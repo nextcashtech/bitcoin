@@ -15,14 +15,14 @@ namespace BitCoin
     Network network();
     void setNetwork(Network pNetwork);
 
-    inline int64_t time()
+    // Seconds since epoch
+    inline int64_t getTime()
     {
-        std::time_t result;
-        std::time(&result);
-        return result;
+        return std::time(NULL);
     }
 
     const char *networkStartString();
+    const uint8_t *networkStartBytes();
     const char *networkPortString();
     uint16_t networkPort();
 
@@ -32,7 +32,7 @@ namespace BitCoin
 
         IPAddress()
         {
-            timestamp = 0;
+            time = 0;
             services = 0;
             std::memset(ip, 0, 16);
             port = 0;
@@ -42,7 +42,7 @@ namespace BitCoin
         bool read(ArcMist::InputStream *pStream);
 
         bool matches(IPAddress &pOther) { return std::memcmp(ip, pOther.ip, 16) == 0 && port == pOther.port; }
-        void updateTime() { timestamp = time(); }
+        void updateTime() { time = getTime(); }
         void operator = (ArcMist::Connection &pConnection)
         {
             if(pConnection.ipv6Bytes())
@@ -60,14 +60,14 @@ namespace BitCoin
 
         const IPAddress &operator = (const IPAddress &pRight)
         {
-            timestamp = pRight.timestamp;
+            time = pRight.time;
             services = pRight.services;
             port = pRight.port;
             std::memcpy(ip, pRight.ip, 16);
             return *this;
         }
 
-        uint32_t timestamp;
+        uint32_t time;
         uint64_t services;
         uint8_t ip[16];
         uint16_t port;
@@ -94,12 +94,13 @@ namespace BitCoin
 
         Hash() { mSize = 0; mData = NULL; }
         Hash(unsigned int pSize) { mSize = pSize; mData = new uint8_t[mSize]; zeroize(); }
+        Hash(const Hash &pCopy) { mData = NULL; *this = pCopy; }
         ~Hash() { if(mData != NULL) delete[] mData; }
 
         unsigned int size() const { return mSize; }
         const uint8_t *value() const { return mData; }
 
-        ArcMist::String hex()
+        ArcMist::String hex() const
         {
             ArcMist::String result;
             if(mSize == 0)
@@ -124,8 +125,10 @@ namespace BitCoin
             }
         }
         
-        // Set to zero size
+        // Set to zero size. Makes hash "empty"
         void clear() { setSize(0); }
+
+        bool isEmpty() const { return mSize == 0; }
 
         bool isZero() const
         {
@@ -224,6 +227,16 @@ namespace BitCoin
         unsigned int mSize;
         uint8_t *mData;
 
+    };
+
+    class HashList : public std::vector<Hash *>
+    {
+    public:
+        ~HashList()
+        {
+            for(unsigned int i=0;i<size();i++)
+                delete at(i);
+        }
     };
 
     void sha256RIPEMD160(ArcMist::InputStream *pInput, unsigned int pInputLength, Hash &pOutput);

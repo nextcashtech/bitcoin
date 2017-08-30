@@ -86,7 +86,9 @@ namespace BitCoin
         ~Transaction();
 
         void write(ArcMist::OutputStream *pStream);
-        bool read(ArcMist::InputStream *pStream);
+
+        // pCalculateHash will calculate the hash of the block data while it reads it
+        bool read(ArcMist::InputStream *pStream, bool pCalculateHash = true);
 
         // P2PKH only
         bool addP2PKHInput(Unspent *pUnspent, PrivateKey &pPrivateKey, PublicKey &pPublicKey);
@@ -104,6 +106,10 @@ namespace BitCoin
             return 0;
         }
 
+        // Hash
+        Hash hash;
+
+        // Data
         uint32_t version;
         std::vector<Input *> inputs;
         std::vector<Output *> outputs;
@@ -113,7 +119,8 @@ namespace BitCoin
         unsigned int size();
         uint64_t feeRate();
 
-        bool process(bool pTest);
+        void calculateHash();
+        bool process(UnspentPool &pUnspentPool, bool pTest);
 
         // Run unit tests
         static bool test();

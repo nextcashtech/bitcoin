@@ -26,6 +26,20 @@ namespace BitCoin
         void process();
         void clear();
 
+        bool hasBlock(Hash &pHash)
+        {
+            mBlockHeaderHashMutex.lock();
+            for(std::list<Hash>::iterator i=mBlockHeaderHashes.begin();i!=mBlockHeaderHashes.end();++i)
+                if(*i == pHash)
+                {
+                    mBlockHeaderHashMutex.unlock();
+                    return true;
+                }
+            mBlockHeaderHashMutex.unlock();
+            return false;
+        }
+        void requestBlock(Hash &pHash);
+
     private:
 
         bool versionSupported(int32_t pVersion);
@@ -44,6 +58,11 @@ namespace BitCoin
         uint64_t mLastTime;
         uint64_t mPingNonce;
         uint64_t mMinimumFeeRate;
+
+        // List of pending block headers this node is known to have
+        ArcMist::Mutex mBlockHeaderHashMutex;
+        void addBlockHeaderHash(Hash &pHash);
+        std::list<Hash> mBlockHeaderHashes;
 
         static unsigned int mNextID;
 

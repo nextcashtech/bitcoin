@@ -1,6 +1,7 @@
 #include "block.hpp"
 
 #include "arcmist/base/log.hpp"
+#include "arcmist/base/thread.hpp"
 #include "arcmist/io/file_stream.hpp"
 #include "arcmist/crypto/digest.hpp"
 #include "info.hpp"
@@ -63,7 +64,7 @@ namespace BitCoin
         pStream->writeUnsignedInt(nonce);
 
         // Transaction Count
-        writeCompactInteger(pStream, transactions.size());
+        writeCompactInteger(pStream, transactionCount);
 
         if(!pIncludeTransactions)
             return;
@@ -73,42 +74,204 @@ namespace BitCoin
             transactions[i].write(pStream);
     }
 
-    bool Block::read(ArcMist::InputStream *pStream, bool pIncludeTransactions)
+    bool Block::read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pCalculateHash)
     {
+        // Create hash
+        ArcMist::Digest *sha256 = NULL;
+        if(pCalculateHash)
+            sha256 = new ArcMist::Digest(ArcMist::Digest::SHA256);
+        hash.clear();
+
         if(pStream->remaining() < 81)
+        {
+            if(sha256 != NULL)
+                delete sha256;
             return false;
+        }
 
         // Version
         version = pStream->readUnsignedInt();
+        if(pCalculateHash)
+            sha256->writeUnsignedInt(version);
 
         // Hash of previous block
         previousHash.read(pStream);
+        if(pCalculateHash)
+            previousHash.write(sha256);
 
         // Merkle Root Hash
         merkleHash.read(pStream);
+        if(pCalculateHash)
+            previousHash.write(sha256);
 
         // Time
         time = pStream->readUnsignedInt();
+        if(pCalculateHash)
+            sha256->writeUnsignedInt(time);
 
         // Encoded version of target threshold
         bits = pStream->readUnsignedInt();
+        if(pCalculateHash)
+            sha256->writeUnsignedInt(bits);
 
         // Nonce
         nonce = pStream->readUnsignedInt();
+        if(pCalculateHash)
+            sha256->writeUnsignedInt(nonce);
 
         // Transaction Count
-        uint64_t count = readCompactInteger(pStream);
-        if(pStream->remaining() < count)
-            return false;
+        transactionCount = readCompactInteger(pStream);
+        if(pCalculateHash)
+            writeCompactInteger(sha256, transactionCount);
 
-        transactions.clear();
+        if(pCalculateHash)
+        {
+            // Get SHA256 of block data
+            ArcMist::Buffer hashData(32);
+            sha256->getResult(&hashData);
+
+            // Double SHA256
+            ArcMist::Buffer doubleHashData(32);
+            ArcMist::Digest::sha256(&hashData, hashData.length(), &doubleHashData);
+
+            // Write to hash
+            hash.read(&doubleHashData, 32);
+        }
+
+        if(sha256 != NULL)
+        {
+            delete sha256;
+            sha256 = NULL;
+        }
+
         if(!pIncludeTransactions)
             return true;
 
+        if(pStream->remaining() < transactionCount)
+        {
+            if(sha256 != NULL)
+                delete sha256;
+            return false;
+        }
+
         // Transactions
-        transactions.resize(count);
-        for(uint64_t i=0;i<count;i++)
+        transactions.clear();
+        transactions.resize(transactionCount);
+        for(uint64_t i=0;i<transactionCount;i++)
             if(!transactions[i].read(pStream))
+                return false;
+
+        return true;
+    }
+
+    void Block::calculateHash()
+    {
+        hash.clear();
+
+        if(transactions.size() == 0)
+            return;
+
+        // Write into digest
+        ArcMist::Digest sha256(ArcMist::Digest::SHA256);
+        write(&sha256, true);
+
+        // Get SHA256 of block data
+        ArcMist::Buffer hashData(32);
+        sha256.getResult(&hashData);
+
+        // Double SHA256
+        ArcMist::Buffer doubleHashData(32);
+        ArcMist::Digest::sha256(&hashData, hashData.length(), &doubleHashData);
+
+        // Write to hash
+        hash.read(&doubleHashData, 32);
+    }
+
+    void concatHash(const Hash *pFirst, const Hash *pSecond, Hash &pResult)
+    {
+        ArcMist::Buffer concatIDs;
+        pFirst->write(&concatIDs);
+        pSecond->write(&concatIDs);
+        doubleSHA256(&concatIDs, concatIDs.length(), pResult);
+    }
+
+    void calculateMerkleHash(std::vector<Hash *>::iterator pIter, std::vector<Hash *>::iterator pEnd, Hash &pResult)
+    {
+        std::vector<Hash *>::iterator next = pIter;
+        ++next;
+        if(next == pEnd)
+        {
+            // Only one entry. Hash it with itself and return
+            concatHash(*pIter, *pIter, pResult);
+            return;
+        }
+
+        std::vector<Hash *>::iterator nextNext = next;
+        ++nextNext;
+        if(nextNext == pEnd)
+        {
+            // Two entries. Hash them together and return
+            concatHash(*pIter, *next, pResult);
+            return;
+        }
+
+        // More than two entries. Move up the tree a level.
+        std::vector<Hash *> nextLevel;
+        Hash *one, *two, *newHash;
+
+        while(pIter != pEnd)
+        {
+            // Get one
+            one = *pIter++;
+
+            // Get two (first one again if no second)
+            if(pIter == pEnd)
+                two = one;
+            else
+                two = *pIter++;
+
+            // Hash these and add to the next level
+            newHash = new Hash(32);
+            concatHash(one, two, *newHash);
+            nextLevel.push_back(newHash);
+        }
+
+        // Calculate the next level
+        calculateMerkleHash(nextLevel.begin(), nextLevel.end(), pResult);
+
+        // Destroy the next level
+        for(std::vector<Hash *>::iterator i=nextLevel.begin();i!=nextLevel.end();++i)
+            delete *i;
+    }
+
+    bool Block::process(UnspentPool &pUnspentPool)
+    {
+        // Validate Merkle Hash
+        Hash calculatedMerkleHash;
+        if(transactions.size() == 1)
+            calculatedMerkleHash = transactions.front().hash;
+        else
+        {
+            // Collect transaction hashes
+            std::vector<Hash *> hashes;
+            for(std::vector<Transaction>::iterator i=transactions.begin();i!=transactions.end();++i)
+                hashes.push_back(&(*i).hash);
+
+            // Calculate the next level
+            calculateMerkleHash(hashes.begin(), hashes.end(), calculatedMerkleHash);
+        }
+
+        if(calculatedMerkleHash != merkleHash)
+        {
+            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Block merkle root hash is invalid");
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Included   : %s", merkleHash.hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Calculated : %s", merkleHash.hex().text());
+            return false;
+        }
+
+        // Validate and process transactions
+        for(std::vector<Transaction>::iterator i=transactions.begin();i!=transactions.end();++i)
+            if(!(*i).process(pUnspentPool, false))
                 return false;
 
         return true;
@@ -129,18 +292,7 @@ namespace BitCoin
         static constexpr const char *START_STRING = "AMBLKS01";
 
         BlockFile(unsigned int pID, const char *pFilePathName);
-        ~BlockFile()
-        {
-            // Calculate new CRC
-            stream.setReadOffset(HASHES_OFFSET);
-            ArcMist::Buffer crcBuffer;
-            crcBuffer.setInputEndian(ArcMist::Endian::LITTLE);
-            crcBuffer.setOutputEndian(ArcMist::Endian::LITTLE);
-            ArcMist::Digest::crc32(&stream, stream.remaining(), &crcBuffer);
-            unsigned int newCRC = crcBuffer.readUnsignedInt();
-            stream.setWriteOffset(CRC_OFFSET);
-            stream.writeUnsignedInt(newCRC);
-        }
+        ~BlockFile() { updateCRC(); }
 
         unsigned int id;
         ArcMist::FileStream stream;
@@ -148,12 +300,22 @@ namespace BitCoin
         unsigned int crc;
 
         bool isFull();
+        unsigned int blockCount();
+        Hash lastHash();
 
-        // Read list of hashes in this file
-        bool readHashes(std::vector<Hash> &pHashes);
+        // Add a block to the file
+        bool addBlock(Block &pBlock);
+
+        // Read list of block hashes from this file. If pStartingHash is empty then start with first block
+        bool readBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount);
+
+        // Read list of block headers from this file. If pStartingHash is empty then start with first block
+        bool readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount);
 
         // Read block for specified hash
         bool readBlock(const Hash &pHash, Block &pBlock, bool pIncludeTransactions);
+        
+        void updateCRC();
 
     };
 
@@ -229,21 +391,176 @@ namespace BitCoin
         return stream.readUnsignedInt() != 0;
     }
 
-    bool BlockFile::readHashes(std::vector<Hash> &pHashes)
+    unsigned int BlockFile::blockCount()
     {
-        pHashes.clear();
+        if(!isValid)
+            return 0;
 
+        // Find last non empty hash
+        Hash hash(32);
+        unsigned int result = 0;
+        stream.setReadOffset(HASHES_OFFSET);
+        for(unsigned int i=0;i<MAX_BLOCKS;i++)
+        {
+            if(!hash.read(&stream, 32))
+                return false;
+            if(stream.readUnsignedInt() != 0)
+                result++;
+            else
+                break;
+        }
+
+        return result;
+    }
+
+    Hash BlockFile::lastHash()
+    {
+        Hash result(32);
+
+        if(!isValid)
+            return result;
+
+        // Find last non empty hash
+        stream.setReadOffset(HASHES_OFFSET);
+        for(unsigned int i=0;i<MAX_BLOCKS;i++)
+        {
+            if(!result.read(&stream, 32))
+                return false;
+            if(stream.readUnsignedInt() == 0)
+                break;
+        }
+
+        return result;
+    }
+
+    bool BlockFile::addBlock(Block &pBlock)
+    {
         if(!isValid)
             return false;
 
-        // Read hashes
+        Hash hash(32);
+        unsigned int hashOffset = 0;
+        bool previousMatches = false;
+
+        // Find next empty hash
         stream.setReadOffset(HASHES_OFFSET);
-        pHashes.resize(MAX_BLOCKS);
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
-            if(!pHashes[i].read(&stream, 32))
+            hashOffset = stream.readOffset();
+            if(!hash.read(&stream, 32))
                 return false;
+            previousMatches = hash == pBlock.previousHash;
+            if(hash.isZero())
+                break;
             stream.readUnsignedInt(); // data offset
+        }
+
+        if(!hash.isZero())
+            return false; // Block was full
+
+        if(!previousMatches)
+            return false; // previousHash from this block doesn't match the last block in this file so it isn't valid
+
+        // Write block data at end of file
+        unsigned int blockOffset = stream.length();
+        stream.setWriteOffset(stream.length());
+        pBlock.write(&stream, true);
+
+        // Calculate hash
+        stream.setReadOffset(blockOffset);
+        doubleSHA256(&stream, stream.remaining(), hash);
+
+        // Write hash entry at beginning of file
+        stream.setWriteOffset(hashOffset);
+        hash.write(&stream);
+        stream.writeUnsignedInt(blockOffset);
+        return true;
+    }
+
+    // If pStartingHash is empty then start with first hash in file
+    bool BlockFile::readBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount)
+    {
+        if(!isValid)
+            return false;
+
+        Hash hash(32);
+        Hash *newHash;
+        bool started = pStartingHash.isEmpty();
+        stream.setReadOffset(HASHES_OFFSET);
+        for(unsigned int i=0;i<MAX_BLOCKS && pHashes.size()<pCount;i++)
+        {
+            if(!hash.read(&stream))
+                return false;
+            if(started || hash == pStartingHash)
+            {
+                started = true;
+                newHash = new Hash(32);
+                (*newHash) = hash;
+                pHashes.push_back(newHash);
+            }
+            stream.readUnsignedInt(); // skip over file offset to next hash
+        }
+
+        return true;
+    }
+
+    // If pStartingHash is empty then start with first block in file
+    bool BlockFile::readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount)
+    {
+        if(!isValid)
+            return false;
+
+        Hash hash(32);
+        Block *newBlockHeader;
+        unsigned int fileOffset;
+        unsigned int nextHashOffset = 0;
+        unsigned int fileHashOffset = 0;
+        bool startAtFirst = pStartingHash.isEmpty();
+        while(pBlockHeaders.size() < pCount)
+        {
+            if(nextHashOffset == 0)
+            {
+                // Find starting hash
+                stream.setReadOffset(HASHES_OFFSET);
+                for(unsigned int i=0;i<MAX_BLOCKS;i++)
+                {
+                    if(!hash.read(&stream))
+                        return false;
+                    if(startAtFirst || hash == pStartingHash)
+                    {
+                        // Go to file offset of block data
+                        fileOffset = stream.readUnsignedInt();
+                        nextHashOffset = stream.readOffset();
+                        if(fileOffset == 0)
+                            return false;
+                        stream.setReadOffset(fileOffset);
+                    }
+                    stream.readUnsignedInt(); // skip over file offset to next hash
+                    fileHashOffset++;
+                }
+                if(nextHashOffset == 0)
+                    return false; // Hash not found
+            }
+            else
+            {
+                stream.setReadOffset(nextHashOffset);
+                if(!hash.read(&stream))
+                    return false;
+                // Go to file offset of block data
+                fileOffset = stream.readUnsignedInt();
+                nextHashOffset = stream.readOffset();
+                if(fileOffset == 0)
+                    return false;
+                stream.setReadOffset(fileOffset);
+                fileHashOffset++;
+            }
+
+            newBlockHeader = new Block();
+            newBlockHeader->read(&stream, false);
+            pBlockHeaders.push_back(newBlockHeader);
+
+            if(fileHashOffset == MAX_BLOCKS)
+                return true; // Reached last block in file
         }
 
         return true;
@@ -259,7 +576,7 @@ namespace BitCoin
         stream.setReadOffset(HASHES_OFFSET);
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
-            if(!hash.read(&stream, 32))
+            if(!hash.read(&stream))
                 return false;
             if(hash == pHash)
             {
@@ -268,12 +585,26 @@ namespace BitCoin
                 if(fileOffset == 0)
                     return false;
                 stream.setReadOffset(fileOffset);
-                pBlock.read(&stream, pIncludeTransactions);
+                return pBlock.read(&stream, pIncludeTransactions);
             }
             stream.readUnsignedInt(); // data offset
         }
 
         return false;
+    }
+
+    void BlockFile::updateCRC()
+    {
+        // Calculate new CRC
+        stream.setReadOffset(HASHES_OFFSET);
+        ArcMist::Buffer crcBuffer;
+        crcBuffer.setInputEndian(ArcMist::Endian::LITTLE);
+        crcBuffer.setOutputEndian(ArcMist::Endian::LITTLE);
+        ArcMist::Digest::crc32(&stream, stream.remaining(), &crcBuffer);
+        unsigned int newCRC = crcBuffer.readUnsignedInt();
+        stream.setWriteOffset(CRC_OFFSET);
+        stream.writeUnsignedInt(newCRC);
+        stream.flush();
     }
 
     BlockChain *BlockChain::sInstance = NULL;
@@ -294,134 +625,266 @@ namespace BitCoin
         BlockChain::sInstance = 0;
     }
 
-    BlockChain::BlockChain() : mBlockMutex("Block")
+    BlockChain::BlockChain() : mPendingBlockHeaderMutex("Pending Block Header"), mPendingBlockMutex("Pending Blocks"), mBlockFileMutex("Block File")
     {
-        mLastBlockFile = NULL;
+        mLastBlockID = 0;
+        mLastFileID = 0;
     }
 
     BlockChain::~BlockChain()
     {
-        mBlockMutex.lock();
-        for(std::list<BlockInfo *>::iterator i=mBlocks.begin();i!=mBlocks.end();++i)
+        mPendingBlockMutex.lock();
+        for(std::vector<Block *>::iterator i=mPendingBlocks.begin();i!=mPendingBlocks.end();++i)
             delete *i;
-        mBlockMutex.unlock();
-
-        if(mLastBlockFile != NULL)
-            delete mLastBlockFile;
+        mPendingBlockMutex.unlock();
     }
 
-    bool BlockChain::addBlock(const Block &pBlock)
+    unsigned int BlockChain::getFileID(const Hash &pHash)
     {
-        bool valid = false;
+        uint16_t lookup = pHash.lookup();
+        unsigned int result = 0xffffffff;
 
-        mBlockMutex.lock();
+        mSets[lookup].lock();
 
-        // Verify previous hash of this block matchs hash of last block on chain
-        if(mBlocks.size() == 0)
-            valid = pBlock.previousHash.isZero();
-        else
-            valid = pBlock.previousHash == mBlocks.back()->hash;
+        std::list<BlockInfo *>::iterator end = mSets[lookup].end();
+        for(std::list<BlockInfo *>::iterator i=mSets[lookup].begin();i!=end;++i)
+            if(pHash == (*i)->hash)
+            {
+                result = (*i)->fileID;
+                mSets[lookup].unlock();
+                return result;
+            }
 
-        if(!valid)
+        mSets[lookup].unlock();
+        return result;
+    }
+
+    void BlockChain::lockFile(unsigned int pFileID)
+    {
+        bool found;
+        while(true)
         {
-            mBlockMutex.unlock();
+            found = false;
+            mBlockFileMutex.lock();
+            for(std::vector<unsigned int>::iterator i=mLockedFileIDs.begin();i!=mLockedFileIDs.end();++i)
+                if(*i == pFileID)
+                {
+                    found = true;
+                    break;
+                }
+            if(!found)
+            {
+                mLockedFileIDs.push_back(pFileID);
+                mBlockFileMutex.unlock();
+                return;
+            }
+            ArcMist::Thread::sleep(100);
+            mBlockFileMutex.unlock();
+        }
+    }
+
+    void BlockChain::unlockFile(unsigned int pFileID)
+    {
+        mBlockFileMutex.lock();
+        for(std::vector<unsigned int>::iterator i=mLockedFileIDs.begin();i!=mLockedFileIDs.end();++i)
+            if(*i == pFileID)
+            {
+                mLockedFileIDs.erase(i);
+                break;
+            }
+        mBlockFileMutex.unlock();
+    }
+
+    // Add block header to queue to be requested and downloaded
+    bool BlockChain::addPendingBlockHeader(Block *pBlock)
+    {
+        bool result = true;
+        mPendingBlockHeaderMutex.lock();
+        if(mPendingBlockHeaders.size() == 0)
+        {
+            if(mLastBlockHash == pBlock->previousHash)
+                mPendingBlockHeaders.push_back(pBlock);
+            else
+                result = false;
+        }
+        else if(mPendingBlockHeaders.size() > 0 && mPendingBlockHeaders.back()->hash == pBlock->previousHash)
+            mPendingBlockHeaders.push_back(pBlock);
+        else
+            result = false;
+        mPendingBlockHeaderMutex.unlock();
+
+        if(result)
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Added pending block header : %s", pBlock->hash.hex().text());
+        return result;
+    }
+
+    Block *BlockChain::nextBlockNeeded()
+    {
+        Block *result = NULL;
+        mPendingBlockHeaderMutex.lock();
+        if(mPendingBlockHeaders.size() > 0)
+            result = mPendingBlockHeaders.front();
+        mPendingBlockHeaderMutex.unlock();
+        return result;
+    }
+
+    bool BlockChain::addPendingBlock(Block *pBlock)
+    {
+        mPendingBlockMutex.lock();
+
+        if(mPendingBlocks.size() == 0 && mLastBlockHash != pBlock->previousHash)
+        {
+            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Pending block is not next");
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Pending Previous : %s", pBlock->previousHash.hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Last             : %s", mLastBlockHash.hex().text());
+            mPendingBlockMutex.unlock();
+            return false;
+        }
+        else if(mPendingBlocks.size() != 0 && mLastPendingHash != pBlock->previousHash)
+        {
+            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Pending block is not next");
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Pending Previous : %s", pBlock->previousHash.hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Last             : %s", mLastBlockHash.hex().text());
+            mPendingBlockMutex.unlock();
             return false;
         }
 
-        // Write block to a file
-        if(mLastBlockFile == NULL)
-            mLastBlockFile = new BlockFile(0, blockFileName(0)); // Start first block file
-        else if(mLastBlockFile->isFull())
+        // Remove from pending headers
+        mPendingBlockHeaderMutex.lock();
+        if(mPendingBlockHeaders.size() > 0)
+            if(mPendingBlockHeaders.front()->hash == pBlock->hash)
+            {
+                delete mPendingBlockHeaders.front();
+                mPendingBlockHeaders.erase(mPendingBlockHeaders.begin());
+            }
+        mPendingBlockHeaderMutex.unlock();
+
+        //TODO Remove this. Write to debug file
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend(pBlock->hash.hex().text());
+        filePathName += ".pending_block";
+        if(!ArcMist::fileExists(filePathName))
         {
-            unsigned int newID = mLastBlockFile->id + 1;
-            delete mLastBlockFile;
-            mLastBlockFile = new BlockFile(newID, blockFileName(newID)); // Start next block file
-            
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Saving pending block to file : %s", pBlock->hash.hex().text());
+            ArcMist::FileOutputStream file(filePathName, false, true);
+            pBlock->write(&file, true);
         }
 
-        // Add block info to mBlocks
-
-        mBlockMutex.unlock();
+        // Add to pending
+        // Set hash
+        mLastPendingHash = pBlock->hash;
+        mPendingBlocks.push_back(pBlock);
+        mPendingBlockMutex.unlock();
+        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Added pending block : %s", pBlock->hash.hex().text());
         return true;
     }
 
-    void BlockChain::getBlockHashes(std::vector<Hash *> &pHashes, const Hash &pStartingHash, unsigned int pCount)
+    bool BlockChain::processBlock(Block *pBlock)
     {
-        bool started = false;
+        UnspentPool &unspentPool = UnspentPool::instance();
+
+        // Process block
+        if(pBlock->process(unspentPool))
+            unspentPool.commit(mLastBlockID+1);
+        else
+        {
+            unspentPool.revert();
+            return false;
+        }
+
+        // Add the block to the chain
+        BlockFile *blockFile;
+
+        lockFile(mLastFileID);
+        blockFile = new BlockFile(mLastFileID, blockFileName(mLastFileID));
+
+        if(blockFile->isFull())
+        {
+            unlockFile(mLastFileID);
+            delete blockFile;
+
+            // Move to next file
+            mLastFileID++;
+            lockFile(mLastFileID);
+            blockFile = new BlockFile(mLastFileID, blockFileName(mLastFileID));
+        }
+
+        bool success = blockFile->addBlock(*pBlock);
+
+        if(success)
+        {
+            mLastBlockID++;
+            mLastBlockHash = blockFile->lastHash();
+        }
+
+        delete blockFile;
+        unlockFile(mLastFileID);
+        return success;
+    }
+
+    void BlockChain::getBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount)
+    {
+        Hash hash = pStartingHash;
+        unsigned int fileID = getFileID(hash);
+        BlockFile *blockFile;
+
         pHashes.clear();
 
-        //TODO Build index of hashes for fast lookup
-        mBlockMutex.lock();
-        for(std::list<BlockInfo *>::iterator i=mBlocks.begin();i!=mBlocks.end() && pHashes.size()<pCount;++i)
+        while(pHashes.size() < pCount)
         {
-            if(pStartingHash == (*i)->hash)
-                started = true;
-            if(started)
-                pHashes.push_back(&((*i)->hash));
+            lockFile(fileID);
+            blockFile = new BlockFile(fileID, blockFileName(fileID));
+
+            if(!blockFile->readBlockHashes(pHashes, hash, pCount))
+                break;
+
+            delete blockFile;
+            unlockFile(fileID);
+
+            hash.clear();
+            fileID++;
         }
-        mBlockMutex.unlock();
     }
 
     void BlockChain::getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount)
     {
-        bool started = false;
+        BlockFile *blockFile;
+        Hash hash = pStartingHash;
+        unsigned int fileID = getFileID(hash);
+
         pBlockHeaders.clear();
-        BlockFile *blockFile = NULL;
-        unsigned int blockFileID;
 
-        //TODO Build index of hashes for fast lookup
-        mBlockMutex.lock();
-        for(std::list<BlockInfo *>::iterator i=mBlocks.begin();i!=mBlocks.end() && pBlockHeaders.size()<pCount;++i)
+        while(pBlockHeaders.size() < pCount)
         {
-            if(pStartingHash == (*i)->hash)
-                started = true;
-            if(started)
-            {
-                if(blockFile == NULL && blockFileID != (*i)->fileID)
-                {
-                    if(blockFile != NULL)
-                        delete blockFile;
-                    blockFile = new BlockFile((*i)->fileID, blockFileName((*i)->fileID));
-                    blockFileID = (*i)->fileID;
-                }
+            lockFile(fileID);
+            blockFile = new BlockFile(fileID, blockFileName(fileID));
 
-                if(!blockFile->isValid)
-                    break;
+            if(!blockFile->readBlockHeaders(pBlockHeaders, hash, pCount))
+                break;
 
-                Block *newBlockHeader = new Block();
-                if(blockFile->readBlock((*i)->hash, *newBlockHeader, false))
-                    pBlockHeaders.push_back(newBlockHeader);
-                else
-                    break;
-            }
-        }
-
-        if(blockFile != NULL)
             delete blockFile;
-        mBlockMutex.unlock();
+            unlockFile(fileID);
+
+            hash.clear();
+            fileID++;
+        }
     }
 
     bool BlockChain::getBlock(const Hash &pHash, Block &pBlock)
     {
-        mBlockMutex.lock();
-        for(std::list<BlockInfo *>::iterator i=mBlocks.begin();i!=mBlocks.end();++i)
-            if(pHash == (*i)->hash)
-            {
-                //TODO Add individual mutexes for each block file
-                BlockFile *blockFile;
-                if(mLastBlockFile != NULL && mLastBlockFile->id == (*i)->fileID)
-                    blockFile = mLastBlockFile;
-                else
-                    blockFile = new BlockFile((*i)->fileID, blockFileName((*i)->fileID));
-                bool success = blockFile->isValid && blockFile->readBlock(pHash, pBlock, true);
-                if(blockFile != mLastBlockFile)
-                    delete blockFile;
-                mBlockMutex.unlock();
-                return success;
-            }
+        unsigned int fileID = getFileID(pHash);
+        if(fileID == 0xffffffff)
+            return false;
 
-        mBlockMutex.unlock();
-        return false;
+        lockFile(fileID);
+        BlockFile *blockFile = new BlockFile(fileID, blockFileName(fileID));
+
+        bool success = blockFile->isValid && blockFile->readBlock(pHash, pBlock, true);
+
+        delete blockFile;
+        unlockFile(fileID);
+
+        return success;
     }
 
     ArcMist::String BlockChain::blockFileName(unsigned int pID)
@@ -441,36 +904,64 @@ namespace BitCoin
     // Load block info from files
     bool BlockChain::loadBlocks()
     {
-        // Load hashes from block info files
-        mBlockMutex.lock();
-        mLastBlockFile = NULL;
+        // Load hashes from block files
+        BlockFile *blockFile = NULL;
+        uint16_t lookup;
         ArcMist::String filePathName;
-        for(unsigned int fileID=1;;fileID++)
+        HashList hashes;
+        Hash *lastBlock = NULL;
+        bool success = true;
+        bool done = false;
+        Hash emptyHash;
+
+        mLastFileID = 0;
+        mLastBlockID = 0;
+        mLastBlockHash.setSize(32);
+        mLastBlockHash.zeroize();
+
+        for(unsigned int fileID=1;!done;fileID++)
         {
+            lockFile(fileID);
             filePathName = blockFileName(fileID);
             if(ArcMist::fileExists(filePathName))
             {
                 // Load hashes from file
-                if(mLastBlockFile != NULL)
-                    delete mLastBlockFile;
-                mLastBlockFile = new BlockFile(fileID, filePathName);
-                if(!mLastBlockFile->isValid)
+                blockFile = new BlockFile(fileID, filePathName);
+                if(!blockFile->isValid)
+                {
+                    unlockFile(fileID);
+                    success = false;
                     break;
+                }
 
-                std::vector<Hash> hashes;
-                mLastBlockFile->readHashes(hashes);
-                for(unsigned int i=0;i<hashes.size();i++)
-                    if(hashes[i].isZero())
+                blockFile->readBlockHashes(hashes, emptyHash, BlockFile::MAX_BLOCKS);
+                delete blockFile;
+                unlockFile(fileID);
+
+                mLastFileID = fileID;
+                for(HashList::iterator i=hashes.begin();i!=hashes.end();++i)
+                    if((*i)->isZero())
+                    {
+                        done = true;
                         break;
+                    }
                     else
-                        mBlocks.push_back(new BlockInfo(hashes[i], fileID));
+                    {
+                        lookup = (*i)->lookup();
+                        mSets[lookup].lock();
+                        mSets[lookup].push_back(new BlockInfo(**i, fileID));
+                        mSets[lookup].unlock();
+                        mLastBlockID++;
+                        lastBlock = *i;
+                    }
             }
             else
                 break;
         }
 
-        mBlockMutex.unlock();
-        return false;
+        if(lastBlock != NULL)
+            mLastBlockHash = *lastBlock;
+        return success;
     }
 
     bool BlockChain::test()

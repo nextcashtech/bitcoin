@@ -1,6 +1,6 @@
 
 COMPILER=g++
-COMPILE_FLAGS=-I./include -I../ArcMist/include -I../secp256k1/include -std=c++11 -Wall
+COMPILE_FLAGS=-I./include -I../ArcMist/include -I../secp256k1/include -std=c++11 -Wall 
 LIBRARY_PATHS=-L../ArcMist -L../secp256k1/.libs
 LIBRARIES=-larcmist -lsecp256k1
 DEBUG_LIBRARIES=-larcmist.debug -lsecp256k1
@@ -78,7 +78,7 @@ debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS}
 	@echo "\t\033[0;33mBUILDING DEBUG ${OUTPUT}\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	${COMPILER} -c -ggdb -o ${OBJECT_DIRECTORY}/main.o.debug main.cpp ${COMPILE_FLAGS}
-	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/main.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o ${OUTPUT} ${LINK_FLAGS}
+	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/main.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o ${OUTPUT}.debug ${LINK_FLAGS}
 	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
 test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS}
@@ -93,7 +93,9 @@ test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS}
 	@./test || echo "\n                                  \033[0;31m!!!!!  Tests Failed  !!!!!\033[0m"
 	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
-test_debug: headers ${OBJECT_DIRECTORY}/.headers ${DEBUG_OBJECTS}
+all: release debug test
+
+test.debug: headers ${OBJECT_DIRECTORY}/.headers ${DEBUG_OBJECTS}
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING DEBUG TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"

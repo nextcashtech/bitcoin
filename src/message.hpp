@@ -44,6 +44,11 @@ namespace BitCoin
             enum Type { UNKNOWN=0x00, TRANSACTION=0x01, BLOCK=0x02, FILTERED_BLOCK=0x03 };
 
             InventoryHash() : hash(32) { type = UNKNOWN; }
+            InventoryHash(Type pType, const Hash &pHash)
+            {
+                type = pType;
+                hash = pHash;
+            }
 
             bool operator == (const InventoryHash &pRight) { return type == pRight.type && hash == pRight.hash; }
             bool operator != (const InventoryHash &pRight) { return type != pRight.type || hash != pRight.hash; }
@@ -60,6 +65,9 @@ namespace BitCoin
 
         void writeFull(Data *pData, ArcMist::Buffer *pOutput);
         Data *readFull(ArcMist::Buffer *pInput);
+
+        // Return type of partial message
+        Type pendingType(ArcMist::Buffer *pInput);
 
         class Data
         {
@@ -95,7 +103,7 @@ namespace BitCoin
 
             int32_t version;
             uint64_t services;
-            int64_t timestamp;
+            int64_t time;
             uint64_t receivingServices;
             char receivingIPv6[16];
             uint16_t receivingPort;
@@ -230,7 +238,7 @@ namespace BitCoin
 
             uint32_t version;
             std::vector<Hash> blockHeaderHashes; // In reverse order (Highest block first)
-            
+
             Hash stopHeaderHash; // Zeroized to stop at highest block on chain
 
         };
@@ -239,12 +247,22 @@ namespace BitCoin
         {
         public:
 
-            BlockData() : Data(BLOCK) { }
+            BlockData() : Data(BLOCK) { block = NULL; }
+            ~BlockData() { if(block != NULL) delete block; }
 
-            void write(ArcMist::OutputStream *pStream) { block.write(pStream, true); }
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize) { return block.read(pStream, true); }
+            void write(ArcMist::OutputStream *pStream)
+            {
+                if(block != NULL)
+                    block->write(pStream, true);
+            }
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize)
+            {
+                if(block == NULL)
+                    block = new Block();
+                return block->read(pStream, true, true);
+            }
 
-            Block block;
+            Block *block;
 
         };
 
@@ -266,13 +284,15 @@ namespace BitCoin
         {
         public:
 
-            GetHeadersData() : Data(GET_HEADERS) { }
+            GetHeadersData() : Data(GET_HEADERS), stopHeaderHash(32) { version = PROTOCOL_VERSION; }
 
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize);
 
             uint32_t version;
             std::vector<Hash> blockHeaderHashes; // In reverse order (Highest block first)
+
+            Hash stopHeaderHash; // Zeroized to stop at highest block on chain
 
         };
 
@@ -281,11 +301,17 @@ namespace BitCoin
         public:
 
             HeadersData() : Data(HEADERS) { }
+            ~HeadersData()
+            {
+                for(std::vector<Block *>::iterator i=headers.begin();i!=headers.end();++i)
+                    if(*i != NULL)
+                        delete *i;
+            }
 
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize);
 
-            std::vector<Block> headers;
+            std::vector<Block *> headers;
 
         };
 
@@ -302,6 +328,7 @@ namespace BitCoin
 
         };
 
+        // Used with FILTER_ADD, FILTER_CLEAR, FILTER_LOAD to request specific transactions
         class MerkleBlockData : public Data
         {
         public:

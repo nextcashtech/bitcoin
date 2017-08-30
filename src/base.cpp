@@ -12,10 +12,69 @@
 
 namespace BitCoin
 {
+    static Network sNetwork = TESTNET;
+    static const uint8_t sMainNetworkStartBytes[4] = { 0xf9, 0xbe, 0xb4, 0xd9 };
+    static const uint8_t sTestNetworkStartBytes[4] = { 0x0b, 0x11, 0x09, 0x07 };
+
+    Network network() { return sNetwork; }
+    void setNetwork(Network pNetwork) { sNetwork = pNetwork; }
+
+    const char *networkStartString()
+    {
+        switch(sNetwork)
+        {
+            case MAINNET:
+                return "f9beb4d9";
+            case TESTNET:
+                return "0b110907";
+        }
+
+        return "";
+    }
+
+    const uint8_t *networkStartBytes()
+    {
+        switch(sNetwork)
+        {
+            case MAINNET:
+                return sMainNetworkStartBytes;
+            case TESTNET:
+                return sTestNetworkStartBytes;
+        }
+
+        return 0x00000000;
+    }
+
+    const char *networkPortString()
+    {
+        switch(sNetwork)
+        {
+            case MAINNET:
+                return "8333";
+            case TESTNET:
+                return "18333";
+        }
+
+        return "";
+    }
+
+    uint16_t networkPort()
+    {
+        switch(sNetwork)
+        {
+            case MAINNET:
+                return 8333;
+            case TESTNET:
+                return 18333;
+        }
+
+        return 0;
+    }
+
     void IPAddress::write(ArcMist::OutputStream *pStream) const
     {
         // Time
-        pStream->writeUnsignedInt(timestamp);
+        pStream->writeUnsignedInt(time);
 
         // Services
         pStream->writeUnsignedLong(services);
@@ -33,7 +92,7 @@ namespace BitCoin
     bool IPAddress::read(ArcMist::InputStream *pStream)
     {
         // Time
-        timestamp = pStream->readUnsignedInt();
+        time = pStream->readUnsignedInt();
 
         // Services
         services = pStream->readUnsignedLong();
@@ -270,7 +329,7 @@ namespace BitCoin
                 values.push_back(0);
 
             Hash hash(32);
-            unsigned int count = 0xffff * 0xff;
+            unsigned int count = 0xffff * 0x0f;
             for(unsigned int i=0;i<count;i++)
             {
                 hash.randomize();
@@ -298,7 +357,7 @@ namespace BitCoin
             //    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, lineText);
             //}
 
-            if(highestCount < 500 && zeroCount < 100)
+            if(highestCount < 100 && zeroCount < 10)
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME,
                   "Passed hash lookup distribution : high %d, zeroes %d", highestCount, zeroCount);
             else

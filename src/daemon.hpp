@@ -24,6 +24,7 @@ namespace BitCoin
         static Daemon &instance();
         static void destroy();
         static void processNodes();
+        static void processManager();
 
         void run(ArcMist::String &pSeed);
 
@@ -54,6 +55,7 @@ namespace BitCoin
         ~Daemon();
 
         ArcMist::Thread *mNodeThread;
+        ArcMist::Thread *mManagerThread;
         ArcMist::Mutex mNodeMutex;
         std::vector<Node *> mNodes;
         bool mStopping;
@@ -61,6 +63,8 @@ namespace BitCoin
         void (*previousSigTermChildHandler)(int);
         void (*previousSigTermHandler)(int);
         void (*previousSigIntHandler)(int);
+        
+        Node *nodeWithBlock(Hash &pBlockHeaderHash);
 
         void cleanNodes();
 
