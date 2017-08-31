@@ -113,6 +113,7 @@ namespace BitCoin
             mSets[lookup].add(*iter);
         }
         mPendingAdd.clear();
+
         for(std::list<Unspent *>::iterator iter=mPendingSpend.begin();iter!=mPendingSpend.end();++iter)
         {
             lookup = (*iter)->transactionID.lookup();
@@ -120,7 +121,9 @@ namespace BitCoin
             delete *iter;
         }
         mPendingSpend.clear();
+
         mModified = true;
+        save();
     }
 
     void UnspentPool::revert()
@@ -137,11 +140,13 @@ namespace BitCoin
 
     bool UnspentPool::load()
     {
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME, "Loading unspent transactions");
         clear();
 
         // Load from file system
         ArcMist::String filePath = Info::instance().path();
         ArcMist::String filePathName, fileName;
+        ArcMist::FileInputStream *file;
         uint16_t fileID;
 
         filePath.pathAppend("unspent");
@@ -153,19 +158,19 @@ namespace BitCoin
             fileName.clear();
             fileID = ArcMist::Endian::convert(i, ArcMist::Endian::LITTLE);
             fileName.writeHex(&fileID, 2);
-
             filePathName = filePath;
             filePathName.pathAppend(fileName);
 
             if(ArcMist::fileExists(filePathName))
             {
-                ArcMist::FileInputStream file(fileName);
-                file.setInputEndian(ArcMist::Endian::LITTLE);
-                if(!mSets[i].read(&file))
+                file = new ArcMist::FileInputStream(filePathName);
+                file->setInputEndian(ArcMist::Endian::LITTLE);
+                if(!mSets[i].read(file))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_UNSPENT_LOG_NAME, "Failed to read set %04x", fileID);
                     mValid = false;
                 }
+                delete file;
             }
             //else
             //    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_UNSPENT_LOG_NAME, "No file for set %04x", fileID);
@@ -176,6 +181,8 @@ namespace BitCoin
 
     bool UnspentPool::save()
     {
+        Events::instance().post(Event::UNSPENTS_SAVED);
+
         if(!mValid)
         {
             Events::instance().post(Event::UNSPENTS_SAVED);
@@ -188,8 +195,11 @@ namespace BitCoin
             return false;
         }
 
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME, "Saving unspent transactions");
+
         ArcMist::String filePath = Info::instance().path();
         ArcMist::String filePathName, fileName;
+        ArcMist::FileOutputStream *file;
         uint16_t fileID;
 
         filePath.pathAppend("unspent");
@@ -201,17 +211,16 @@ namespace BitCoin
             fileName.clear();
             fileID = ArcMist::Endian::convert(i, ArcMist::Endian::LITTLE);
             fileName.writeHex(&fileID, 2);
-
             filePathName = filePath;
             filePathName.pathAppend(fileName);
 
-            ArcMist::FileOutputStream file(fileName, true);
-            file.setOutputEndian(ArcMist::Endian::LITTLE);
-            mSets[i].write(&file);
+            file = new ArcMist::FileOutputStream(filePathName, true);
+            file->setOutputEndian(ArcMist::Endian::LITTLE);
+            mSets[i].write(file);
+            delete file;
         }
 
         mModified = false;
-        Events::instance().post(Event::UNSPENTS_SAVED);
         return true;
     }
 
