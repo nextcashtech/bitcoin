@@ -22,6 +22,27 @@
 #define MAIN_LOG_NAME "Main"
 
 
+pid_t daemonPID(const char *pPath)
+{
+    ArcMist::FileInputStream pidStream(pPath);
+    if(!pidStream.isValid())
+        return 0;
+    ArcMist::Buffer pidBuffer;
+    uint8_t byte;
+    while(pidStream.remaining())
+    {
+        byte = pidStream.readByte();
+        if(ArcMist::isWhiteSpace(byte))
+            break;
+        pidBuffer.writeByte(byte);
+    }
+    ArcMist::String pidString = pidBuffer.readString(pidBuffer.length());
+    if(!pidString)
+        return 0;
+    return std::stol(pidString.text());
+}
+
+
 int main(int pArgumentCount, char **pArguments)
 {
     bool nextIsPath = false, nextIsSeed = false, noDaemon = false;
@@ -88,31 +109,21 @@ int main(int pArgumentCount, char **pArguments)
     if(stop)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "PID file : %s", pidFilePath.text());
-        pid_t kill_pid = 0;
-        ArcMist::FileInputStream pidStream(pidFilePath.text());
-        ArcMist::Buffer pidBuffer;
-        uint8_t byte;
-        while(pidStream.remaining())
+        pid_t killPID = daemonPID(pidFilePath.text());
+
+        if(killPID == 0)
         {
-            byte = pidStream.readByte();
-            if(byte == '\n')
-                break;
-            pidBuffer.writeByte(byte);
-        }
-        ArcMist::String pidString = pidBuffer.readString(pidBuffer.length());
-        if(!pidString)
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, MAIN_LOG_NAME, "Daemon pid not found");
+            ArcMist::Log::add(ArcMist::Log::ERROR, MAIN_LOG_NAME, "PID not found");
             return 1;
         }
-        kill_pid = std::stol(pidString.text());
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "Killing daemon pid %d", kill_pid);
 
-        if(kill_pid == 0)
-            return 1;
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "Killing daemon PID %d", killPID);
 
-        if(kill(kill_pid, SIGTERM) < 0)
-            ArcMist::Log::add(ArcMist::Log::INFO, MAIN_LOG_NAME, "Kill pid failed");
+        if(kill(killPID, SIGTERM) < 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, MAIN_LOG_NAME, "Kill PID failed. Deleting PID file");
+            std::remove(pidFilePath.text());
+        }
 
         return 0;
     }
@@ -121,6 +132,15 @@ int main(int pArgumentCount, char **pArguments)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "Log file : %s", logFilePath.text());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "PID file : %s", pidFilePath.text());
+
+        // Check if already running
+        pid_t currentPID = daemonPID(pidFilePath.text());
+        if(currentPID != 0)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, MAIN_LOG_NAME, "Daemon is already running under PID %d", currentPID);
+            ArcMist::Log::add(ArcMist::Log::WARNING, MAIN_LOG_NAME, "Call with parameter --stop");
+            return 1;
+        }
     }
 
     //TODO Move new connections to seperate thread
@@ -153,7 +173,7 @@ int main(int pArgumentCount, char **pArguments)
 
     // Set up daemon to log to a file
     if(!noDaemon)
-        ArcMist::Log::setOutput(new ArcMist::FileOutputStream(logFilePath.text()), true);
+        ArcMist::Log::setOutput(new ArcMist::FileOutputStream(logFilePath.text(), false, true), true);
 
     // Write pid to file
     if(!noDaemon)
@@ -164,6 +184,9 @@ int main(int pArgumentCount, char **pArguments)
     }
 
     // "testnet-seed.bitcoin.jonasschnelli.ch"
+    // seed.tbtc.petertodd.org
+    // testnet-seed.bluematt.me
+    // testnet-seed.bitcoin.schildbach.de
 
     daemon.run(seed, !noDaemon);
 
