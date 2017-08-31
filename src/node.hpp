@@ -1,6 +1,7 @@
 #ifndef BITCOIN_NODE_HPP
 #define BITCOIN_NODE_HPP
 
+#include "arcmist/base/mutex.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "arcmist/io/network.hpp"
 #include "base.hpp"

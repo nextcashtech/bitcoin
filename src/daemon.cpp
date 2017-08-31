@@ -4,6 +4,8 @@
 #include "info.hpp"
 #include "block.hpp"
 #include "events.hpp"
+#include "block.hpp"
+#include "block_chain.hpp"
 
 #include <unistd.h>
 #include <csignal>
@@ -37,6 +39,9 @@ namespace BitCoin
         mStopping = false;
         mNodeThread = NULL;
         mManagerThread = NULL;
+        previousSigTermChildHandler = NULL;
+        previousSigTermHandler= NULL;
+        previousSigIntHandler = NULL;
     }
 
     Daemon::~Daemon()
@@ -47,8 +52,8 @@ namespace BitCoin
 
     void Daemon::handleSigTermChild(int pValue)
     {
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Terminate child signal received. Stopping.");
-        instance().stop();
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Terminate child signal received.");
+        //instance().stop();
     }
 
     void Daemon::handleSigTerm(int pValue)
@@ -63,10 +68,11 @@ namespace BitCoin
         instance().stop();
     }
 
-    void Daemon::run(ArcMist::String &pSeed)
+    void Daemon::run(ArcMist::String &pSeed, bool pInDaemonMode)
     {
-        start();
-        
+        if(!start(pInDaemonMode))
+            return;
+
         if(pSeed)
             querySeed(pSeed);
         else
@@ -76,24 +82,27 @@ namespace BitCoin
             ArcMist::Thread::sleep(1);
     }
 
-    void Daemon::start()
+    bool Daemon::start(bool pInDaemonMode)
     {
         if(isRunning())
         {
             ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_DAEMON_LOG_NAME, "Already running. Start aborted.");
-            return;
+            return false;
         }
 
         if(mStopping)
         {
             ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_DAEMON_LOG_NAME, "Still stopping. Start aborted.");
-            return;
+            return false;
         }
 
         // Set signal handlers
-        previousSigTermChildHandler = signal(SIGCHLD, handleSigTermChild);
-        previousSigTermHandler = signal(SIGTERM, handleSigTerm);
-        previousSigIntHandler = signal(SIGINT, handleSigInt);
+        if(pInDaemonMode)
+        {
+            previousSigTermChildHandler = signal(SIGCHLD, handleSigTermChild);
+            previousSigTermHandler = signal(SIGTERM, handleSigTerm);
+            previousSigIntHandler = signal(SIGINT, handleSigInt);
+        }
 
         switch(network())
         {
@@ -104,19 +113,37 @@ namespace BitCoin
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Starting BitCoin Daemon for Test Net");
                 break;
             default:
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Starting BitCoin Daemon for Unknown Net");
-                break;
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Starting BitCoin Daemon for Unknown Net");
+                return false;
         }
 
-        mNodeThread = new ArcMist::Thread("Node", processNodes);
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Loading Info");
+        Info::instance();
 
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Loading Blocks");
+        if(!BlockChain::instance().loadBlocks())
+            return false;
+
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Loading Unspent Transaction Outputs");
+        if(!UnspentPool::instance().load())
+            return false;
+
+        mNodeThread = new ArcMist::Thread("Node", processNodes);
         if(mNodeThread == NULL)
+        {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create node thread");
+            return false;
+        }
 
         mManagerThread = new ArcMist::Thread("Manager", processManager);
-
         if(mManagerThread == NULL)
+        {
+            mStopping = true;
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create manager thread");
+            return false;
+        }
+        
+        return true;
     }
 
     void Daemon::stop()
@@ -136,9 +163,16 @@ namespace BitCoin
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Stopping");
 
         // Set signal handlers back to original
-        signal(SIGCHLD, previousSigTermChildHandler);
-        signal(SIGTERM, previousSigTermHandler);
-        signal(SIGINT, previousSigIntHandler);
+        if(previousSigTermChildHandler != NULL)
+            signal(SIGCHLD, previousSigTermChildHandler);
+        if(previousSigTermHandler != NULL)
+            signal(SIGTERM, previousSigTermHandler);
+        if(previousSigIntHandler != NULL)
+            signal(SIGINT, previousSigIntHandler);
+
+        previousSigTermChildHandler = NULL;
+        previousSigTermHandler= NULL;
+        previousSigIntHandler = NULL;
 
         mStopping = true;
 
@@ -293,6 +327,12 @@ namespace BitCoin
 
             if(events.elapsedSince(Event::INFO_SAVED, 300))
                 Info::instance().save();
+
+            if(daemon.mStopping)
+                break;
+
+            if(events.elapsedSince(Event::UNSPENTS_SAVED, 300))
+                UnspentPool::instance().save();
 
             if(daemon.mStopping)
                 break;

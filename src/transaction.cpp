@@ -11,17 +11,30 @@
 
 namespace BitCoin
 {
+    Transaction::Transaction(const Transaction &pCopy)
+    {
+        version = pCopy.version;
+        lockTime = pCopy.lockTime;
+        hash = pCopy.hash;
+        hash = pCopy.hash;
+
+        for(std::vector<Input *>::const_iterator i=pCopy.inputs.begin();i!=pCopy.inputs.end();++i)
+            inputs.push_back(new Input(**i));
+        for(std::vector<Output *>::const_iterator i=pCopy.outputs.begin();i!=pCopy.outputs.end();++i)
+            outputs.push_back(new Output(**i));
+    }
+
     Transaction::~Transaction()
     {
         for(unsigned int i=0;i<mUnspents.size();i++)
             if(mUnspents[i] != NULL)
                 delete mUnspents[i];
-        for(unsigned int i=0;i<inputs.size();i++)
-            if(inputs[i] != NULL)
-                delete inputs[i];
-        for(unsigned int i=0;i<outputs.size();i++)
-            if(outputs[i] != NULL)
-                delete outputs[i];
+        for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+            if((*input) != NULL)
+                delete (*input);
+        for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
+            if((*output) != NULL)
+                delete (*output);
     }
 
     void Transaction::clear()
@@ -33,11 +46,11 @@ namespace BitCoin
         for(unsigned int i=0;i<mUnspents.size();i++)
             delete mUnspents[i];
         mUnspents.clear();
-        for(unsigned int i=0;i<inputs.size();i++)
-            delete inputs[i];
+        for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+            delete (*input);
         inputs.clear();
-        for(unsigned int i=0;i<outputs.size();i++)
-            delete outputs[i];
+        for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
+            delete (*output);
         outputs.clear();
     }
 
@@ -103,7 +116,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::process(UnspentPool &pUnspentPool, bool pTest)
+    bool Transaction::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase, bool pTest)
     {
         ScriptInterpreter interpreter;
         Unspent *unspent;
@@ -113,83 +126,117 @@ namespace BitCoin
         mFee = 0;
 
         // Process Inputs
-        for(unsigned int i=0;i<inputs.size();i++)
+        unsigned int index = 1;
+        for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
         {
-            // Find unspent transaction for input
-            unspent = pUnspentPool.find(inputs[i]->outpoint.transactionID, inputs[i]->outpoint.index);
-            if(unspent)
+            // Check if this is a coinbase
+            if(pCoinBase)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d outpoint transaction not found : trans %s output %d", i + 1,
-                  inputs[i]->outpoint.transactionID.hex().text(), inputs[i]->outpoint.index + 1);
-                return false;
+                if((*input)->outpoint.index != 0xffffffff)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Coinbase Input %d outpoint index is not 0xffffff : %08x", index, (*input)->outpoint.index);
+                    return false;
+                }
+            }
+            else
+            {
+                // Find unspent transaction for input
+                unspent = pUnspentPool.find((*input)->outpoint.transactionID, (*input)->outpoint.index);
+                if(unspent == NULL)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d outpoint transaction not found : trans %s output %d", index,
+                      (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index + 1);
+                    return false;
+                }
+
+                spents.push_back(unspent);
             }
 
-            spents.push_back(unspent);
             interpreter.clear();
 
             // Process signature script
-            inputs[i]->script.setReadOffset(0);
-            if(!interpreter.process(inputs[i]->script))
+            (*input)->script.setReadOffset(0);
+            if(!interpreter.process((*input)->script))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d signature script failed", i + 1);
+                  "Input %d signature script failed", index);
                 return false;
             }
 
             // Add unspent transaction script
-            unspent->script.setReadOffset(0);
-            if(!interpreter.process(unspent->script));
+            if(unspent != NULL)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d output script failed", i + 1);
-                return false;
+                unspent->script.setReadOffset(0);
+                if(!interpreter.process(unspent->script));
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d output script failed", index);
+                    return false;
+                }
             }
 
             if(!interpreter.isValid())
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d script is not valid", i + 1);
+                  "Input %d script is not valid", index);
                 return false;
             }
 
-            if(!interpreter.isVerified())
+            if(!pCoinBase)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d script did not verify", i + 1);
-                return false;
+                if(!interpreter.isVerified())
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d script did not verify", index);
+                    return false;
+                }
+
+                mFee += unspent->amount;
             }
 
-            mFee += unspent->amount;
+            ++index;
         }
 
         // Process Outputs
-        for(unsigned int i=0;i<outputs.size();i++)
+        index = 1;
+        for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
         {
-            unspent = new Unspent();
-            unspent->amount = outputs[i]->amount;
-            unspent->script = outputs[i]->script;
-            unspent->transactionID = id();
-            unspent->index = i;
-            parseOutputScript(unspent->script, unspent->hash);
+            if((*output)->amount < 0)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Output %d amount is negative %d", index, (*output)->amount);
+                  return false;
+            }
 
-            if(outputs[i]->amount > mFee)
+            unspent = new Unspent();
+            unspent->amount = (*output)->amount;
+            unspent->script = (*output)->script;
+            unspent->script.compact();
+            unspent->transactionID = hash;
+            unspent->index = index - 1;
+            parseOutputScript(unspent->script, unspent->hash);
+            mUnspents.push_back(unspent);
+
+            if(!pCoinBase && (*output)->amount > 0 && (uint64_t)(*output)->amount > mFee)
             {
                 ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
                   "Outputs are more than inputs");
                 return false;
             }
 
-            mFee -= outputs[i]->amount;
+            mFee -= (*output)->amount;
+            ++index;
         }
 
         if(!pTest)
         {
-            for(unsigned int i=0;i<mUnspents.size();i++)
-                pUnspentPool.add(*mUnspents[i]);
+            for(std::vector<Unspent *>::iterator unspent=mUnspents.begin();unspent!=mUnspents.end();++unspent)
+                pUnspentPool.add(**unspent);
 
-            for(unsigned int i=0;i<spents.size();i++)
-                pUnspentPool.spend(spents[i]);
+            for(std::vector<Unspent *>::iterator unspent=spents.begin();unspent!=spents.end();++unspent)
+                pUnspentPool.spend(*unspent);
         }
 
         return true;
@@ -203,15 +250,15 @@ namespace BitCoin
         result += compactIntegerSize(inputs.size());
 
         // Inputs
-        for(unsigned int i=0;i<inputs.size();i++)
-            result += inputs[i]->size();
+        for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+            result += (*input)->size();
 
         // Output Count
         result += compactIntegerSize(outputs.size());
 
         // Outputs
-        for(unsigned int i=0;i<outputs.size();i++)
-            result += outputs[i]->size();
+        for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
+            result += (*output)->size();
 
         // Lock Time
         result += 4;
@@ -276,7 +323,7 @@ namespace BitCoin
         outpoint.write(pStream);
         writeCompactInteger(pStream, script.length());
         script.setReadOffset(0);
-        pStream->write(&script, script.length());
+        pStream->writeStream(&script, script.length());
         pStream->writeUnsignedInt(sequence);
     }
 
@@ -289,7 +336,8 @@ namespace BitCoin
         if(pStream->remaining() < bytes)
             return false;
         script.clear();
-        script.read(pStream, bytes);
+        script.setSize(bytes);
+        script.writeStream(pStream, bytes);
 
         if(pStream->remaining() < 4)
             return false;
@@ -319,10 +367,10 @@ namespace BitCoin
 
     void Output::write(ArcMist::OutputStream *pStream)
     {
-        pStream->writeUnsignedLong(amount);
+        pStream->writeLong(amount);
         writeCompactInteger(pStream, script.length());
         script.setReadOffset(0);
-        pStream->write(&script, script.length());
+        pStream->writeStream(&script, script.length());
     }
 
     bool Output::read(ArcMist::InputStream *pStream)
@@ -336,7 +384,8 @@ namespace BitCoin
         if(pStream->remaining() < bytes)
             return false;
         script.clear();
-        script.read(pStream, bytes);
+        script.setSize(bytes);
+        script.writeStream(pStream, bytes);
 
         return true;
     }
@@ -350,15 +399,15 @@ namespace BitCoin
         writeCompactInteger(pStream, inputs.size());
 
         // Inputs
-        for(unsigned int i=0;i<inputs.size();i++)
-            inputs[i]->write(pStream);
+        for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+            (*input)->write(pStream);
 
         // Output Count
         writeCompactInteger(pStream, outputs.size());
 
         // Outputs
-        for(unsigned int i=0;i<outputs.size();i++)
-            outputs[i]->write(pStream);
+        for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
+            (*output)->write(pStream);
 
         // Lock Time
         pStream->writeUnsignedInt(lockTime);
@@ -367,101 +416,93 @@ namespace BitCoin
     bool Transaction::read(ArcMist::InputStream *pStream, bool pCalculateHash)
     {
         // Create hash
-        ArcMist::Digest *sha256 = NULL;
+        ArcMist::Digest *digest = NULL;
         if(pCalculateHash)
-            sha256 = new ArcMist::Digest(ArcMist::Digest::SHA256);
+        {
+            digest = new ArcMist::Digest(ArcMist::Digest::SHA256_SHA256);
+            digest->setOutputEndian(ArcMist::Endian::LITTLE);
+        }
         hash.clear();
 
         if(pStream->remaining() < 5)
         {
-            if(sha256 != NULL)
-                delete sha256;
+            if(digest != NULL)
+                delete digest;
             return false;
         }
 
         // Version
         version = pStream->readUnsignedInt();
         if(pCalculateHash)
-            sha256->writeUnsignedInt(version);
+            digest->writeUnsignedInt(version);
 
         // Input Count
         uint64_t count = readCompactInteger(pStream);
         if(pCalculateHash)
-            writeCompactInteger(sha256, count);
+            writeCompactInteger(digest, count);
         if(pStream->remaining() < count)
         {
-            if(sha256 != NULL)
-                delete sha256;
+            if(digest != NULL)
+                delete digest;
             return false;
         }
 
         // Inputs
         inputs.resize(count);
-        for(unsigned int i=0;i<count;i++)
-            inputs[i] = NULL;
-        for(unsigned int i=0;i<count;i++)
+        for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+            (*input) = NULL;
+        for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
         {
-            inputs[i] = new Input();
-            if(!inputs[i]->read(pStream))
+            (*input) = new Input();
+            if(!(*input)->read(pStream))
             {
-                if(sha256 != NULL)
-                    delete sha256;
+                if(digest != NULL)
+                    delete digest;
                 return false;
             }
             else if(pCalculateHash)
-                inputs[i]->write(sha256);
+                (*input)->write(digest);
         }
 
         // Output Count
         count = readCompactInteger(pStream);
         if(pCalculateHash)
-            writeCompactInteger(sha256, count);
+            writeCompactInteger(digest, count);
 
         // Outputs
         outputs.resize(count);
-        for(unsigned int i=0;i<count;i++)
-            outputs[i] = NULL;
-        for(unsigned int i=0;i<count;i++)
+        for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
+            (*output) = NULL;
+        for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
         {
-            outputs[i] = new Output();
-            if(!outputs[i]->read(pStream))
+            (*output) = new Output();
+            if(!(*output)->read(pStream))
             {
-                if(sha256 != NULL)
-                    delete sha256;
+                if(digest != NULL)
+                    delete digest;
                 return false;
             }
             else if(pCalculateHash)
-                outputs[i]->write(sha256);
+                (*output)->write(digest);
         }
 
         if(pStream->remaining() < 4)
         {
-            if(sha256 != NULL)
-                delete sha256;
+            if(digest != NULL)
+                delete digest;
             return false;
         }
 
         // Lock Time
         lockTime = pStream->readUnsignedInt();
         if(pCalculateHash)
-            sha256->writeUnsignedInt(lockTime);
+            digest->writeUnsignedInt(lockTime);
 
         if(pCalculateHash)
-        {
-            // Get SHA256 of block data
-            ArcMist::Buffer hashData(32);
-            sha256->getResult(&hashData);
+            digest->getResult(&hash);
 
-            // Double SHA256
-            ArcMist::Buffer doubleHashData(32);
-            ArcMist::Digest::sha256(&hashData, hashData.length(), &doubleHashData);
-
-            // Write to hash
-            hash.read(&doubleHashData, 32);
-        }
-
-        if(sha256 != NULL)
-            delete sha256;
+        if(digest != NULL)
+            delete digest;
         return true;
     }
 
@@ -470,25 +511,18 @@ namespace BitCoin
         hash.clear();
 
         // Write into digest
-        ArcMist::Digest sha256(ArcMist::Digest::SHA256);
-        write(&sha256);
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        write(&digest);
 
-        // Get SHA256 of block data
-        ArcMist::Buffer hashData(32);
-        sha256.getResult(&hashData);
-
-        // Double SHA256
-        ArcMist::Buffer doubleHashData(32);
-        ArcMist::Digest::sha256(&hashData, hashData.length(), &doubleHashData);
-
-        // Write to hash
-        hash.read(&doubleHashData, 32);
+        digest.getResult(&hash);
     }
 
     bool Transaction::test()
     {
-        bool success = true;
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "------------- Starting Transaction Tests -------------");
 
+        bool success = true;
         KeyContext context;
         PrivateKey privateKey1(&context);
         PublicKey publicKey1(&context);
@@ -499,21 +533,21 @@ namespace BitCoin
         ArcMist::Buffer data;
 
         // Initialize private key
-        data.writeHexAsBinary("d68e0869df44615cc57f196208a896653e969f69960c6435f38ae47f6b6d082d");
+        data.writeHex("d68e0869df44615cc57f196208a896653e969f69960c6435f38ae47f6b6d082d");
         privateKey1.read(&data);
 
         // Initialize public key
         data.clear();
-        data.writeHexAsBinary("03077b2a0406db4b4e2cddbe9aca5e9f1a3cf039feb843992d05cc0b7a75046635");
+        data.writeHex("03077b2a0406db4b4e2cddbe9aca5e9f1a3cf039feb843992d05cc0b7a75046635");
         publicKey1.read(&data);
 
         // Initialize private key
-        data.writeHexAsBinary("4fd0a873dba1d74801f182013c5ae17c17213d333657047a6e6c5865f388a60a");
+        data.writeHex("4fd0a873dba1d74801f182013c5ae17c17213d333657047a6e6c5865f388a60a");
         privateKey2.read(&data);
 
         // Initialize public key
         data.clear();
-        data.writeHexAsBinary("03362365326bd230642290787f3ba93d6299392ac5d26cd66e300f140184521e9c");
+        data.writeHex("03362365326bd230642290787f3ba93d6299392ac5d26cd66e300f140184521e9c");
         publicKey2.read(&data);
 
         // Create unspent (so we can spend it)
@@ -556,7 +590,8 @@ namespace BitCoin
 
         transaction.inputs[0]->script.setReadOffset(0);
         transaction.calculateHash();
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        transaction.inputs[0]->script.setReadOffset(0);
         if(!interpreter.process(transaction.inputs[0]->script))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
@@ -593,7 +628,8 @@ namespace BitCoin
 
         transaction.inputs[0]->script.setReadOffset(0);
         transaction.calculateHash();
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        transaction.inputs[0]->script.setReadOffset(0);
         if(!interpreter.process(transaction.inputs[0]->script))
         {
             interpreter.printStack("After signature script");
@@ -631,7 +667,8 @@ namespace BitCoin
 
         transaction.inputs[0]->script.setReadOffset(0);
         transaction.calculateHash();
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        transaction.inputs[0]->script.setReadOffset(0);
         if(!interpreter.process(transaction.inputs[0]->script))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
@@ -667,7 +704,9 @@ namespace BitCoin
 
         // Create hash of redeemScript
         Hash redeemHash(20);
-        sha256RIPEMD160(&redeemScript, redeemScript.length(), redeemHash);
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
+        digest.writeStream(&redeemScript, redeemScript.length());
+        digest.getResult(&redeemHash);
 
         unspent->amount = 51000;
         unspent->script.clear();
@@ -684,7 +723,8 @@ namespace BitCoin
 
         transaction.inputs[0]->script.setReadOffset(0);
         transaction.calculateHash();
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        transaction.inputs[0]->script.setReadOffset(0);
         if(!interpreter.process(transaction.inputs[0]->script))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");

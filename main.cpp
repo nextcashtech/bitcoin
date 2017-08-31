@@ -24,7 +24,6 @@
 
 int main(int pArgumentCount, char **pArguments)
 {
-    ArcMist::Log::setLevel(ArcMist::Log::VERBOSE);
     bool nextIsPath = false, nextIsSeed = false, noDaemon = false;
     ArcMist::String path = "/home/curtis/Development/bcc_test/", seed;
     bool stop = false;
@@ -42,6 +41,10 @@ int main(int pArgumentCount, char **pArguments)
             seed = pArguments[i];
             nextIsSeed = false;
         }
+        else if(std::strcmp(pArguments[i], "-v") == 0)
+            ArcMist::Log::setLevel(ArcMist::Log::VERBOSE);
+        else if(std::strcmp(pArguments[i], "-vv") == 0)
+            ArcMist::Log::setLevel(ArcMist::Log::DEBUG);
         else if(std::strcmp(pArguments[i], "--nodaemon") == 0)
             noDaemon = true;
         else if(std::strcmp(pArguments[i], "--path") == 0)
@@ -57,12 +60,26 @@ int main(int pArgumentCount, char **pArguments)
             std::cerr << "    --stop               -> Kill active daemon" << std::endl;
             std::cerr << "    --path PATH          -> Specify directory for daemon files. Default : " << path.text() << std::endl;
             std::cerr << "    --seed SEED_NAME     -> Start daemon and load peers from seed" << std::endl;
+            std::cerr << "    -v                   -> Verbose logging" << std::endl;
+            std::cerr << "    -vv                  -> Debug loggin" << std::endl;
             std::cerr << "    --nodaemon           -> Don't perform daemon process fork" << std::endl;
             std::cerr << std::endl;
             return 0;
         }
         else if(std::strcmp(pArguments[i], "--stop") == 0)
             stop = true;
+        else
+        {
+            std::cerr << "\033[0;31mUnknown parameter : " << pArguments[i] << "\033[0m" << std::endl;
+            std::cerr << "Usage :" << std::endl;
+            std::cerr << "    help or --help or -h -> Display this message" << std::endl;
+            std::cerr << "    --stop               -> Kill active daemon" << std::endl;
+            std::cerr << "    --path PATH          -> Specify directory for daemon files. Default : " << path.text() << std::endl;
+            std::cerr << "    --seed SEED_NAME     -> Start daemon and load peers from seed" << std::endl;
+            std::cerr << "    --nodaemon           -> Don't perform daemon process fork" << std::endl;
+            std::cerr << std::endl;
+            return 0;
+        }
 
     BitCoin::Info::setPath(path);
     ArcMist::String logFilePath = BitCoin::Info::path() + "daemon.log";
@@ -100,9 +117,11 @@ int main(int pArgumentCount, char **pArguments)
         return 0;
     }
 
-    ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "Log file : %s", logFilePath.text());
     if(!noDaemon)
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "Log file : %s", logFilePath.text());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "PID file : %s", pidFilePath.text());
+    }
 
     //TODO Move new connections to seperate thread
 
@@ -133,26 +152,23 @@ int main(int pArgumentCount, char **pArguments)
     BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
 
     // Set up daemon to log to a file
-    ArcMist::FileOutputStream *logStream = new ArcMist::FileOutputStream(logFilePath.text(), true, false);
-    ArcMist::Log::setOutput(logStream);
+    if(!noDaemon)
+        ArcMist::Log::setOutput(new ArcMist::FileOutputStream(logFilePath.text()), true);
 
     // Write pid to file
     if(!noDaemon)
     {
-        ArcMist::FileOutputStream pidStream(pidFilePath.text(), false, true);
+        ArcMist::FileOutputStream pidStream(pidFilePath.text(), true);
         pidStream.writeFormatted("%d", pid);
         pidStream.writeByte('\n');
     }
 
     // "testnet-seed.bitcoin.jonasschnelli.ch"
 
-    daemon.run(seed);
+    daemon.run(seed, !noDaemon);
 
     if(!noDaemon)
         std::remove(pidFilePath.text());
-
-    if(logStream)
-        delete logStream;
 
     return 0;
 }

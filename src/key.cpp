@@ -3,6 +3,7 @@
 #include "arcmist/base/log.hpp"
 #include "arcmist/base/math.hpp"
 #include "arcmist/io/buffer.hpp"
+#include "arcmist/crypto/digest.hpp"
 #include "interpreter.hpp"
 
 #define BITCOIN_KEY_LOG_NAME "BitCoin Key"
@@ -200,10 +201,9 @@ namespace BitCoin
             return mHash;
 
         // Calculate hash
-        mHash.setSize(20);
-        ArcMist::Buffer data;
-        write(&data, true, false); // Compressed
-        sha256RIPEMD160(&data, data.length(), mHash);
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
+        write(&digest, true, false); // Compressed
+        digest.getResult(&mHash);
         return mHash;
     }
 
@@ -258,8 +258,9 @@ namespace BitCoin
     {
         bool test()
         {
-            bool success = true;
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "------------- Starting Key Tests -------------");
 
+            bool success = true;
             KeyContext context;
             PrivateKey privateKey(&context);
             PublicKey publicKey(&context);

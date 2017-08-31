@@ -18,6 +18,10 @@ namespace BitCoin
     public:
 
         Outpoint() : transactionID(32) { index = 0xffffffff; }
+        Outpoint(const Outpoint &pCopy) : transactionID(pCopy.transactionID)
+        {
+            index = pCopy.index;
+        }
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
@@ -32,6 +36,10 @@ namespace BitCoin
     public:
 
         Input() { sequence = 0xffffffff; }
+        Input(const Input &pCopy) : outpoint(pCopy.outpoint), script(pCopy.script)
+        {
+            sequence = pCopy.sequence;
+        }
         virtual ~Input() {}
 
         // Outpoint (32 trans id + 4 index), + 4 sequence, + script length size + script length
@@ -40,7 +48,7 @@ namespace BitCoin
         virtual void write(ArcMist::OutputStream *pStream);
         virtual bool read(ArcMist::InputStream *pStream);
 
-        unsigned int blockHeight() { return 0; } //TODO signatureScript.blockHeight(); }
+        unsigned int blockHeight() { return 0; } //TODO Block height for coinbase //signatureScript.blockHeight(); }
 
         Outpoint outpoint;
         ArcMist::Buffer script;
@@ -66,6 +74,10 @@ namespace BitCoin
     public:
 
         Output() {}
+        Output(const Output &pCopy) : script(pCopy.script)
+        {
+            amount = pCopy.amount;
+        }
 
         // 8 amount + script length size + script length
         unsigned int size() { return 8 + compactIntegerSize(script.length()) + script.length(); }
@@ -73,7 +85,7 @@ namespace BitCoin
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
-        uint64_t amount; // Number of Satoshis spent (documentation says this should be signed)
+        int64_t amount; // Number of Satoshis spent (documentation says this should be signed)
         ArcMist::Buffer script;
 
     };
@@ -83,6 +95,7 @@ namespace BitCoin
     public:
 
         Transaction() { version = 1; mFee = 0; lockTime = 0xffffffff; }
+        Transaction(const Transaction &pCopy);
         ~Transaction();
 
         void write(ArcMist::OutputStream *pStream);
@@ -115,25 +128,21 @@ namespace BitCoin
         std::vector<Output *> outputs;
         uint32_t lockTime;
 
-        Hash &id() { return mID; }
         unsigned int size();
         uint64_t feeRate();
 
         void calculateHash();
-        bool process(UnspentPool &pUnspentPool, bool pTest);
+        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase, bool pTest);
 
         // Run unit tests
         static bool test();
 
     private:
 
-        Hash mID;
         uint64_t mFee;
         std::vector<Unspent *> mUnspents;
 
     };
-    
-    
 }
 
 #endif

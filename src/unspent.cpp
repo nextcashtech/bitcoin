@@ -4,6 +4,7 @@
 #include "arcmist/io/file_stream.hpp"
 #include "base.hpp"
 #include "info.hpp"
+#include "events.hpp"
 
 #define BITCOIN_UNSPENT_LOG_NAME "BitCoin Unspent"
 
@@ -40,33 +41,9 @@ namespace BitCoin
 
     UnspentPool::UnspentPool()
     {
+        mValid = true;
         mModified = false;
         mLastBlockID = 0;
-
-        // Load from file system
-        ArcMist::String filePath = Info::instance().path();
-        ArcMist::String filePathName, fileName;
-        uint16_t fileID;
-
-        filePath.pathAppend("unspent");
-
-        for(unsigned int i=0;i<0xffff;i++)
-        {
-            fileName.clear();
-            fileID = ArcMist::Endian::convert(i, ArcMist::Endian::LITTLE);
-            fileName.writeHex(&fileID, 2);
-
-            filePathName = filePath;
-            filePathName.pathAppend(fileName);
-
-            ArcMist::FileInputStream file(fileName);
-            file.setInputEndian(ArcMist::Endian::LITTLE);
-            if(!mSets[i].read(&file))
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_UNSPENT_LOG_NAME, "Failed to read set %x", fileID);
-                mValid = false;
-            }
-        }
     }
 
     UnspentPool::~UnspentPool()
@@ -158,19 +135,18 @@ namespace BitCoin
         mPendingSpend.clear();
     }
 
-    bool UnspentPool::save()
+    bool UnspentPool::load()
     {
-        if(!mValid)
-            return false;
+        clear();
 
-        if(!mModified)
-            return true;
-
+        // Load from file system
         ArcMist::String filePath = Info::instance().path();
         ArcMist::String filePathName, fileName;
         uint16_t fileID;
 
         filePath.pathAppend("unspent");
+
+        ArcMist::createDirectory(filePath.text());
 
         for(unsigned int i=0;i<0xffff;i++)
         {
@@ -181,12 +157,61 @@ namespace BitCoin
             filePathName = filePath;
             filePathName.pathAppend(fileName);
 
-            ArcMist::FileOutputStream file(fileName, false, true);
+            if(ArcMist::fileExists(filePathName))
+            {
+                ArcMist::FileInputStream file(fileName);
+                file.setInputEndian(ArcMist::Endian::LITTLE);
+                if(!mSets[i].read(&file))
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_UNSPENT_LOG_NAME, "Failed to read set %04x", fileID);
+                    mValid = false;
+                }
+            }
+            //else
+            //    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_UNSPENT_LOG_NAME, "No file for set %04x", fileID);
+        }
+
+        return mValid;
+    }
+
+    bool UnspentPool::save()
+    {
+        if(!mValid)
+        {
+            Events::instance().post(Event::UNSPENTS_SAVED);
+            return false;
+        }
+
+        if(!mModified)
+        {
+            Events::instance().post(Event::UNSPENTS_SAVED);
+            return false;
+        }
+
+        ArcMist::String filePath = Info::instance().path();
+        ArcMist::String filePathName, fileName;
+        uint16_t fileID;
+
+        filePath.pathAppend("unspent");
+
+        ArcMist::createDirectory(filePath.text());
+
+        for(unsigned int i=0;i<0xffff;i++)
+        {
+            fileName.clear();
+            fileID = ArcMist::Endian::convert(i, ArcMist::Endian::LITTLE);
+            fileName.writeHex(&fileID, 2);
+
+            filePathName = filePath;
+            filePathName.pathAppend(fileName);
+
+            ArcMist::FileOutputStream file(fileName, true);
             file.setOutputEndian(ArcMist::Endian::LITTLE);
             mSets[i].write(&file);
         }
 
         mModified = false;
+        Events::instance().post(Event::UNSPENTS_SAVED);
         return true;
     }
 
@@ -194,6 +219,13 @@ namespace BitCoin
     {
         for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
             delete *iter;
+    }
+
+    void UnspentSet::clear()
+    {
+        for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
+            delete *iter;
+        mPool.clear();
     }
 
     Unspent *UnspentSet::find(const Hash &pTransactionID, uint32_t pIndex)

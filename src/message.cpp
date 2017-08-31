@@ -5,6 +5,7 @@
 #include "arcmist/base/log.hpp"
 #include "arcmist/base/endian.hpp"
 #include "arcmist/base/math.hpp"
+#include "arcmist/crypto/digest.hpp"
 #include "base.hpp"
 
 #include <cstring>
@@ -150,7 +151,7 @@ namespace BitCoin
 
             // Write header
             // Start String (4 bytes)
-            pOutput->writeHexAsBinary(networkStartString());
+            pOutput->writeHex(networkStartString());
 
             // Command Name (12 bytes padded with nulls)
             const char *name = nameFor(pData->type);
@@ -169,9 +170,11 @@ namespace BitCoin
             pOutput->writeUnsignedInt(payload.length());
 
             // Check Sum (4 bytes) SHA256(SHA256(payload))
-            uint8_t checkSum[4];
-            doubleSHA256First4(&payload, payload.length(), checkSum);
-            pOutput->write(checkSum, 4);
+            ArcMist::Buffer checkSum(32);
+            ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+            digest.writeStream(&payload, payload.length());
+            digest.getResult(&checkSum);
+            pOutput->writeStream(&checkSum, 4);
 
             // Write payload
             payload.setReadOffset(0);
@@ -258,17 +261,14 @@ namespace BitCoin
             // Check if header is complete
             if(pInput->remaining() < 20)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME, "Header not fully received : %d / %d",
-                  pInput->remaining() + 4, 24); // Add 4 for start string that is already read
+                //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME, "Header not fully received : %d / %d",
+                //  pInput->remaining() + 4, 24); // Add 4 for start string that is already read
                 pInput->setReadOffset(startReadOffset);
                 return NULL;
             }
 
             // Command Name (12 bytes padded with nulls)
             ArcMist::String command = pInput->readString(12);
-
-            if(command == "headers")
-                ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME, "headers received");
 
             // Payload Size (4 bytes)
             uint32_t payloadSize = pInput->readUnsignedInt();
@@ -289,15 +289,15 @@ namespace BitCoin
             }
 
             // Read payload
-            ArcMist::Buffer payload;
-            payload.setInputEndian(ArcMist::Endian::LITTLE);
-            payload.setSize(payloadSize);
-            pInput->readStream(&payload, payloadSize);
-            pInput->flush();
+            unsigned int payloadOffset = pInput->readOffset();
 
             // Validate check sum
             uint8_t checkSum[4];
-            doubleSHA256First4(&payload, payload.length(), checkSum);
+            ArcMist::Buffer checkSumData(32);
+            ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+            digest.writeStream(pInput, payloadSize);
+            digest.getResult(&checkSumData);
+            checkSumData.read(checkSum, 4);
             if(std::memcmp(checkSum, receivedCheckSum, 4) != 0)
             {
                 ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME, "Invalid check sum. Discarding.");
@@ -306,247 +306,95 @@ namespace BitCoin
                 return NULL;
             }
 
-            payload.setReadOffset(0);
+            pInput->setReadOffset(payloadOffset);
+            Data *result = NULL;
             switch(typeFor(command))
             {
                 case VERSION:
-                {
-                    VersionData *versionData = new VersionData();
-                    if(!versionData->read(&payload, payloadSize))
-                    {
-                        delete versionData;
-                        return NULL;
-                    }
-                    return versionData;
-                }
+                    result = new VersionData();
+                    break;
                 case VERACK:
-                {
-                    Data *versionAcknowledgeMessage = new Data(VERACK);
-                    if(!versionAcknowledgeMessage->read(&payload, payloadSize))
-                    {
-                        delete versionAcknowledgeMessage;
-                        return NULL;
-                    }
-                    return versionAcknowledgeMessage;
-                }
+                    result = new Data(VERACK);
+                    break;
                 case PING:
-                {
-                    PingData *pingMessage = new PingData();
-                    if(!pingMessage->read(&payload, payloadSize))
-                    {
-                        delete pingMessage;
-                        return NULL;
-                    }
-                    return pingMessage;
-                }
+                    result = new PingData();
+                    break;
                 case PONG:
-                {
-                    PongData *pongMessage = new PongData();
-                    if(!pongMessage->read(&payload, payloadSize))
-                    {
-                        delete pongMessage;
-                        return NULL;
-                    }
-                    return pongMessage;
-                }
+                    result = new PongData();
+                    break;
                 case REJECT:
-                {
-                    RejectData *rejectMessage = new RejectData();
-                    if(!rejectMessage->read(&payload, payloadSize))
-                    {
-                        delete rejectMessage;
-                        return NULL;
-                    }
-                    return rejectMessage;
-                }
+                    result = new RejectData();
+                    break;
                 case GET_ADDRESSES:
-                {
-                    Data *getAddressesMessage = new Data(GET_ADDRESSES);
-                    if(!getAddressesMessage->read(&payload, payloadSize))
-                    {
-                        delete getAddressesMessage;
-                        return NULL;
-                    }
-                    return getAddressesMessage;
-                }
+                    result = new Data(GET_ADDRESSES);
+                    break;
                 case ADDRESSES:
-                {
-                    AddressesData *addressesMessage = new AddressesData();
-                    if(!addressesMessage->read(&payload, payloadSize))
-                    {
-                        delete addressesMessage;
-                        return NULL;
-                    }
-                    return addressesMessage;
-                }
+                    result = new AddressesData();
+                    break;
                 case ALERT:
-                {
-                    Data *alertMessage = new Data(ALERT);
-                    if(!alertMessage->read(&payload, payloadSize))
-                    {
-                        delete alertMessage;
-                        return NULL;
-                    }
-                    return alertMessage;
-                }
+                    result = new Data(ALERT);
+                    break;
                 case FEE_FILTER:
-                {
-                    FeeFilterData *feeFilterMessage = new FeeFilterData();
-                    if(!feeFilterMessage->read(&payload, payloadSize))
-                    {
-                        delete feeFilterMessage;
-                        return NULL;
-                    }
-                    return feeFilterMessage;
-                }
+                    result = new FeeFilterData();
+                    break;
                 case FILTER_ADD:
-                {
-                    FilterAddData *filterAddMessage = new FilterAddData();
-                    if(!filterAddMessage->read(&payload, payloadSize))
-                    {
-                        delete filterAddMessage;
-                        return NULL;
-                    }
-                    return filterAddMessage;
-                }
+                    result = new FilterAddData();
+                    break;
                 case FILTER_CLEAR:
-                {
-                    Data *filterClearMessage = new Data(FILTER_CLEAR);
-                    if(!filterClearMessage->read(&payload, payloadSize))
-                    {
-                        delete filterClearMessage;
-                        return NULL;
-                    }
-                    return filterClearMessage;
-                }
+                    result = new Data(FILTER_CLEAR);
+                    break;
                 case FILTER_LOAD:
-                {
-                    FilterLoadData *filterLoadMessage = new FilterLoadData();
-                    if(!filterLoadMessage->read(&payload, payloadSize))
-                    {
-                        delete filterLoadMessage;
-                        return NULL;
-                    }
-                    return filterLoadMessage;
-                }
+                    result = new FilterLoadData();
+                    break;
                 case SEND_HEADERS:
-                {
-                    Data *sendHeadersMessage = new Data(SEND_HEADERS);
-                    if(!sendHeadersMessage->read(&payload, payloadSize))
-                    {
-                        delete sendHeadersMessage;
-                        return NULL;
-                    }
-                    return sendHeadersMessage;
-                }
+                    result = new Data(SEND_HEADERS);
+                    break;
                 case GET_BLOCKS:
-                {
-                    GetBlocksData *getBlocksMessage = new GetBlocksData();
-                    if(!getBlocksMessage->read(&payload, payloadSize))
-                    {
-                        delete getBlocksMessage;
-                        return NULL;
-                    }
-                    return getBlocksMessage;
-                }
+                    result = new GetBlocksData();
+                    break;
                 case BLOCK:
-                {
-                    BlockData *blockMessage = new BlockData();
-                    if(!blockMessage->read(&payload, payloadSize))
-                    {
-                        delete blockMessage;
-                        return NULL;
-                    }
-                    return blockMessage;
-                }
+                    result = new BlockData();
+                    break;
                 case GET_DATA:
-                {
-                    GetDataData *getDataMessage = new GetDataData();
-                    if(!getDataMessage->read(&payload, payloadSize))
-                    {
-                        delete getDataMessage;
-                        return NULL;
-                    }
-                    return getDataMessage;
-                }
+                    result = new GetDataData();
+                    break;
                 case GET_HEADERS:
-                {
-                    GetHeadersData *getHeadersMessage = new GetHeadersData();
-                    if(!getHeadersMessage->read(&payload, payloadSize))
-                    {
-                        delete getHeadersMessage;
-                        return NULL;
-                    }
-                    return getHeadersMessage;
-                }
+                    result = new GetHeadersData();
+                    break;
                 case HEADERS:
-                {
-                    HeadersData *headersMessage = new HeadersData();
-                    if(!headersMessage->read(&payload, payloadSize))
-                    {
-                        delete headersMessage;
-                        return NULL;
-                    }
-                    return headersMessage;
-                }
+                    result = new HeadersData();
+                    break;
                 case INVENTORY:
-                {
-                    InventoryData *inventoryMessage = new InventoryData();
-                    if(!inventoryMessage->read(&payload, payloadSize))
-                    {
-                        delete inventoryMessage;
-                        return NULL;
-                    }
-                    return inventoryMessage;
-                }
+                    result = new InventoryData();
+                    break;
                 case MEM_POOL:
-                {
-                    Data *memPoolMessage = new Data(MEM_POOL);
-                    if(!memPoolMessage->read(&payload, payloadSize))
-                    {
-                        delete memPoolMessage;
-                        return NULL;
-                    }
-                    return memPoolMessage;
-                }
+                    result = new Data(MEM_POOL);
+                    break;
                 case MERKLE_BLOCK:
-                {
-                    MerkleBlockData *merkleBlockMessage = new MerkleBlockData();
-                    if(!merkleBlockMessage->read(&payload, payloadSize))
-                    {
-                        delete merkleBlockMessage;
-                        return NULL;
-                    }
-                    return merkleBlockMessage;
-                }
+                    result = new MerkleBlockData();
+                    break;
                 case NOT_FOUND:
-                {
-                    NotFoundData *notFoundMessage = new NotFoundData();
-                    if(!notFoundMessage->read(&payload, payloadSize))
-                    {
-                        delete notFoundMessage;
-                        return NULL;
-                    }
-                    return notFoundMessage;
-                }
+                    result = new NotFoundData();
+                    break;
                 case TRANSACTION:
-                {
-                    TransactionData *transactionMessage = new TransactionData();
-                    if(!transactionMessage->read(&payload, payloadSize))
-                    {
-                        delete transactionMessage;
-                        return NULL;
-                    }
-                    return transactionMessage;
-                }
+                    result = new TransactionData();
+                    break;
                 default:
                 case UNKNOWN:
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                       "Unknown command name (%s). Discarding.", command);
-                    return NULL;
+                    result = NULL;
+                    break;
             }
 
-            return NULL;
+            if(result != NULL && !result->read(pInput, payloadSize))
+            {
+                delete result;
+                result = NULL;
+            }
+
+            pInput->flush();
+            return result;
         }
 
         VersionData::VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort,
@@ -1106,18 +954,18 @@ namespace BitCoin
 
         void NotFoundData::write(ArcMist::OutputStream *pStream)
         {
+            
         }
 
         bool NotFoundData::read(ArcMist::InputStream *pStream, unsigned int pSize)
         {
-            //if(pSize < 1)
-            //    return false;
-
             return true;
         }
 
         bool test()
         {
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "------------- Starting Message Tests -------------");
+
             bool result = true;
 
             /***********************************************************************************************

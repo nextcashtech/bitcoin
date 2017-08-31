@@ -14,7 +14,8 @@ namespace BitCoin
 {
     static Network sNetwork = TESTNET;
     static const uint8_t sMainNetworkStartBytes[4] = { 0xf9, 0xbe, 0xb4, 0xd9 };
-    static const uint8_t sTestNetworkStartBytes[4] = { 0x0b, 0x11, 0x09, 0x07 };
+    static const uint8_t sTestNetworkStartBytes[4] = { 0xfa, 0xbf, 0xb5, 0xda };
+    //static const uint8_t sTestNetworkStartBytes[4] = { 0x0b, 0x11, 0x09, 0x07 };
 
     Network network() { return sNetwork; }
     void setNetwork(Network pNetwork) { sNetwork = pNetwork; }
@@ -26,7 +27,8 @@ namespace BitCoin
             case MAINNET:
                 return "f9beb4d9";
             case TESTNET:
-                return "0b110907";
+                return "fabfb5da";
+                //return "0b110907";
         }
 
         return "";
@@ -179,41 +181,6 @@ namespace BitCoin
         return ArcMist::Digest::crc32((const uint8_t *)mData, mSize) & 0xffff;
     }
 
-    void sha256RIPEMD160(ArcMist::InputStream *pInput, unsigned int pInputLength, Hash &pOutput)
-    {
-        ArcMist::Buffer buffer, buffer2;
-        ArcMist::Digest::sha256(pInput, pInputLength, &buffer);
-        ArcMist::Digest::ripEMD160(&buffer, buffer.length(), &buffer2);
-        pOutput.read(&buffer2, 20);
-    }
-
-    void doubleSHA256(ArcMist::InputStream *pInput, unsigned int pInputLength, Hash &pOutput)
-    {
-        ArcMist::Buffer buffer, buffer2;
-        ArcMist::Digest::sha256(pInput, pInputLength, &buffer);
-        ArcMist::Digest::sha256(&buffer, buffer.length(), &buffer2);
-        pOutput.read(&buffer2, 32);
-    }
-
-    void doubleSHA256First4(ArcMist::InputStream *pInput, unsigned int pInputLength, uint8_t *pOutput)
-    {
-        //unsigned int remaining = pInput->remaining();
-
-        ArcMist::Buffer buffer, buffer2;
-        ArcMist::Digest::sha256(pInput, pInputLength, &buffer);
-
-        //ArcMist::Log::addHex(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME, "Single SHA256", &buffer, buffer.remaining());
-        //buffer.setReadOffset(0);
-
-        ArcMist::Digest::sha256(&buffer, buffer.length(), &buffer2);
-
-        //ArcMist::Log::addHex(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME, "Double SHA256", &buffer2, buffer2.remaining());
-        //buffer2.setReadOffset(0);
-
-        buffer2.read(pOutput, 4);
-        //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BASE_LOG_NAME, "Double SHA256 First 4 : %x", *((uint32_t *)pOutput));
-    }
-
     ArcMist::String base58Encode(Base58Type pType, ArcMist::InputStream *pStream, unsigned int pSize)
     {
         uint8_t data[pSize + 1];
@@ -319,6 +286,8 @@ namespace BitCoin
     {
         bool test()
         {
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "------------- Starting Base Tests -------------");
+
             bool success = true;
 
             /***********************************************************************************************

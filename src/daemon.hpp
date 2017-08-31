@@ -26,9 +26,9 @@ namespace BitCoin
         static void processNodes();
         static void processManager();
 
-        void run(ArcMist::String &pSeed);
+        void run(ArcMist::String &pSeed, bool pInDaemonMode = true);
 
-        void start();
+        bool start(bool pInDaemonMode);
         bool isRunning() { return mNodeThread != NULL; }
         void stop();
 

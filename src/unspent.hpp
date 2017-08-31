@@ -46,6 +46,8 @@ namespace BitCoin
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
+        void clear();
+
     private:
 
         std::list<Unspent *> mPool;
@@ -91,12 +93,29 @@ namespace BitCoin
         // Reverse all of the changes made by the most recent block
         void reverseLastBlock();
 
+        // Load from file system
+        bool load();
+
         // Save to file system
         bool save();
 
     private:
 
         UnspentPool();
+
+        void clear()
+        {
+            mValid = true;
+            mLastBlockID = 0;
+
+            for(std::list<Unspent *>::iterator iter=mPendingAdd.begin();iter!=mPendingAdd.end();++iter)
+                delete *iter;
+            mPendingAdd.clear();
+            mPendingSpend.clear();
+
+            for(unsigned int i=0;i<0xffff;i++)
+                mSets[i].clear();
+        }
 
         UnspentSet mSets[0xffff];
         std::list<Unspent *> mPendingAdd, mPendingSpend;

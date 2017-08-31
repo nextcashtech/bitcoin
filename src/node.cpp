@@ -4,6 +4,8 @@
 #include "info.hpp"
 #include "message.hpp"
 #include "events.hpp"
+#include "block.hpp"
+#include "block_chain.hpp"
 
 #define BITCOIN_NODE_LOG_NAME "Node"
 
@@ -227,12 +229,10 @@ namespace BitCoin
                     getBlocksData.stopHeaderHash.setSize(32);
                     getBlocksData.stopHeaderHash.zeroize();
 
-                    //TODO Add some recent header hashes to the Get Blocks message
-                    //BlockChain &blockChain = BlockChain::instance();
-                    //if(!blockChain.lastBlockHeaderHash().isEmpty())
-                    //{
-                    //    getBlocksData.blockHeaderHashes.
-                    //}
+                    //TODO Add more recent header hashes to the Get Blocks message
+                    BlockChain &blockChain = BlockChain::instance();
+                    if(!blockChain.lastPendingBlockHash().isEmpty())
+                        getBlocksData.blockHeaderHashes.push_back(blockChain.lastPendingBlockHash());
 
                     sendMessage(&getBlocksData);
                 }
@@ -426,18 +426,14 @@ namespace BitCoin
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
                           "[%d] Inventory block header hash : %s", mID, (*i).hash.hex().text());
                         addBlockHeaderHash((*i).hash);
-                        if(blockChain.lastBlockHash().isEmpty())
-                            startBlockHash = (*i).hash;
-                        else if(!startBlockHash.isEmpty())
-                            stopBlockHash = (*i).hash;
-                        else if((*i).hash == blockChain.lastBlockHash())
+                        if((*i).hash == blockChain.lastPendingBlockHash())
                             startBlockHash = (*i).hash;
                     }
                     else if((*i).type == Message::InventoryHash::TRANSACTION)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
                           "[%d] Inventory transaction hash : %s", mID, (*i).hash.hex().text());
-                        // TODO Transaction inventory messages
+                        //TODO Transaction inventory messages
                     }
                 }
 

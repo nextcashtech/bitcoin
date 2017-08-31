@@ -65,7 +65,7 @@ ${OBJECT_DIRECTORY}/%.o.debug: %.cpp | ${OBJECT_DIRECTORY}
 	@echo "\033[0;32m----------------------------------------------------------------------------------------------------\033[0m"
 	${COMPILER} -c -ggdb -o $@ $< ${COMPILE_FLAGS}
 
-release: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS}
+release: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} main.cpp
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING RELEASE ${OUTPUT}\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
@@ -73,7 +73,7 @@ release: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS}
 	${COMPILER} ${OBJECTS} ${OBJECT_DIRECTORY}/main.o ${LIBRARY_PATHS} ${LIBRARIES} -o ${OUTPUT} ${LINK_FLAGS}
 	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
-debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS}
+debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} main.cpp
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING DEBUG ${OUTPUT}\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
@@ -81,7 +81,7 @@ debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS}
 	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/main.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o ${OUTPUT}.debug ${LINK_FLAGS}
 	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
-test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS}
+test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} test.cpp
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
@@ -93,9 +93,9 @@ test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS}
 	@./test || echo "\n                                  \033[0;31m!!!!!  Tests Failed  !!!!!\033[0m"
 	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
-all: release debug test
+all: clean release debug test
 
-test.debug: headers ${OBJECT_DIRECTORY}/.headers ${DEBUG_OBJECTS}
+test.debug: headers ${OBJECT_DIRECTORY}/.headers ${DEBUG_OBJECTS} test.cpp
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING DEBUG TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"

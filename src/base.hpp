@@ -88,7 +88,7 @@ namespace BitCoin
 
     };
 
-    class Hash
+    class Hash : public ArcMist::RawOutputStream // So ArcMist::Digest can write results to it
     {
     public:
 
@@ -100,12 +100,27 @@ namespace BitCoin
         unsigned int size() const { return mSize; }
         const uint8_t *value() const { return mData; }
 
+        // Little endian (lease significant bytes first)
         ArcMist::String hex() const
         {
             ArcMist::String result;
             if(mSize == 0)
                 return result;
             result.writeHex(mData, mSize);
+            return result;
+        }
+
+        // Big endian (most significant bytes first, i.e. leading zeroes for block hashes)
+        ArcMist::String bigHex() const
+        {
+            ArcMist::String result;
+            if(mSize == 0)
+                return result;
+            uint8_t reverse[mSize];
+            unsigned int i = mSize - 1;
+            for(unsigned int j=0;j<mSize;j++)
+                reverse[i--] = mData[j];
+            result.writeHex(reverse, mSize);
             return result;
         }
 
@@ -222,6 +237,13 @@ namespace BitCoin
             return read(pStream);
         }
 
+        // ArcMist::RawOutputStream virtual
+        void write(const void *pInput, unsigned int pSize)
+        {
+            setSize(pSize);
+            std::memcpy(mData, pInput, pSize);
+        }
+
     private:
 
         unsigned int mSize;
@@ -238,10 +260,6 @@ namespace BitCoin
                 delete at(i);
         }
     };
-
-    void sha256RIPEMD160(ArcMist::InputStream *pInput, unsigned int pInputLength, Hash &pOutput);
-    void doubleSHA256(ArcMist::InputStream *pInput, unsigned int pInputLength, Hash &pOutput);
-    void doubleSHA256First4(ArcMist::InputStream *pInput, unsigned int pInputLength, uint8_t *pOutput);
 
     enum Base58Type { PUBLIC_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY, TEST_PUBLIC_KEY_HASH, TEST_SCRIPT_HASH };
     ArcMist::String base58Encode(Base58Type pType, ArcMist::InputStream *pStream, unsigned int pSize);

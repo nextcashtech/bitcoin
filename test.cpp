@@ -1,7 +1,7 @@
 #include "message.hpp"
 #include "key.hpp"
 #include "transaction.hpp"
-#include "block.hpp"
+#include "block_chain.hpp"
 #include "info.hpp"
 
 #include "arcmist/base/log.hpp"

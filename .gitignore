@@ -1,0 +1,7 @@
+
+.objects/
+include/
+test
+test.debug
+bitcoin
+bitcoin.debug

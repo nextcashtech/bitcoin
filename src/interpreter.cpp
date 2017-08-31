@@ -1,5 +1,6 @@
 #include "interpreter.hpp"
 
+#include "arcmist/crypto/digest.hpp"
 #include "key.hpp"
 
 #define MAX_SINGLE_BYTE_PUSH_DATA_CODE 0x4b
@@ -141,7 +142,9 @@ namespace BitCoin
 
         // Calculate Hash
         pScript.setReadOffset(0);
-        doubleSHA256(&pScript, pScript.length(), signatureHash);
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+        digest.writeStream(&pScript, pScript.length());
+        digest.getResult(&signatureHash);
 
         // Sign Hash
         if(!pPrivateKey.sign(signatureHash, signature))
@@ -239,7 +242,9 @@ namespace BitCoin
 
         // Calculate the signature hash
         Hash signatureHash(32);
-        doubleSHA256(&pScript, pScript.length() - pSignatureStartOffset, signatureHash);
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+        digest.writeStream(&pScript, pScript.length() - pSignatureStartOffset);
+        digest.getResult(&signatureHash);
 
         // Set offset back to the previous
         pScript.setReadOffset(previousReadOffset);
@@ -460,8 +465,9 @@ namespace BitCoin
 
                     // Hash top stack item and pop it
                     top()->setReadOffset(0);
-                    mHash.setSize(20);
-                    sha256RIPEMD160(top(), top()->length(), mHash);
+                    ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
+                    digest.writeStream(top(), top()->length());
+                    digest.getResult(&mHash);
                     pop();
 
                     // Push the hash
@@ -485,8 +491,9 @@ namespace BitCoin
 
                     // Hash top stack item and pop it
                     top()->setReadOffset(0);
-                    mHash.setSize(32);
-                    doubleSHA256(top(), top()->length(), mHash);
+                    ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+                    digest.writeStream(top(), top()->length());
+                    digest.getResult(&mHash);
                     pop();
 
                     // Push the hash

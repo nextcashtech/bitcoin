@@ -167,7 +167,7 @@ namespace BitCoin
 
         ArcMist::String dataFilePath = sPath;
         dataFilePath.pathAppend("data");
-        ArcMist::FileOutputStream file(dataFilePath, false, true);
+        ArcMist::FileOutputStream file(dataFilePath, true);
 
         file.writeFormatted("peers_max=%d", maxConnections);
     }
@@ -188,7 +188,7 @@ namespace BitCoin
 
         ArcMist::String dataFilePath = sPath;
         dataFilePath.pathAppend("peers");
-        ArcMist::FileOutputStream file(dataFilePath, false, true);
+        ArcMist::FileOutputStream file(dataFilePath, true);
         file.setOutputEndian(ArcMist::Endian::LITTLE);
 
         mPeerMutex.lock();
