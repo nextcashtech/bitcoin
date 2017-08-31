@@ -36,6 +36,7 @@ namespace BitCoin
 
     Daemon::Daemon() : mNodeMutex("Nodes")
     {
+        mRunning = false;
         mStopping = false;
         mNodeThread = NULL;
         mManagerThread = NULL;
@@ -52,8 +53,7 @@ namespace BitCoin
 
     void Daemon::handleSigTermChild(int pValue)
     {
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Terminate child signal received.");
-        //instance().stop();
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Child process terminated");
     }
 
     void Daemon::handleSigTerm(int pValue)
@@ -96,6 +96,8 @@ namespace BitCoin
             return false;
         }
 
+        mRunning = true;
+
         // Set signal handlers
         if(pInDaemonMode)
         {
@@ -117,14 +119,11 @@ namespace BitCoin
                 return false;
         }
 
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Loading Info");
         Info::instance();
 
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Loading Blocks");
         if(!BlockChain::instance().loadBlocks())
             return false;
 
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Loading Unspent Transaction Outputs");
         if(!UnspentPool::instance().load())
             return false;
 
@@ -142,7 +141,7 @@ namespace BitCoin
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create manager thread");
             return false;
         }
-        
+
         return true;
     }
 
@@ -161,6 +160,7 @@ namespace BitCoin
         }
 
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Stopping");
+        mStopping = true;
 
         // Set signal handlers back to original
         if(previousSigTermChildHandler != NULL)
@@ -173,8 +173,6 @@ namespace BitCoin
         previousSigTermChildHandler = NULL;
         previousSigTermHandler= NULL;
         previousSigIntHandler = NULL;
-
-        mStopping = true;
 
         // Wait for manager to finish
         if(mManagerThread != NULL)
@@ -194,9 +192,13 @@ namespace BitCoin
         for(unsigned int i=0;i<tempNodes.size();i++)
             delete tempNodes[i];
 
+        BlockChain::destroy();
+        UnspentPool::destroy();
         Info::destroy();
 
+        mRunning = false;
         mStopping = false;
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Stopped");
     }
 
     bool Daemon::addNode(const char *pIPAddress, const char *pPort)

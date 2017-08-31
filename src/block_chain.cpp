@@ -586,6 +586,8 @@ namespace BitCoin
         }
 
         // Add the block to the chain
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Added block to chain : %s", pBlock->hash.hex().text());
+
         lockFile(mLastFileID);
         BlockFile *blockFile = new BlockFile(mLastFileID, blockFileName(mLastFileID));
 
@@ -706,6 +708,8 @@ namespace BitCoin
     // Load block info from files
     bool BlockChain::loadBlocks()
     {
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Loading blocks");
+
         // Load hashes from block files
         BlockFile *blockFile = NULL;
         uint16_t lookup;
@@ -762,7 +766,10 @@ namespace BitCoin
                     }
             }
             else
+            {
+                unlockFile(fileID);
                 break;
+            }
         }
 
         mProcessBlockMutex.unlock();
@@ -770,6 +777,7 @@ namespace BitCoin
         if(mNextBlockID == 0)
         {
             // Add genesis block
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Creating genesis block");
             Block *genesis = Block::genesis();
             processBlock(genesis);
             delete genesis;

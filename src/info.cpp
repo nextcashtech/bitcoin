@@ -118,8 +118,8 @@ namespace BitCoin
             minFee = std::stol(value, NULL, 0);
             if(minFee < 1)
                 minFee = 1;
-            else if(minFee > 1000)
-                minFee = 1000;
+            else if(minFee > 100000)
+                minFee = 100000;
         }
         else if(std::strcmp(name, "ip") == 0)
             ip = ArcMist::Network::parseIPv6(value);

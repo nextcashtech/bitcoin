@@ -29,7 +29,7 @@ namespace BitCoin
         void run(ArcMist::String &pSeed, bool pInDaemonMode = true);
 
         bool start(bool pInDaemonMode);
-        bool isRunning() { return mNodeThread != NULL; }
+        bool isRunning() { return mRunning; }
         void stop();
 
         bool addNode(IPAddress &pAddress);
@@ -58,7 +58,7 @@ namespace BitCoin
         ArcMist::Thread *mManagerThread;
         ArcMist::Mutex mNodeMutex;
         std::vector<Node *> mNodes;
-        bool mStopping;
+        bool mRunning, mStopping;
 
         void (*previousSigTermChildHandler)(int);
         void (*previousSigTermHandler)(int);
