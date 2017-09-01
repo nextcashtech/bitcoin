@@ -89,7 +89,8 @@ namespace BitCoin
         bool getBlock(const Hash &pHash, Block &pBlock);
 
         // Load block data from file system
-        bool loadBlocks();
+        //   If pList is true then all the block hashes will be output
+        bool loadBlocks(bool pList);
 
         // Process pending headers and blocks
         void process();

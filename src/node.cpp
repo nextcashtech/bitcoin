@@ -189,19 +189,23 @@ namespace BitCoin
     void Node::requestBlockHashes()
     {
         Chain &chain = Chain::instance();
-        Message::GetBlocksData getBlocksData;
         HashList hashList;
 
         chain.getReverseBlockHashes(hashList, 32);
+        if(hashList.size() == 0)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requesting block hashes starting from genesis", mID);
+        else
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requesting block hashes starting from %s", mID, hashList.front()->hex().text());
+
+        Message::GetBlocksData getBlocksData;
         for(HashList::iterator hash=hashList.begin();hash!=hashList.end();++hash)
             getBlocksData.blockHeaderHashes.push_back(**hash);
-
         sendMessage(&getBlocksData);
     }
 
     void Node::requestHeaders(const Hash &pStartingHash)
     {
-        // Request the remaining headers from that inventory
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requesting block headers starting from %s", mID, pStartingHash.hex().text());
         Message::GetHeadersData getHeadersData;
         getHeadersData.blockHeaderHashes.push_back(pStartingHash);
         sendMessage(&getHeadersData);
@@ -211,13 +215,13 @@ namespace BitCoin
 
     void Node::requestBlock(const Hash &pHash)
     {
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requesting block : %s", mID, pHash.hex().text());
         Message::GetDataData getDataData;
         getDataData.inventory.push_back(Message::InventoryHash(Message::InventoryHash::BLOCK, pHash));
         sendMessage(&getDataData);
         mBlockRequested = pHash;
         mLastBlockRequest = getTime();
         Events::instance().post(Event::BLOCK_REQUESTED);
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requested block : %s", mID, pHash.hex().text());
     }
 
     void Node::sendVersion()

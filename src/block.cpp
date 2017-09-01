@@ -316,8 +316,9 @@ namespace BitCoin
         }
         else
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Coinbase %.08f", bitcoins(-transactions.begin()->fee()));
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Fees     %.08f", bitcoins(mFees));
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Transactions %d", transactions.size());
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Coinbase     %.08f", bitcoins(-transactions.begin()->fee()));
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Fees         %.08f", bitcoins(mFees));
         }
 
         return true;

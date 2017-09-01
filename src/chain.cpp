@@ -199,6 +199,8 @@ namespace BitCoin
     // If pStartingHash is empty then start with first hash in file
     bool BlockFile::readBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount)
     {
+        pHashes.clear();
+
         if(!isValid)
             return false;
 
@@ -234,6 +236,8 @@ namespace BitCoin
     // If pStartingHash is empty then start with first block in file
     bool BlockFile::readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount)
     {
+        pBlockHeaders.clear();
+
         if(!isValid)
             return false;
 
@@ -564,8 +568,10 @@ namespace BitCoin
             if((!pBlock->previousHash.isZero() || !mLastBlockHash.isEmpty()) && mLastBlockHash != pBlock->previousHash)
             {
                 ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Pending block is not next");
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Pending Previous : %s", pBlock->previousHash.hex().text());
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Last             : %s", mLastBlockHash.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+                  "Pending Previous : %s", pBlock->previousHash.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+                  "Last             : %s", mLastBlockHash.hex().text());
                 mPendingBlockMutex.unlock();
                 return false;
             }
@@ -573,8 +579,10 @@ namespace BitCoin
         else if(mPendingBlocks.size() != 0 && mLastPendingHash != pBlock->previousHash)
         {
             ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Pending block is not next");
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Pending Previous : %s", pBlock->previousHash.hex().text());
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Last             : %s", mLastBlockHash.hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+              "Pending Previous : %s", pBlock->previousHash.hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+              "Last Pending     : %s", mLastPendingHash.hex().text());
             mPendingBlockMutex.unlock();
             return false;
         }
@@ -594,37 +602,9 @@ namespace BitCoin
         mLastPendingHash = pBlock->hash;
         mPendingBlocks.push_back(pBlock);
         mPendingBlockMutex.unlock();
-        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Added pending block : %s", pBlock->hash.hex().text());
+        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+          "Added pending block : %s", pBlock->hash.hex().text());
         return true;
-    }
-
-    void Chain::process()
-    {
-        mPendingBlockMutex.lock();
-
-        if(mPendingBlocks.size() > 0)
-        {
-            // Check this front block and add it to the chain
-            if(processBlock(mPendingBlocks.front()))
-            {
-                // Delete block
-                delete mPendingBlocks.front();
-                mPendingBlocks.erase(mPendingBlocks.begin());
-
-                if(mPendingBlocks.size() == 0)
-                    mLastPendingHash.clear();
-            }
-            else
-            {
-                // Clear pending blocks since they assumed this block was good
-                for(std::vector<Block *>::iterator block=mPendingBlocks.begin();block!=mPendingBlocks.end();++block)
-                    delete *block;
-                mPendingBlocks.clear();
-                mLastPendingHash.clear();
-            }
-        }
-
-        mPendingBlockMutex.unlock();
     }
 
     bool Chain::processBlock(Block *pBlock)
@@ -641,21 +621,25 @@ namespace BitCoin
             return false;
         }
 
-        // Add the block to the chain
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Added block to chain : %s", pBlock->hash.hex().text());
-
+        // Commit and save changes to unspent pool
         if(!unspentPool.commit(mNextBlockHeight) || !unspentPool.save())
         {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+              "Failed to commit or save unspent transaction pool");
             unspentPool.revert();
             mProcessBlockMutex.unlock();
             return false;
         }
 
+        // Add the block to the chain
         lockBlockFile(mLastFileID);
         BlockFile *blockFile = new BlockFile(mLastFileID, blockFileName(mLastFileID));
 
         if(blockFile->isFull())
         {
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+              "Block file %08d is full. Starting new file %08d", mLastFileID, mLastFileID + 1);
+
             unlockBlockFile(mLastFileID);
             delete blockFile;
 
@@ -669,19 +653,65 @@ namespace BitCoin
         delete blockFile;
         unlockBlockFile(mLastFileID);
 
-        uint16_t lookup = pBlock->hash.lookup();
-        mBlockLookup[lookup].lock();
-        mBlockLookup[lookup].push_back(new BlockInfo(pBlock->hash, mLastFileID, mNextBlockHeight));
-        mBlockLookup[lookup].unlock();
-
         if(success)
         {
+            uint16_t lookup = pBlock->hash.lookup();
+            mBlockLookup[lookup].lock();
+            mBlockLookup[lookup].push_back(new BlockInfo(pBlock->hash, mLastFileID, mNextBlockHeight));
+            mBlockLookup[lookup].unlock();
+
             mNextBlockHeight++;
             mLastBlockHash = pBlock->hash;
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+              "Added block to chain : %s", pBlock->hash.hex().text());
+        }
+        else
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+              "Failed to add to block file %08d : %s", mLastFileID, pBlock->hash.hex().text());
         }
 
         mProcessBlockMutex.unlock();
         return success;
+    }
+
+    void Chain::process()
+    {
+        mPendingBlockMutex.lock();
+        if(mPendingBlocks.size() == 0)
+        {
+            mPendingBlockMutex.unlock();
+            return;
+        }
+
+        // Check this front block and add it to the chain
+        if(processBlock(mPendingBlocks.front()))
+        {
+            // Delete block
+            delete mPendingBlocks.front();
+
+            // Remove block from pending blocks
+            mPendingBlocks.erase(mPendingBlocks.begin());
+            if(mPendingBlocks.size() == 0)
+                mLastPendingHash.clear();
+            mPendingBlockMutex.unlock();
+        }
+        else
+        {
+            // Clear pending blocks since they assumed this block was good
+            for(std::vector<Block *>::iterator block=mPendingBlocks.begin();block!=mPendingBlocks.end();++block)
+                delete *block;
+            mPendingBlocks.clear();
+            mLastPendingHash.clear();
+            mPendingBlockMutex.unlock();
+
+            // Clear pending headers since they assumed this block was good
+            mPendingHeaderMutex.lock();
+            for(std::list<Block *>::iterator header=mPendingHeaders.begin();header!=mPendingHeaders.end();++header)
+                    delete *header;
+            mPendingHeaders.clear();
+            mPendingHeaderMutex.unlock();
+        }
     }
 
     void Chain::getBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount)
@@ -717,7 +747,12 @@ namespace BitCoin
         Hash hash;
 
         pHashes.clear();
-        for(unsigned int fileID=mLastFileID;;fileID--)
+
+        // Don't start with latest block. Go back to previous file
+        if(mLastFileID == 0)
+            return;
+
+        for(unsigned int fileID=mLastFileID-1;;fileID--)
         {
             lockBlockFile(fileID);
             blockFile = new BlockFile(fileID, blockFileName(fileID));
@@ -802,7 +837,7 @@ namespace BitCoin
     }
 
     // Load block info from files
-    bool Chain::loadBlocks()
+    bool Chain::loadBlocks(bool pList)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Loading blocks");
 
@@ -835,30 +870,45 @@ namespace BitCoin
                 blockFile = new BlockFile(fileID, filePathName);
                 if(!blockFile->isValid)
                 {
+                    delete blockFile;
                     unlockBlockFile(fileID);
                     success = false;
                     break;
                 }
 
-                blockFile->readBlockHashes(hashes, emptyHash, BlockFile::MAX_BLOCKS);
+                if(!blockFile->readBlockHashes(hashes, emptyHash, BlockFile::MAX_BLOCKS))
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed to read hashes from block file %s", filePathName.text());
+                    delete blockFile;
+                    unlockBlockFile(fileID);
+                    success = false;
+                    break;
+                }
                 delete blockFile;
                 unlockBlockFile(fileID);
 
+                if(pList)
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Block file %s", filePathName.text());
+
                 mLastFileID = fileID;
-                for(HashList::iterator i=hashes.begin();i!=hashes.end();++i)
-                    if((*i)->isZero())
+                for(HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                    if((*hash)->isZero())
                     {
                         done = true;
+                        delete blockFile;
+                        unlockBlockFile(fileID);
                         break;
                     }
                     else
                     {
-                        lookup = (*i)->lookup();
+                        if(pList)
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Block %08d : %s", mNextBlockHeight, (*hash)->hex().text());
+                        lookup = (*hash)->lookup();
                         mBlockLookup[lookup].lock();
-                        mBlockLookup[lookup].push_back(new BlockInfo(**i, fileID, mNextBlockHeight));
+                        mBlockLookup[lookup].push_back(new BlockInfo(**hash, fileID, mNextBlockHeight));
                         mBlockLookup[lookup].unlock();
                         mNextBlockHeight++;
-                        lastBlock = *i;
+                        lastBlock = *hash;
                     }
             }
             else

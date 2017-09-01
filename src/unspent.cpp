@@ -123,10 +123,20 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    bool UnspentPool::commit(unsigned int pBlockID)
+    bool UnspentPool::commit(unsigned int pBlockHeight)
     {
-        if(!mValid || pBlockID != mNextBlockHeight)
+        if(!mValid)
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_UNSPENT_LOG_NAME, "Can't commit invalid unspent pool");
             return false;
+        }
+
+        if(pBlockHeight != mNextBlockHeight)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_UNSPENT_LOG_NAME,
+              "Can't commit non matching block id %08d. Should be %08d", pBlockHeight, mNextBlockHeight);
+            return false;
+        }
 
         uint16_t lookup;
         mMutex.lock();
@@ -205,6 +215,15 @@ namespace BitCoin
             //else
             //    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_UNSPENT_LOG_NAME, "No file for set %04x", fileID);
         }
+
+        // Read height to file
+        filePathName = filePath;
+        filePathName.pathAppend("height");
+        file = new ArcMist::FileInputStream(filePathName);
+        file->setInputEndian(ArcMist::Endian::LITTLE);
+        mNextBlockHeight = file->readUnsignedInt();
+        delete file;
+
         mMutex.unlock();
 
         return mValid;
@@ -216,17 +235,19 @@ namespace BitCoin
 
         if(!mValid)
         {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_UNSPENT_LOG_NAME, "Can't save invalid unspent pool");
             Events::instance().post(Event::UNSPENTS_SAVED);
             return false;
         }
 
         if(!mModified)
         {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_UNSPENT_LOG_NAME, "Not saving unspent transactions. They weren't modified");
             Events::instance().post(Event::UNSPENTS_SAVED);
-            return false;
+            return true;
         }
 
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME, "Saving unspent transactions");
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_UNSPENT_LOG_NAME, "Saving unspent transactions");
 
         ArcMist::String filePath = Info::instance().path();
         ArcMist::String filePathName, fileName;
@@ -251,6 +272,14 @@ namespace BitCoin
             mSets[i].write(file);
             delete file;
         }
+
+        // Read height to file
+        filePathName = filePath;
+        filePathName.pathAppend("height");
+        file = new ArcMist::FileOutputStream(filePathName, true);
+        file->setOutputEndian(ArcMist::Endian::LITTLE);
+        file->writeUnsignedInt(mNextBlockHeight);
+        delete file;
 
         mModified = false;
         mMutex.unlock();

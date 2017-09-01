@@ -124,7 +124,7 @@ namespace BitCoin
         Info::instance(); // Load data
         mLastInfoSave = getTime();
 
-        if(!Chain::instance().loadBlocks())
+        if(!Chain::instance().loadBlocks(false))
             return false;
 
         if(!UnspentPool::instance().load())
@@ -144,6 +144,7 @@ namespace BitCoin
             return false;
         }
 
+        mLastNodeAdd = getTime();
         mManagerThread = new ArcMist::Thread("Manager", processManager);
         if(mManagerThread == NULL)
         {
@@ -282,29 +283,43 @@ namespace BitCoin
         Daemon &daemon = Daemon::instance();
         Chain &chain = Chain::instance();
         Info &info = Info::instance();
+        uint64_t time;
+        unsigned int nodesWithBlocks, pendingHeaders, waitingForBlocks;
 
         while(!daemon.mStopping)
         {
-            if(getTime() - daemon.mLastRequestCheck > 10)
+            time = getTime();
+
+            if(time - daemon.mLastRequestCheck > 10)
             {
-                if(daemon.nodesWithBlocks() < 4)
+                daemon.mLastRequestCheck = time;
+
+                nodesWithBlocks = daemon.nodesWithBlocks();
+                if(nodesWithBlocks < 4)
                 {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Only %d nodes with blocks", nodesWithBlocks);
                     Node *node = daemon.nodeWithoutBlocks();
                     if(node != NULL)
                         node->requestBlockHashes();
                 }
 
                 // Check for header request
-                if(chain.pendingHeaders() < 10 && daemon.nodesWaitingForHeaders() < 2)
+                pendingHeaders = chain.pendingHeaders();
+                if(pendingHeaders < 10 && daemon.nodesWaitingForHeaders() < 2)
                 {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Only %d pending headers", pendingHeaders);
                     Node *node = daemon.nodeWithBlock(chain.lastPendingBlockHash());
                     if(node != NULL)
                         node->requestHeaders(chain.lastPendingBlockHash());
+                    else
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "No nodes with block : %s", chain.lastPendingBlockHash().hex().text());
                 }
 
                 // Check for block request
-                if(daemon.mMaxConcurrentDownloads > daemon.nodesWaitingForBlocks())
+                waitingForBlocks = daemon.nodesWaitingForBlocks();
+                if(daemon.mMaxConcurrentDownloads > waitingForBlocks)
                 {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Only %d blocks downloading", waitingForBlocks);
                     Hash nextBlockHash = chain.nextBlockNeeded();
                     if(!nextBlockHash.isEmpty())
                     {
@@ -323,14 +338,11 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - daemon.mLastInfoSave > 300)
+            if(time - daemon.mLastInfoSave > 300)
             {
-                daemon.mLastInfoSave = getTime();
+                daemon.mLastInfoSave = time;
                 info.save();
             }
-
-            if(daemon.mStopping)
-                break;
 
             if(daemon.mStopping)
                 break;
@@ -443,7 +455,7 @@ namespace BitCoin
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Found %d nodes from %s", ipList.size(), pName);
 
-        for(unsigned int i=0;i<ipList.size();i++)
+        for(unsigned int i=0;i<ipList.size() && !mStopping;i++)
             if(addNode(ipList[i], networkPortString()))
                 result++;
 
@@ -459,12 +471,13 @@ namespace BitCoin
 
         info.randomizePeers(peers);
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers", peers.size());
-        for(std::vector<Peer *>::iterator i=peers.begin();i!=peers.end();++i)
+        for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
         {
-            if(addNode((*i)->address))
+            //TODO Ensure only one connection is made to an address. Check that this peer doesn't already have a node.
+            if(addNode((*peer)->address))
                 count++;
 
-            if(count >= pCount)
+            if(mStopping || count >= pCount)
                 break;
         }
 
@@ -477,9 +490,13 @@ namespace BitCoin
 
         Daemon &daemon = Daemon::instance();
         Info &info = Info::instance();
+        unsigned int count;
+        uint64_t time;
 
         while(!daemon.mStopping)
         {
+            time = getTime();
+
             if(daemon.mSeed)
             {
                 daemon.querySeed(daemon.mSeed);
@@ -489,10 +506,13 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(daemon.mNodes.size() < info.maxConnections && getTime() - daemon.mLastNodeAdd > 60)
+            if(daemon.mNodes.size() < info.maxConnections && time - daemon.mLastNodeAdd > 60)
             {
-                daemon.mLastNodeAdd = getTime();
-                daemon.pickNodes(info.maxConnections - daemon.mNodes.size());
+                daemon.mLastNodeAdd = time;
+                count = info.maxConnections - daemon.mNodes.size();
+                if(count > 10)
+                    count = 10; // Don't attempt more than 10 at a time
+                daemon.pickNodes(count);
             }
 
             if(daemon.mStopping)

@@ -22,6 +22,7 @@
 
 
 pid_t daemonPID(const char *pPath);
+void printHelp(const char *pPath);
 
 int main(int pArgumentCount, char **pArguments)
 {
@@ -30,6 +31,7 @@ int main(int pArgumentCount, char **pArguments)
     bool stop = false;
     bool validate = false;
     bool rebuild = false;
+    bool listblocks = false;
 
     for(int i=1;i<pArgumentCount;i++)
         if(nextIsPath)
@@ -58,41 +60,37 @@ int main(int pArgumentCount, char **pArguments)
             validate = true;
         else if(std::strcmp(pArguments[i], "--rebuild") == 0)
             rebuild = true;
+        else if(std::strcmp(pArguments[i], "--listblocks") == 0)
+            listblocks = true;
         else if(std::strcmp(pArguments[i], "help") == 0 ||
           std::strcmp(pArguments[i], "--help") == 0 ||
           std::strcmp(pArguments[i], "-h") == 0)
         {
-            std::cerr << "Usage :" << std::endl;
-            std::cerr << "    help or --help or -h -> Display this message" << std::endl;
-            std::cerr << "    --stop               -> Kill active daemon" << std::endl;
-            std::cerr << "    --path PATH          -> Specify directory for daemon files. Default : " << path.text() << std::endl;
-            std::cerr << "    --seed SEED_NAME     -> Start daemon and load peers from seed" << std::endl;
-            std::cerr << "    -v                   -> Verbose logging" << std::endl;
-            std::cerr << "    -vv                  -> Debug loggin" << std::endl;
-            std::cerr << "    --nodaemon           -> Don't perform daemon process fork" << std::endl;
-            std::cerr << "    --validate           -> Validate local block chain and exit" << std::endl;
-            std::cerr << std::endl;
+            printHelp(path);
             return 0;
         }
         else if(std::strcmp(pArguments[i], "--stop") == 0)
             stop = true;
         else
         {
-            std::cerr << "\033[0;31mUnknown parameter : " << pArguments[i] << "\033[0m" << std::endl;
-            std::cerr << "Usage :" << std::endl;
-            std::cerr << "    help or --help or -h -> Display this message" << std::endl;
-            std::cerr << "    --stop               -> Kill active daemon" << std::endl;
-            std::cerr << "    --path PATH          -> Specify directory for daemon files. Default : " << path.text() << std::endl;
-            std::cerr << "    --seed SEED_NAME     -> Start daemon and load peers from seed" << std::endl;
-            std::cerr << "    --nodaemon           -> Don't perform daemon process fork" << std::endl;
-            std::cerr << std::endl;
+            printHelp(path);
             return 0;
         }
 
     BitCoin::Info::setPath(path);
 
+    if(listblocks)
+    {
+        ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
+        if(BitCoin::Chain::instance().loadBlocks(true))
+            return 0;
+        else
+            return 1;
+    }
+
     if(validate || rebuild)
     {
+        ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
         if(BitCoin::Chain::instance().validate(rebuild))
             return 0;
         else
@@ -210,4 +208,19 @@ pid_t daemonPID(const char *pPath)
     if(!pidString)
         return 0;
     return std::stol(pidString.text());
+}
+
+void printHelp(const char *pPath)
+{
+    std::cerr << "Usage :" << std::endl;
+    std::cerr << "    help or --help or -h -> Display this message" << std::endl;
+    std::cerr << "    --stop               -> Kill active daemon" << std::endl;
+    std::cerr << "    --path PATH          -> Specify directory for daemon files. Default : " << pPath << std::endl;
+    std::cerr << "    --seed SEED_NAME     -> Start daemon and load peers from seed" << std::endl;
+    std::cerr << "    -v                   -> Verbose logging" << std::endl;
+    std::cerr << "    -vv                  -> Debug logging" << std::endl;
+    std::cerr << "    --nodaemon           -> Don't perform daemon process fork" << std::endl;
+    std::cerr << "    --listblocks         -> List hashes of all blocks and exit" << std::endl;
+    std::cerr << "    --validate           -> Validate local block chain and exit" << std::endl;
+    std::cerr << std::endl;
 }
