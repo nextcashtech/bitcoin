@@ -34,7 +34,7 @@ namespace BitCoin
         void stop();
 
         bool stopping() { return mStopping; }
-        
+
         static void handleSigTermChild(int pValue);
         static void handleSigTerm(int pValue);
         static void handleSigInt(int pValue);
@@ -50,13 +50,22 @@ namespace BitCoin
         ArcMist::Mutex mNodeMutex;
         std::vector<Node *> mNodes;
         uint64_t mLastNodeAdd;
+        uint64_t mLastRequestCheck;
+        uint64_t mLastInfoSave;
         bool mRunning, mStopping;
+        unsigned int mMaxConcurrentDownloads;
 
         void (*previousSigTermChildHandler)(int);
         void (*previousSigTermHandler)(int);
         void (*previousSigIntHandler)(int);
-        
-        Node *nodeWithBlock(Hash &pBlockHeaderHash);
+
+        unsigned int nodesWithBlocks();
+        Node *nodeWithoutBlocks();
+
+        unsigned int nodesWaitingForHeaders();
+
+        unsigned int nodesWaitingForBlocks();
+        Node *nodeWithBlock(const Hash &pBlockHeaderHash);
 
         // Query peers from a seed
         // Returns number of peers actually connected

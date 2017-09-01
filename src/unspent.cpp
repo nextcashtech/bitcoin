@@ -19,6 +19,19 @@ namespace BitCoin
         transactionID = pValue.transactionID;
         index = pValue.index;
         hash = pValue.hash;
+        height = pValue.height;
+    }
+
+    Unspent &Unspent::operator = (Unspent &pRight)
+    {
+        amount = pRight.amount;
+        pRight.script.setReadOffset(0);
+        script.writeStream(&pRight.script, pRight.script.length());
+        transactionID = pRight.transactionID;
+        index = pRight.index;
+        hash = pRight.hash;
+        height = pRight.height;
+        return *this;
     }
 
     UnspentPool *UnspentPool::sInstance = NULL;
@@ -39,19 +52,19 @@ namespace BitCoin
         UnspentPool::sInstance = 0;
     }
 
-    UnspentPool::UnspentPool()
+    UnspentPool::UnspentPool() : mMutex("Unspent")
     {
         mValid = true;
         mModified = false;
-        mLastBlockID = 0;
+        mNextBlockHeight = 0;
     }
 
     UnspentPool::~UnspentPool()
     {
-        save();
-
+        mMutex.lock();
         for(std::list<Unspent *>::iterator iter=mPendingAdd.begin();iter!=mPendingAdd.end();++iter)
             delete *iter;
+        mMutex.unlock();
     }
 
     Unspent *UnspentPool::find(const Hash &pTransactionID, uint32_t pIndex)
@@ -61,6 +74,7 @@ namespace BitCoin
 
         //TODO Special case needed for coinbase transactions whose index == 0xffffffff
         uint16_t lookup = pTransactionID.lookup();
+        mMutex.lock();
         Unspent *result = mSets[lookup].find(pTransactionID, pIndex);
 
         if(result == NULL)
@@ -78,9 +92,13 @@ namespace BitCoin
             // Check if it is in pending spend
             for(std::list<Unspent *>::iterator iter=mPendingSpend.begin();iter!=mPendingSpend.end();++iter)
                 if(result == *iter)
+                {
+                    mMutex.unlock();
                     return NULL;
+                }
         }
 
+        mMutex.unlock();
         return result;
     }
 
@@ -90,7 +108,9 @@ namespace BitCoin
             return;
 
         Unspent *newUnspent = new Unspent(pUnspent);
+        mMutex.lock();
         mPendingAdd.push_back(newUnspent);
+        mMutex.unlock();
     }
 
     void UnspentPool::spend(Unspent *pUnspent)
@@ -98,19 +118,23 @@ namespace BitCoin
         if(!mValid)
             return;
 
+        mMutex.lock();
         mPendingSpend.push_back(pUnspent);
+        mMutex.unlock();
     }
 
-    void UnspentPool::commit(unsigned int pBlockID)
+    bool UnspentPool::commit(unsigned int pBlockID)
     {
-        if(!mValid)
-            return;
+        if(!mValid || pBlockID != mNextBlockHeight)
+            return false;
 
         uint16_t lookup;
+        mMutex.lock();
         for(std::list<Unspent *>::iterator iter=mPendingAdd.begin();iter!=mPendingAdd.end();++iter)
         {
             lookup = (*iter)->transactionID.lookup();
             mSets[lookup].add(*iter);
+            mUnspentCount++;
         }
         mPendingAdd.clear();
 
@@ -118,12 +142,15 @@ namespace BitCoin
         {
             lookup = (*iter)->transactionID.lookup();
             mSets[lookup].remove(*iter);
+            mUnspentCount--;
             delete *iter;
         }
         mPendingSpend.clear();
 
+        mNextBlockHeight++;
         mModified = true;
-        save();
+        mMutex.unlock();
+        return true;
     }
 
     void UnspentPool::revert()
@@ -131,11 +158,13 @@ namespace BitCoin
         if(!mValid)
             return;
 
+        mMutex.lock();
         for(std::list<Unspent *>::iterator iter=mPendingAdd.begin();iter!=mPendingAdd.end();++iter)
             delete *iter;
 
         mPendingAdd.clear();
         mPendingSpend.clear();
+        mMutex.unlock();
     }
 
     bool UnspentPool::load()
@@ -153,6 +182,7 @@ namespace BitCoin
 
         ArcMist::createDirectory(filePath.text());
 
+        mMutex.lock();
         for(unsigned int i=0;i<0xffff;i++)
         {
             fileName.clear();
@@ -175,6 +205,7 @@ namespace BitCoin
             //else
             //    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_UNSPENT_LOG_NAME, "No file for set %04x", fileID);
         }
+        mMutex.unlock();
 
         return mValid;
     }
@@ -206,6 +237,7 @@ namespace BitCoin
 
         ArcMist::createDirectory(filePath.text());
 
+        mMutex.lock();
         for(unsigned int i=0;i<0xffff;i++)
         {
             fileName.clear();
@@ -221,7 +253,16 @@ namespace BitCoin
         }
 
         mModified = false;
+        mMutex.unlock();
         return true;
+    }
+
+    void UnspentPool::reset()
+    {
+        mMutex.lock();
+        for(unsigned int i=0;i<0xffff;i++)
+            mSets[i].clear();
+        mMutex.unlock();
     }
 
     UnspentSet::~UnspentSet()
@@ -311,6 +352,9 @@ namespace BitCoin
 
         // Hash
         hash.write(pStream);
+
+        // Height
+        pStream->writeUnsignedInt(height);
     }
 
     bool Unspent::read(ArcMist::InputStream *pStream)
@@ -353,6 +397,12 @@ namespace BitCoin
         // Hash
         if(!hash.read(pStream, size))
             return false;
+
+        if(pStream->remaining() < 4)
+            return false;
+
+        // Height
+        height = pStream->readUnsignedInt();
 
         return true;
     }

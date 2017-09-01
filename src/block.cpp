@@ -271,9 +271,14 @@ namespace BitCoin
         return result;
     }
 
-    bool Block::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pTest)
+    bool Block::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight)
     {
         //TODO Validate target "bits" (mining difficulty)
+        if(transactions.size() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
+            return false;
+        }
 
         // Validate Merkle Hash
         Hash calculatedMerkleHash;
@@ -290,18 +295,18 @@ namespace BitCoin
         bool isCoinBase = true;
         for(std::vector<Transaction>::iterator i=transactions.begin();i!=transactions.end();++i)
         {
-            if(!(*i).process(pUnspentPool, pBlockHeight, isCoinBase, pTest))
+            if(!(*i).process(pUnspentPool, pBlockHeight, isCoinBase))
                 return false;
             isCoinBase = false;
         }
 
         //TODO Check that coinbase output amount - fees is correct for block height
-        //if((*output)->amount != coinBaseAmount(pBlockHeight))
-        //{
-        //    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-        //      "Coinbase outputs  %d script did not verify", i + 1);
-        //    return false;
-        //}
+        // if(transactions.begin()->amount != coinBaseAmount(pBlockHeight))
+        // {
+            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+              // "Coinbase outputs  %d script did not verify", i + 1);
+            // return false;
+        // }
 
         return true;
     }

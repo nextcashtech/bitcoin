@@ -19,7 +19,7 @@ namespace BitCoin
         Node(const char *pIP, const char *pPort);
         Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort);
         Node(IPAddress &pAddress);
-        ~Node() { clear(); }
+        ~Node();
 
         unsigned int id() { return mID; }
         bool isOpen() { return mConnection.isOpen(); }
@@ -27,19 +27,15 @@ namespace BitCoin
         void process();
         void clear();
 
-        bool hasBlock(Hash &pHash)
-        {
-            mBlockHeaderHashMutex.lock();
-            for(std::list<Hash>::iterator i=mBlockHeaderHashes.begin();i!=mBlockHeaderHashes.end();++i)
-                if(*i == pHash)
-                {
-                    mBlockHeaderHashMutex.unlock();
-                    return true;
-                }
-            mBlockHeaderHashMutex.unlock();
-            return false;
-        }
-        void requestBlock(Hash &pHash);
+        bool hasBlocks(); // Block inventories have been received
+        bool hasBlock(const Hash &pHash); // Block inventory received for specified hash
+        void clearBlockHashes(); // Clear block inventory information
+        void requestBlockHashes(); // Request an inventory of blocks
+
+        void requestHeaders(const Hash &pStartingHash);
+        bool waitingForHeaders() { return !mHeaderRequested.isEmpty() && getTime() - mLastHeaderRequest < 300; }
+
+        void requestBlock(const Hash &pHash);
         bool waitingForBlock() { return !mBlockRequested.isEmpty() && getTime() - mLastBlockRequest < 300; }
 
     private:
@@ -54,7 +50,7 @@ namespace BitCoin
         IPAddress mAddress;
         ArcMist::Connection mConnection;
         ArcMist::Buffer mReceiveBuffer;
-        
+
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;
         uint64_t mLastTime;
@@ -62,12 +58,12 @@ namespace BitCoin
         uint64_t mMinimumFeeRate;
 
         // List of pending block headers this node is known to have
-        ArcMist::Mutex mBlockHeaderHashMutex;
+        ArcMist::Mutex mBlockHashMutex;
         void addBlockHeaderHash(Hash &pHash);
-        std::list<Hash> mBlockHeaderHashes;
+        std::list<Hash> mBlockHashes[0xffff];
+        unsigned int mBlockHashCount;
 
-        std::list<Message::InventoryData *> mInventories;
-
+        Hash mHeaderRequested;
         uint64_t mLastHeaderRequest;
         Hash mBlockRequested;
         uint64_t mLastBlockRequest;

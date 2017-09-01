@@ -5,7 +5,7 @@
 #include "message.hpp"
 #include "events.hpp"
 #include "block.hpp"
-#include "block_chain.hpp"
+#include "chain.hpp"
 
 #define BITCOIN_NODE_LOG_NAME "Node"
 
@@ -14,7 +14,7 @@ namespace BitCoin
 {
     unsigned int Node::mNextID = 256;
 
-    Node::Node(IPAddress &pAddress) : mBlockHeaderHashMutex("Node Block Header Hash")
+    Node::Node(IPAddress &pAddress) : mBlockHashMutex("Node Block Header Hash")
     {
         mVersionSent = false;
         mVersionAcknowledged = false;
@@ -23,13 +23,14 @@ namespace BitCoin
         mLastTime = 0;
         mPingNonce = 0;
         mMinimumFeeRate = 0;
-        mVersionData = 0;
+        mVersionData = NULL;
         mID = mNextID++;
         mAddress = pAddress;
         mReceiveBuffer.setInputEndian(ArcMist::Endian::LITTLE);
         mReceiveBuffer.setOutputEndian(ArcMist::Endian::LITTLE);
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
+        mBlockHashCount = 0;
 
         if(!mConnection.open(AF_INET6, pAddress.ip, pAddress.port))
         {
@@ -40,7 +41,7 @@ namespace BitCoin
         sendVersion();
     }
 
-    Node::Node(const char *pIP, const char *pPort) : mBlockHeaderHashMutex("Node Block Header Hash")
+    Node::Node(const char *pIP, const char *pPort) : mBlockHashMutex("Node Block Header Hash")
     {
         mVersionSent = false;
         mVersionAcknowledged = false;
@@ -49,10 +50,11 @@ namespace BitCoin
         mLastTime = 0;
         mPingNonce = 0;
         mMinimumFeeRate = 0;
-        mVersionData = 0;
+        mVersionData = NULL;
         mID = mNextID++;
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
+        mBlockHashCount = 0;
 
         if(!mConnection.open(pIP, pPort))
         {
@@ -65,7 +67,7 @@ namespace BitCoin
         sendVersion();
     }
 
-    Node::Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort) : mBlockHeaderHashMutex("Node Block Header Hash")
+    Node::Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort) : mBlockHashMutex("Node Block Header Hash")
     {
         mVersionSent = false;
         mVersionAcknowledged = false;
@@ -74,10 +76,11 @@ namespace BitCoin
         mLastTime = 0;
         mPingNonce = 0;
         mMinimumFeeRate = 0;
-        mVersionData = 0;
+        mVersionData = NULL;
         mID = mNextID++;
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
+        mBlockHashCount = 0;
 
         if(!mConnection.open(pFamily, pIP, pPort))
         {
@@ -90,6 +93,13 @@ namespace BitCoin
         sendVersion();
     }
 
+    Node::~Node()
+    {
+        mConnection.close();
+        if(mVersionData != NULL)
+            delete mVersionData;
+    }
+
     void Node::clear()
     {
         mConnection.close();
@@ -100,40 +110,66 @@ namespace BitCoin
         mLastTime = 0;
         mPingNonce = 0;
         mMinimumFeeRate = 0;
-        if(mVersionData != 0)
+        if(mVersionData != NULL)
             delete mVersionData;
-        mVersionData = 0;
+        mVersionData = NULL;
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
+        mHeaderRequested.clear();
+        mBlockRequested.clear();
 
-        // Delete inventory data messages
-        for(std::list<Message::InventoryData *>::iterator i=mInventories.begin();i!=mInventories.end();++i)
-            delete *i;
+        clearBlockHashes();
+    }
+
+    bool Node::hasBlocks()
+    {
+        mBlockHashMutex.lock();
+        bool result = mBlockHashCount != 0;
+        mBlockHashMutex.unlock();
+        return result;
+    }
+
+    bool Node::hasBlock(const Hash &pHash)
+    {
+        mBlockHashMutex.lock();
+        std::list<Hash> &hashes = mBlockHashes[pHash.lookup()];
+        for(std::list<Hash>::iterator i=hashes.begin();i!=hashes.end();++i)
+            if(*i == pHash)
+            {
+                mBlockHashMutex.unlock();
+                return true;
+            }
+        mBlockHashMutex.unlock();
+        return false;
+    }
+
+    void Node::clearBlockHashes()
+    {
+        mBlockHashMutex.lock();
+        std::list<Hash> *set = mBlockHashes;
+        for(unsigned int i=0;i<0xffff;i++)
+        {
+            set->clear();
+            set++;
+        }
+        mBlockHashCount = 0;
+        mBlockHashMutex.unlock();
     }
 
     void Node::addBlockHeaderHash(Hash &pHash)
     {
-        mBlockHeaderHashMutex.lock();
-        for(std::list<Hash>::iterator hash=mBlockHeaderHashes.begin();hash!=mBlockHeaderHashes.end();++hash)
+        mBlockHashMutex.lock();
+        std::list<Hash> &hashes = mBlockHashes[pHash.lookup()];
+        for(std::list<Hash>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
             if(*hash == pHash)
             {
-                mBlockHeaderHashMutex.unlock();
-                return;
+                mBlockHashMutex.unlock();
+                return; // Already added
             }
 
-        mBlockHeaderHashes.push_back(pHash);
-        mBlockHeaderHashMutex.unlock();
-    }
-
-    void Node::requestBlock(Hash &pHash)
-    {
-        Message::GetDataData getDataData;
-        getDataData.inventory.push_back(Message::InventoryHash(Message::InventoryHash::BLOCK, pHash));
-        sendMessage(&getDataData);
-        mBlockRequested = pHash;
-        mLastBlockRequest = getTime();
-        Events::instance().post(Event::BLOCK_REQUESTED);
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requested block : %s", mID, pHash.hex().text());
+        mBlockHashCount++;
+        hashes.push_back(pHash);
+        mBlockHashMutex.unlock();
     }
 
     bool Node::versionSupported(int32_t pVersion)
@@ -144,19 +180,52 @@ namespace BitCoin
 
     void Node::sendMessage(Message::Data *pData)
     {
-        if(pData->type == Message::GET_HEADERS)
-            mLastHeaderRequest = getTime();
         ArcMist::Buffer send;
         Message::writeFull(pData, &send);
         mConnection.send(&send);
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Sent <%s>", mID, Message::nameFor(pData->type));
     }
 
+    void Node::requestBlockHashes()
+    {
+        Chain &chain = Chain::instance();
+        Message::GetBlocksData getBlocksData;
+        HashList hashList;
+
+        chain.getReverseBlockHashes(hashList, 32);
+        for(HashList::iterator hash=hashList.begin();hash!=hashList.end();++hash)
+            getBlocksData.blockHeaderHashes.push_back(**hash);
+
+        sendMessage(&getBlocksData);
+    }
+
+    void Node::requestHeaders(const Hash &pStartingHash)
+    {
+        // Request the remaining headers from that inventory
+        Message::GetHeadersData getHeadersData;
+        getHeadersData.blockHeaderHashes.push_back(pStartingHash);
+        sendMessage(&getHeadersData);
+        mHeaderRequested = pStartingHash;
+        mLastHeaderRequest = getTime();
+    }
+
+    void Node::requestBlock(const Hash &pHash)
+    {
+        Message::GetDataData getDataData;
+        getDataData.inventory.push_back(Message::InventoryHash(Message::InventoryHash::BLOCK, pHash));
+        sendMessage(&getDataData);
+        mBlockRequested = pHash;
+        mLastBlockRequest = getTime();
+        Events::instance().post(Event::BLOCK_REQUESTED);
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requested block : %s", mID, pHash.hex().text());
+    }
+
     void Node::sendVersion()
     {
+        Chain &chain = Chain::instance();
         Info &info = Info::instance();
         Message::VersionData versionMessage(mConnection.ipv6Bytes(), mConnection.port(), info.ip, info.port,
-          info.fullMode, BlockChain::instance().blockCount(), info.fullMode);
+          info.fullMode, chain.blockCount(), chain.chainIsCurrent());
         sendMessage(&versionMessage);
         mVersionSent = true;
     }
@@ -231,29 +300,9 @@ namespace BitCoin
                     Info::instance().updatePeer(mAddress, mVersionData->userAgent);
                 }
 
-                // Ask for block inventory
-                if(mVersionData->relay)
-                {
-                    // Send "send headers" message
-                    Message::Data sendHeadersData(Message::SEND_HEADERS);
-                    sendMessage(&sendHeadersData);
-
-                    // Send get blocks
-                    Message::GetBlocksData getBlocksData;
-
-                    // Request to stop on highest block
-                    getBlocksData.stopHeaderHash.setSize(32);
-                    getBlocksData.stopHeaderHash.zeroize();
-
-                    // Add more recent block hashes to the Get Blocks message
-                    BlockChain &blockChain = BlockChain::instance();
-                    HashList hashList;
-                    blockChain.getReverseBlockHashes(hashList, 32);
-                    for(HashList::iterator hash=hashList.begin();hash!=hashList.end();++hash)
-                        getBlocksData.blockHeaderHashes.push_back(**hash);
-
-                    sendMessage(&getBlocksData);
-                }
+                // Send "send headers" message
+                Message::Data sendHeadersData(Message::SEND_HEADERS);
+                sendMessage(&sendHeadersData);
 
                 break;
             }
@@ -328,7 +377,7 @@ namespace BitCoin
 
             case Message::FEE_FILTER:
                 mMinimumFeeRate = ((Message::FeeFilterData *)message)->minimumFeeRate;
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_NODE_LOG_NAME, "[%d] Fee minimum rate set to %d", mID,
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Fee minimum rate set to %d", mID,
                   mMinimumFeeRate);
                 break;
 
@@ -355,26 +404,26 @@ namespace BitCoin
                 // Send Inventory of block headers
                 Message::InventoryData inventoryData;
                 HashList hashes;
-                BlockChain &blockChain = BlockChain::instance();
+                Chain &chain = Chain::instance();
 
                 // Find appropriate hashes
                 for(std::vector<Hash>::iterator i=getBlocksData->blockHeaderHashes.begin();i!=getBlocksData->blockHeaderHashes.end();++i)
-                {
-                    blockChain.getBlockHashes(hashes, *i, 200);
-                    if(hashes.size() > 0)
+                    if(chain.blockInChain(*i))
+                    {
+                        chain.getBlockHashes(hashes, *i, 1000);
                         break;
-                }
+                    }
 
                 if(hashes.size() == 0)
                 {
                     // No matching starting hashes found. Start from genesis
                     Hash emptyHash;
-                    blockChain.getBlockHashes(hashes, emptyHash, 200);
+                    chain.getBlockHashes(hashes, emptyHash, 1000);
                 }
 
                 unsigned int count = hashes.size();
-                if(count > 200) // Maximum of 200
-                    count = 200;
+                if(count > 1000) // Maximum of 1000
+                    count = 1000;
 
                 // Add inventory to message
                 bool dontStop = getBlocksData->stopHeaderHash.isZero();
@@ -401,7 +450,7 @@ namespace BitCoin
                     mBlockRequested.clear();
                     mLastBlockRequest = 0;
                 }
-                if(BlockChain::instance().addPendingBlock(((Message::BlockData *)message)->block))
+                if(Chain::instance().addPendingBlock(((Message::BlockData *)message)->block))
                     ((Message::BlockData *)message)->block = NULL; // Memory has been handed off
                 break;
             }
@@ -415,23 +464,21 @@ namespace BitCoin
 
             case Message::HEADERS:
             {
-                mLastHeaderRequest = 0;
-
                 Message::HeadersData *headersData = (Message::HeadersData *)message;
-                BlockChain &blockChain = BlockChain::instance();
-                Hash lastAcceptedHeaderHash;
-                unsigned int originalHeaderCount = headersData->headers.size();
+                Chain &chain = Chain::instance();
 
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
                   "[%d] Headers message with %d block headers", mID, headersData->headers.size());
+                mHeaderRequested.clear();
+                mLastHeaderRequest = 0;
 
                 for(std::vector<Block *>::iterator header=headersData->headers.begin();header!=headersData->headers.end();)
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_NODE_LOG_NAME,
                       "[%d] Header : %s", mID, (*header)->hash.hex().text());
-                    if(blockChain.addPendingBlockHeader(*header))
+
+                    if(chain.addPendingBlockHeader(*header))
                     {
-                        lastAcceptedHeaderHash = (*header)->hash;
                         // memory will be deleted by block chain after it is processed so remove it from this list
                         header = headersData->headers.erase(header);
                     }
@@ -439,69 +486,19 @@ namespace BitCoin
                         ++header;
                 }
 
-                // Received a single header that matches.
-                if(originalHeaderCount == 1 && !lastAcceptedHeaderHash.isEmpty())
-                {
-                    // Check if more are available
-                    bool found;
-                    for(std::list<Message::InventoryData *>::iterator inventories=mInventories.begin();inventories!=mInventories.end();)
-                    {
-                        found = false;
-                        for(std::vector<Message::InventoryHash>::iterator hash=(*inventories)->inventory.begin();hash!=(*inventories)->inventory.end();++hash)
-                            if((*hash).type == Message::InventoryHash::BLOCK && (*hash).hash == lastAcceptedHeaderHash)
-                            {
-                                found = true;
-                                break;
-                            }
-
-                        if(found)
-                        {
-                            // Request the remaining headers from that inventory
-                            Message::GetHeadersData getHeadersData;
-                            getHeadersData.blockHeaderHashes.push_back(lastAcceptedHeaderHash);
-                            sendMessage(&getHeadersData);
-
-                            // Remove this inventory message since we are done with it
-                            delete *inventories;
-                            inventories = mInventories.erase(inventories);
-                        }
-                        else
-                            ++inventories;
-                    }
-                }
-
                 break;
             }
             case Message::INVENTORY:
             {
                 Message::InventoryData *inventoryData = (Message::InventoryData *)message;
-                BlockChain &blockChain = BlockChain::instance();
-                Hash afterMatchBlockHash, firstBlockHash;
-                bool hasBlock = false, matchFound = false;
-
                 for(std::vector<Message::InventoryHash>::iterator i=inventoryData->inventory.begin();i!=inventoryData->inventory.end();++i)
                 {
                     if((*i).type == Message::InventoryHash::BLOCK)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_NODE_LOG_NAME,
-                          "[%d] Inventory block header hash : %s", mID, (*i).hash.hex().text());
-                        if(!hasBlock)
-                        {
-                            hasBlock = true;
-                            mInventories.push_back(inventoryData);
-                            dontDeleteMessage = true;
-                            firstBlockHash = (*i).hash;
-                        }
+                          "[%d] Inventory block hash : %s", mID, (*i).hash.hex().text());
 
                         addBlockHeaderHash((*i).hash);
-
-                        if(matchFound)
-                        {
-                            if(afterMatchBlockHash.isEmpty())
-                                afterMatchBlockHash = (*i).hash;
-                        }
-                        else if((*i).hash == blockChain.lastPendingBlockHash())
-                            matchFound = true;
                     }
                     else if((*i).type == Message::InventoryHash::TRANSACTION)
                     {
@@ -510,24 +507,6 @@ namespace BitCoin
                         //TODO Transaction inventory messages
                     }
                 }
-
-                if(!afterMatchBlockHash.isEmpty())
-                {
-                    // Specific matching blocks found request them all
-                    Message::GetHeadersData getHeadersData;
-                    getHeadersData.blockHeaderHashes.push_back(afterMatchBlockHash);
-                    //getHeadersData.stopHeaderHash = ; // Leave zeroized to request all block headers
-                    sendMessage(&getHeadersData);
-                }
-                else if(hasBlock)
-                {
-                    // Request first block header to check if it is next in chain
-                    Message::GetHeadersData getHeadersData;
-                    getHeadersData.blockHeaderHashes.push_back(blockChain.lastPendingBlockHash());
-                    getHeadersData.stopHeaderHash = firstBlockHash; // Request to stop at their first reported header
-                    sendMessage(&getHeadersData);
-                }
-
                 break;
             }
             case Message::MEM_POOL:

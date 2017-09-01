@@ -1,7 +1,7 @@
 #include "message.hpp"
 #include "key.hpp"
 #include "transaction.hpp"
-#include "block_chain.hpp"
+#include "chain.hpp"
 #include "info.hpp"
 
 #include "arcmist/base/log.hpp"
@@ -22,7 +22,7 @@ int main(int pArgumentCount, char **pArguments)
     if(!BitCoin::Transaction::test())
         failed++;
 
-    if(!BitCoin::BlockChain::test())
+    if(!BitCoin::Chain::test())
         failed++;
 
     if(!BitCoin::Message::test())

@@ -116,7 +116,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase, bool pTest)
+    bool Transaction::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase)
     {
         ScriptInterpreter interpreter;
         Unspent *unspent = NULL;
@@ -216,6 +216,7 @@ namespace BitCoin
             unspent->script.compact();
             unspent->transactionID = hash;
             unspent->index = index - 1;
+            unspent->height = pBlockHeight;
             parseOutputScript(unspent->script, unspent->hash);
             mUnspents.push_back(unspent);
 
@@ -230,14 +231,11 @@ namespace BitCoin
             ++index;
         }
 
-        if(!pTest)
-        {
-            for(std::vector<Unspent *>::iterator unspent=mUnspents.begin();unspent!=mUnspents.end();++unspent)
-                pUnspentPool.add(**unspent);
+        for(std::vector<Unspent *>::iterator unspent=mUnspents.begin();unspent!=mUnspents.end();++unspent)
+            pUnspentPool.add(**unspent);
 
-            for(std::vector<Unspent *>::iterator unspent=spents.begin();unspent!=spents.end();++unspent)
-                pUnspentPool.spend(*unspent);
-        }
+        for(std::vector<Unspent *>::iterator unspent=spents.begin();unspent!=spents.end();++unspent)
+            pUnspentPool.spend(*unspent);
 
         return true;
     }

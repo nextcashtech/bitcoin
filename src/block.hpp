@@ -39,7 +39,7 @@ namespace BitCoin
 
         void calculateHash();
         void calculateMerkleHash(Hash &pMerkleHash);
-        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pTest);
+        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight);
         
         static uint64_t coinBaseAmount(uint64_t pBlockHeight);
         static Block *genesis();

@@ -1,6 +1,7 @@
 #ifndef BITCOIN_UNSPENT_HPP
 #define BITCOIN_UNSPENT_HPP
 
+#include "arcmist/base/mutex.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
 
@@ -16,12 +17,14 @@ namespace BitCoin
 
         Unspent() : transactionID(32) { amount = 0; index = 0xffffffff; }
         Unspent(Unspent &pValue);
+        Unspent &operator = (Unspent &pRight);
 
         uint64_t amount; // Quantity of Satoshis
         ArcMist::Buffer script; // Public key script needed to spend
         Hash transactionID; // Hash of transaction that created this unspent
         uint32_t index; // Index of output in transaction that created this unspent
         Hash hash; // Hash of public key or redeem script used in this unspent script
+        unsigned int height;
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
@@ -62,8 +65,6 @@ namespace BitCoin
         static UnspentPool &instance();
         static void destroy();
 
-        ~UnspentPool();
-
         bool isValid() const { return mValid; }
 
         // Find an existing unspent transaction
@@ -84,14 +85,24 @@ namespace BitCoin
         }
 
         // Commit pending adds and spends
-        void commit(unsigned int pBlockID);
-        // Remove and pending adds and spends
+        bool commit(unsigned int pBlockID);
+        // Remove pending adds and spends
         void revert();
 
-        // ID of last block
-        unsigned int lastBlock() { return mLastBlockID; }
+        // Height of last block
+        unsigned int blockHeight() { return mNextBlockHeight - 1; }
+
+        // Number of unspent transactions
+        unsigned int count()
+        {
+            mMutex.lock();
+            unsigned int result = mUnspentCount + mPendingAdd.size() - mPendingSpend.size();
+            mMutex.unlock();
+            return result;
+        }
+
         // Reverse all of the changes made by the most recent block
-        void reverseLastBlock();
+        //TODO void reverseLastBlock();
 
         // Load from file system
         bool load();
@@ -99,14 +110,20 @@ namespace BitCoin
         // Save to file system
         bool save();
 
+        // Clear all unspent transactions
+        void reset();
+
     private:
 
         UnspentPool();
+        ~UnspentPool();
+        const UnspentPool &operator = (const UnspentPool &pRight);
 
         void clear()
         {
+            mMutex.lock();
             mValid = true;
-            mLastBlockID = 0;
+            mNextBlockHeight = 0;
 
             for(std::list<Unspent *>::iterator iter=mPendingAdd.begin();iter!=mPendingAdd.end();++iter)
                 delete *iter;
@@ -115,14 +132,16 @@ namespace BitCoin
 
             for(unsigned int i=0;i<0xffff;i++)
                 mSets[i].clear();
+            mMutex.unlock();
         }
 
+        ArcMist::Mutex mMutex;
         UnspentSet mSets[0xffff];
         std::list<Unspent *> mPendingAdd, mPendingSpend;
         bool mModified;
         bool mValid;
-
-        unsigned int mLastBlockID;
+        unsigned int mUnspentCount;
+        unsigned int mNextBlockHeight;
 
         static UnspentPool *sInstance;
 

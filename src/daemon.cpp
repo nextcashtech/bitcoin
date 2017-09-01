@@ -5,7 +5,7 @@
 #include "block.hpp"
 #include "events.hpp"
 #include "block.hpp"
-#include "block_chain.hpp"
+#include "chain.hpp"
 
 #include <unistd.h>
 #include <csignal>
@@ -45,6 +45,9 @@ namespace BitCoin
         previousSigTermHandler= NULL;
         previousSigIntHandler = NULL;
         mLastNodeAdd = 0;
+        mLastRequestCheck = 0;
+        mLastInfoSave = 0;
+        mMaxConcurrentDownloads = 1;
     }
 
     Daemon::~Daemon()
@@ -118,9 +121,10 @@ namespace BitCoin
                 return false;
         }
 
-        Info::instance();
+        Info::instance(); // Load data
+        mLastInfoSave = getTime();
 
-        if(!BlockChain::instance().loadBlocks())
+        if(!Chain::instance().loadBlocks())
             return false;
 
         if(!UnspentPool::instance().load())
@@ -203,7 +207,7 @@ namespace BitCoin
         for(unsigned int i=0;i<tempNodes.size();i++)
             delete tempNodes[i];
 
-        BlockChain::destroy();
+        Chain::destroy();
         UnspentPool::destroy();
         Info::destroy();
 
@@ -212,17 +216,63 @@ namespace BitCoin
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Stopped");
     }
 
-    Node *Daemon::nodeWithBlock(Hash &pBlockHeaderHash)
+    Node *Daemon::nodeWithBlock(const Hash &pBlockHeaderHash)
     {
         mNodeMutex.lock();
-        std::vector<Node *> nodes = Daemon::instance().mNodes;
-        mNodeMutex.unlock();
-
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
             if(!(*node)->waitingForBlock() && (*node)->hasBlock(pBlockHeaderHash))
+            {
+                mNodeMutex.unlock();
                 return *node;
-
+            }
+        mNodeMutex.unlock();
         return NULL;
+    }
+
+    Node *Daemon::nodeWithoutBlocks()
+    {
+        mNodeMutex.lock();
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            if(!(*node)->hasBlocks())
+            {
+                mNodeMutex.unlock();
+                return *node;
+            }
+        mNodeMutex.unlock();
+        return NULL;
+    }
+
+    unsigned int Daemon::nodesWaitingForBlocks()
+    {
+        unsigned int result = 0;
+        mNodeMutex.lock();
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            if((*node)->waitingForBlock())
+                result++;
+        mNodeMutex.unlock();
+        return result;
+    }
+
+    unsigned int Daemon::nodesWaitingForHeaders()
+    {
+        unsigned int result = 0;
+        mNodeMutex.lock();
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            if((*node)->waitingForHeaders())
+                result++;
+        mNodeMutex.unlock();
+        return result;
+    }
+
+    unsigned int Daemon::nodesWithBlocks()
+    {
+        unsigned int result = 0;
+        mNodeMutex.lock();
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            if((*node)->hasBlocks())
+                result++;
+        mNodeMutex.unlock();
+        return result;
     }
 
     void Daemon::processManager()
@@ -230,46 +280,57 @@ namespace BitCoin
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Manager thread started");
 
         Daemon &daemon = Daemon::instance();
-        BlockChain &blockChain = BlockChain::instance();
-        Events &events = Events::instance();
+        Chain &chain = Chain::instance();
         Info &info = Info::instance();
 
         while(!daemon.mStopping)
         {
-            // Determine if we should request a block
-            if(events.lastOccurence(Event::BLOCK_RECEIVE_FINISHED) > events.lastOccurence(Event::BLOCK_REQUESTED) ||
-              (events.elapsedSince(Event::BLOCK_REQUESTED, 30) && events.elapsedSince(Event::BLOCK_RECEIVE_PARTIAL, 300)))
+            if(getTime() - daemon.mLastRequestCheck > 10)
             {
-                // Block receive finished since last block request
-                // or
-                //   At least 30 seconds since last block request
-                //   and
-                //     at least 300 seconds since last block was received
-                Block *nextBlock = blockChain.nextBlockNeeded();
-                if(nextBlock != NULL)
+                if(daemon.nodesWithBlocks() < 4)
                 {
-                    Node *node = daemon.nodeWithBlock(nextBlock->hash);
+                    Node *node = daemon.nodeWithoutBlocks();
                     if(node != NULL)
-                        node->requestBlock(nextBlock->hash);
+                        node->requestBlockHashes();
+                }
+
+                // Check for header request
+                if(chain.pendingHeaders() < 10 && daemon.nodesWaitingForHeaders() < 2)
+                {
+                    Node *node = daemon.nodeWithBlock(chain.lastPendingBlockHash());
+                    if(node != NULL)
+                        node->requestHeaders(chain.lastPendingBlockHash());
+                }
+
+                // Check for block request
+                if(daemon.mMaxConcurrentDownloads > daemon.nodesWaitingForBlocks())
+                {
+                    Hash nextBlockHash = chain.nextBlockNeeded();
+                    if(!nextBlockHash.isEmpty())
+                    {
+                        Node *node = daemon.nodeWithBlock(nextBlockHash);
+                        if(node != NULL)
+                            node->requestBlock(nextBlockHash);
+                    }
                 }
             }
 
             if(daemon.mStopping)
                 break;
 
-            blockChain.process();
+            chain.process();
 
             if(daemon.mStopping)
                 break;
 
-            if(events.elapsedSince(Event::INFO_SAVED, 300))
+            if(getTime() - daemon.mLastInfoSave > 300)
+            {
+                daemon.mLastInfoSave = getTime();
                 info.save();
+            }
 
             if(daemon.mStopping)
                 break;
-
-            if(events.elapsedSince(Event::UNSPENTS_SAVED, 300))
-                UnspentPool::instance().save();
 
             if(daemon.mStopping)
                 break;

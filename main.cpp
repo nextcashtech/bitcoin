@@ -7,7 +7,7 @@
 #include "arcmist/io/network.hpp"
 #include "arcmist/base/endian.hpp"
 #include "info.hpp"
-#include "block_chain.hpp"
+#include "chain.hpp"
 #include "daemon.hpp"
 
 #include <iostream>
@@ -29,6 +29,7 @@ int main(int pArgumentCount, char **pArguments)
     ArcMist::String path = "/home/curtis/Development/bcc_test/", seed;
     bool stop = false;
     bool validate = false;
+    bool rebuild = false;
 
     for(int i=1;i<pArgumentCount;i++)
         if(nextIsPath)
@@ -55,6 +56,8 @@ int main(int pArgumentCount, char **pArguments)
             nextIsSeed = true;
         else if(std::strcmp(pArguments[i], "--validate") == 0)
             validate = true;
+        else if(std::strcmp(pArguments[i], "--rebuild") == 0)
+            rebuild = true;
         else if(std::strcmp(pArguments[i], "help") == 0 ||
           std::strcmp(pArguments[i], "--help") == 0 ||
           std::strcmp(pArguments[i], "-h") == 0)
@@ -88,9 +91,9 @@ int main(int pArgumentCount, char **pArguments)
 
     BitCoin::Info::setPath(path);
 
-    if(validate)
+    if(validate || rebuild)
     {
-        if(BitCoin::BlockChain::instance().validate())
+        if(BitCoin::Chain::instance().validate(rebuild))
             return 0;
         else
             return 1;
