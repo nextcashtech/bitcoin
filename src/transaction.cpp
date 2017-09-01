@@ -119,7 +119,7 @@ namespace BitCoin
     bool Transaction::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase, bool pTest)
     {
         ScriptInterpreter interpreter;
-        Unspent *unspent;
+        Unspent *unspent = NULL;
         std::vector<Unspent *> spents;
 
         mUnspents.clear();

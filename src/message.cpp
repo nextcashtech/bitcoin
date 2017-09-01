@@ -282,8 +282,8 @@ namespace BitCoin
             {
                 // Allocate enough memory in this buffer for the full message
                 pInput->setSize(pInput->readOffset() + payloadSize);
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME, "Payload not fully received : %d / %d",
-                  pInput->remaining(), payloadSize);
+                //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME, "Payload not fully received : %d / %d",
+                //  pInput->remaining(), payloadSize);
                 pInput->setReadOffset(startReadOffset);
                 return NULL;
             }

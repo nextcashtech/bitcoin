@@ -165,24 +165,19 @@ namespace BitCoin
         if(!sPath)
             return;
 
-        ArcMist::String dataFilePath = sPath;
-        dataFilePath.pathAppend("data");
-        ArcMist::FileOutputStream file(dataFilePath, true);
-
-        file.writeFormatted("peers_max=%d", maxConnections);
+        //ArcMist::String dataFilePath = sPath;
+        //dataFilePath.pathAppend("data");
+        //ArcMist::FileOutputStream file(dataFilePath, true);
     }
 
     void Info::writePeersFile()
     {
         if(!mPeersModified)
-        {
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INFO_LOG_NAME, "Peers not modified. Not writing peers file.");
             return;
-        }
 
         if(!sPath)
         {
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INFO_LOG_NAME, "No Path. Not writing peers file.");
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INFO_LOG_NAME, "No Path. Not writing peers file.");
             return;
         }
 
@@ -192,7 +187,7 @@ namespace BitCoin
         file.setOutputEndian(ArcMist::Endian::LITTLE);
 
         mPeerMutex.lock();
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_INFO_LOG_NAME, "Writing peers file with %d peers", mPeers.size());
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Writing peers file with %d peers", mPeers.size());
         for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
             (*i)->write(&file);
         mPeerMutex.unlock();
@@ -223,7 +218,7 @@ namespace BitCoin
                 mPeers.push_back(newPeer);
         }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_INFO_LOG_NAME, "Read peers file with %d peers", mPeers.size());
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Read peers file with %d peers", mPeers.size());
         mPeerMutex.unlock();
     }
 

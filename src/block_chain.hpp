@@ -75,6 +75,8 @@ namespace BitCoin
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
         void getBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount);
+        // Retrieve list of block hashes starting at top, going down and skipping around 100 between each.
+        void getReverseBlockHashes(HashList &pHashes, unsigned int pCount);
 
         // Retrieve block headers starting at a specific hash. (empty starting hash for first block)
         void getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount);
@@ -88,6 +90,9 @@ namespace BitCoin
         // Process pending headers and blocks
         void process();
 
+        // Validate the local block chain. Print output to log
+        bool validate();
+
         static bool test();
 
     private:
@@ -98,13 +103,25 @@ namespace BitCoin
         // Blocks
         ArcMist::String blockFilePath();
         ArcMist::String blockFileName(unsigned int pID);
-        unsigned int getFileID(const Hash &pHash);
+        unsigned int blockFileID(const Hash &pHash);
         BlockSet mSets[0xffff];
         std::vector<unsigned int> mLockedFileIDs;
 
         // Block headers to request blocks
         ArcMist::Mutex mPendingBlockHeaderMutex;
         std::list<Block *> mPendingBlockHeaders;
+
+
+
+
+        //TODO Build queue of block headers and blocks that are sorted and have empty slots while waiting for them to download.
+        //  Then they process as soon as the earliest are complete.
+
+        //TODO Save block headers somewhere. Not necessarily files. Just don't request them from every node.
+        //  Only inventory messages are needed to know if they have the blocks I need.
+
+
+
 
         // Pending Blocks
         ArcMist::Mutex mPendingBlockMutex;

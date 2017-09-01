@@ -41,6 +41,9 @@ namespace BitCoin
         // Add a block to the file
         bool addBlock(Block &pBlock);
 
+        // Read block at specified offset in file. Return false if the offset is too high.
+        bool readBlock(unsigned int pOffset, Block &pBlock);
+
         // Read list of block hashes from this file. If pStartingHash is empty then start with first block
         bool readBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount);
 
@@ -312,6 +315,24 @@ namespace BitCoin
         return pBlockHeaders.size() > 0;
     }
 
+    bool BlockFile::readBlock(unsigned int pOffset, Block &pBlock)
+    {
+        if(!isValid)
+            return false;
+
+        ArcMist::FileInputStream *inputFile = new ArcMist::FileInputStream(filePathName);
+
+        // Go to location in header where the data offset to the block is
+        inputFile->setReadOffset(HASHES_OFFSET + (pOffset * HEADER_ITEM_SIZE) + 32);
+
+        unsigned int offset = inputFile->readUnsignedInt();
+        if(offset == 0)
+            return false;
+
+        inputFile->setReadOffset(offset);
+        return pBlock.read(inputFile, true);
+    }
+
     bool BlockFile::readBlock(const Hash &pHash, Block &pBlock, bool pIncludeTransactions)
     {
         if(!isValid)
@@ -407,7 +428,7 @@ namespace BitCoin
         mPendingBlockMutex.unlock();
     }
 
-    unsigned int BlockChain::getFileID(const Hash &pHash)
+    unsigned int BlockChain::blockFileID(const Hash &pHash)
     {
         uint16_t lookup = pHash.lookup();
         unsigned int result = 0xffffffff;
@@ -560,14 +581,25 @@ namespace BitCoin
         if(mPendingBlocks.size() > 0)
         {
             // Check this front block and add it to the chain
-            processBlock(mPendingBlocks.front());
-            delete mPendingBlocks.front();
-            mPendingBlocks.erase(mPendingBlocks.begin());
+            if(processBlock(mPendingBlocks.front()))
+            {
+                // Delete block
+                delete mPendingBlocks.front();
+                mPendingBlocks.erase(mPendingBlocks.begin());
 
-            if(mPendingBlocks.size() == 0)
-                mLastBlockHash.clear();
+                if(mPendingBlocks.size() == 0)
+                    mLastPendingHash.clear();
+            }
+            else
+            {
+                // Clear pending blocks since they assumed this block was good
+                for(std::vector<Block *>::iterator block=mPendingBlocks.begin();block!=mPendingBlocks.end();++block)
+                    delete *block;
+                mPendingBlocks.clear();
+                mLastPendingHash.clear();
+            }
         }
-     
+
         mPendingBlockMutex.unlock();
     }
 
@@ -603,16 +635,16 @@ namespace BitCoin
         }
 
         bool success = blockFile->addBlock(*pBlock);
+        delete blockFile;
+        unlockFile(mLastFileID);
 
         if(success)
         {
             unspentPool.commit(mNextBlockID);
             mNextBlockID++;
-            mLastBlockHash = blockFile->lastHash();
+            mLastBlockHash = pBlock->hash;
         }
 
-        delete blockFile;
-        unlockFile(mLastFileID);
         mProcessBlockMutex.unlock();
         return success;
     }
@@ -620,8 +652,11 @@ namespace BitCoin
     void BlockChain::getBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount)
     {
         Hash hash = pStartingHash;
-        unsigned int fileID = getFileID(hash);
         BlockFile *blockFile;
+        unsigned int fileID = blockFileID(hash);
+
+        if(fileID == 0xffffffff)
+            return;
 
         pHashes.clear();
 
@@ -641,11 +676,37 @@ namespace BitCoin
         }
     }
 
+    void BlockChain::getReverseBlockHashes(HashList &pHashes, unsigned int pCount)
+    {
+        BlockFile *blockFile;
+        Hash hash;
+
+        pHashes.clear();
+        for(unsigned int fileID=mLastFileID;;fileID--)
+        {
+            lockFile(fileID);
+            blockFile = new BlockFile(fileID, blockFileName(fileID));
+
+            hash = blockFile->lastHash();
+            if(!hash.isEmpty())
+                pHashes.push_back(new Hash(hash));
+
+            delete blockFile;
+            unlockFile(fileID);
+
+            if(pHashes.size() >= pCount || fileID == 0)
+                break;
+        }
+    }
+
     void BlockChain::getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount)
     {
         BlockFile *blockFile;
         Hash hash = pStartingHash;
-        unsigned int fileID = getFileID(hash);
+        unsigned int fileID = blockFileID(hash);
+
+        if(fileID == 0xffffffff)
+            return; // hash not found
 
         pBlockHeaders.clear();
 
@@ -667,9 +728,9 @@ namespace BitCoin
 
     bool BlockChain::getBlock(const Hash &pHash, Block &pBlock)
     {
-        unsigned int fileID = getFileID(pHash);
+        unsigned int fileID = blockFileID(pHash);
         if(fileID == 0xffffffff)
-            return false;
+            return false; // hash not found
 
         lockFile(fileID);
         BlockFile *blockFile = new BlockFile(fileID, blockFileName(fileID));
@@ -774,6 +835,8 @@ namespace BitCoin
 
         mProcessBlockMutex.unlock();
 
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Loaded %d blocks", mNextBlockID);
+
         if(mNextBlockID == 0)
         {
             // Add genesis block
@@ -786,6 +849,74 @@ namespace BitCoin
         if(lastBlock != NULL)
             mLastBlockHash = *lastBlock;
         return success;
+    }
+
+    bool BlockChain::validate()
+    {
+        BlockFile *blockFile;
+        Hash previousHash(32), merkleHash;
+        Block block;
+        unsigned int i, height = 0;
+        ArcMist::String filePathName;
+        for(unsigned int fileID=0;;fileID++)
+        {
+            filePathName = blockFileName(fileID);
+            if(!ArcMist::fileExists(filePathName))
+                break;
+
+            lockFile(fileID);
+            blockFile = new BlockFile(fileID, filePathName);
+
+            for(i=0;i<BlockFile::MAX_BLOCKS;i++)
+            {
+                if(blockFile->readBlock(i, block))
+                {
+                    if(block.previousHash != previousHash)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+                          "Block %010d previous hash doesn't match", height);
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+                          "Included Previous Hash : %s", block.previousHash.hex().text());
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+                          "Previous Block's Hash  : %s", previousHash.hex().text());
+                        return false;
+                    }
+
+                    block.calculateMerkleHash(merkleHash);
+                    if(block.merkleHash != merkleHash)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+                          "Block %010d has invalid merkle hash", height);
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+                          "Included Merkle Hash : %s", block.merkleHash.hex().text());
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+                          "Correct Merkle Hash  : %s", merkleHash.hex().text());
+                        return false;
+                    }
+
+                    if(!block.process(UnspentPool::instance(), height, true))
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+                          "Block %010d failed to process", height);
+                        return false;
+                    }
+
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+                      "Block %010d is valid : %d transactions", height, block.transactions.size());
+
+                    previousHash = block.hash;
+                    height++;
+                }
+                else // End of chain
+                    break;
+            }
+
+            delete blockFile;
+            unlockFile(fileID);
+        }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Validated block height of %d", height-1);
+        return true;
     }
 
     bool BlockChain::test()
@@ -833,6 +964,31 @@ namespace BitCoin
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed genesis block hash");
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Block hash   : %s", genesis->hash.hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Correct hash : %s", checkHash.hex().text());
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Genesis block read hash
+         ***********************************************************************************************/
+        //Big Endian checkData.writeHex("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+        checkData.clear();
+        if(network() == TESTNET)
+            checkData.writeHex("43497fd7f826957108f4a30fd9cec3aeba79972084e90ead01ea330900000000");
+        else
+            checkData.writeHex("6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000");
+        checkHash.read(&checkData);
+        Block readGenesisBlock;
+        ArcMist::Buffer blockBuffer;
+        genesis->write(&blockBuffer, true);
+        readGenesisBlock.read(&blockBuffer, true);
+
+        if(readGenesisBlock.hash == checkHash)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed genesis block read hash");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed genesis block read hash");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Block hash   : %s", readGenesisBlock.hash.hex().text());
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Correct hash : %s", checkHash.hex().text());
             success = false;
         }
@@ -921,8 +1077,81 @@ namespace BitCoin
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed genesis block raw data");
         }
 
-        delete genesis;
+        /***********************************************************************************************
+         * Block read
+         ***********************************************************************************************/
+        Block readBlock;
+        ArcMist::FileInputStream readFile("tests/06128e87be8b1b4dea47a7247d5528d2702c96826c7a648497e773b800000000.pending_block");
 
+        if(!readBlock.read(&readFile, true))
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed to read block");
+            success = false;
+        }
+        else
+        {
+            /***********************************************************************************************
+             * Block read hash
+             ***********************************************************************************************/
+            checkData.clear();
+            checkData.writeHex("06128e87be8b1b4dea47a7247d5528d2702c96826c7a648497e773b800000000");
+            checkHash.read(&checkData);
+
+            if(readBlock.hash == checkHash)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed read block hash");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed read block hash");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Block hash   : %s", readBlock.hash.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Correct hash : %s", checkHash.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Block read previous hash
+             ***********************************************************************************************/
+            checkData.clear();
+            checkData.writeHex("43497fd7f826957108f4a30fd9cec3aeba79972084e90ead01ea330900000000");
+            checkHash.read(&checkData);
+
+            if(readBlock.previousHash == checkHash)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed read block previous hash");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed read block previous hash");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Block previous hash   : %s", readBlock.previousHash.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Correct previous hash : %s", checkHash.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Block read merkle hash
+             ***********************************************************************************************/
+            readBlock.calculateMerkleHash(checkHash);
+
+            if(readBlock.merkleHash == checkHash)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed read block merkle hash");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed read block merkle hash");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Block merkle hash   : %s", readBlock.merkleHash.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Correct merkle hash : %s", checkHash.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Block read process
+             ***********************************************************************************************/
+            if(readBlock.process(UnspentPool::instance(), 1, true))
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed read block process");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed read block process");
+                success = false;
+            }
+        }
+
+        delete genesis;
         return success;
     }
 }

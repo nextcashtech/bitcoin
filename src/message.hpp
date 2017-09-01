@@ -290,7 +290,12 @@ namespace BitCoin
             bool read(ArcMist::InputStream *pStream, unsigned int pSize);
 
             uint32_t version;
-            std::vector<Hash> blockHeaderHashes; // In reverse order (Highest block first)
+
+            // Listing of block hashes that you have in reverse order (Highest block first)
+            // Maybe like every 100th block or something
+            // First block in this list that they have they will send you headers for
+            //   everything after through the stop header
+            std::vector<Hash> blockHeaderHashes;
 
             Hash stopHeaderHash; // Zeroized to stop at highest block on chain
 

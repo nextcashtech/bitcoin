@@ -38,11 +38,13 @@ namespace BitCoin
     {
         mRunning = false;
         mStopping = false;
+        mConnectionThread = NULL;
         mNodeThread = NULL;
         mManagerThread = NULL;
         previousSigTermChildHandler = NULL;
         previousSigTermHandler= NULL;
         previousSigIntHandler = NULL;
+        mLastNodeAdd = 0;
     }
 
     Daemon::~Daemon()
@@ -73,13 +75,10 @@ namespace BitCoin
         if(!start(pInDaemonMode))
             return;
 
-        if(pSeed)
-            querySeed(pSeed);
-        else
-            pickNodes(Info::instance().maxConnections);
+        mSeed = pSeed;
 
         while(isRunning())
-            ArcMist::Thread::sleep(1);
+            ArcMist::Thread::sleep(100);
     }
 
     bool Daemon::start(bool pInDaemonMode)
@@ -126,6 +125,13 @@ namespace BitCoin
 
         if(!UnspentPool::instance().load())
             return false;
+
+        mConnectionThread = new ArcMist::Thread("Connection", processConnections);
+        if(mConnectionThread == NULL)
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create connection thread");
+            return false;
+        }
 
         mNodeThread = new ArcMist::Thread("Node", processNodes);
         if(mNodeThread == NULL)
@@ -174,6 +180,11 @@ namespace BitCoin
         previousSigTermHandler= NULL;
         previousSigIntHandler = NULL;
 
+        // Wait for connections to finish
+        if(mConnectionThread != NULL)
+            delete mConnectionThread;
+        mConnectionThread = NULL;
+
         // Wait for manager to finish
         if(mManagerThread != NULL)
             delete mManagerThread;
@@ -199,6 +210,121 @@ namespace BitCoin
         mRunning = false;
         mStopping = false;
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Stopped");
+    }
+
+    Node *Daemon::nodeWithBlock(Hash &pBlockHeaderHash)
+    {
+        mNodeMutex.lock();
+        std::vector<Node *> nodes = Daemon::instance().mNodes;
+        mNodeMutex.unlock();
+
+        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+            if(!(*node)->waitingForBlock() && (*node)->hasBlock(pBlockHeaderHash))
+                return *node;
+
+        return NULL;
+    }
+
+    void Daemon::processManager()
+    {
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Manager thread started");
+
+        Daemon &daemon = Daemon::instance();
+        BlockChain &blockChain = BlockChain::instance();
+        Events &events = Events::instance();
+        Info &info = Info::instance();
+
+        while(!daemon.mStopping)
+        {
+            // Determine if we should request a block
+            if(events.lastOccurence(Event::BLOCK_RECEIVE_FINISHED) > events.lastOccurence(Event::BLOCK_REQUESTED) ||
+              (events.elapsedSince(Event::BLOCK_REQUESTED, 30) && events.elapsedSince(Event::BLOCK_RECEIVE_PARTIAL, 300)))
+            {
+                // Block receive finished since last block request
+                // or
+                //   At least 30 seconds since last block request
+                //   and
+                //     at least 300 seconds since last block was received
+                Block *nextBlock = blockChain.nextBlockNeeded();
+                if(nextBlock != NULL)
+                {
+                    Node *node = daemon.nodeWithBlock(nextBlock->hash);
+                    if(node != NULL)
+                        node->requestBlock(nextBlock->hash);
+                }
+            }
+
+            if(daemon.mStopping)
+                break;
+
+            blockChain.process();
+
+            if(daemon.mStopping)
+                break;
+
+            if(events.elapsedSince(Event::INFO_SAVED, 300))
+                info.save();
+
+            if(daemon.mStopping)
+                break;
+
+            if(events.elapsedSince(Event::UNSPENTS_SAVED, 300))
+                UnspentPool::instance().save();
+
+            if(daemon.mStopping)
+                break;
+
+            ArcMist::Thread::sleep(1000);
+        }
+
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Manager thread finished");
+    }
+
+    void Daemon::processNodes()
+    {
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Nodes thread started");
+
+        Daemon &daemon = Daemon::instance();
+        std::vector<Node *> nodes, liveNodes, deadNodes;
+
+        while(!daemon.mStopping)
+        {
+            daemon.mNodeMutex.lock();
+            nodes = daemon.mNodes;
+            daemon.mNodeMutex.unlock();
+            liveNodes.clear();
+            deadNodes.clear();
+
+            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+            {
+                if(daemon.mStopping)
+                    break;
+
+                if((*node)->isOpen())
+                {
+                    liveNodes.push_back(*node); // Add nodes to keep
+                    (*node)->process();
+                }
+                else
+                    deadNodes.push_back(*node);
+            }
+
+            if(daemon.mStopping)
+                break;
+
+            // Clean nodes
+            daemon.mNodeMutex.lock();
+            daemon.mNodes = liveNodes; // Copy live nodes back to main list
+            daemon.mNodeMutex.unlock();
+            for(unsigned int i=0;i<deadNodes.size();i++)
+                delete deadNodes[i];
+
+            if(daemon.mStopping)
+                break;
+            ArcMist::Thread::sleep(200); // 5hz
+        }
+
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Nodes thread finished");
     }
 
     bool Daemon::addNode(const char *pIPAddress, const char *pPort)
@@ -284,111 +410,36 @@ namespace BitCoin
         return count;
     }
 
-    Node *Daemon::nodeWithBlock(Hash &pBlockHeaderHash)
+    void Daemon::processConnections()
     {
-        mNodeMutex.lock();
-        std::vector<Node *> nodes = Daemon::instance().mNodes;
-        mNodeMutex.unlock();
-
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if((*node)->hasBlock(pBlockHeaderHash))
-                return *node;
-
-        return NULL;
-    }
-
-    void Daemon::processManager()
-    {
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Manager thread started");
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Connections thread started");
 
         Daemon &daemon = Daemon::instance();
-        BlockChain &blockChain = BlockChain::instance();
-        Events &events = Events::instance();
+        Info &info = Info::instance();
 
         while(!daemon.mStopping)
         {
-            // Determine if we should request a block
-            if(events.lastOccurence(Event::BLOCK_RECEIVE_FINISHED) > events.lastOccurence(Event::BLOCK_REQUESTED) ||
-              (events.elapsedSince(Event::BLOCK_REQUESTED, 30) && events.elapsedSince(Event::BLOCK_RECEIVE_PARTIAL, 300)))
+            if(daemon.mSeed)
             {
-                // Block receive finished since last block request
-                // or
-                //   At least 30 seconds since last block request
-                //   and
-                //     at least 300 seconds since last block was received
-                Block *nextBlock = blockChain.nextBlockNeeded();
-                if(nextBlock != NULL)
-                {
-                    Node *node = daemon.nodeWithBlock(nextBlock->hash);
-                    node->requestBlock(nextBlock->hash);
-                }
+                daemon.querySeed(daemon.mSeed);
+                daemon.mSeed.clear();
             }
 
             if(daemon.mStopping)
                 break;
 
-            if(events.elapsedSince(Event::INFO_SAVED, 300))
-                Info::instance().save();
-
-            if(daemon.mStopping)
-                break;
-
-            if(events.elapsedSince(Event::UNSPENTS_SAVED, 300))
-                UnspentPool::instance().save();
-
-            if(daemon.mStopping)
-                break;
-            
-            ArcMist::Thread::sleep(2000); // 5hz
-        }
-
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Manager thread finished");
-    }
-
-    void Daemon::processNodes()
-    {
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Nodes thread started");
-
-        Daemon &daemon = Daemon::instance();
-        std::vector<Node *> nodes, liveNodes, deadNodes;
-
-        while(!daemon.mStopping)
-        {
-            daemon.mNodeMutex.lock();
-            nodes = daemon.mNodes;
-            daemon.mNodeMutex.unlock();
-            liveNodes.clear();
-            deadNodes.clear();
-
-            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+            if(daemon.mNodes.size() < info.maxConnections && getTime() - daemon.mLastNodeAdd > 60)
             {
-                if(daemon.mStopping)
-                    break;
-
-                if((*node)->isOpen())
-                {
-                    liveNodes.push_back(*node); // Add nodes to keep
-                    (*node)->process();
-                }
-                else
-                    deadNodes.push_back(*node);
+                daemon.mLastNodeAdd = getTime();
+                daemon.pickNodes(info.maxConnections - daemon.mNodes.size());
             }
 
             if(daemon.mStopping)
                 break;
 
-            // Clean nodes
-            daemon.mNodeMutex.lock();
-            daemon.mNodes = liveNodes; // Copy live nodes back to main list
-            daemon.mNodeMutex.unlock();
-            for(unsigned int i=0;i<deadNodes.size();i++)
-                delete deadNodes[i];
-
-            if(daemon.mStopping)
-                break;
             ArcMist::Thread::sleep(200); // 5hz
         }
 
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Nodes thread finished");
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Connections thread finished");
     }
 }

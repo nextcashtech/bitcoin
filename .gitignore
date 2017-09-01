@@ -5,3 +5,4 @@ test
 test.debug
 bitcoin
 bitcoin.debug
+.gdb*

@@ -6,9 +6,8 @@
 #include "arcmist/io/buffer.hpp"
 #include "arcmist/io/network.hpp"
 #include "arcmist/base/endian.hpp"
-#include "message.hpp"
 #include "info.hpp"
-#include "node.hpp"
+#include "block_chain.hpp"
 #include "daemon.hpp"
 
 #include <iostream>
@@ -22,32 +21,14 @@
 #define MAIN_LOG_NAME "Main"
 
 
-pid_t daemonPID(const char *pPath)
-{
-    ArcMist::FileInputStream pidStream(pPath);
-    if(!pidStream.isValid())
-        return 0;
-    ArcMist::Buffer pidBuffer;
-    uint8_t byte;
-    while(pidStream.remaining())
-    {
-        byte = pidStream.readByte();
-        if(ArcMist::isWhiteSpace(byte))
-            break;
-        pidBuffer.writeByte(byte);
-    }
-    ArcMist::String pidString = pidBuffer.readString(pidBuffer.length());
-    if(!pidString)
-        return 0;
-    return std::stol(pidString.text());
-}
-
+pid_t daemonPID(const char *pPath);
 
 int main(int pArgumentCount, char **pArguments)
 {
     bool nextIsPath = false, nextIsSeed = false, noDaemon = false;
     ArcMist::String path = "/home/curtis/Development/bcc_test/", seed;
     bool stop = false;
+    bool validate = false;
 
     for(int i=1;i<pArgumentCount;i++)
         if(nextIsPath)
@@ -72,6 +53,8 @@ int main(int pArgumentCount, char **pArguments)
             nextIsPath = true;
         else if(std::strcmp(pArguments[i], "--seed") == 0)
             nextIsSeed = true;
+        else if(std::strcmp(pArguments[i], "--validate") == 0)
+            validate = true;
         else if(std::strcmp(pArguments[i], "help") == 0 ||
           std::strcmp(pArguments[i], "--help") == 0 ||
           std::strcmp(pArguments[i], "-h") == 0)
@@ -84,6 +67,7 @@ int main(int pArgumentCount, char **pArguments)
             std::cerr << "    -v                   -> Verbose logging" << std::endl;
             std::cerr << "    -vv                  -> Debug loggin" << std::endl;
             std::cerr << "    --nodaemon           -> Don't perform daemon process fork" << std::endl;
+            std::cerr << "    --validate           -> Validate local block chain and exit" << std::endl;
             std::cerr << std::endl;
             return 0;
         }
@@ -103,6 +87,15 @@ int main(int pArgumentCount, char **pArguments)
         }
 
     BitCoin::Info::setPath(path);
+
+    if(validate)
+    {
+        if(BitCoin::BlockChain::instance().validate())
+            return 0;
+        else
+            return 1;
+    }
+
     ArcMist::String logFilePath = BitCoin::Info::path() + "daemon.log";
     ArcMist::String pidFilePath = BitCoin::Info::path() + "pid";
 
@@ -194,4 +187,24 @@ int main(int pArgumentCount, char **pArguments)
         std::remove(pidFilePath.text());
 
     return 0;
+}
+
+pid_t daemonPID(const char *pPath)
+{
+    ArcMist::FileInputStream pidStream(pPath);
+    if(!pidStream.isValid())
+        return 0;
+    ArcMist::Buffer pidBuffer;
+    uint8_t byte;
+    while(pidStream.remaining())
+    {
+        byte = pidStream.readByte();
+        if(ArcMist::isWhiteSpace(byte))
+            break;
+        pidBuffer.writeByte(byte);
+    }
+    ArcMist::String pidString = pidBuffer.readString(pidBuffer.length());
+    if(!pidString)
+        return 0;
+    return std::stol(pidString.text());
 }

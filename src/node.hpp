@@ -40,6 +40,7 @@ namespace BitCoin
             return false;
         }
         void requestBlock(Hash &pHash);
+        bool waitingForBlock() { return !mBlockRequested.isEmpty() && getTime() - mLastBlockRequest < 300; }
 
     private:
 
@@ -64,6 +65,12 @@ namespace BitCoin
         ArcMist::Mutex mBlockHeaderHashMutex;
         void addBlockHeaderHash(Hash &pHash);
         std::list<Hash> mBlockHeaderHashes;
+
+        std::list<Message::InventoryData *> mInventories;
+
+        uint64_t mLastHeaderRequest;
+        Hash mBlockRequested;
+        uint64_t mLastBlockRequest;
 
         static unsigned int mNextID;
 

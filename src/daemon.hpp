@@ -23,6 +23,7 @@ namespace BitCoin
 
         static Daemon &instance();
         static void destroy();
+        static void processConnections();
         static void processNodes();
         static void processManager();
 
@@ -31,17 +32,6 @@ namespace BitCoin
         bool start(bool pInDaemonMode);
         bool isRunning() { return mRunning; }
         void stop();
-
-        bool addNode(IPAddress &pAddress);
-        bool addNode(const char *pIPAddress, const char *pPort);
-
-        // Query peers from a seed
-        // Returns number of peers actually connected
-        unsigned int querySeed(const char *pName);
-
-        // Randomly choose peers and open nodes on them until specified count is reached.
-        // Returns number of peers actually connected
-        unsigned int pickNodes(unsigned int pCount);
 
         bool stopping() { return mStopping; }
         
@@ -54,10 +44,12 @@ namespace BitCoin
         Daemon();
         ~Daemon();
 
+        ArcMist::Thread *mConnectionThread;
         ArcMist::Thread *mNodeThread;
         ArcMist::Thread *mManagerThread;
         ArcMist::Mutex mNodeMutex;
         std::vector<Node *> mNodes;
+        uint64_t mLastNodeAdd;
         bool mRunning, mStopping;
 
         void (*previousSigTermChildHandler)(int);
@@ -66,6 +58,16 @@ namespace BitCoin
         
         Node *nodeWithBlock(Hash &pBlockHeaderHash);
 
+        // Query peers from a seed
+        // Returns number of peers actually connected
+        ArcMist::String mSeed;
+        unsigned int querySeed(const char *pName);
+
+        // Randomly choose peers and open nodes on them until specified count is reached.
+        // Returns number of peers actually connected
+        bool addNode(IPAddress &pAddress);
+        bool addNode(const char *pIPAddress, const char *pPort);
+        unsigned int pickNodes(unsigned int pCount);
         void cleanNodes();
 
         static Daemon *sInstance;

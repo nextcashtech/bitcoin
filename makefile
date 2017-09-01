@@ -51,6 +51,7 @@ ${OBJECT_DIRECTORY}/.debug_headers: $(HEADER_FILES) | ${OBJECT_DIRECTORY}
 	@echo "\tHEADER(S) UPDATED $?"
 	@echo ----------------------------------------------------------------------------------------------------
 	@rm -vf ${OBJECT_DIRECTORY}/*.o.debug
+	@rm -vf ${OBJECT_DIRECTORY}/*/*.o.debug
 	@touch ${OBJECT_DIRECTORY}/.debug_headers
 
 ${OBJECT_DIRECTORY}/%.o: %.cpp | ${OBJECT_DIRECTORY}

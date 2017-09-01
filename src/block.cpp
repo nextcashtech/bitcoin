@@ -110,7 +110,7 @@ namespace BitCoin
         // Merkle Root Hash
         merkleHash.read(pStream);
         if(pCalculateHash)
-            previousHash.write(digest);
+            merkleHash.write(digest);
 
         // Time
         time = pStream->readUnsignedInt();
