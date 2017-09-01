@@ -20,20 +20,20 @@ namespace BitCoin
             return false;
         }
 
-        /* Version 2 - Requires block height in coinbase
+        /*TODO Version 2 - Requires block height in coinbase
          *   Reject version 2 blocks without block height at block 224,412
          *   Reject version 1 blocks at block 227,930
          */
         if((version == 2 && pHeight >= 224412) || version > 2)
         {
-            // Check for block height in coinbase (first) transaction
-            if(transactions.size() > 0 && transactions[0].blockHeight() != pHeight)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-                  "Version 2 block with non matching block height after 224,412 : actual %d, included %d",
-                  pHeight, transactions[0].blockHeight());
-                return false;
-            }
+            //TODO Check for block height in coinbase (first) transaction
+            // if(transactions.size() > 0 && transactions[0].blockHeight() != pHeight)
+            // {
+                // ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                  // "Version 2 block with non matching block height after 224,412 : actual %d, included %d",
+                  // pHeight, transactions[0].blockHeight());
+                // return false;
+            // }
         }
 
         //TODO Version 3 - Requires ECDSA DER encoded signatures
@@ -273,10 +273,12 @@ namespace BitCoin
 
     bool Block::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight)
     {
+        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Processing block %08d", pBlockHeight);
+
         //TODO Validate target "bits" (mining difficulty)
         if(transactions.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
             return false;
         }
 
@@ -293,20 +295,30 @@ namespace BitCoin
 
         // Validate and process transactions
         bool isCoinBase = true;
-        for(std::vector<Transaction>::iterator i=transactions.begin();i!=transactions.end();++i)
+        mFees = 0;
+        for(std::vector<Transaction>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            if(!(*i).process(pUnspentPool, pBlockHeight, isCoinBase))
+            if(!transaction->process(pUnspentPool, pBlockHeight, isCoinBase))
                 return false;
+            if(!isCoinBase)
+                mFees += transaction->fee();
             isCoinBase = false;
         }
 
-        //TODO Check that coinbase output amount - fees is correct for block height
-        // if(transactions.begin()->amount != coinBaseAmount(pBlockHeight))
-        // {
-            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-              // "Coinbase outputs  %d script did not verify", i + 1);
-            // return false;
-        // }
+        // Check that coinbase output amount - fees is correct for block height
+        if(-transactions.begin()->fee() - mFees != coinBaseAmount(pBlockHeight))
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Coinbase outputs are not the correct amount");
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Coinbase %.08f", bitcoins(-transactions.begin()->fee()));
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Fees     %.08f", bitcoins(mFees));
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Block %08d Coinbase amount should be %.08f", pBlockHeight, bitcoins(coinBaseAmount(pBlockHeight)));
+            return false;
+        }
+        else
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Coinbase %.08f", bitcoins(-transactions.begin()->fee()));
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Fees     %.08f", bitcoins(mFees));
+        }
 
         return true;
     }

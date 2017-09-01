@@ -48,26 +48,11 @@ namespace BitCoin
         virtual void write(ArcMist::OutputStream *pStream);
         virtual bool read(ArcMist::InputStream *pStream);
 
-        unsigned int blockHeight() { return 0; } //TODO Block height for coinbase //signatureScript.blockHeight(); }
-
         Outpoint outpoint;
         ArcMist::Buffer script;
         uint32_t sequence;
 
     };
-
-    /*class CoinBaseInput : public Input
-    {
-    public:
-
-        void write(ArcMist::OutputStream *pStream) const;
-        bool read(ArcMist::InputStream *pStream);
-
-        Hash256 hash;
-        uint32_t index; // always 0xffffffff, because there is no previous outpoint
-        uint64_t blockHeight;
-
-    };*/
 
     class Output
     {
@@ -112,13 +97,6 @@ namespace BitCoin
         
         void clear();
 
-        unsigned int blockHeight()
-        {
-            if(inputs.size() > 0)
-                return inputs[0]->blockHeight();
-            return 0;
-        }
-
         // Hash
         Hash hash;
 
@@ -131,6 +109,8 @@ namespace BitCoin
         unsigned int size();
         uint64_t feeRate();
 
+        uint64_t fee() const { return mFee; }
+
         void calculateHash();
         bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase);
 
@@ -139,7 +119,7 @@ namespace BitCoin
 
     private:
 
-        uint64_t mFee;
+        int64_t mFee;
         std::vector<Unspent *> mUnspents;
 
     };

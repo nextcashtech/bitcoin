@@ -12,7 +12,7 @@ namespace BitCoin
     {
     public:
 
-        Block() : previousHash(32), merkleHash(32) { version = 4; transactionCount = 0; }
+        Block() : previousHash(32), merkleHash(32) { version = 4; transactionCount = 0; mFees = 0; }
 
         // Checks if block follows version specific validation rules
         bool versionIsValid(unsigned int pHeight);
@@ -37,12 +37,22 @@ namespace BitCoin
         // Transactions (empty when "header only")
         std::vector<Transaction> transactions;
 
+        // Total of fees collected from transactions (set during process), not including coin base
+        uint64_t fees() const { return mFees; }
+
         void calculateHash();
         void calculateMerkleHash(Hash &pMerkleHash);
         bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight);
-        
+
+        // Amount of Satoshis generated for mining a block at this height
         static uint64_t coinBaseAmount(uint64_t pBlockHeight);
+
+        // Generate the Genesis block for the chain
         static Block *genesis();
+
+    private:
+
+        uint64_t mFees;
 
     };
 }

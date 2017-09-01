@@ -21,6 +21,11 @@ namespace BitCoin
         return std::time(NULL);
     }
 
+    inline double bitcoins(int64_t pSatoshis)
+    {
+        return (double)pSatoshis / 100000000;
+    }
+
     const char *networkStartString();
     const uint8_t *networkStartBytes();
     const char *networkPortString();

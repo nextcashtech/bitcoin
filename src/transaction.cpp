@@ -220,7 +220,7 @@ namespace BitCoin
             parseOutputScript(unspent->script, unspent->hash);
             mUnspents.push_back(unspent);
 
-            if(!pCoinBase && (*output)->amount > 0 && (uint64_t)(*output)->amount > mFee)
+            if(!pCoinBase && (*output)->amount > 0 && (*output)->amount > mFee)
             {
                 ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
                   "Outputs are more than inputs");
@@ -343,25 +343,6 @@ namespace BitCoin
 
         return true;
     }
-
-    /*void CoinBaseInput::write(ArcMist::OutputStream *pStream) const
-    {
-        outpoint.write(pStream);
-        writeCompactInteger(pStream, signatureScript.length());
-        signatureScript->write(pStream);
-        pStream->writeUnsignedInt(sequence);
-        
-        
-        Hash256 hash;
-        uint32_t index; // always 0xffffffff, because there is no previous outpoint
-        uint64_t blockHeight;
-        
-    }
-
-    bool CoinBaseInput::read(ArcMist::InputStream *pStream)
-    {
-        
-    }*/
 
     void Output::write(ArcMist::OutputStream *pStream)
     {
