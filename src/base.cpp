@@ -179,6 +179,38 @@ namespace BitCoin
         return ArcMist::Digest::crc32((const uint8_t *)mData, mSize) & 0xffff;
     }
 
+    // Set hash to highest possible value that is valid for a header hash proof of work
+    void Hash::setDifficulty(uint32_t pBits)
+    {
+        uint8_t length = ((pBits >> 24) & 0xff) - 1;
+
+        setSize(32);
+        zeroize();
+
+        if(length > 31)
+            return;
+
+        mData[length]   = (pBits >> 16) & 0xff;
+        mData[length-1] = (pBits >> 8) & 0xff;
+        mData[length-2] = pBits & 0xff;
+    }
+
+    // Header hash must be <= target difficulty hash
+    bool Hash::operator <= (const Hash &pRight)
+    {
+        if(mSize != pRight.mSize)
+            return false;
+
+        for(int i=mSize-1;i>=0;i--)
+            if(mData[i] < pRight.mData[i])
+                return true;
+            else if(mData[i] > pRight.mData[i])
+                return false;
+
+        // They are equal
+        return true;
+    }
+
     ArcMist::String base58Encode(Base58Type pType, ArcMist::InputStream *pStream, unsigned int pSize)
     {
         uint8_t data[pSize + 1];
@@ -333,6 +365,115 @@ namespace BitCoin
                   "Failed hash lookup distribution : high %d, zeroes %d", highestCount, zeroCount);
                 success = false;
             }
+
+            /***********************************************************************************************
+             * Target Bits Decode 0x181bc330
+             ***********************************************************************************************/
+            Hash testDifficulty;
+            Hash checkDifficulty(32);
+            testDifficulty.setDifficulty(0x181bc330);
+            ArcMist::Buffer testData;
+
+            testData.writeHex("00000000000000000000000000000000000000000030c31b0000000000000000");
+            checkDifficulty.read(&testData);
+
+            if(testDifficulty == checkDifficulty)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Decode 0x181bc330");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Decode 0x181bc330");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Difficulty : %s", testDifficulty.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct    : %s", checkDifficulty.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Target Bits Decode 0x1b0404cb
+             ***********************************************************************************************/
+            testDifficulty.setDifficulty(0x1b0404cb);
+            testData.clear();
+            testData.writeHex("000000000000000000000000000000000000000000000000cb04040000000000");
+            checkDifficulty.read(&testData);
+
+            if(testDifficulty == checkDifficulty)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Decode 0x1b0404cb");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Decode 0x1b0404cb");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Difficulty : %s", testDifficulty.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct    : %s", checkDifficulty.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Target Bits Decode 0x1d00ffff
+             ***********************************************************************************************/
+            testDifficulty.setDifficulty(0x1d00ffff);
+            testData.clear();
+            testData.writeHex("0000000000000000000000000000000000000000000000000000ffff00000000");
+            checkDifficulty.read(&testData);
+
+            if(testDifficulty == checkDifficulty)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Decode 0x1d00ffff");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Decode 0x1d00ffff");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Difficulty : %s", testDifficulty.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct    : %s", checkDifficulty.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Target Bits Check less than
+             ***********************************************************************************************/
+            testDifficulty.setDifficulty(486604799); //0x1d00ffff
+            testData.clear();
+            testData.writeHex("43497fd7f826957108f4a30fd9cec3aeba79972084e90ead01ea330900000000");
+            checkDifficulty.read(&testData);
+
+            if(checkDifficulty <= testDifficulty)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Check less than");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Check less than");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Check   : %s", checkDifficulty.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Highest : %s", testDifficulty.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Target Bits Check equal
+             ***********************************************************************************************/
+            testDifficulty.setDifficulty(486604799);
+            checkDifficulty.setDifficulty(0x1d00ffff);
+
+            if(checkDifficulty <= testDifficulty)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Check equal");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Check equal");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Check   : %s", checkDifficulty.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Highest : %s", testDifficulty.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Target Bits Check not less than
+             ***********************************************************************************************/
+            testDifficulty.setDifficulty(486604799); //0x1d00ffff
+            testData.clear();
+            testData.writeHex("43497fd7f826957108f4a30fd9cec3aeba79972084e90ead01ea330910000000");
+            checkDifficulty.read(&testData);
+
+            if(checkDifficulty <= testDifficulty)
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Check not less than");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Check   : %s", checkDifficulty.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Highest : %s", testDifficulty.hex().text());
+                success = false;
+            }
+            else
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Check not less than");
 
             return success;
         }

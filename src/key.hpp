@@ -129,7 +129,7 @@ namespace BitCoin
         ArcMist::String hex() const;
 
         void write(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
-        bool read(ArcMist::InputStream *pStream, unsigned int pLength);
+        bool read(ArcMist::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly = false);
 
         bool verify(PublicKey &pPublicKey, Hash &pHash) const;
 

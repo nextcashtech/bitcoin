@@ -32,6 +32,7 @@ int main(int pArgumentCount, char **pArguments)
     bool validate = false;
     bool rebuild = false;
     bool listblocks = false;
+    bool mainnet = false;
 
     for(int i=1;i<pArgumentCount;i++)
         if(nextIsPath)
@@ -54,6 +55,8 @@ int main(int pArgumentCount, char **pArguments)
             noDaemon = true;
         else if(std::strcmp(pArguments[i], "--path") == 0)
             nextIsPath = true;
+        else if(std::strcmp(pArguments[i], "--mainnet") == 0)
+            mainnet = true;
         else if(std::strcmp(pArguments[i], "--seed") == 0)
             nextIsSeed = true;
         else if(std::strcmp(pArguments[i], "--validate") == 0)
@@ -162,7 +165,10 @@ int main(int pArgumentCount, char **pArguments)
             return 1;
     }
 
-    BitCoin::setNetwork(BitCoin::TESTNET);
+    if(mainnet)
+        BitCoin::setNetwork(BitCoin::MAINNET);
+    else
+        BitCoin::setNetwork(BitCoin::TESTNET);
     BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
 
     // Set up daemon to log to a file

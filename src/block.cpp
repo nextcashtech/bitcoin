@@ -20,26 +20,26 @@ namespace BitCoin
             return false;
         }
 
-        /*TODO Version 2 - Requires block height in coinbase
+        /* BIP34 Block version 2 - Requires block height in coinbase
          *   Reject version 2 blocks without block height at block 224,412
          *   Reject version 1 blocks at block 227,930
+         * Implemented in transaction.cpp process function
          */
-        if((version == 2 && pHeight >= 224412) || version > 2)
-        {
-            //TODO Check for block height in coinbase (first) transaction
-            // if(transactions.size() > 0 && transactions[0].blockHeight() != pHeight)
-            // {
-                // ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-                  // "Version 2 block with non matching block height after 224,412 : actual %d, included %d",
-                  // pHeight, transactions[0].blockHeight());
-                // return false;
-            // }
-        }
 
-        //TODO Version 3 - Requires ECDSA DER encoded signatures
+        /* BIP66 Version 3 - Requires ECDSA DER encoded signatures
+         * Implemented in interpreter.cpp Signature::read function
+         */
+
         //TODO Version 4 - Added support for OP_CHECKLOCKTIMEVERIFY operation code.
 
         return true;
+    }
+
+    bool Block::hasProofOfWork()
+    {
+        Hash target;
+        target.setDifficulty(targetBits);
+        return hash <= target;
     }
 
     void Block::write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount)
@@ -57,7 +57,7 @@ namespace BitCoin
         pStream->writeUnsignedInt(time);
 
         // Encoded version of target threshold
-        pStream->writeUnsignedInt(bits);
+        pStream->writeUnsignedInt(targetBits);
 
         // Nonce
         pStream->writeUnsignedInt(nonce);
@@ -118,9 +118,9 @@ namespace BitCoin
             digest->writeUnsignedInt(time);
 
         // Encoded version of target threshold
-        bits = pStream->readUnsignedInt();
+        targetBits = pStream->readUnsignedInt();
         if(pCalculateHash)
-            digest->writeUnsignedInt(bits);
+            digest->writeUnsignedInt(targetBits);
 
         // Nonce
         nonce = pStream->readUnsignedInt();
@@ -157,6 +157,23 @@ namespace BitCoin
                 return false;
 
         return true;
+    }
+
+    void Block::print(ArcMist::Log::Level pLevel)
+    {
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Hash          : %s", hash.hex().text());
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Version       : %d", version);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Previous Hash : %s", previousHash.hex().text());
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "MerkleHash    : %s", merkleHash.hex().text());
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Time          : %d", time);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Bits          : %d", targetBits);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Nonce         : %d", nonce);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "%d Transactions", transactionCount);
+
+        unsigned int index = 1;
+        for(std::vector<Transaction>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
+            ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Transaction %05d : %s",
+              index++, transaction->hash.hex().text());
     }
 
     void Block::calculateHash()
@@ -275,7 +292,7 @@ namespace BitCoin
     {
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Processing block %08d", pBlockHeight);
 
-        //TODO Validate target "bits" (mining difficulty)
+        //TODO Validate target "targetBits" (mining difficulty)
         if(transactions.size() == 0)
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
@@ -298,7 +315,7 @@ namespace BitCoin
         mFees = 0;
         for(std::vector<Transaction>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            if(!transaction->process(pUnspentPool, pBlockHeight, isCoinBase))
+            if(!transaction->process(pUnspentPool, pBlockHeight, isCoinBase, version))
                 return false;
             if(!isCoinBase)
                 mFees += transaction->fee();
@@ -334,13 +351,13 @@ namespace BitCoin
         if(network() == TESTNET)
         {
             result->time = 1296688602;
-            result->bits = 0x1d00ffff;
+            result->targetBits = 0x1d00ffff;
             result->nonce = 414098458;
         }
         else
         {
             result->time = 1231006505;
-            result->bits = 0x1d00ffff;
+            result->targetBits = 0x1d00ffff;
             result->nonce = 2083236893;
         }
         result->transactionCount = 1;

@@ -144,6 +144,10 @@ namespace BitCoin
                 zeroize();
             }
         }
+
+        // Difficulty checks
+        void setDifficulty(uint32_t pBits);
+        bool operator <= (const Hash &pRight);
         
         // Set to zero size. Makes hash "empty"
         void clear() { setSize(0); }

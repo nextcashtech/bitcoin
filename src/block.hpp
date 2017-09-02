@@ -1,6 +1,7 @@
 #ifndef BITCOIN_BLOCK_HPP
 #define BITCOIN_BLOCK_HPP
 
+#include "arcmist/base/log.hpp"
 #include "arcmist/io/stream.hpp"
 #include "base.hpp"
 #include "transaction.hpp"
@@ -16,11 +17,17 @@ namespace BitCoin
 
         // Checks if block follows version specific validation rules
         bool versionIsValid(unsigned int pHeight);
+        
+        // Verify hash is lower than target difficulty specified by targetBits
+        bool hasProofOfWork();
 
         void write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount = true);
 
         // pCalculateHash will calculate the hash of the block data while it reads it
         bool read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pCalculateHash = true);
+
+        // Print human readable version to log
+        void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
 
         // Hash
         Hash hash;
@@ -30,7 +37,7 @@ namespace BitCoin
         Hash previousHash;
         Hash merkleHash;
         uint32_t time;
-        uint32_t bits;
+        uint32_t targetBits;
         uint32_t nonce;
         uint64_t transactionCount;
 

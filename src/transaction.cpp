@@ -116,7 +116,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase)
+    bool Transaction::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase, uint32_t pVersion)
     {
         ScriptInterpreter interpreter;
         Unspent *unspent = NULL;
@@ -158,7 +158,7 @@ namespace BitCoin
 
             // Process signature script
             (*input)->script.setReadOffset(0);
-            if(!interpreter.process((*input)->script))
+            if(!interpreter.process((*input)->script, true, pVersion >= 3))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d signature script failed", index);
@@ -169,7 +169,7 @@ namespace BitCoin
             if(unspent != NULL)
             {
                 unspent->script.setReadOffset(0);
-                if(!interpreter.process(unspent->script));
+                if(!interpreter.process(unspent->script, false, pVersion >= 3));
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d output script failed", index);
@@ -184,7 +184,25 @@ namespace BitCoin
                 return false;
             }
 
-            if(!pCoinBase)
+            if(pCoinBase)
+            {
+                /* BIP34 Block version 2 - Requires block height in coinbase
+                 *   Reject version 2 blocks without block height at block 224,412
+                 *   Reject version 1 blocks at block 227,930
+                 */
+                if((pVersion == 2 && pBlockHeight >= 224412) || pVersion > 2)
+                {
+                    int blockHeight = interpreter.readStackUnsignedInt();
+                    if(blockHeight != (int)pBlockHeight)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Version 2 block with non matching block height after 224,412 : actual %d, specified %d",
+                          pBlockHeight, blockHeight);
+                        return false;
+                    }
+                }
+            }
+            else
             {
                 if(!interpreter.isVerified())
                 {
@@ -571,7 +589,7 @@ namespace BitCoin
         transaction.calculateHash();
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
-        if(!interpreter.process(transaction.inputs[0]->script))
+        if(!interpreter.process(transaction.inputs[0]->script, true))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -579,7 +597,7 @@ namespace BitCoin
         else
         {
             unspent->script.setReadOffset(0);
-            if(!interpreter.process(unspent->script))
+            if(!interpreter.process(unspent->script, false))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process unspent script");
                 success = false;
@@ -609,7 +627,7 @@ namespace BitCoin
         transaction.calculateHash();
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
-        if(!interpreter.process(transaction.inputs[0]->script))
+        if(!interpreter.process(transaction.inputs[0]->script, true))
         {
             interpreter.printStack("After signature script");
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
@@ -618,7 +636,7 @@ namespace BitCoin
         else
         {
             unspent->script.setReadOffset(0);
-            if(!interpreter.process(unspent->script))
+            if(!interpreter.process(unspent->script, false))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process unspent script");
                 success = false;
@@ -648,7 +666,7 @@ namespace BitCoin
         transaction.calculateHash();
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
-        if(!interpreter.process(transaction.inputs[0]->script))
+        if(!interpreter.process(transaction.inputs[0]->script, true))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -656,7 +674,7 @@ namespace BitCoin
         else
         {
             unspent->script.setReadOffset(0);
-            if(!interpreter.process(unspent->script))
+            if(!interpreter.process(unspent->script, false))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process unspent script");
                 success = false;
@@ -704,7 +722,7 @@ namespace BitCoin
         transaction.calculateHash();
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
-        if(!interpreter.process(transaction.inputs[0]->script))
+        if(!interpreter.process(transaction.inputs[0]->script, true))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -712,7 +730,7 @@ namespace BitCoin
         else
         {
             unspent->script.setReadOffset(0);
-            if(!interpreter.process(unspent->script))
+            if(!interpreter.process(unspent->script, false))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process unspent script");
                 success = false;

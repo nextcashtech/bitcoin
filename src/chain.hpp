@@ -68,10 +68,11 @@ namespace BitCoin
         // Check if a header has been downloaded
         bool headerAvailable(Hash &pHash);
 
-        unsigned int pendingHeaders();
+        // Number of headers pending
+        unsigned int pendingHeaderCount();
         // Add block header to queue to be requested and downloaded
-        bool addPendingBlockHeader(Block *pBlock);
-        // Returns the header of the next block needed
+        bool addPendingHeader(Block *pBlock);
+        // Returns the hash of the next block needed
         Hash nextBlockNeeded();
 
         // Add block to queue to be processed and added to top of chain

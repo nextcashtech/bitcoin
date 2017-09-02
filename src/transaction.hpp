@@ -112,7 +112,7 @@ namespace BitCoin
         uint64_t fee() const { return mFee; }
 
         void calculateHash();
-        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase);
+        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase, uint32_t pVersion);
 
         // Run unit tests
         static bool test();

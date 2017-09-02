@@ -253,7 +253,7 @@ namespace BitCoin
         return pSignature.verify(pPublicKey, signatureHash);
     }
 
-    bool ScriptInterpreter::process(ArcMist::Buffer &pScript)
+    bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript, bool pECDSA_DER_SigsOnly)
     {
         unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;
@@ -289,9 +289,16 @@ namespace BitCoin
                     break;
 
                 case OP_IF: // If the top stack value is not OP_FALSE the statements are executed. The top stack value is removed
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IF");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IF");
                         mValid = false;
                         return false;
                     }
@@ -301,9 +308,16 @@ namespace BitCoin
                     pop();
                     break;
                 case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NOTIF");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NOTIF");
                         mValid = false;
                         return false;
                     }
@@ -313,33 +327,54 @@ namespace BitCoin
                     pop();
                     break;
                 case OP_ELSE: // If the preceding OP_IF or OP_NOTIF or OP_ELSE was not executed then these statements are and if the preceding OP_IF or OP_NOTIF or OP_ELSE was executed then these statements are not.
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(mIfStack.size() > 0)
                         mIfStack.back() = !mIfStack.back();
                     else
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "No if before else");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "No if before else");
                         mValid = false;
                         return false;
                     }
                     break;
                 case OP_ENDIF: // Ends an if/else block. All blocks must end, or the transaction is invalid. An OP_ENDIF without OP_IF earlier is also invalid.
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(mIfStack.size() > 0)
                         mIfStack.pop_back();
                     else
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "No if before endif");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "No if before endif");
                         mValid = false;
                         return false;
                     }
                     break;
 
                 case OP_VERIFY: // Marks transaction as invalid if top stack value is not true.
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(!ifStackTrue())
                         break;
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_VERIFY");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_VERIFY");
                         mValid = false;
                         return false;
                     }
@@ -354,16 +389,23 @@ namespace BitCoin
                         mVerified = top()->readUnsignedInt() != 0;
                     else
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
                           "Verify stack when top is longer than 4 : %d", top()->length());
                         mValid = false;
                         return false;
                     }
                     break;
                 case OP_RETURN: // Marks transaction as invalid
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(!ifStackTrue())
                         break;
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
+                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
                     mVerified = false;
                     return false;
 
@@ -373,7 +415,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TOALTSTACK");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TOALTSTACK");
                         mValid = false;
                         return false;
                     }
@@ -387,7 +429,7 @@ namespace BitCoin
 
                     if(!checkAltStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack not large enough for OP_FROMALTSTACK");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack not large enough for OP_FROMALTSTACK");
                         mValid = false;
                         return false;
                     }
@@ -397,12 +439,19 @@ namespace BitCoin
                     break;
                 case OP_DUP: // Duplicates the top stack item.
                 {
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(!ifStackTrue())
                         break;
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DUP");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DUP");
                         mValid = false;
                         return false;
                     }
@@ -416,12 +465,19 @@ namespace BitCoin
                 case OP_EQUAL: // Returns 1 if the the top two stack items are exactly equal, 0 otherwise
                 case OP_EQUALVERIFY: // Same as OP_EQUAL, but runs OP_VERIFY afterward.
                 {
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(!ifStackTrue())
                         break;
                     
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
                         mValid = false;
                         return false;
                     }
@@ -453,12 +509,19 @@ namespace BitCoin
                 }
                 case OP_HASH160: // The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
                 {
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(!ifStackTrue())
                         break;
                     
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
                         mValid = false;
                         return false;
                     }
@@ -479,12 +542,19 @@ namespace BitCoin
                 }
                 case OP_HASH256: // The input is hashed two times with SHA-256.
                 {
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(!ifStackTrue())
                         break;
                     
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH256");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH256");
                         mValid = false;
                         return false;
                     }
@@ -504,6 +574,13 @@ namespace BitCoin
                 }
 
                 case OP_CODESEPARATOR: // All of the signature checking words will only match signatures to the data after the most recently-executed OP_CODESEPARATOR.
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     if(!ifStackTrue())
                         break;
                     sigStartOffset = pScript.readOffset();
@@ -512,6 +589,13 @@ namespace BitCoin
                 case OP_CHECKSIG:
                 case OP_CHECKSIGVERIFY: // Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
                 {
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     /* The entire transaction's outputs, inputs, and script (from the most recently-executed OP_CODESEPARATOR
                      *   to the end) are hashed. The signature used by OP_CHECKSIG must be a valid signature for this hash and
                      *   public key. If it is, 1 is returned, 0 otherwise. */
@@ -520,7 +604,7 @@ namespace BitCoin
                     
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKSIG");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKSIG");
                         mValid = false;
                         return false;
                     }
@@ -532,7 +616,7 @@ namespace BitCoin
                     top()->setReadOffset(0);
                     if(!publicKey.read(top()))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read public key");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read public key");
                         mValid = false;
                         return false;
                     }
@@ -541,9 +625,9 @@ namespace BitCoin
                     // Pop the signature
                     Signature scriptSignature(&keyContext);
                     top()->setReadOffset(0);
-                    if(!scriptSignature.read(top(), top()->length()))
+                    if(!scriptSignature.read(top(), top()->length(), pECDSA_DER_SigsOnly))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read signature");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read signature");
                         mValid = false;
                         return false;
                     }
@@ -559,6 +643,11 @@ namespace BitCoin
                     }
                     else
                     {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Signature check failed");
+                        //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        //  "Public key : %s", publicKey.hex().text());
+                        //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        //  "Signature : %s", scriptSignature.hex().text());
                         if(opCode == OP_CHECKSIG)
                             push(); // Push false onto the stack
                         else
@@ -573,6 +662,13 @@ namespace BitCoin
                 case OP_CHECKMULTISIG:
                 case OP_CHECKMULTISIGVERIFY:
                 {
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     /* Compares the first signature against each public key until it finds an ECDSA match. Starting with the
                      *   subsequent public key, it compares the second signature against each remaining public key until it
                      *   finds an ECDSA match. The process is repeated until all signatures have been checked or not enough
@@ -590,7 +686,7 @@ namespace BitCoin
                     
                     if(!checkStackSize(5))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKMULTISIG");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKMULTISIG");
                         mValid = false;
                         return false;
                     }
@@ -602,7 +698,7 @@ namespace BitCoin
 
                     if(!checkStackSize(publicKeyCount))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKMULTISIG public keys");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKMULTISIG public keys");
                         mValid = false;
                         return false;
                     }
@@ -615,7 +711,7 @@ namespace BitCoin
                         top()->setReadOffset(0);
                         if(!publicKeys[i]->read(top()))
                         {
-                            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read public key");
+                            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read public key");
                             mValid = false;
                             return false;
                         }
@@ -627,7 +723,7 @@ namespace BitCoin
 
                     if(!checkStackSize(signatureCount + 1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKMULTISIG signatures");
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKMULTISIG signatures");
                         mValid = false;
                         return false;
                     }
@@ -638,9 +734,9 @@ namespace BitCoin
                     {
                         signatures[i] = new Signature(&keyContext);
                         top()->setReadOffset(0);
-                        if(!signatures[i]->read(top(), top()->length()))
+                        if(!signatures[i]->read(top(), top()->length(), pECDSA_DER_SigsOnly))
                         {
-                            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read signature");
+                            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read signature");
                             mValid = false;
                             return false;
                         }
@@ -681,6 +777,7 @@ namespace BitCoin
 
                     if(failed)
                     {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Multiple Signature check failed");
                         if(opCode == OP_CHECKMULTISIG)
                             push(); // Push false onto the stack
                         else
@@ -700,6 +797,13 @@ namespace BitCoin
                     break;
                 }
                 case OP_CHECKLOCKTIMEVERIFY:
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        mValid = false;
+                        return false;
+                    }
+
                     /* Marks transaction as invalid if the top stack item is greater than the transaction's nLockTime field,
                      *   otherwise script evaluation continues as though an OP_NOP was executed. Transaction is also invalid
                      *   if 1. the stack is empty; or 2. the top stack item is negative; or 3. the top stack item is greater

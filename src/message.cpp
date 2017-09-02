@@ -1440,7 +1440,7 @@ namespace BitCoin
                 if(blockData.block->time != receivedBlockData->block->time)
                     blockDataMatches = false;
 
-                if(blockData.block->bits != receivedBlockData->block->bits)
+                if(blockData.block->targetBits != receivedBlockData->block->targetBits)
                     blockDataMatches = false;
 
                 if(blockData.block->nonce != receivedBlockData->block->nonce)

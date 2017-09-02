@@ -74,7 +74,7 @@ namespace BitCoin
         ~ScriptInterpreter() { clear(); }
 
         // Process script
-        bool process(ArcMist::Buffer &pScript);
+        bool process(ArcMist::Buffer &pScript, bool pIsSignatureScript, bool pECDSA_DER_SigsOnly = false);
 
         // No issues processing script
         bool isValid()
@@ -139,6 +139,25 @@ namespace BitCoin
             for(std::list<ArcMist::Buffer *>::iterator i = mStack.begin();i!=mStack.end();++i,index++)
                 ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                   "   Item %d has %d bytes", index, (*i)->length());
+        }
+
+        int readStackUnsignedInt()
+        {
+            if(!checkStackSize(1))
+                return 0;
+
+            ArcMist::Buffer *heightBuffer = mStack.front();
+            heightBuffer->setReadOffset(0);
+            if(heightBuffer->length() == 1)
+                return heightBuffer->readByte();
+            else if(heightBuffer->length() == 2)
+                return heightBuffer->readShort();
+            else if(heightBuffer->length() == 3)
+                return heightBuffer->readByte() + (heightBuffer->readShort() << 8);
+            else if(heightBuffer->length() == 4)
+                return heightBuffer->readInt();
+
+            return 0;
         }
 
     private:

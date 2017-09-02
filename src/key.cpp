@@ -94,14 +94,23 @@ namespace BitCoin
             return false;
         }
 
-        if(!secp256k1_ecdsa_verify(mContext->context, (const secp256k1_ecdsa_signature *)mData,
+        if(secp256k1_ecdsa_verify(mContext->context, (const secp256k1_ecdsa_signature *)mData,
           pHash.value(), (const secp256k1_pubkey *)pPublicKey.value()))
+            return true;
+            
+        if(!secp256k1_ecdsa_signature_normalize(mContext->context, (secp256k1_ecdsa_signature *)mData,
+          (const secp256k1_ecdsa_signature *)mData))
         {
-            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME, "Invalid signature");
-            return false;
+            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME, "Signature already normalized");
+            return false; // Already normalized
         }
 
-        return true;
+        // Try it again with the normalized signature
+        if(secp256k1_ecdsa_verify(mContext->context, (const secp256k1_ecdsa_signature *)mData,
+          pHash.value(), (const secp256k1_pubkey *)pPublicKey.value()))
+            return true;
+
+        return false;
     }
 
     ArcMist::String Signature::hex() const
@@ -216,7 +225,7 @@ namespace BitCoin
 
     void Signature::write(ArcMist::OutputStream *pStream, bool pScriptFormat) const
     {
-        size_t length = 128;
+        size_t length = 73;
         uint8_t output[length];
         if(!secp256k1_ecdsa_signature_serialize_der(mContext->context, output, &length, (secp256k1_ecdsa_signature*)mData))
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to write signature");
@@ -225,26 +234,45 @@ namespace BitCoin
         pStream->write(output, length);
     }
 
-    bool Signature::read(ArcMist::InputStream *pStream, unsigned int pLength)
+    bool Signature::read(ArcMist::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly)
     {
         uint8_t input[pLength];
         pStream->read(input, pLength);
 
-        if(!secp256k1_ecdsa_signature_parse_der(mContext->context, (secp256k1_ecdsa_signature*)mData, input, pLength))
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME, "Failed to read der signature");
-        else
-            return true;
-
-        if(pLength < 64)
-            return false;
-
-        if(!secp256k1_ecdsa_signature_parse_compact(mContext->context, (secp256k1_ecdsa_signature*)mData, input))
+        if(pLength == 64)
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to read compact signature");
-            return false;
+            if(pECDSA_DER_SigsOnly)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+                  "BIP66 requires ECDSA DER signatures only. Signature length %d", pLength);
+                return false;
+            }
+
+            if(!secp256k1_ecdsa_signature_parse_compact(mContext->context, (secp256k1_ecdsa_signature*)mData, input))
+            {
+                ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME, "Failed to parse compact signature (64 bytes)");
+                return false;
+            }
+            else
+                return true;
         }
 
-        return true;
+        if(secp256k1_ecdsa_signature_parse_der(mContext->context, (secp256k1_ecdsa_signature*)mData, input, pLength))
+            return true;
+
+        // Try with one less
+        if(secp256k1_ecdsa_signature_parse_der(mContext->context, (secp256k1_ecdsa_signature*)mData, input, pLength-1))
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+              "Signature parsed with one less than specified. %d - 1", pLength);
+            return true;
+        }
+
+        ArcMist::String hex;
+        hex.writeHex(input, pLength);
+        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+          "Failed to parse signature (%d bytes) : %s", pLength, hex.text());
+        return false;
     }
 
     ArcMist::String CompressedPublicKey::hex() const

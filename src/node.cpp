@@ -470,9 +470,10 @@ namespace BitCoin
             {
                 Message::HeadersData *headersData = (Message::HeadersData *)message;
                 Chain &chain = Chain::instance();
+                unsigned int addedCount = 0;
 
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
-                  "[%d] Headers message with %d block headers", mID, headersData->headers.size());
+                  "[%d] Received %d block headers", mID, headersData->headers.size());
                 mHeaderRequested.clear();
                 mLastHeaderRequest = 0;
 
@@ -481,14 +482,18 @@ namespace BitCoin
                     ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_NODE_LOG_NAME,
                       "[%d] Header : %s", mID, (*header)->hash.hex().text());
 
-                    if(chain.addPendingBlockHeader(*header))
+                    if(chain.addPendingHeader(*header))
                     {
                         // memory will be deleted by block chain after it is processed so remove it from this list
                         header = headersData->headers.erase(header);
+                        addedCount++;
                     }
                     else
                         ++header;
                 }
+
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
+                  "[%d] Added %d pending headers", mID, addedCount);
 
                 break;
             }

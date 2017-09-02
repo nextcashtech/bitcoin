@@ -284,7 +284,7 @@ namespace BitCoin
         Chain &chain = Chain::instance();
         Info &info = Info::instance();
         uint64_t time;
-        unsigned int nodesWithBlocks, pendingHeaders, waitingForBlocks;
+        unsigned int nodesWithBlocks, pendingHeaderCount, nodesWaitingForHeaders, waitingForBlocks;
 
         while(!daemon.mStopping)
         {
@@ -294,32 +294,43 @@ namespace BitCoin
             {
                 daemon.mLastRequestCheck = time;
 
-                nodesWithBlocks = daemon.nodesWithBlocks();
-                if(nodesWithBlocks < 4)
+                pendingHeaderCount = chain.pendingHeaderCount();
+                if(pendingHeaderCount < 100)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Only %d nodes with blocks", nodesWithBlocks);
-                    Node *node = daemon.nodeWithoutBlocks();
-                    if(node != NULL)
-                        node->requestBlockHashes();
-                }
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                      "Only %d pending headers", pendingHeaderCount);
 
-                // Check for header request
-                pendingHeaders = chain.pendingHeaders();
-                if(pendingHeaders < 10 && daemon.nodesWaitingForHeaders() < 2)
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Only %d pending headers", pendingHeaders);
-                    Node *node = daemon.nodeWithBlock(chain.lastPendingBlockHash());
-                    if(node != NULL)
-                        node->requestHeaders(chain.lastPendingBlockHash());
-                    else
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "No nodes with block : %s", chain.lastPendingBlockHash().hex().text());
+                    nodesWithBlocks = daemon.nodesWithBlocks();
+                    if(nodesWithBlocks < 4)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                          "Only %d nodes with blocks", nodesWithBlocks);
+                        Node *node = daemon.nodeWithoutBlocks();
+                        if(node != NULL)
+                            node->requestBlockHashes();
+                    }
+
+                    // Check for header request
+                    nodesWaitingForHeaders = daemon.nodesWaitingForHeaders();
+                    if(nodesWaitingForHeaders < 2)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                          "Only %d nodes waiting for headers", nodesWaitingForHeaders);
+                        Node *node = daemon.nodeWithBlock(chain.lastPendingBlockHash());
+                        if(node != NULL)
+                            node->requestHeaders(chain.lastPendingBlockHash());
+                        else
+                            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                              "No nodes with block : %s", chain.lastPendingBlockHash().hex().text());
+                    }
                 }
 
                 // Check for block request
                 waitingForBlocks = daemon.nodesWaitingForBlocks();
                 if(daemon.mMaxConcurrentDownloads > waitingForBlocks)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Only %d blocks downloading", waitingForBlocks);
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                      "Only %d blocks downloading", waitingForBlocks);
                     Hash nextBlockHash = chain.nextBlockNeeded();
                     if(!nextBlockHash.isEmpty())
                     {
