@@ -78,13 +78,41 @@ namespace BitCoin
          */
         OP_CHECKMULTISIGVERIFY = 0xaf, // Same as OP_CHECKMULTISIG, but OP_VERIFY is executed afterward.
 
-        OP_CHECKLOCKTIMEVERIFY = 0xb1 
+        OP_CHECKLOCKTIMEVERIFY = 0xb1,
         /* Marks transaction as invalid if the top stack item is greater than the transaction's nLockTime field,
          *   otherwise script evaluation continues as though an OP_NOP was executed. Transaction is also invalid
          *   if 1. the stack is empty; or 2. the top stack item is negative; or 3. the top stack item is greater
          *   than or equal to 500000000 while the transaction's nLockTime field is less than 500000000, or vice
          *   versa; or 4. the input's nSequence field is equal to 0xffffffff. The precise semantics are described
          *   in BIP 0065 */
+
+        OP_1ADD                = 0x8b, //    in    out    1 is added to the input.
+        OP_1SUB                = 0x8c, //    in    out    1 is subtracted from the input.
+        OP_2MUL                = 0x8d, //    in    out    The input is multiplied by 2. disabled.
+        OP_2DIV                = 0x8e, //    in    out    The input is divided by 2. disabled.
+        OP_NEGATE              = 0x8f, //    in    out    The sign of the input is flipped.
+        OP_ABS                 = 0x90, //    in    out    The input is made positive.
+        OP_NOT                 = 0x91, //    in    out    If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
+        OP_0NOTEQUAL           = 0x92, //    in    out    Returns 0 if the input is 0. 1 otherwise.
+        OP_ADD                 = 0x93, //    a b   out    a is added to b.
+        OP_SUB                 = 0x94, //    a b   out    b is subtracted from a.
+        OP_MUL                 = 0x95, //    a b   out    a is multiplied by b. disabled.
+        OP_DIV                 = 0x96, //    a b   out    a is divided by b. disabled.
+        OP_MOD                 = 0x97, //    a b   out    Returns the remainder after dividing a by b. disabled.
+        OP_LSHIFT              = 0x98, //    a b   out    Shifts a left b bits, preserving sign. disabled.
+        OP_RSHIFT              = 0x99, //    a b   out    Shifts a right b bits, preserving sign. disabled.
+        OP_BOOLAND             = 0x9a, //    a b   out    If both a and b are not 0, the output is 1. Otherwise 0.
+        OP_BOOLOR              = 0x9b, //    a b   out    If a or b is not 0, the output is 1. Otherwise 0.
+        OP_NUMEQUAL            = 0x9c, //    a b   out    Returns 1 if the numbers are equal, 0 otherwise.
+        OP_NUMEQUALVERIFY      = 0x9d, //    a b   Nothing / fail    Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
+        OP_NUMNOTEQUAL         = 0x9e, //    a b   out    Returns 1 if the numbers are not equal, 0 otherwise.
+        OP_LESSTHAN            = 0x9f, //    a b   out    Returns 1 if a is less than b, 0 otherwise.
+        OP_GREATERTHAN         = 0xa0, //    a b   out    Returns 1 if a is greater than b, 0 otherwise.
+        OP_LESSTHANOREQUAL     = 0xa1, //    a b   out    Returns 1 if a is less than or equal to b, 0 otherwise.
+        OP_GREATERTHANOREQUAL  = 0xa2, //    a b   out    Returns 1 if a is greater than or equal to b, 0 otherwise.
+        OP_MIN                 = 0xa3, //    a b   out    Returns the smaller of a and b.
+        OP_MAX                 = 0xa4, //    a b   out    Returns the larger of a and b.
+        OP_WITHIN              = 0xa5, //    x min max    out    Returns 1 if x is within the specified range (left-inclusive), 0 otherwise
 
         //TODO More operation codes
     };
@@ -252,13 +280,13 @@ namespace BitCoin
 
             if(opCode == 0x00)
             {
-                result += "<>";
+                result += "<OP_0>";
                 continue;
             }
 
             if(opCode < MAX_SINGLE_BYTE_PUSH_DATA_CODE)
             {
-                result += "<";
+                result += "<PUSH=";
                 result += pScript.readHexString(opCode);
                 result += ">";
                 continue;
@@ -327,23 +355,23 @@ namespace BitCoin
                     result += "<OP_CHECKLOCKTIMEVERIFY>";
                     break;
                 case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
-                    result += "<";
+                    result += "<OP_PUSHDATA1=";
                     result += pScript.readHexString(pScript.readByte());
                     result += ">";
                     break;
                 case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
-                    result += "<";
+                    result += "<OP_PUSHDATA2=";
                     result += pScript.readHexString(pScript.readUnsignedShort());
                     result += ">";
                     break;
                 case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
-                    result += "<";
+                    result += "<OP_PUSHDATA4=";
                     result += pScript.readHexString(pScript.readUnsignedInt());
                     result += ">";
                     break;
                 case OP_0: // An empty array of bytes is pushed to the stack
                 //case OP_FALSE:
-                    result += "<>";
+                    result += "<OP_0>";
                     break;
                 case OP_1NEGATE: // The number -1 is pushed
                     result += "<OP_1NEGATE>";
@@ -396,6 +424,90 @@ namespace BitCoin
                 case OP_16: // The number 16 is pushed
                     result += "<OP_16>";
                     break;
+
+
+                case OP_1ADD: //    in    out    1 is added to the input.
+                    result += "<OP_1ADD>";
+                    break;
+                case OP_1SUB: //    in    out    1 is subtracted from the input.
+                    result += "<OP_1SUB>";
+                    break;
+                case OP_2MUL: //    in    out    The input is multiplied by 2. disabled.
+                    result += "<OP_2MUL>";
+                    break;
+                case OP_2DIV: //    in    out    The input is divided by 2. disabled.
+                    result += "<OP_2DIV>";
+                    break;
+                case OP_NEGATE: //    in    out    The sign of the input is flipped.
+                    result += "<OP_NEGATE>";
+                    break;
+                case OP_ABS: //    in    out    The input is made positive.
+                    result += "<OP_ABS>";
+                    break;
+                case OP_NOT: //    in    out    If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
+                    result += "<OP_NOT>";
+                    break;
+                case OP_0NOTEQUAL: //    in    out    Returns 0 if the input is 0. 1 otherwise.
+                    result += "<OP_0NOTEQUAL>";
+                    break;
+                case OP_ADD: //    a b   out    a is added to b.
+                    result += "<OP_ADD>";
+                    break;
+                case OP_SUB: //    a b   out    b is subtracted from a.
+                    result += "<OP_SUB>";
+                    break;
+                case OP_MUL: //    a b   out    a is multiplied by b. disabled.
+                    result += "<OP_MUL>";
+                    break;
+                case OP_DIV: //    a b   out    a is divided by b. disabled.
+                    result += "<OP_DIV>";
+                    break;
+                case OP_MOD: //    a b   out    Returns the remainder after dividing a by b. disabled.
+                    result += "<OP_MOD>";
+                    break;
+                case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign. disabled.
+                    result += "<OP_LSHIFT>";
+                    break;
+                case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign. disabled.
+                    result += "<OP_RSHIFT>";
+                    break;
+                case OP_BOOLAND: //    a b   out    If both a and b are not 0, the output is 1. Otherwise 0.
+                    result += "<OP_BOOLAND>";
+                    break;
+                case OP_BOOLOR: //    a b   out    If a or b is not 0, the output is 1. Otherwise 0.
+                    result += "<OP_BOOLOR>";
+                    break;
+                case OP_NUMEQUAL: //    a b   out    Returns 1 if the numbers are equal, 0 otherwise.
+                    result += "<OP_NUMEQUAL>";
+                    break;
+                case OP_NUMEQUALVERIFY: //    a b   Nothing / fail    Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
+                    result += "<OP_NUMEQUALVERIFY>";
+                    break;
+                case OP_NUMNOTEQUAL: //    a b   out    Returns 1 if the numbers are not equal, 0 otherwise.
+                    result += "<OP_NUMNOTEQUAL>";
+                    break;
+                case OP_LESSTHAN: //    a b   out    Returns 1 if a is less than b, 0 otherwise.
+                    result += "<OP_LESSTHAN>";
+                    break;
+                case OP_GREATERTHAN: //    a b   out    Returns 1 if a is greater than b, 0 otherwise.
+                    result += "<OP_GREATERTHAN>";
+                    break;
+                case OP_LESSTHANOREQUAL: //    a b   out    Returns 1 if a is less than or equal to b, 0 otherwise.
+                    result += "<OP_LESSTHANOREQUAL>";
+                    break;
+                case OP_GREATERTHANOREQUAL: //    a b   out    Returns 1 if a is greater than or equal to b, 0 otherwise.
+                    result += "<OP_GREATERTHANOREQUAL>";
+                    break;
+                case OP_MIN: //    a b   out    Returns the smaller of a and b.
+                    result += "<OP_MIN>";
+                    break;
+                case OP_MAX: //    a b   out    Returns the larger of a and b.
+                    result += "<OP_MAX>";
+                    break;
+                case OP_WITHIN: //    x min max    out    Returns 1 if x is within the specified range (left-inclusive), 0 otherwise
+                    result += "<OP_WITHIN>";
+                    break;
+
                 default:
                     result += "<!!!UNDEFINED!!!>";
                     ArcMist::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, "Undefined : %x", opCode);
@@ -489,6 +601,221 @@ namespace BitCoin
         mTransaction = pTransaction;
     }
 
+    bool arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue)
+    {
+        //TODO This is a mess and needs to be cleaned up. Unit test below should cover it.
+        // For logging
+        pBuffer->setReadOffset(0);
+        ArcMist::String inputValue = pBuffer->readHexString(pBuffer->length());
+
+        if(pBuffer->length() > 8)
+        {
+            pBuffer->setReadOffset(0);
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+              "Arithmetic read to many bytes : %s", inputValue.text());
+            return false;
+        }
+        else if(pBuffer->length() == 0)
+        {
+            pValue = 0;
+            return true;
+        }
+
+        // Read value
+        int startOffset = 8 - pBuffer->length();
+        uint8_t bytes[8];
+        pBuffer->setReadOffset(0);
+        std::memset(bytes, 0, 8);
+        //pBuffer->read(bytes + (8 - pBuffer->length()), pBuffer->length());
+        if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
+        {
+            for(unsigned int i=7;pBuffer->remaining();i--)
+                bytes[i] = pBuffer->readByte();
+        }
+        else
+        {
+            for(unsigned int i=startOffset;pBuffer->remaining();i++)
+                bytes[i] = pBuffer->readByte();
+        }
+
+        bool negative = false;
+
+        // Skip 0xff (all bits true) bytes
+        for(int i=startOffset;i<8;i++)
+            if(bytes[i] == 0xff)
+            {
+                negative = true;
+                startOffset++;
+            }
+            else
+                break;
+
+        if(startOffset == 8) // all 0xff
+        {
+            pValue = -1;
+            return true;
+        }
+
+        negative = negative || bytes[startOffset] & 0x80;
+
+        if(negative)
+        {
+            if(bytes[startOffset] == 0x80)
+                startOffset++; // Skip 0x80 byte
+            else
+                bytes[startOffset] ^= 0x80; // Flip highest bit
+
+            // Set any previous bytes to 0xff
+            std::memset(bytes, 0xff, startOffset);
+        }
+        else
+        {
+            // Zeroize any previous bytes
+            std::memset(bytes, 0, startOffset);
+
+            // Skip zero bytes
+            for(int i=startOffset;i<8;i++)
+                if(bytes[i] == 0x00)
+                    startOffset++;
+                else
+                    break;
+        }
+
+        if(startOffset == 8)
+        {
+            if(negative) // All 0xff
+                pValue = -1; // this might not get hit
+            else // All 0x00
+                pValue = 0;
+        }
+        else
+        {
+            if(negative && bytes[startOffset] == 0x80)
+            {
+                if(startOffset < 3)
+                {
+                    pBuffer->setReadOffset(0);
+                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                      "Arithmetic read to many bytes (negative) : %s", inputValue.text());
+                    return false;
+                }
+            }
+            else if(pBuffer->length() > 5)
+            {
+                pBuffer->setReadOffset(0);
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Arithmetic read to many bytes (positive) : %s", inputValue.text());
+                return false;
+            }
+
+            // Adjust for system endian
+            if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
+                ArcMist::Endian::reverse(bytes, 8);
+            std::memcpy(&pValue, bytes, 8);
+
+            if(negative)
+            {
+                pValue = -pValue;
+                std::memset((uint8_t *)&pValue + startOffset, 0xff, 8 - startOffset);
+            }
+        }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+          "Arithmetic read : %s -> %08x%08x", inputValue.text(), pValue >> 32, pValue);
+        return true;
+    }
+
+    void arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue)
+    {
+        //TODO This is a mess and needs to be cleaned up. Unit test below should cover it.
+        uint8_t bytes[8];
+        int startOffset = 0;
+        bool negative = pValue < 0;
+
+        std::memcpy(bytes, &pValue, 8);
+        if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
+            ArcMist::Endian::reverse(bytes, 8);
+
+        // Minimal encoding. Remove leading 0xff bytes
+        if(negative)
+        {
+            // Skip 0xff bytes
+            for(int i=startOffset;i<5;i++)
+                if(bytes[i] == 0xff)
+                    startOffset++;
+                else
+                    break;
+        }
+        else
+        {
+            // Skip zero bytes
+            for(int i=startOffset;i<8;i++)
+                if(bytes[i] == 0x00)
+                    startOffset++;
+                else
+                    break;
+        }
+
+        if(startOffset == 4 && (negative || bytes[startOffset] & 0x80))
+        {
+            // Needs compacting
+            int64_t value = pValue;
+            if(negative)
+                value = -value;
+
+            std::memcpy(bytes, &value, 8);
+            if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
+                ArcMist::Endian::reverse(bytes, 8);
+
+            startOffset = 0;
+            // Skip zero bytes
+            for(int i=startOffset;i<4;i++)
+                if(bytes[i] == 0x00)
+                    startOffset++;
+                else
+                    break;
+
+            if(bytes[startOffset] & 0x80) // Highest bit set
+            {
+                if(negative)
+                {
+                    //    - If the most significant byte is >= 0x80 and the value is negative, push a
+                    //    new 0x80 byte that will be popped off when converting to an integral.
+                    bytes[--startOffset] = 0x80; // Add a new 0x80 byte
+                }
+                else
+                {
+                    //    - If the most significant byte is >= 0x80 and the value is positive, push a
+                    //    new zero-byte to make the significant byte < 0x80 again.
+                    bytes[--startOffset] = 0x00; // Add a new 0x00 byte
+                }
+            }
+            else if(negative)
+            {
+                //    - If the most significant byte is < 0x80 and the value is negative, add
+                //    0x80 to it, since it will be subtracted and interpreted as a negative when
+                //    converting to an integral.
+                bytes[--startOffset] = 0x80;
+            }
+        }
+        else if(negative && bytes[startOffset] == 0xff)
+            startOffset--;
+        else if(!negative && bytes[startOffset] == 0x00)
+            startOffset--;
+
+        pBuffer->clear();
+        if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
+        {
+            ArcMist::Endian::reverse(bytes, 8);
+            pBuffer->write(bytes, 8 - startOffset);
+        }
+        else
+            pBuffer->write(bytes + startOffset, 8 - startOffset);
+        pBuffer->setReadOffset(0);
+        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+          "Arithmetic write : %08x%08x -> %s", pValue >> 32, pValue, pBuffer->readHexString(pBuffer->length()).text());
+    }
+
     bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript, bool pECDSA_DER_SigsOnly)
     {
         unsigned int sigStartOffset = pScript.readOffset();
@@ -505,7 +832,7 @@ namespace BitCoin
                     continue;
 
                 // Push an empty value onto the stack (OP_FALSE)
-                push();
+                push()->writeByte(0);
                 continue;
             }
 
@@ -662,13 +989,6 @@ namespace BitCoin
                     break;
                 case OP_DUP: // Duplicates the top stack item.
                 {
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_DUP");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
 
@@ -683,6 +1003,7 @@ namespace BitCoin
                     top()->setReadOffset(0);
                     dupBuffer->writeStream(top(), top()->length());
                     push(dupBuffer);
+                    printStack("OP_DUP");
                     break;
                 }
                 case OP_EQUAL: // Returns 1 if the the top two stack items are exactly equal, 0 otherwise
@@ -709,7 +1030,11 @@ namespace BitCoin
                     std::list<ArcMist::Buffer *>::iterator secondToLast = mStack.end();
                     --secondToLast;
                     --secondToLast;
+                    mStack.back()->setReadOffset(0);
+                    (*secondToLast)->setReadOffset(0);
                     bool matching = *mStack.back() == **secondToLast;
+                    if(!matching)
+                        printStack("OP_EQUAL failed");
                     pop();
                     pop();
 
@@ -900,7 +1225,7 @@ namespace BitCoin
                      */
                     if(!ifStackTrue())
                         break;
-                    
+
                     if(!checkStackSize(5))
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1048,7 +1373,7 @@ namespace BitCoin
                 //case OP_FALSE: // An empty array of bytes is pushed to the stack
                     if(!ifStackTrue())
                         break;
-                    push();
+                    push()->writeByte(0);
                     break;
                 case OP_1NEGATE: // The number -1 is pushed
                     if(!ifStackTrue())
@@ -1136,9 +1461,939 @@ namespace BitCoin
                         break;
                     push()->writeByte(16);
                     break;
+
+
+                // Arithmetic
+                case OP_1ADD: //    in    out    1 is added to the input.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_1ADD");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t value;
+                    if(!arithmeticRead(top(), value))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    arithmeticWrite(top(), value + 1);
+                    break;
+                }
+                case OP_1SUB: //    in    out    1 is subtracted from the input.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_1SUB");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t value;
+                    if(!arithmeticRead(top(), value))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    arithmeticWrite(top(), value - 1);
+                    break;
+                }
+                case OP_2MUL: //    in    out    The input is multiplied by 2. disabled.
+                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                      "OP_2MUL is a disabled op code");
+                    mValid = false;
+                    break;
+                case OP_2DIV: //    in    out    The input is divided by 2. disabled.
+                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                      "OP_2DIV is a disabled op code");
+                    mValid = false;
+                    break;
+                case OP_NEGATE: //    in    out    The sign of the input is flipped.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_NEGATE");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t value;
+                    if(!arithmeticRead(top(), value))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    arithmeticWrite(top(), -value);
+                    break;
+                }
+                case OP_ABS: //    in    out    The input is made positive.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_ABS");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t value;
+                    if(!arithmeticRead(top(), value))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    if(value < 0)
+                        arithmeticWrite(top(), -value);
+                    break;
+                }
+                case OP_NOT: //    in    out    If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_NOT");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t value;
+                    if(!arithmeticRead(top(), value))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(value == 0)
+                        top()->writeByte(1);
+                    else
+                        top()->writeByte(0);
+                    break;
+                }
+                case OP_0NOTEQUAL: //    in    out    Returns 0 if the input is 0. 1 otherwise.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_0NOTEQUAL");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t value;
+                    if(!arithmeticRead(top(), value))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(value == 0)
+                        top()->writeByte(0);
+                    else
+                        top()->writeByte(1);
+                    break;
+                }
+                case OP_ADD: //    a b   out    a is added to b.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_ADD");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    arithmeticWrite(top(), a + b);
+                    break;
+                }
+                case OP_SUB: //    a b   out    b is subtracted from a.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_SUB");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    arithmeticWrite(top(), a - b);
+                    break;
+                }
+                case OP_MUL: //    a b   out    a is multiplied by b. disabled.
+                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                      "OP_MUL is a disabled op code");
+                    mValid = false;
+                    break;
+                case OP_DIV: //    a b   out    a is divided by b. disabled.
+                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                      "OP_DIV is a disabled op code");
+                    mValid = false;
+                    break;
+                case OP_MOD: //    a b   out    Returns the remainder after dividing a by b. disabled.
+                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                      "OP_MOD is a disabled op code");
+                    mValid = false;
+                    break;
+                case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign. disabled.
+                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                      "OP_LSHIFT is a disabled op code");
+                    mValid = false;
+                    break;
+                case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign. disabled.
+                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                      "OP_RSHIFT is a disabled op code");
+                    mValid = false;
+                    break;
+                case OP_BOOLAND: //    a b   out    If both a and b are not 0, the output is 1. Otherwise 0.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_BOOLAND");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a != 0 && b != 0)
+                        top()->writeByte(1);
+                    else
+                        top()->writeByte(0);
+                    break;
+                }
+                case OP_BOOLOR: //    a b   out    If a or b is not 0, the output is 1. Otherwise 0.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_BOOLOR");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a != 0 || b != 0)
+                        top()->writeByte(1);
+                    else
+                        top()->writeByte(0);
+                    break;
+                }
+                case OP_NUMEQUAL: //    a b   out    Returns 1 if the numbers are equal, 0 otherwise.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_NUMEQUAL");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a == b)
+                        top()->writeByte(1);
+                    else
+                        top()->writeByte(0);
+                    break;
+                }
+                case OP_NUMEQUALVERIFY: //    a b   Nothing / fail    Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_NUMEQUALVERIFY");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a == b)
+                        top()->writeByte(1);
+                    else
+                    {
+                        top()->writeByte(0);
+                        mVerified = false;
+                    }
+                    break;
+                }
+                case OP_NUMNOTEQUAL: //    a b   out    Returns 1 if the numbers are not equal, 0 otherwise.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_NUMNOTEQUAL");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a != b)
+                        top()->writeByte(1);
+                    else
+                        top()->writeByte(0);
+                    break;
+                }
+                case OP_LESSTHAN: //    a b   out    Returns 1 if a is less than b, 0 otherwise.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_LESSTHAN");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a < b)
+                        top()->writeByte(1);
+                    else
+                        top()->writeByte(0);
+                    break;
+                }
+                case OP_GREATERTHAN: //    a b   out    Returns 1 if a is greater than b, 0 otherwise.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_GREATERTHAN");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a > b)
+                        top()->writeByte(1);
+                    else
+                        top()->writeByte(0);
+                    break;
+                }
+                case OP_LESSTHANOREQUAL: //    a b   out    Returns 1 if a is less than or equal to b, 0 otherwise.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_LESSTHANOREQUAL");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a <= b)
+                        top()->writeByte(1);
+                    else
+                        top()->writeByte(0);
+                    break;
+                }
+                case OP_GREATERTHANOREQUAL: //    a b   out    Returns 1 if a is greater than or equal to b, 0 otherwise
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_GREATERTHANOREQUAL");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a >= b)
+                        top()->writeByte(1);
+                    else
+                        top()->writeByte(0);
+                    break;
+                }
+                case OP_MIN: //    a b   out    Returns the smaller of a and b.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_MIN");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a < b)
+                        arithmeticWrite(top(), a);
+                    else
+                        arithmeticWrite(top(), b);
+                    break;
+                }
+                case OP_MAX: //    a b   out    Returns the larger of a and b.
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(2))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_MAX");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t a;
+                    if(!arithmeticRead(top(), a))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t b;
+                    if(!arithmeticRead(top(), b))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(a > b)
+                        arithmeticWrite(top(), a);
+                    else
+                        arithmeticWrite(top(), b);
+                    break;
+                }
+                case OP_WITHIN: //    x min max    out    Returns 1 if x is within the specified range (left-inclusive), 0 otherwise
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!checkStackSize(3))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_WITHIN");
+                        mValid = false;
+                        return false;
+                    }
+
+                    int64_t max;
+                    if(!arithmeticRead(top(), max))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t min;
+                    if(!arithmeticRead(top(), min))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    int64_t x;
+                    if(!arithmeticRead(top(), x))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    top()->setWriteOffset(0);
+                    if(x >= min && x < max)
+                        top()->writeByte(1);
+                    else
+                        top()->writeByte(0);
+                    break;
+                }
             }
         }
 
         return mValid;
+    }
+    
+    bool ScriptInterpreter::test()
+    {
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+          "------------- Starting Script Interpreter Tests -------------");
+
+        bool success = true;
+        ArcMist::Buffer data, testData;
+        int64_t value, testValue;
+
+        /***********************************************************************************************
+         * Arithmetic read 0x7fffffff - Highest 32 bit positive number (highest bit 0)
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("ffffff7f");
+        value = 0x7fffffff;
+
+        if(arithmeticRead(&testData, testValue) && value == testValue)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0x7fffffff");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0x7fffffff");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %08x%08x", value >> 32, value);
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Read    : %08x%08x", testValue >> 32, testValue);
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic write 0x7fffffff - Highest 32 bit positive number (highest bit 0)
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("ffffff7f");
+        value = 0x7fffffff;
+        arithmeticWrite(&data, value);
+
+        data.setReadOffset(0);
+        if(data == testData)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0x7fffffff");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0x7fffffff");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %s", testData.readHexString(testData.length()).text());
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Written : %s", data.readHexString(data.length()).text());
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic read 0xffffffff - Highest 32 bit negative number (all bits 1) == -1
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("ffffffff");
+        value = 0xffffffffffffffff;
+
+        if(arithmeticRead(&testData, testValue) && value == testValue)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xffffffff");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xffffffff");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %08x%08x", value >> 32, value);
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Read    : %08x%08x", testValue >> 32, testValue);
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic write 0xffffffff - Highest 32 bit negative number (all bits 1) == -1
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("ffffffff");
+        value = 0xffffffffffffffff;
+        arithmeticWrite(&data, value);
+
+        data.setReadOffset(0);
+        if(data == testData)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xffffffff");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xffffffff");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %s", testData.readHexString(testData.length()).text());
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Written : %s", data.readHexString(data.length()).text());
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic write 0xffffff7f80 - Lowest 32 bit negative number (first and last bits 1) == ‭-2,147,483,647‬
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("ffffff7f80");
+        value = 0xffffffff80000001; // 64 bit form of ‭-2,147,483,647‬
+        arithmeticWrite(&data, value); // Compress to as few bytes as possible (which is 5 : 0xfeffffff80)
+
+        data.setReadOffset(0);
+        if(data == testData)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xffffff7f80");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xffffff7f80");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %s", testData.readHexString(testData.length()).text());
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Written : %s", data.readHexString(data.length()).text());
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic read 0xffffff7f80 - Lowest 32 bit negative number (first and last bits 1) == ‭-2,147,483,647‬
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("ffffff7f80");
+        value = 0xffffffff80000001;
+
+        if(arithmeticRead(&testData, testValue) && value == testValue)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xffffff7f80");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xffffff7f80");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %08x%08x", value >> 32, value);
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Read    : %08x%08x", testValue >> 32, testValue);
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic read 0xfeffffff80
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("feffffff80");
+        value = 0xffffffff00000002;
+
+        if(arithmeticRead(&testData, testValue) && value == testValue)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xfeffffff80");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xfeffffff80");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %08x%08x", value >> 32, value);
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Read    : %08x%08x", testValue >> 32, testValue);
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic write 0xfeffffff80
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("feffffff80");
+        value = 0xffffffff00000002;
+        arithmeticWrite(&data, value);
+
+        data.setReadOffset(0);
+        if(data == testData)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xfeffffff80");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xfeffffff80");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %s", testData.readHexString(testData.length()).text());
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Written : %s", data.readHexString(data.length()).text());
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic read 0x6e
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("6e");
+        value = 0x000000000000006e;
+
+        if(arithmeticRead(&testData, testValue) && value == testValue)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0x6e");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0x6e");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %08x%08x", value >> 32, value);
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Read    : %08x%08x", testValue >> 32, testValue);
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic write 0x6e
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("6e");
+        value = 0x000000000000006e;
+        arithmeticWrite(&data, value);
+
+        data.setReadOffset(0);
+        if(data == testData)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0x6e");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0x6e");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %s", testData.readHexString(testData.length()).text());
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Written : %s", data.readHexString(data.length()).text());
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic read 0xfeffffff00
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("feffffff00");
+        value = 0x00000000fffffffe;
+
+        if(arithmeticRead(&testData, testValue) && value == testValue)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xfeffffff00");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xfeffffff00");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %08x%08x", value >> 32, value);
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Read    : %08x%08x", testValue >> 32, testValue);
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic write 0xfeffffff00
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("feffffff00");
+        value = 0x00000000fffffffe;
+        arithmeticWrite(&data, value);
+
+        data.setReadOffset(0);
+        if(data == testData)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xfeffffff00");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xfeffffff00");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct   : %s", testData.readHexString(testData.length()).text());
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Written : %s", data.readHexString(data.length()).text());
+            success = false;
+        }
+
+        return success;
     }
 }

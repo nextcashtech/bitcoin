@@ -234,7 +234,8 @@ namespace BitCoin
                 if(!interpreter.process((*input)->script, true, pBlockVersion >= 3))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d signature script failed", index+1);
+                      "Input %d signature script failed : ", index+1);
+                    (*input)->print(ArcMist::Log::VERBOSE);
                     return false;
                 }
 
@@ -244,7 +245,10 @@ namespace BitCoin
                     if(!interpreter.process(unspent->script, false, pBlockVersion >= 3))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Input %d unspent script failed", index+1);
+                          "Input %d unspent script failed : ", index+1);
+                        (*input)->print(ArcMist::Log::VERBOSE);
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Unspent :");
+                        unspent->print(ArcMist::Log::VERBOSE);
                         return false;
                     }
                 }
@@ -252,14 +256,26 @@ namespace BitCoin
                 if(!interpreter.isValid())
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d script is not valid", index+1);
+                      "Input %d script is not valid : ", index+1);
+                    (*input)->print(ArcMist::Log::VERBOSE);
+                    if(unspent != NULL)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Unspent :");
+                        unspent->print(ArcMist::Log::VERBOSE);
+                    }
                     return false;
                 }
 
                 if(!interpreter.isVerified())
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d script did not verify", index+1);
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d script did not verify : ", index+1);
+                    (*input)->print(ArcMist::Log::VERBOSE);
+                    if(unspent != NULL)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Unspent :");
+                        unspent->print(ArcMist::Log::VERBOSE);
+                    }
                     return false;
                 }
 
@@ -276,8 +292,9 @@ namespace BitCoin
             if((*output)->amount < 0)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Output %d amount is negative %d", index+1, (*output)->amount);
-                  return false;
+                  "Output %d amount is negative %d : ", index+1, (*output)->amount);
+                (*output)->print(ArcMist::Log::VERBOSE);
+                return false;
             }
 
             unspent = new Unspent();

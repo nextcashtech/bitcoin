@@ -98,12 +98,15 @@ namespace BitCoin
         // For debugging
         void printStack(const char *pText)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "%d items on the stack : %s", mStack.size(), pText);
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack : %s", pText);
 
             unsigned int index = 1;
             for(std::list<ArcMist::Buffer *>::iterator i = mStack.begin();i!=mStack.end();++i,index++)
+            {
+                (*i)->setReadOffset(0);
                 ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-                  "   Item %d has %d bytes", index, (*i)->length());
+                  "    %d (%d bytes) : %s", index, (*i)->length(), (*i)->readHexString((*i)->length()).text());
+            }
         }
 
         int readStackUnsignedInt()
@@ -175,6 +178,8 @@ namespace BitCoin
         // Write to a script to push the following size of data to the stack
         static void writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput);
 
+        static bool test();
+
     private:
 
         bool mValid;
@@ -220,14 +225,24 @@ namespace BitCoin
         }
 
         // Stack manipulation
-        ArcMist::Buffer *push() { mStack.push_back(new ArcMist::Buffer()); return mStack.back(); }
+        ArcMist::Buffer *push()
+        {
+            mStack.push_back(new ArcMist::Buffer());
+            mStack.back()->setInputEndian(ArcMist::Endian::LITTLE); // Needed for arithmetic op codes to work
+            return mStack.back();
+        }
         void push(ArcMist::Buffer *pValue) { mStack.push_back(pValue); }
         void pop(bool pDelete = true) { if(pDelete) delete mStack.back(); mStack.pop_back(); }
         ArcMist::Buffer *top() { return mStack.back(); }
         bool stackIsEmpty() { return mStack.size() == 0; }
 
         // Alt Stack manipulation
-        ArcMist::Buffer *pushAlt() { mAltStack.push_back(new ArcMist::Buffer()); return mAltStack.back(); }
+        ArcMist::Buffer *pushAlt()
+        {
+            mAltStack.push_back(new ArcMist::Buffer());
+            mStack.back()->setInputEndian(ArcMist::Endian::LITTLE); // Needed for arithmetic op codes to work
+            return mAltStack.back();
+        }
         void pushAlt(ArcMist::Buffer *pValue) { mAltStack.push_back(pValue); }
         void popAlt(bool pDelete = true) { if(pDelete) delete mAltStack.back(); mAltStack.pop_back(); }
         ArcMist::Buffer *topAlt() { return mAltStack.back(); }
