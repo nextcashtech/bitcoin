@@ -1304,22 +1304,22 @@ namespace BitCoin
          * New Block
          ***********************************************************************************************/
         // Requires unspents to be setup
-        Info::instance().setPath("../bcc_test");
-        unspents.load();
+        // Info::instance().setPath("../bcc_test");
+        // unspents.load();
 
-        ArcMist::FileInputStream file("../bcc_test/2077ea8e53ba9a132d83b91e40fb1f4c724217b8197c4533a5bee9e900000000.invalid");
-        Block newBlock;
+        // ArcMist::FileInputStream file("../bcc_test/2077ea8e53ba9a132d83b91e40fb1f4c724217b8197c4533a5bee9e900000000.invalid");
+        // Block newBlock;
 
-        newBlock.read(&file, true);
-        newBlock.print();
+        // newBlock.read(&file, true);
+        // newBlock.print();
         
-        if(newBlock.process(unspents, 381))
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed New Block test");
-        else
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed New Block test");
-            success = false;
-        }
+        // if(newBlock.process(unspents, 381))
+            // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed New Block test");
+        // else
+        // {
+            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed New Block test");
+            // success = false;
+        // }
         
         return success;
     }

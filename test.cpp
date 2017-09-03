@@ -14,14 +14,14 @@ int main(int pArgumentCount, char **pArguments)
 
     ArcMist::Log::setLevel(ArcMist::Log::DEBUG);
 
-    //if(!BitCoin::Base::test())
-    //    failed++;
+    if(!BitCoin::Base::test())
+        failed++;
 
-    //if(!BitCoin::Key::test())
-    //    failed++;
+    if(!BitCoin::Key::test())
+        failed++;
 
-    //if(!BitCoin::Transaction::test())
-    //    failed++;
+    if(!BitCoin::Transaction::test())
+        failed++;
 
     if(!BitCoin::ScriptInterpreter::test())
         failed++;
@@ -29,11 +29,11 @@ int main(int pArgumentCount, char **pArguments)
     if(!BitCoin::Chain::test())
         failed++;
 
-    //if(!BitCoin::Message::test())
-    //    failed++;
+    if(!BitCoin::Message::test())
+        failed++;
 
-    //if(!BitCoin::Info::test())
-    //    failed++;
+    if(!BitCoin::Info::test())
+        failed++;
 
     if(failed)
         return 1;
