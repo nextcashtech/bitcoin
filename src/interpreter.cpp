@@ -90,7 +90,7 @@ namespace BitCoin
     };
 
     // Parse output script for standard type and hash
-    ScriptType parseOutputScript(ArcMist::Buffer &pScript, Hash &pHash)
+    ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(ArcMist::Buffer &pScript, Hash &pHash)
     {
         /* Supports
          *   P2PKH - OP_DUP, OP_HASH160, <PubKeyHash>, OP_EQUALVERIFY, OP_CHECKSIG
@@ -132,18 +132,26 @@ namespace BitCoin
     }
 
     // Create a Pay to Public Key Hash signature script
-    bool writeP2PKHSignatureScript(const PrivateKey &pPrivateKey,
-                                   const PublicKey &pPublicKey,
-                                   ArcMist::Buffer &pScript,
-                                   ArcMist::OutputStream *pOutput)
+    bool ScriptInterpreter::writeP2PKHSignatureScript(const PrivateKey &pPrivateKey,
+                                                      const PublicKey &pPublicKey,
+                                                      Transaction &pTransaction,
+                                                      unsigned int pInputOffset,
+                                                      ArcMist::Buffer &pUnspentScript,
+                                                      Signature::HashType pType,
+                                                      ArcMist::OutputStream *pOutput)
     {
-        Hash signatureHash(32);
         Signature signature(pPrivateKey.context());
 
-        // Calculate Hash
-        pScript.setReadOffset(0);
+        // Write appropriate data to a SHA256_SHA256 digest
         ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
-        digest.writeStream(&pScript, pScript.length());
+        unsigned int previousReadOffset = pUnspentScript.readOffset();
+        pUnspentScript.setReadOffset(0);
+        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        pTransaction.writeSignatureData(&digest, pInputOffset, pUnspentScript, pType);
+        pUnspentScript.setReadOffset(previousReadOffset);
+
+        // Get digest result
+        Hash signatureHash(32);
         digest.getResult(&signatureHash);
 
         // Sign Hash
@@ -154,7 +162,7 @@ namespace BitCoin
         }
 
         // Push the signature onto the stack
-        signature.write(pOutput, true);
+        signature.write(pOutput, true, pType);
 
         // Push the public key onto the stack
         pPublicKey.write(pOutput, true, true);
@@ -163,7 +171,7 @@ namespace BitCoin
     }
 
     // Create a Pay to Public Key Hash public key script
-    void writeP2PKHPublicKeyScript(const Hash &pPublicKeyHash, ArcMist::OutputStream *pOutput)
+    void ScriptInterpreter::writeP2PKHPublicKeyScript(const Hash &pPublicKeyHash, ArcMist::OutputStream *pOutput)
     {
         // Copy the public key from the signature script and push it onto the stack
         pOutput->writeByte(OP_DUP);
@@ -183,7 +191,7 @@ namespace BitCoin
     }
 
     // Create a P2SH (Pay to Script Hash) signature script
-    void writeP2SHSignatureScript(ArcMist::Buffer &pRedeemScript, ArcMist::OutputStream *pOutput)
+    void ScriptInterpreter::writeP2SHSignatureScript(ArcMist::Buffer &pRedeemScript, ArcMist::OutputStream *pOutput)
     {
         // Push the redeem script onto the stack
         writePushDataSize(pRedeemScript.length(), pOutput);
@@ -192,7 +200,7 @@ namespace BitCoin
     }
 
     // Create a P2SH (Pay to Script Hash) public key/output script
-    void writeP2SHPublicKeyScript(const Hash &pScriptHash, ArcMist::OutputStream *pOutput)
+    void ScriptInterpreter::writeP2SHPublicKeyScript(const Hash &pScriptHash, ArcMist::OutputStream *pOutput)
     {
         // Pop the public key from the signature script, hash it, and push the hash onto the stack
         pOutput->writeByte(OP_HASH160);
@@ -206,7 +214,7 @@ namespace BitCoin
         pOutput->writeByte(OP_EQUAL);
     }
     
-    void writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput)
+    void ScriptInterpreter::writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput)
     {
         if(pSize < MAX_SINGLE_BYTE_PUSH_DATA_CODE)
             pOutput->writeByte(pSize);
@@ -227,30 +235,257 @@ namespace BitCoin
         }
     }
 
-    void writeScriptToText(ArcMist::InputStream *pScript, ArcMist::OutputStream *pText)
+    void ScriptInterpreter::printScript(ArcMist::Buffer &pScript, ArcMist::Log::Level pLevel)
     {
-        //TODO
+        if(pScript.remaining() == 0)
+        {
+            ArcMist::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, "EMPTY SCRIPT");
+            return;
+        }
+
+        uint8_t opCode;
+        ArcMist::String result;
+
+        while(pScript.remaining())
+        {
+            opCode = pScript.readByte();
+
+            if(opCode == 0x00)
+            {
+                result += "<>";
+                continue;
+            }
+
+            if(opCode < MAX_SINGLE_BYTE_PUSH_DATA_CODE)
+            {
+                result += "<";
+                result += pScript.readHexString(opCode);
+                result += ">";
+                continue;
+            }
+
+            switch(opCode)
+            {
+                case OP_NOP: // Does nothing
+                    result += "<OP_NOP>";
+                    break;
+                case OP_IF: // If the top stack value is not OP_FALSE the statements are executed. The top stack value is removed
+                    result += "<OP_IF>";
+                    break;
+                case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
+                    result += "<OP_NOTIF>";
+                    break;
+                case OP_ELSE:
+                    result += "<OP_ELSE>";
+                    break;
+                case OP_ENDIF:
+                    result += "<OP_ENDIF>";
+                    break;
+                case OP_VERIFY:
+                    result += "<OP_VERIFY>";
+                    break;
+                case OP_RETURN:
+                    result += "<OP_RETURN>";
+                    break;
+                case OP_TOALTSTACK:
+                    result += "<OP_TOALTSTACK>";
+                    break;
+                case OP_FROMALTSTACK:
+                    result += "<OP_FROMALTSTACK>";
+                    break;
+                case OP_DUP:
+                    result += "<OP_DUP>";
+                    break;
+                case OP_EQUAL:
+                    result += "<OP_EQUAL>";
+                    break;
+                case OP_EQUALVERIFY:
+                    result += "<OP_EQUALVERIFY>";
+                    break;
+                case OP_HASH160:
+                    result += "<OP_HASH160>";
+                    break;
+                case OP_HASH256:
+                    result += "<OP_HASH256>";
+                    break;
+                case OP_CODESEPARATOR:
+                    result += "<OP_CODESEPARATOR>";
+                    break;
+                case OP_CHECKSIG:
+                    result += "<OP_CHECKSIG>";
+                    break;
+                case OP_CHECKSIGVERIFY:
+                    result += "<OP_CHECKSIGVERIFY>";
+                    break;
+                case OP_CHECKMULTISIG:
+                    result += "<OP_CHECKMULTISIG>";
+                    break;
+                case OP_CHECKMULTISIGVERIFY:
+                    result += "<OP_CHECKMULTISIGVERIFY>";
+                    break;
+                case OP_CHECKLOCKTIMEVERIFY:
+                    result += "<OP_CHECKLOCKTIMEVERIFY>";
+                    break;
+                case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
+                    result += "<";
+                    result += pScript.readHexString(pScript.readByte());
+                    result += ">";
+                    break;
+                case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
+                    result += "<";
+                    result += pScript.readHexString(pScript.readUnsignedShort());
+                    result += ">";
+                    break;
+                case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
+                    result += "<";
+                    result += pScript.readHexString(pScript.readUnsignedInt());
+                    result += ">";
+                    break;
+                case OP_0: // An empty array of bytes is pushed to the stack
+                //case OP_FALSE:
+                    result += "<>";
+                    break;
+                case OP_1NEGATE: // The number -1 is pushed
+                    result += "<OP_1NEGATE>";
+                    break;
+                case OP_1: // The number 1 is pushed
+                    result += "<OP_1>";
+                    break;
+                case OP_2: // The number 2 is pushed
+                    result += "<OP_2>";
+                    break;
+                case OP_3: // The number 3 is pushed
+                    result += "<OP_3>";
+                    break;
+                case OP_4: // The number 4 is pushed
+                    result += "<OP_4>";
+                    break;
+                case OP_5: // The number 5 is pushed
+                    result += "<OP_5>";
+                    break;
+                case OP_6: // The number 6 is pushed
+                    result += "<OP_6>";
+                    break;
+                case OP_7: // The number 7 is pushed
+                    result += "<OP_7>";
+                    break;
+                case OP_8: // The number 8 is pushed
+                    result += "<OP_8>";
+                    break;
+                case OP_9: // The number 9 is pushed
+                    result += "<OP_9>";
+                    break;
+                case OP_10: // The number 10 is pushed
+                    result += "<OP_10>";
+                    break;
+                case OP_11: // The number 11 is pushed
+                    result += "<OP_11>";
+                    break;
+                case OP_12: // The number 12 is pushed
+                    result += "<OP_12>";
+                    break;
+                case OP_13: // The number 13 is pushed
+                    result += "<OP_13>";
+                    break;
+                case OP_14: // The number 14 is pushed
+                    result += "<OP_14>";
+                    break;
+                case OP_15: // The number 15 is pushed
+                    result += "<OP_15>";
+                    break;
+                case OP_16: // The number 16 is pushed
+                    result += "<OP_16>";
+                    break;
+                default:
+                    result += "<!!!UNDEFINED!!!>";
+                    break;
+            }
+        }
+
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, result);
     }
 
-    bool checkSignature(PublicKey &pPublicKey, Signature &pSignature, ArcMist::Buffer &pScript, unsigned int pSignatureStartOffset)
+    void ScriptInterpreter::removeCodeSeparators(ArcMist::Buffer &pInputScript, ArcMist::Buffer &pOutputScript)
     {
-        // Get offset of end of signature
-        unsigned int previousReadOffset = pScript.readOffset();
+        uint8_t opCode;
+        while(pInputScript.remaining())
+        {
+            opCode = pInputScript.readByte();
+            if(opCode != OP_CODESEPARATOR)
+                pOutputScript.writeByte(opCode);
 
-        // Set read offset to the beginning of the data for the signature
-        pScript.setReadOffset(pSignatureStartOffset);
+            if(opCode == 0x00)
+                continue;
 
-        // Calculate the signature hash
-        Hash signatureHash(32);
+            if(opCode < MAX_SINGLE_BYTE_PUSH_DATA_CODE)
+            {
+                pOutputScript.writeStream(&pInputScript, opCode);
+                continue;
+            }
+
+            switch(opCode)
+            {
+                case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
+                {
+                    uint8_t size = pInputScript.readByte();
+                    pOutputScript.writeByte(size);
+                    pOutputScript.writeStream(&pInputScript, size);
+                    break;
+                }
+                case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
+                {
+                    uint16_t size = pInputScript.readUnsignedShort();
+                    pOutputScript.writeUnsignedShort(size);
+                    pOutputScript.writeStream(&pInputScript, size);
+                    break;
+                }
+                case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
+                {
+                    uint32_t size = pInputScript.readUnsignedInt();
+                    pOutputScript.writeUnsignedInt(size);
+                    pOutputScript.writeStream(&pInputScript, size);
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+    }
+
+    bool ScriptInterpreter::checkSignature(PublicKey &pPublicKey, ArcMist::Buffer *pSignature, bool pECDSA_DER_SigsOnly,
+      ArcMist::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset)
+    {
+        // Read the signature from the stack item
+        Signature signature(pPublicKey.context());
+        pSignature->setReadOffset(0);
+        if(!signature.read(pSignature, pSignature->length()-1, pECDSA_DER_SigsOnly))
+        {
+            mValid = false;
+            return false;
+        }
+
+        // Read the hash type from the stack item
+        Signature::HashType hashType = static_cast<Signature::HashType>(pSignature->readByte());
+
+        // Write appropriate data to a SHA256_SHA256 digest
         ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
-        digest.writeStream(&pScript, pScript.length() - pSignatureStartOffset);
+        unsigned int previousReadOffset = pCurrentOutputScript.readOffset();
+        pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
+        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        mTransaction.writeSignatureData(&digest, mInputOffset, pCurrentOutputScript, hashType);
+        pCurrentOutputScript.setReadOffset(previousReadOffset);
+
+        // Get digest result
+        Hash signatureHash(32);
         digest.getResult(&signatureHash);
 
-        // Set offset back to the previous
-        pScript.setReadOffset(previousReadOffset);
-
         // Push a true or false depending on if the signature is valid
-        return pSignature.verify(pPublicKey, signatureHash);
+        return signature.verify(pPublicKey, signatureHash);
+    }
+
+    void ScriptInterpreter::setTransaction(Transaction &pTransaction)
+    {
+        mTransaction = pTransaction;
     }
 
     bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript, bool pECDSA_DER_SigsOnly)
@@ -291,14 +526,14 @@ namespace BitCoin
                 case OP_IF: // If the top stack value is not OP_FALSE the statements are executed. The top stack value is removed
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_IF");
                         mValid = false;
                         return false;
                     }
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IF");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IF");
                         mValid = false;
                         return false;
                     }
@@ -310,14 +545,14 @@ namespace BitCoin
                 case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_NOTIF");
                         mValid = false;
                         return false;
                     }
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NOTIF");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NOTIF");
                         mValid = false;
                         return false;
                     }
@@ -329,7 +564,7 @@ namespace BitCoin
                 case OP_ELSE: // If the preceding OP_IF or OP_NOTIF or OP_ELSE was not executed then these statements are and if the preceding OP_IF or OP_NOTIF or OP_ELSE was executed then these statements are not.
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_ELSE");
                         mValid = false;
                         return false;
                     }
@@ -338,7 +573,7 @@ namespace BitCoin
                         mIfStack.back() = !mIfStack.back();
                     else
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "No if before else");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "No if before else");
                         mValid = false;
                         return false;
                     }
@@ -346,7 +581,7 @@ namespace BitCoin
                 case OP_ENDIF: // Ends an if/else block. All blocks must end, or the transaction is invalid. An OP_ENDIF without OP_IF earlier is also invalid.
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_ENDIF");
                         mValid = false;
                         return false;
                     }
@@ -355,7 +590,7 @@ namespace BitCoin
                         mIfStack.pop_back();
                     else
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "No if before endif");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "No if before endif");
                         mValid = false;
                         return false;
                     }
@@ -364,7 +599,7 @@ namespace BitCoin
                 case OP_VERIFY: // Marks transaction as invalid if top stack value is not true.
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_VERIFY");
                         mValid = false;
                         return false;
                     }
@@ -374,7 +609,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_VERIFY");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_VERIFY");
                         mValid = false;
                         return false;
                     }
@@ -389,7 +624,7 @@ namespace BitCoin
                         mVerified = top()->readUnsignedInt() != 0;
                     else
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                           "Verify stack when top is longer than 4 : %d", top()->length());
                         mValid = false;
                         return false;
@@ -398,16 +633,16 @@ namespace BitCoin
                 case OP_RETURN: // Marks transaction as invalid
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_RETURN");
                         mValid = false;
                         return false;
                     }
 
                     if(!ifStackTrue())
                         break;
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
+                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
                     mVerified = false;
-                    return false;
+                    return true;
 
                 case OP_TOALTSTACK: // Puts the input onto the top of the alt stack. Removes it from the main stack.
                     if(!ifStackTrue())
@@ -415,7 +650,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TOALTSTACK");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TOALTSTACK");
                         mValid = false;
                         return false;
                     }
@@ -429,7 +664,7 @@ namespace BitCoin
 
                     if(!checkAltStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack not large enough for OP_FROMALTSTACK");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack not large enough for OP_FROMALTSTACK");
                         mValid = false;
                         return false;
                     }
@@ -441,7 +676,7 @@ namespace BitCoin
                 {
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_DUP");
                         mValid = false;
                         return false;
                     }
@@ -451,7 +686,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DUP");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DUP");
                         mValid = false;
                         return false;
                     }
@@ -467,7 +702,7 @@ namespace BitCoin
                 {
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_EQUAL or OP_EQUALVERIFY");
                         mValid = false;
                         return false;
                     }
@@ -477,7 +712,7 @@ namespace BitCoin
                     
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
                         mValid = false;
                         return false;
                     }
@@ -511,7 +746,7 @@ namespace BitCoin
                 {
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_HASH160");
                         mValid = false;
                         return false;
                     }
@@ -521,7 +756,7 @@ namespace BitCoin
                     
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
                         mValid = false;
                         return false;
                     }
@@ -544,7 +779,8 @@ namespace BitCoin
                 {
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid op code for signature script : OP_HASH256");
                         mValid = false;
                         return false;
                     }
@@ -554,7 +790,8 @@ namespace BitCoin
                     
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH256");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_HASH256");
                         mValid = false;
                         return false;
                     }
@@ -576,7 +813,8 @@ namespace BitCoin
                 case OP_CODESEPARATOR: // All of the signature checking words will only match signatures to the data after the most recently-executed OP_CODESEPARATOR.
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid op code for signature script : OP_CODESEPARATOR");
                         mValid = false;
                         return false;
                     }
@@ -591,7 +829,8 @@ namespace BitCoin
                 {
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid op code for signature script : OP_CHECKSIG or OP_CHECKSIGVERIFY");
                         mValid = false;
                         return false;
                     }
@@ -604,7 +843,8 @@ namespace BitCoin
                     
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKSIG");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_CHECKSIG");
                         mValid = false;
                         return false;
                     }
@@ -616,26 +856,16 @@ namespace BitCoin
                     top()->setReadOffset(0);
                     if(!publicKey.read(top()))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read public key");
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    // Pop the signature
-                    Signature scriptSignature(&keyContext);
-                    top()->setReadOffset(0);
-                    if(!scriptSignature.read(top(), top()->length(), pECDSA_DER_SigsOnly))
-                    {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read signature");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read public key");
                         mValid = false;
                         return false;
                     }
                     pop();
 
                     // Check the signature with the public key
-                    if(checkSignature(publicKey, scriptSignature, pScript, sigStartOffset))
+                    if(checkSignature(publicKey, top(), pECDSA_DER_SigsOnly, pScript, sigStartOffset))
                     {
+                        pop();
                         if(opCode == OP_CHECKSIG)
                             push()->writeByte(1); // Push true onto the stack
                         else
@@ -643,7 +873,8 @@ namespace BitCoin
                     }
                     else
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Signature check failed");
+                        pop();
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Signature check failed");
                         //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                         //  "Public key : %s", publicKey.hex().text());
                         //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -651,10 +882,7 @@ namespace BitCoin
                         if(opCode == OP_CHECKSIG)
                             push(); // Push false onto the stack
                         else
-                        {
                             mVerified = false;
-                            return false;
-                        }
                     }
 
                     break;
@@ -664,7 +892,8 @@ namespace BitCoin
                 {
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid op code for signature script : OP_CHECKMULTISIG or OP_CHECKMULTISIGVERIFY");
                         mValid = false;
                         return false;
                     }
@@ -686,7 +915,8 @@ namespace BitCoin
                     
                     if(!checkStackSize(5))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKMULTISIG");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_CHECKMULTISIG");
                         mValid = false;
                         return false;
                     }
@@ -695,10 +925,10 @@ namespace BitCoin
 
                     // Pop count of public keys
                     unsigned int publicKeyCount = popInteger();
-
                     if(!checkStackSize(publicKeyCount))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKMULTISIG public keys");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_CHECKMULTISIG public keys");
                         mValid = false;
                         return false;
                     }
@@ -711,7 +941,7 @@ namespace BitCoin
                         top()->setReadOffset(0);
                         if(!publicKeys[i]->read(top()))
                         {
-                            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read public key");
+                            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read public key");
                             mValid = false;
                             return false;
                         }
@@ -720,27 +950,20 @@ namespace BitCoin
 
                     // Pop count of signatures
                     unsigned int signatureCount = popInteger();
-
                     if(!checkStackSize(signatureCount + 1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_CHECKMULTISIG signatures");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_CHECKMULTISIG signatures");
                         mValid = false;
                         return false;
                     }
 
                     // Pop signatures
-                    Signature *signatures[signatureCount];
+                    ArcMist::Buffer *signatures[signatureCount];
                     for(unsigned int i=0;i<signatureCount;i++)
                     {
-                        signatures[i] = new Signature(&keyContext);
-                        top()->setReadOffset(0);
-                        if(!signatures[i]->read(top(), top()->length(), pECDSA_DER_SigsOnly))
-                        {
-                            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read signature");
-                            mValid = false;
-                            return false;
-                        }
-                        pop();
+                        signatures[i] = top();
+                        pop(false);
                     }
 
                     // Pop extra item because of bug
@@ -754,13 +977,12 @@ namespace BitCoin
                     {
                         signatureVerified = false;
                         while(publicKeyOffset < publicKeyCount)
-                        {
-                            if(checkSignature(*publicKeys[publicKeyOffset], *signatures[i], pScript, sigStartOffset))
+                            if(checkSignature(*publicKeys[publicKeyOffset], signatures[i],
+                              pECDSA_DER_SigsOnly, pScript, sigStartOffset))
                             {
                                 signatureVerified = true;
                                 break;
                             }
-                        }
 
                         if(!signatureVerified)
                         {
@@ -777,14 +999,12 @@ namespace BitCoin
 
                     if(failed)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Multiple Signature check failed");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Multiple Signature check failed");
                         if(opCode == OP_CHECKMULTISIG)
                             push(); // Push false onto the stack
                         else
-                        {
                             mVerified = false;
-                            return false;
-                        }
                     }
                     else
                     {
@@ -799,7 +1019,8 @@ namespace BitCoin
                 case OP_CHECKLOCKTIMEVERIFY:
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script");
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid op code for signature script : OP_CHECKLOCKTIMEVERIFY");
                         mValid = false;
                         return false;
                     }

@@ -5,6 +5,7 @@
 #include "base.hpp"
 #include "info.hpp"
 #include "events.hpp"
+#include "interpreter.hpp"
 
 #define BITCOIN_UNSPENT_LOG_NAME "BitCoin Unspent"
 
@@ -211,6 +212,7 @@ namespace BitCoin
                     mValid = false;
                 }
                 delete file;
+                mUnspentCount += mSets[i].size();
             }
             //else
             //    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_UNSPENT_LOG_NAME, "No file for set %04x", fileID);
@@ -220,7 +222,7 @@ namespace BitCoin
         filePathName = filePath;
         filePathName.pathAppend("height");
         file = new ArcMist::FileInputStream(filePathName);
-        file->setInputEndian(ArcMist::Endian::LITTLE);
+        file->setInputEndian(ArcMist::Endian::BIG);
         mNextBlockHeight = file->readUnsignedInt();
         delete file;
 
@@ -434,5 +436,19 @@ namespace BitCoin
         height = pStream->readUnsignedInt();
 
         return true;
+    }
+
+    void Unspent::print(ArcMist::Log::Level pLevel)
+    {
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Amount         : %.08f", bitcoins(amount));
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Script : (%d bytes)", script.length());
+        script.setReadOffset(0);
+        ScriptInterpreter::printScript(script, pLevel);
+        script.setReadOffset(0);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Transaction ID : %s", transactionID.hex().text());
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Index          : %x", index);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Hash           : %s", hash.hex().text());
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Height         : %d", height);
+        
     }
 }

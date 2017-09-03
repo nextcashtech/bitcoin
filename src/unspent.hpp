@@ -2,6 +2,7 @@
 #define BITCOIN_UNSPENT_HPP
 
 #include "arcmist/base/mutex.hpp"
+#include "arcmist/base/log.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
 
@@ -29,6 +30,9 @@ namespace BitCoin
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
+        // Print human readable to log
+        void print(ArcMist::Log::Level pLevel);
+
     };
 
     // Hash table of subset of unspent transactions
@@ -40,6 +44,8 @@ namespace BitCoin
 
         UnspentSet() {}
         ~UnspentSet();
+        
+        unsigned int size() const { return mPool.size(); }
 
         Unspent *find(const Hash &pTransactionID, uint32_t pIndex);
 

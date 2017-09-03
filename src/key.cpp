@@ -152,7 +152,7 @@ namespace BitCoin
             else
             {
                 if(pScriptFormat)
-                    writePushDataSize(compressedLength, pStream);
+                    ScriptInterpreter::writePushDataSize(compressedLength, pStream);
                 pStream->write(compressedData, compressedLength);
             }
         }
@@ -165,7 +165,7 @@ namespace BitCoin
             else
             {
                 if(pScriptFormat)
-                    writePushDataSize(length, pStream);
+                    ScriptInterpreter::writePushDataSize(length, pStream);
                 pStream->write(data, length);
             }
         }
@@ -219,19 +219,20 @@ namespace BitCoin
     void PublicKeyData::write(ArcMist::OutputStream *pStream, bool pScriptFormat) const
     {
         if(pScriptFormat)
-            writePushDataSize(64, pStream);
+            ScriptInterpreter::writePushDataSize(64, pStream);
         pStream->write(mData, 64);
     }
 
-    void Signature::write(ArcMist::OutputStream *pStream, bool pScriptFormat) const
+    void Signature::write(ArcMist::OutputStream *pStream, bool pScriptFormat, HashType pHashType) const
     {
         size_t length = 73;
         uint8_t output[length];
         if(!secp256k1_ecdsa_signature_serialize_der(mContext->context, output, &length, (secp256k1_ecdsa_signature*)mData))
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to write signature");
         if(pScriptFormat)
-            writePushDataSize(length, pStream);
+            ScriptInterpreter::writePushDataSize(length + 1, pStream);
         pStream->write(output, length);
+        pStream->writeByte(pHashType);
     }
 
     bool Signature::read(ArcMist::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly)
@@ -264,7 +265,7 @@ namespace BitCoin
         if(secp256k1_ecdsa_signature_parse_der(mContext->context, (secp256k1_ecdsa_signature*)mData, input, pLength-1))
         {
             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
-              "Signature parsed with one less than specified. %d - 1", pLength);
+              "Signature parsed with one less byte than specified. %d - 1", pLength);
             return true;
         }
 

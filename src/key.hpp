@@ -120,6 +120,8 @@ namespace BitCoin
     class Signature
     {
     public:
+    
+        enum HashType { INVALID = 0x00, ALL = 0x01, NONE = 0x02, SINGLE = 0x03, ANYONECANPAY = 0x80 };
 
         Signature(KeyContext *pContext) { mContext = pContext; std::memset(mData, 0, 64); }
         
@@ -128,7 +130,7 @@ namespace BitCoin
         void set(void *pData) { std::memcpy(mData, pData, 64); }
         ArcMist::String hex() const;
 
-        void write(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
+        void write(ArcMist::OutputStream *pStream, bool pScriptFormat, HashType pHashType) const;
         bool read(ArcMist::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly = false);
 
         bool verify(PublicKey &pPublicKey, Hash &pHash) const;

@@ -629,7 +629,12 @@ namespace BitCoin
         {
             //TODO Add hash to blacklist. So it isn't downloaded again.
 
+            // Print the block info and save it to a file
             pBlock->print(ArcMist::Log::VERBOSE);
+            ArcMist::String filePathName = Info::instance().path();
+            filePathName.pathAppend(pBlock->hash.hex() + ".invalid");
+            ArcMist::FileOutputStream file(filePathName, true);
+            pBlock->write(&file, true);
 
             unspentPool.revert();
             mProcessBlockMutex.unlock();
@@ -1022,6 +1027,7 @@ namespace BitCoin
 
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_CHAIN_LOG_NAME,
                       "Block %010d is valid : %d transactions", height, block.transactions.size());
+                    block.print();
 
                     previousHash = block.hash;
                     height++;
@@ -1051,10 +1057,10 @@ namespace BitCoin
         Hash checkHash(32);
         Block *genesis = Block::genesis();
 
-        genesis->print(ArcMist::Log::INFO);
+        //genesis->print(ArcMist::Log::INFO);
 
-        //ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Current coin base amount : %f",
-        //  (double)Block::coinBaseAmount(485000) / 100000000.0); // 100,000,000 Satoshis in a BitCoin
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Current coin base amount : %f",
+         (double)Block::coinBaseAmount(485000) / 100000000.0); // 100,000,000 Satoshis in a BitCoin
 
         /***********************************************************************************************
          * Genesis block merkle hash
@@ -1207,6 +1213,9 @@ namespace BitCoin
          ***********************************************************************************************/
         Block readBlock;
         ArcMist::FileInputStream readFile("tests/06128e87be8b1b4dea47a7247d5528d2702c96826c7a648497e773b800000000.pending_block");
+        Info::instance().setPath("../bcc_test");
+        UnspentPool &unspent = UnspentPool::instance();
+        unspent.load();
 
         if(!readBlock.read(&readFile, true))
         {
@@ -1215,7 +1224,7 @@ namespace BitCoin
         }
         else
         {
-            readBlock.print(ArcMist::Log::INFO);
+            //readBlock.print(ArcMist::Log::INFO);
 
             /***********************************************************************************************
              * Block read hash
@@ -1269,7 +1278,6 @@ namespace BitCoin
             /***********************************************************************************************
              * Block read process
              ***********************************************************************************************/
-            UnspentPool &unspent = UnspentPool::instance();
             if(readBlock.process(unspent, 1))
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed read block process");
             else
@@ -1282,6 +1290,30 @@ namespace BitCoin
         }
 
         delete genesis;
+        
+        /***********************************************************************************************
+         * Block multi output test
+         ***********************************************************************************************/
+        // Requires unspents to be setup
+        // Info::instance().setPath("../bcc_test");
+
+        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_CHAIN_LOG_NAME, "%d Unspent transactions", unspent.count());
+
+        // ArcMist::FileInputStream file("7c967c39b155d44a57d37c46bcb47506c0b00a7987d9debe642c4c1a00000000.invalid");
+        // Block invalidBlock;
+        
+        // invalidBlock.read(&file, true);
+        
+        // //invalidBlock.print();
+        
+        // if(invalidBlock.process(unspent, 381))
+            // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed Block multi output test");
+        // else
+        // {
+            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed Block multi output test");
+            // success = false;
+        // }
+        
         return success;
     }
 }

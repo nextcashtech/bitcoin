@@ -1,6 +1,7 @@
 #ifndef BITCOIN_TRANSACTION_HPP
 #define BITCOIN_TRANSACTION_HPP
 
+#include "arcmist/base/log.hpp"
 #include "arcmist/io/stream.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
@@ -22,6 +23,12 @@ namespace BitCoin
         {
             index = pCopy.index;
         }
+        Outpoint &operator = (const Outpoint &pRight)
+        {
+            transactionID = pRight.transactionID;
+            index = pRight.index;
+            return *this;
+        }
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
@@ -40,13 +47,24 @@ namespace BitCoin
         {
             sequence = pCopy.sequence;
         }
-        virtual ~Input() {}
+        Input &operator = (const Input &pRight)
+        {
+            outpoint = pRight.outpoint;
+            script = pRight.script;
+            sequence = pRight.sequence;
+            return *this;
+        }
 
         // Outpoint (32 trans id + 4 index), + 4 sequence, + script length size + script length
         unsigned int size() { return 40 + compactIntegerSize(script.length()) + script.length(); }
 
-        virtual void write(ArcMist::OutputStream *pStream);
-        virtual bool read(ArcMist::InputStream *pStream);
+        void write(ArcMist::OutputStream *pStream);
+        bool read(ArcMist::InputStream *pStream);
+
+        // Print human readable version to log
+        void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
+        
+        bool writeSignatureData(ArcMist::OutputStream *pStream, ArcMist::Buffer *pSubScript);
 
         Outpoint outpoint;
         ArcMist::Buffer script;
@@ -63,12 +81,21 @@ namespace BitCoin
         {
             amount = pCopy.amount;
         }
+        Output &operator = (Output &pRight)
+        {
+            amount = pRight.amount;
+            script = pRight.script;
+            return *this;
+        }
 
         // 8 amount + script length size + script length
         unsigned int size() { return 8 + compactIntegerSize(script.length()) + script.length(); }
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
+
+        // Print human readable version to log
+        void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
 
         int64_t amount; // Number of Satoshis spent (documentation says this should be signed)
         ArcMist::Buffer script;
@@ -80,8 +107,10 @@ namespace BitCoin
     public:
 
         Transaction() { version = 1; mFee = 0; lockTime = 0xffffffff; }
-        Transaction(const Transaction &pCopy);
+        Transaction(const Transaction &pCopy) { *this = pCopy; }
         ~Transaction();
+
+        Transaction &operator = (const Transaction &pRight);
 
         void write(ArcMist::OutputStream *pStream);
 
@@ -96,6 +125,9 @@ namespace BitCoin
         bool addP2SHInput(Unspent *pUnspent, ArcMist::Buffer &pRedeemScript);
         
         void clear();
+
+        // Print human readable version to log
+        void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
 
         // Hash
         Hash hash;
@@ -112,7 +144,10 @@ namespace BitCoin
         uint64_t fee() const { return mFee; }
 
         void calculateHash();
-        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase, uint32_t pVersion);
+        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase, uint32_t pBlockVersion);
+
+        bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
+          ArcMist::Buffer &pOutputScript, Signature::HashType pSigHashType);
 
         // Run unit tests
         static bool test();

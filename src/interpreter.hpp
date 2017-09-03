@@ -5,59 +5,15 @@
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
 #include "key.hpp"
+#include "transaction.hpp"
 
 #include <list>
 
-#define BITCOIN_INTERPRETER_LOG_NAME "BitCoin Transaction"
+#define BITCOIN_INTERPRETER_LOG_NAME "BitCoin Interpreter"
 
 
 namespace BitCoin
 {
-    enum ScriptType
-    {
-        UNKNOWN,
-        P2PKH,     // secp256k1 signature and sha256(ripemd160()) hash of secp256k1 public key
-        P2SH,      // sha256(ripemd160()) hash of redeem script
-        /* TODO Check support for multisig P2SH
-         * pub key script : OP_HASH160 <Hash160(redeemScript)> OP_EQUAL
-         * redeem script : <OP_2> <A pubkey> <B pubkey> <C pubkey> <OP_3> OP_CHECKMULTISIG
-         * sig script : OP_0 <A sig> <C sig> <redeemScript> */
-        MULTI_SIG, //TODO
-        /* pub key script :  <m> <A pubkey> [B pubkey] [C pubkey...] <n> OP_CHECKMULTISIG
-         * sig script : OP_0 <A sig> [B sig] [C sig...] */
-        P2PK,      //TODO pub key script : <pubkey> OP_CHECKSIG, sig script : <sig>
-        NULL_DATA  //TODO pub key script : OP_RETURN <0-80 bytes of data>, sig script : (can't be spent)
-    };
-
-    // Parse output script for hash/address
-    ScriptType parseOutputScript(ArcMist::Buffer &pScript, Hash &pHash);
-
-    // Create a P2PKH (Pay to Public Key Hash) signature script
-    bool writeP2PKHSignatureScript(const PrivateKey      &pPrivateKey,
-                                   const PublicKey       &pPublicKey,
-                                   ArcMist::Buffer       &pScript,
-                                   ArcMist::OutputStream *pOutput);
-
-    // Create a P2PKH (Pay to Public Key Hash) public key/output script
-    void writeP2PKHPublicKeyScript(const Hash &pPublicKeyHash, ArcMist::OutputStream *pOutput);
-
-    // Create a P2SH (Pay to Script Hash) signature script
-    void writeP2SHSignatureScript(ArcMist::Buffer &pRedeemScript, ArcMist::OutputStream *pOutput);
-
-    // Create a P2SH (Pay to Script Hash) multi signature script
-    void addSignatureToP2SHMultiSignatureScript(const PrivateKey &pPrivateKey,
-                                                const PublicKey  &pPublicKey,
-                                                ArcMist::Buffer  &pRedeemScript,
-                                                ArcMist::Buffer  &pSignatureScript);
-
-    // Create a P2SH (Pay to Script Hash) public key/output script
-    void writeP2SHPublicKeyScript(const Hash &pScriptHash, ArcMist::OutputStream *pOutput);
-
-    // Write to a script to push the following size of data to the stack
-    void writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput);
-    
-    void writeScriptToText(ArcMist::InputStream *pScript, ArcMist::OutputStream *pText);
-
     inline bool bufferIsZero(ArcMist::Buffer &pBuffer)
     {
         while(pBuffer.remaining() > 0)
@@ -70,11 +26,18 @@ namespace BitCoin
     {
     public:
 
-        ScriptInterpreter() { mValid = true; mVerified = false; }
+        ScriptInterpreter() { mValid = true; mVerified = false; mInputOffset = 0; }
         ~ScriptInterpreter() { clear(); }
+
+        void setTransaction(Transaction &pTransaction);
+        void setInputOffset(unsigned int pOffset) { mInputOffset = pOffset; }
 
         // Process script
         bool process(ArcMist::Buffer &pScript, bool pIsSignatureScript, bool pECDSA_DER_SigsOnly = false);
+
+        // Parse and check a signature
+        bool checkSignature(PublicKey &pPublicKey, ArcMist::Buffer *pSignature, bool pECDSA_DER_SigsOnly,
+          ArcMist::Buffer &pSubScript, unsigned int pSignatureStartOffset);
 
         // No issues processing script
         bool isValid()
@@ -114,7 +77,9 @@ namespace BitCoin
         void clear()
         {
             mValid = true;
-            mVerified = false;
+            mVerified = true;
+            mTransaction.clear();
+            mInputOffset = 0;
 
             std::list<ArcMist::Buffer *>::iterator iter;
 
@@ -125,7 +90,7 @@ namespace BitCoin
             for(iter=mAltStack.begin();iter!=mAltStack.end();++iter)
                 delete *iter;
             mAltStack.clear();
-            
+
             mIfStack.clear();
             mAltIfStack.clear();
         }
@@ -160,11 +125,65 @@ namespace BitCoin
             return 0;
         }
 
+        enum ScriptType
+        {
+            UNKNOWN,
+            P2PKH,     // secp256k1 signature and sha256(ripemd160()) hash of secp256k1 public key
+            P2SH,      // sha256(ripemd160()) hash of redeem script
+            /* TODO Check support for multisig P2SH
+             * pub key script : OP_HASH160 <Hash160(redeemScript)> OP_EQUAL
+             * redeem script : <OP_2> <A pubkey> <B pubkey> <C pubkey> <OP_3> OP_CHECKMULTISIG
+             * sig script : OP_0 <A sig> <C sig> <redeemScript> */
+            MULTI_SIG, //TODO
+            /* pub key script :  <m> <A pubkey> [B pubkey] [C pubkey...] <n> OP_CHECKMULTISIG
+             * sig script : OP_0 <A sig> [B sig] [C sig...] */
+            P2PK,      //TODO pub key script : <pubkey> OP_CHECKSIG, sig script : <sig>
+            NULL_DATA  //TODO pub key script : OP_RETURN <0-80 bytes of data>, sig script : (can't be spent)
+        };
+
+        static void printScript(ArcMist::Buffer &pScript, ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
+
+        static void removeCodeSeparators(ArcMist::Buffer &pInputScript, ArcMist::Buffer &pOutputScript);
+
+        // Parse output script for hash/address
+        static ScriptType parseOutputScript(ArcMist::Buffer &pScript, Hash &pHash);
+
+        // Create a P2PKH (Pay to Public Key Hash) signature script
+        static bool writeP2PKHSignatureScript(const PrivateKey &pPrivateKey,
+                                              const PublicKey &pPublicKey,
+                                              Transaction &pTransaction,
+                                              unsigned int pInputOffset,
+                                              ArcMist::Buffer &pUnspentScript,
+                                              Signature::HashType pType,
+                                              ArcMist::OutputStream *pOutput);
+
+        // Create a P2PKH (Pay to Public Key Hash) public key/output script
+        static void writeP2PKHPublicKeyScript(const Hash &pPublicKeyHash, ArcMist::OutputStream *pOutput);
+
+        // Create a P2SH (Pay to Script Hash) signature script
+        static void writeP2SHSignatureScript(ArcMist::Buffer &pRedeemScript, ArcMist::OutputStream *pOutput);
+
+        // Create a P2SH (Pay to Script Hash) multi signature script
+        static void addSignatureToP2SHMultiSignatureScript(const PrivateKey &pPrivateKey,
+                                                    const PublicKey  &pPublicKey,
+                                                    ArcMist::Buffer  &pRedeemScript,
+                                                    ArcMist::Buffer  &pSignatureScript);
+
+        // Create a P2SH (Pay to Script Hash) public key/output script
+        static void writeP2SHPublicKeyScript(const Hash &pScriptHash, ArcMist::OutputStream *pOutput);
+
+        // Write to a script to push the following size of data to the stack
+        static void writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput);
+
     private:
 
         bool mValid;
         bool mVerified;
         Hash mHash;
+        Transaction mTransaction;
+        unsigned int mInputOffset;
+
+        void writeSigHashAllData(ArcMist::Buffer &pData, ArcMist::Buffer &pSubScript);
 
         std::list<ArcMist::Buffer *> mStack, mAltStack;
         std::list<bool> mIfStack, mAltIfStack;
