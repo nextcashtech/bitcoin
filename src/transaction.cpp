@@ -173,7 +173,6 @@ namespace BitCoin
         unsigned int index = 0;
         for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
         {
-            // Check if this is a coinbase
             if(pCoinBase)
             {
                 if((*input)->outpoint.index != 0xffffffff)
@@ -181,6 +180,35 @@ namespace BitCoin
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                       "Coinbase Input %d outpoint index is not 0xffffff : %08x", index+1, (*input)->outpoint.index);
                     return false;
+                }
+
+                /* BIP34 Block version 2 - Requires block height in coinbase input script
+                 *   Reject version 2 blocks without block height at block 224,412
+                 *   Reject version 1 blocks at block 227,930
+                 */
+                if((pBlockVersion == 2 && pBlockHeight >= 224412) || pBlockVersion > 2)
+                {
+                    interpreter.clear();
+                    interpreter.setTransaction(*this);
+                    interpreter.setInputOffset(index);
+
+                    // Process signature script
+                    (*input)->script.setReadOffset(0);
+                    if(!interpreter.process((*input)->script, true, pBlockVersion >= 3))
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Input %d signature script failed", index+1);
+                        return false;
+                    }
+
+                    int blockHeight = interpreter.readStackUnsignedInt();
+                    if(blockHeight != (int)pBlockHeight)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Version 2 block with non matching block height after 224,412 : actual %d, specified %d",
+                          pBlockHeight, blockHeight);
+                        return false;
+                    }
                 }
             }
             else
@@ -196,59 +224,38 @@ namespace BitCoin
                 }
 
                 spents.push_back(unspent);
-            }
 
-            interpreter.clear();
-            interpreter.setTransaction(*this);
-            interpreter.setInputOffset(index);
+                interpreter.clear();
+                interpreter.setTransaction(*this);
+                interpreter.setInputOffset(index);
 
-            // Process signature script
-            (*input)->script.setReadOffset(0);
-            if(!interpreter.process((*input)->script, true, pBlockVersion >= 3))
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d signature script failed", index+1);
-                return false;
-            }
-
-            // Add unspent transaction script
-            if(unspent != NULL)
-            {
-                if(!interpreter.process(unspent->script, false, pBlockVersion >= 3))
+                // Process signature script
+                (*input)->script.setReadOffset(0);
+                if(!interpreter.process((*input)->script, true, pBlockVersion >= 3))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d unspent script failed", index+1);
+                      "Input %d signature script failed", index+1);
                     return false;
                 }
-            }
 
-            if(!interpreter.isValid())
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d script is not valid", index+1);
-                return false;
-            }
-
-            if(pCoinBase)
-            {
-                /* BIP34 Block version 2 - Requires block height in coinbase
-                 *   Reject version 2 blocks without block height at block 224,412
-                 *   Reject version 1 blocks at block 227,930
-                 */
-                if((pBlockVersion == 2 && pBlockHeight >= 224412) || pBlockVersion > 2)
+                // Add unspent transaction script
+                if(unspent != NULL)
                 {
-                    int blockHeight = interpreter.readStackUnsignedInt();
-                    if(blockHeight != (int)pBlockHeight)
+                    if(!interpreter.process(unspent->script, false, pBlockVersion >= 3))
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Version 2 block with non matching block height after 224,412 : actual %d, specified %d",
-                          pBlockHeight, blockHeight);
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Input %d unspent script failed", index+1);
                         return false;
                     }
                 }
-            }
-            else
-            {
+
+                if(!interpreter.isValid())
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d script is not valid", index+1);
+                    return false;
+                }
+
                 if(!interpreter.isVerified())
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,

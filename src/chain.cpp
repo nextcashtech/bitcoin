@@ -1215,7 +1215,6 @@ namespace BitCoin
         ArcMist::FileInputStream readFile("tests/06128e87be8b1b4dea47a7247d5528d2702c96826c7a648497e773b800000000.pending_block");
         Info::instance().setPath("../bcc_test");
         UnspentPool &unspent = UnspentPool::instance();
-        unspent.load();
 
         if(!readBlock.read(&readFile, true))
         {

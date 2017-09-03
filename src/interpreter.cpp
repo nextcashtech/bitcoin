@@ -398,6 +398,7 @@ namespace BitCoin
                     break;
                 default:
                     result += "<!!!UNDEFINED!!!>";
+                    ArcMist::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, "Undefined : %x", opCode);
                     break;
             }
         }
@@ -614,21 +615,8 @@ namespace BitCoin
                         return false;
                     }
 
-                    if(top()->length() == 0)
+                    if(bufferIsZero(*top()))
                         mVerified = false;
-                    else if(top()->length() == 1)
-                        mVerified = top()->readByte() != 0;
-                    else if(top()->length() == 2)
-                        mVerified = top()->readUnsignedShort() != 0;
-                    else if(top()->length() == 4)
-                        mVerified = top()->readUnsignedInt() != 0;
-                    else
-                    {
-                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Verify stack when top is longer than 4 : %d", top()->length());
-                        mValid = false;
-                        return false;
-                    }
                     break;
                 case OP_RETURN: // Marks transaction as invalid
                     if(pIsSignatureScript)
