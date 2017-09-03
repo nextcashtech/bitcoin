@@ -135,7 +135,7 @@ namespace BitCoin
         if(pBlockHeight != mNextBlockHeight)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_UNSPENT_LOG_NAME,
-              "Can't commit non matching block id %08d. Should be %08d", pBlockHeight, mNextBlockHeight);
+              "Can't commit non matching block height %08d. Should be %08d", pBlockHeight, mNextBlockHeight);
             return false;
         }
 
@@ -222,11 +222,14 @@ namespace BitCoin
         filePathName = filePath;
         filePathName.pathAppend("height");
         file = new ArcMist::FileInputStream(filePathName);
-        file->setInputEndian(ArcMist::Endian::BIG);
+        file->setInputEndian(ArcMist::Endian::LITTLE);
         mNextBlockHeight = file->readUnsignedInt();
         delete file;
 
         mMutex.unlock();
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME,
+          "Loaded %d tranactions at block height %d", mUnspentCount, mNextBlockHeight - 1);
 
         return mValid;
     }
@@ -449,6 +452,5 @@ namespace BitCoin
         ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Index          : %x", index);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Hash           : %s", hash.hex().text());
         ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Height         : %d", height);
-        
     }
 }
