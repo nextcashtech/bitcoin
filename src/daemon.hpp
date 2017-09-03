@@ -31,9 +31,9 @@ namespace BitCoin
 
         bool start(bool pInDaemonMode);
         bool isRunning() { return mRunning; }
-        void stop();
-
         bool stopping() { return mStopping; }
+        
+        void requestStop() { mStopRequested = true; }
 
         static void handleSigTermChild(int pValue);
         static void handleSigTerm(int pValue);
@@ -44,6 +44,8 @@ namespace BitCoin
         Daemon();
         ~Daemon();
 
+        void stop();
+
         ArcMist::Thread *mConnectionThread;
         ArcMist::Thread *mNodeThread;
         ArcMist::Thread *mManagerThread;
@@ -52,7 +54,7 @@ namespace BitCoin
         uint64_t mLastNodeAdd;
         uint64_t mLastRequestCheck;
         uint64_t mLastInfoSave;
-        bool mRunning, mStopping;
+        bool mRunning, mStopping, mStopRequested;
         unsigned int mMaxConcurrentDownloads;
 
         void (*previousSigTermChildHandler)(int);
@@ -60,7 +62,7 @@ namespace BitCoin
         void (*previousSigIntHandler)(int);
 
         unsigned int nodesWithBlocks();
-        Node *nodeWithoutBlocks();
+        Node *nodeNeedingBlockHashes();
 
         unsigned int nodesWaitingForHeaders();
 

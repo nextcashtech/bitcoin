@@ -170,11 +170,14 @@ namespace BitCoin
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Nonce         : %08x", nonce);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "%d Transactions", transactionCount);
 
-        unsigned int index = 1;
+        unsigned int index = 0;
         for(std::vector<Transaction>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Transaction %d", index++);
-              transaction->print(pLevel);
+            if(index == 0)
+                ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Coinbase Transaction", index++);
+            else
+                ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Transaction %d", index++);
+            transaction->print(pLevel);
         }
     }
 

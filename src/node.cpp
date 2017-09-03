@@ -31,6 +31,7 @@ namespace BitCoin
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
+        mLastBlockHashRequest = 0;
 
         if(!mConnection.open(AF_INET6, pAddress.ip, pAddress.port))
         {
@@ -55,6 +56,7 @@ namespace BitCoin
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
+        mLastBlockHashRequest = 0;
 
         if(!mConnection.open(pIP, pPort))
         {
@@ -81,6 +83,7 @@ namespace BitCoin
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
+        mLastBlockHashRequest = 0;
 
         if(!mConnection.open(pFamily, pIP, pPort))
         {
@@ -115,10 +118,21 @@ namespace BitCoin
         mVersionData = NULL;
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
+        mLastBlockHashRequest = 0;
         mHeaderRequested.clear();
         mBlockRequested.clear();
 
         clearBlockHashes();
+    }
+
+    bool Node::shouldRequestBlocks()
+    {
+        mBlockHashMutex.lock();
+        uint64_t time = getTime();
+        bool result = (mBlockHashCount == 0 && time - mLastBlockHashRequest > 300) ||
+          time - mLastBlockHashRequest > 21600;
+        mBlockHashMutex.unlock();
+        return result;
     }
 
     bool Node::hasBlocks()
@@ -201,6 +215,7 @@ namespace BitCoin
         for(HashList::iterator hash=hashList.begin();hash!=hashList.end();++hash)
             getBlocksData.blockHeaderHashes.push_back(**hash);
         sendMessage(&getBlocksData);
+        mLastBlockHashRequest = getTime();
     }
 
     void Node::requestHeaders(const Hash &pStartingHash)
@@ -222,6 +237,7 @@ namespace BitCoin
         mBlockRequested = pHash;
         mLastBlockRequest = getTime();
         Events::instance().post(Event::BLOCK_REQUESTED);
+        Chain::instance().markBlockRequested(pHash);
     }
 
     void Node::sendVersion()

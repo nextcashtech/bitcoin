@@ -38,6 +38,7 @@ namespace BitCoin
     {
         mRunning = false;
         mStopping = false;
+        mStopRequested = false;
         mConnectionThread = NULL;
         mNodeThread = NULL;
         mManagerThread = NULL;
@@ -47,7 +48,7 @@ namespace BitCoin
         mLastNodeAdd = 0;
         mLastRequestCheck = 0;
         mLastInfoSave = 0;
-        mMaxConcurrentDownloads = 1;
+        mMaxConcurrentDownloads = 10;
     }
 
     Daemon::~Daemon()
@@ -64,13 +65,13 @@ namespace BitCoin
     void Daemon::handleSigTerm(int pValue)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Terminate signal received. Stopping.");
-        instance().stop();
+        instance().requestStop();
     }
 
     void Daemon::handleSigInt(int pValue)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Interrupt signal received. Stopping.");
-        instance().stop();
+        instance().requestStop();
     }
 
     void Daemon::run(ArcMist::String &pSeed, bool pInDaemonMode)
@@ -81,7 +82,12 @@ namespace BitCoin
         mSeed = pSeed;
 
         while(isRunning())
-            ArcMist::Thread::sleep(100);
+        {
+            if(mStopRequested)
+                stop();
+            else
+                ArcMist::Thread::sleep(100);
+        }
     }
 
     bool Daemon::start(bool pInDaemonMode)
@@ -230,11 +236,11 @@ namespace BitCoin
         return NULL;
     }
 
-    Node *Daemon::nodeWithoutBlocks()
+    Node *Daemon::nodeNeedingBlockHashes()
     {
         mNodeMutex.lock();
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
-            if(!(*node)->hasBlocks())
+            if((*node)->shouldRequestBlocks())
             {
                 mNodeMutex.unlock();
                 return *node;
@@ -284,7 +290,7 @@ namespace BitCoin
         Chain &chain = Chain::instance();
         Info &info = Info::instance();
         uint64_t time;
-        unsigned int nodesWithBlocks, pendingHeaderCount, nodesWaitingForHeaders, waitingForBlocks;
+        unsigned int nodesWithBlocks, pendingCount, nodesWaitingForHeaders, waitingForBlocks;
 
         while(!daemon.mStopping)
         {
@@ -294,18 +300,18 @@ namespace BitCoin
             {
                 daemon.mLastRequestCheck = time;
 
-                pendingHeaderCount = chain.pendingHeaderCount();
-                if(pendingHeaderCount < 100)
+                pendingCount = chain.pendingCount();
+                if(pendingCount < 100)
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                      "Headers Pending : %d", pendingHeaderCount);
+                      "Pending block/headers : %d", pendingCount);
 
                     nodesWithBlocks = daemon.nodesWithBlocks();
                     if(nodesWithBlocks < 4)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
                           "Nodes with block downloads : %d", nodesWithBlocks);
-                        Node *node = daemon.nodeWithoutBlocks();
+                        Node *node = daemon.nodeNeedingBlockHashes();
                         if(node != NULL)
                             node->requestBlockHashes();
                     }

@@ -5,6 +5,7 @@
 #include "arcmist/io/file_stream.hpp"
 #include "arcmist/crypto/digest.hpp"
 #include "info.hpp"
+#include "daemon.hpp"
 
 #define BITCOIN_BLOCK_CHAIN_LOG_NAME "BitCoin Block Chain"
 
@@ -419,8 +420,8 @@ namespace BitCoin
         Chain::sInstance = 0;
     }
 
-    Chain::Chain() : mPendingHeaderMutex("Pending Block Header"), mPendingBlockMutex("Pending Blocks"),
-      mProcessBlockMutex("Process Block"), mBlockFileMutex("Block File")
+    Chain::Chain() : mPendingMutex("Pending"),
+      mProcessMutex("Process"), mBlockFileMutex("Block File")
     {
         mNextBlockHeight = 0;
         mLastFileID = 0;
@@ -428,10 +429,10 @@ namespace BitCoin
 
     Chain::~Chain()
     {
-        mPendingBlockMutex.lock();
-        for(std::vector<Block *>::iterator i=mPendingBlocks.begin();i!=mPendingBlocks.end();++i)
-            delete *i;
-        mPendingBlockMutex.unlock();
+        mPendingMutex.lock();
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            delete *pending;
+        mPendingMutex.unlock();
     }
 
     bool Chain::headerAvailable(Hash &pHash)
@@ -440,14 +441,14 @@ namespace BitCoin
             return true;
 
         bool found = false;
-        mPendingBlockMutex.lock();
-        for(std::vector<Block *>::iterator i=mPendingBlocks.begin();i!=mPendingBlocks.end();++i)
-            if((*i)->hash == pHash)
+        mPendingMutex.lock();
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            if((*pending)->block->hash == pHash)
             {
                 found = true;
                 break;
             }
-        mPendingBlockMutex.unlock();
+        mPendingMutex.unlock();
 
         return found;
     }
@@ -511,11 +512,11 @@ namespace BitCoin
         mBlockFileMutex.unlock();
     }
 
-    unsigned int Chain::pendingHeaderCount()
+    unsigned int Chain::pendingCount()
     {
-        mPendingHeaderMutex.lock();
-        unsigned int result = mPendingHeaders.size();
-        mPendingHeaderMutex.unlock();
+        mPendingMutex.lock();
+        unsigned int result = mPending.size();
+        mPendingMutex.unlock();
         return result;
     }
 
@@ -523,20 +524,20 @@ namespace BitCoin
     bool Chain::addPendingHeader(Block *pBlock)
     {
         bool result = false;
-        mPendingHeaderMutex.lock();
-        if(mPendingHeaders.size() == 0)
+        mPendingMutex.lock();
+        if(mPending.size() == 0)
         {
             if(pBlock->previousHash.isZero() && mLastBlockHash.isEmpty())
                 result = true; // First block of chain
-            else if(mLastBlockHash == pBlock->previousHash)
-                result = true;
+            else if(pBlock->previousHash == mLastBlockHash)
+                result = true; // First pending entry
         }
-        else if(mPendingHeaders.size() > 0 && mPendingHeaders.back()->hash == pBlock->previousHash)
-            result = true;
+        else if(mPending.back()->block->hash == pBlock->previousHash)
+            result = true; // Add to pending
 
         if(!result)
         {
-            mPendingHeaderMutex.unlock();
+            mPendingMutex.unlock();
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_CHAIN_LOG_NAME,
               "Pending header not next : %s", pBlock->hash.hex().text());
             return false;
@@ -544,7 +545,7 @@ namespace BitCoin
 
         if(!pBlock->hasProofOfWork())
         {
-            mPendingHeaderMutex.unlock();
+            mPendingMutex.unlock();
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_CHAIN_LOG_NAME,
               "Not enough proof of work : %s", pBlock->hash.hex().text());
             Hash target;
@@ -555,74 +556,73 @@ namespace BitCoin
         }
 
         // Add to pending list
-        mPendingHeaders.push_back(pBlock);
+        mPending.push_back(new PendingData(pBlock));
+        mLastPendingHash = pBlock->hash;
 
         //TODO if(!result) check if this header is from an alternate chain.
-        //  Check if previous hash is in the chain and determine if a fork is needed
+        //  Check if previous hash is in the chain, but not at the top and determine if a fork is needed
 
-        mPendingHeaderMutex.unlock();
+        mPendingMutex.unlock();
 
         if(result)
             ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
               "Added pending header : %s", pBlock->hash.hex().text());
         return result;
     }
+    
+    void Chain::markBlockRequested(const Hash &pHash)
+    {
+        mPendingMutex.lock();
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            if((*pending)->block->hash == pHash)
+            {
+                (*pending)->requestedTime = getTime();
+                break;
+            }
+        mPendingMutex.unlock();
+    }
 
     Hash Chain::nextBlockNeeded()
     {
         Hash result;
-        mPendingHeaderMutex.lock();
-        if(mPendingHeaders.size() > 0)
-            result = mPendingHeaders.front()->hash;
-        mPendingHeaderMutex.unlock();
+        uint64_t time = getTime();
+        mPendingMutex.lock();
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            if(time - (*pending)->requestedTime > 120)
+            {
+                result = (*pending)->block->hash;
+                break;
+            }
+        mPendingMutex.unlock();
         return result;
     }
 
     bool Chain::addPendingBlock(Block *pBlock)
     {
-        mPendingBlockMutex.lock();
+        //TODO Find pending header entry and replace the header with the full block
+        bool success = false;
 
-        if(mPendingBlocks.size() == 0)
-        {
-            if((!pBlock->previousHash.isZero() || !mLastBlockHash.isEmpty()) && mLastBlockHash != pBlock->previousHash)
+        mPendingMutex.lock();
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            if((*pending)->block->hash == pBlock->hash)
             {
-                ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Pending block is not next");
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
-                  "Pending Previous : %s", pBlock->previousHash.hex().text());
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
-                  "Last             : %s", mLastBlockHash.hex().text());
-                mPendingBlockMutex.unlock();
-                return false;
+                (*pending)->replace(pBlock);
+                success = true;
+                break;
             }
-        }
-        else if(mPendingBlocks.size() != 0 && mLastPendingHash != pBlock->previousHash)
-        {
-            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Pending block is not next");
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
-              "Pending Previous : %s", pBlock->previousHash.hex().text());
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
-              "Last Pending     : %s", mLastPendingHash.hex().text());
-            mPendingBlockMutex.unlock();
-            return false;
-        }
+        mPendingMutex.unlock();
 
-        //TODO Validate proof of work is up to appropriate difficulty
-
-        // Add to pending
-        // Set hash
-        mLastPendingHash = pBlock->hash;
-        mPendingBlocks.push_back(pBlock);
-        mPendingBlockMutex.unlock();
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_CHAIN_LOG_NAME,
           "Added pending block : %s", pBlock->hash.hex().text());
-        return true;
+
+        return success;
     }
 
     bool Chain::processBlock(Block *pBlock)
     {
         UnspentPool &unspentPool = UnspentPool::instance();
 
-        mProcessBlockMutex.lock();
+        mProcessMutex.lock();
 
         // Process block
         if(!pBlock->process(unspentPool, mNextBlockHeight))
@@ -637,7 +637,7 @@ namespace BitCoin
             pBlock->write(&file, true);
 
             unspentPool.revert();
-            mProcessBlockMutex.unlock();
+            mProcessMutex.unlock();
             return false;
         }
 
@@ -647,7 +647,7 @@ namespace BitCoin
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME,
               "Failed to commit or save unspent transaction pool");
             unspentPool.revert();
-            mProcessBlockMutex.unlock();
+            mProcessMutex.unlock();
             return false;
         }
 
@@ -691,54 +691,64 @@ namespace BitCoin
               "Failed to add to block file %08d : %s", mLastFileID, pBlock->hash.hex().text());
         }
 
-        mProcessBlockMutex.unlock();
+        mProcessMutex.unlock();
         return success;
     }
 
     void Chain::process()
     {
-        mPendingBlockMutex.lock();
-        if(mPendingBlocks.size() == 0)
+        // Check if first pending header is actually a full block and process it
+        mPendingMutex.lock();
+        if(mPending.size() == 0)
         {
-            mPendingBlockMutex.unlock();
+            // No pending blocks or headers
+            mPendingMutex.unlock();
+            return;
+        }
+        
+        PendingData *nextPending = mPending.front();
+        if(!nextPending->isFull())
+        {
+            // Next pending block is not full yet
+            mPendingMutex.unlock();
             return;
         }
 
+        mPendingMutex.unlock();
+
         // Check this front block and add it to the chain
-        if(processBlock(mPendingBlocks.front()))
+        if(processBlock(nextPending->block))
         {
+            mPendingMutex.lock();
+
             // Delete block
-            delete mPendingBlocks.front();
+            delete nextPending;
 
-            // Remove from pending blocks
-            mPendingBlocks.erase(mPendingBlocks.begin());
-            if(mPendingBlocks.size() == 0)
+            // Remove from pending
+            mPending.erase(mPending.begin());
+            if(mPending.size() == 0)
                 mLastPendingHash.clear();
-            mPendingBlockMutex.unlock();
 
-            // Remove from pending headers
-            mPendingHeaderMutex.lock();
-            delete mPendingHeaders.front();
-            mPendingHeaders.erase(mPendingHeaders.begin());
-            mPendingHeaderMutex.unlock();
+            mPendingMutex.unlock();
         }
         else
         {
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Clearing all pending blocks");
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Clearing all pending blocks/headers");
 
             // Clear pending blocks since they assumed this block was good
-            for(std::vector<Block *>::iterator block=mPendingBlocks.begin();block!=mPendingBlocks.end();++block)
-                delete *block;
-            mPendingBlocks.clear();
+            mPendingMutex.lock();
+            for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+                delete *pending;
+            mPending.clear();
             mLastPendingHash.clear();
-            mPendingBlockMutex.unlock();
+            mPendingMutex.unlock();
 
-            // Clear pending headers since they assumed this block was good
-            // mPendingHeaderMutex.lock();
-            // for(std::list<Block *>::iterator header=mPendingHeaders.begin();header!=mPendingHeaders.end();++header)
-                    // delete *header;
-            // mPendingHeaders.clear();
-            // mPendingHeaderMutex.unlock();
+            //TODO Figure out how to recover from this
+
+            // Stop daemon
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME,
+              "Stopping daemon because this is currently unrecoverable");
+            Daemon::instance().requestStop();
         }
     }
 
@@ -879,7 +889,7 @@ namespace BitCoin
         bool done = false;
         Hash emptyHash;
 
-        mProcessBlockMutex.lock();
+        mProcessMutex.lock();
 
         mLastFileID = 0;
         mNextBlockHeight = 0;
@@ -946,7 +956,7 @@ namespace BitCoin
             }
         }
 
-        mProcessBlockMutex.unlock();
+        mProcessMutex.unlock();
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Loaded %d blocks", mNextBlockHeight);
 
@@ -1214,7 +1224,7 @@ namespace BitCoin
         Block readBlock;
         ArcMist::FileInputStream readFile("tests/06128e87be8b1b4dea47a7247d5528d2702c96826c7a648497e773b800000000.pending_block");
         Info::instance().setPath("../bcc_test");
-        UnspentPool &unspent = UnspentPool::instance();
+        UnspentPool &unspents = UnspentPool::instance();
 
         if(!readBlock.read(&readFile, true))
         {
@@ -1277,7 +1287,7 @@ namespace BitCoin
             /***********************************************************************************************
              * Block read process
              ***********************************************************************************************/
-            if(readBlock.process(unspent, 1))
+            if(readBlock.process(unspents, 1))
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed read block process");
             else
             {
@@ -1285,33 +1295,31 @@ namespace BitCoin
                 success = false;
             }
 
-            unspent.revert();
+            unspents.revert();
         }
 
         delete genesis;
         
         /***********************************************************************************************
-         * Block multi output test
+         * New Block
          ***********************************************************************************************/
         // Requires unspents to be setup
-        // Info::instance().setPath("../bcc_test");
+        Info::instance().setPath("../bcc_test");
+        unspents.load();
 
-        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_CHAIN_LOG_NAME, "%d Unspent transactions", unspent.count());
+        ArcMist::FileInputStream file("../bcc_test/2077ea8e53ba9a132d83b91e40fb1f4c724217b8197c4533a5bee9e900000000.invalid");
+        Block newBlock;
 
-        // ArcMist::FileInputStream file("7c967c39b155d44a57d37c46bcb47506c0b00a7987d9debe642c4c1a00000000.invalid");
-        // Block invalidBlock;
+        newBlock.read(&file, true);
+        newBlock.print();
         
-        // invalidBlock.read(&file, true);
-        
-        // //invalidBlock.print();
-        
-        // if(invalidBlock.process(unspent, 381))
-            // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed Block multi output test");
-        // else
-        // {
-            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed Block multi output test");
-            // success = false;
-        // }
+        if(newBlock.process(unspents, 381))
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Passed New Block test");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_CHAIN_LOG_NAME, "Failed New Block test");
+            success = false;
+        }
         
         return success;
     }

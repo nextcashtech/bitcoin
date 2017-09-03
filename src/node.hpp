@@ -28,6 +28,7 @@ namespace BitCoin
         void clear();
 
         bool hasBlocks(); // Block inventories have been received
+        bool shouldRequestBlocks(); // Returns true if node has no block hashes and hasn't requested any recently
         bool hasBlock(const Hash &pHash); // Block inventory received for specified hash
         void clearBlockHashes(); // Clear block inventory information
         void requestBlockHashes(); // Request an inventory of blocks
@@ -62,6 +63,7 @@ namespace BitCoin
         void addBlockHeaderHash(Hash &pHash);
         std::list<Hash> mBlockHashes[0xffff];
         unsigned int mBlockHashCount;
+        uint64_t mLastBlockHashRequest;
 
         Hash mHeaderRequested;
         uint64_t mLastHeaderRequest;

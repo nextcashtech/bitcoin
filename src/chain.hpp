@@ -48,6 +48,40 @@ namespace BitCoin
             return false;
         }
     };
+    
+    class PendingData
+    {
+    public:
+    
+        PendingData(Block *pBlock)
+        {
+            block = pBlock;
+            requestedTime = 0;
+        }
+        ~PendingData()
+        {
+            if(block != NULL)
+                delete block;
+        }
+
+        void replace(Block *pBlock)
+        {
+            if(block != NULL)
+                delete block;
+            block = pBlock;
+        }
+
+        // Return true if this is a full block and not just a header
+        bool isFull() { return block->transactionCount > 0; }
+
+        uint64_t requestedTime;
+        Block *block;
+        
+    private:
+        PendingData();
+        PendingData(PendingData &pCopy);
+        PendingData &operator = (PendingData &pRight);
+    };
 
     class Chain
     {
@@ -68,12 +102,14 @@ namespace BitCoin
         // Check if a header has been downloaded
         bool headerAvailable(Hash &pHash);
 
-        // Number of headers pending
-        unsigned int pendingHeaderCount();
+        // Number of pending headers/blocks
+        unsigned int pendingCount();
         // Add block header to queue to be requested and downloaded
         bool addPendingHeader(Block *pBlock);
         // Returns the hash of the next block needed
         Hash nextBlockNeeded();
+        // Mark a block as requested
+        void markBlockRequested(const Hash &pHash);
 
         // Add block to queue to be processed and added to top of chain
         bool addPendingBlock(Block *pBlock);
@@ -107,32 +143,15 @@ namespace BitCoin
         Chain();
         ~Chain();
 
-
         BlockSet mBlockLookup[0xffff];
 
         // Block headers for blocks not yet on chain
-        ArcMist::Mutex mPendingHeaderMutex;
-        std::list<Block *> mPendingHeaders;
-
-
-
-
-        //TODO Build queue of block headers and blocks that are sorted and have empty slots while waiting for them to download.
-        //  Then they process as soon as the earliest are complete.
-
-        //TODO Save block headers somewhere. Not necessarily files. Just don't request them from every node.
-        //  Only inventory messages are needed to know if they have the needed blocks.
-
-
-
-
-        // Blocks not yet verified and on chain
-        ArcMist::Mutex mPendingBlockMutex;
-        std::vector<Block *> mPendingBlocks;
+        ArcMist::Mutex mPendingMutex;
+        std::list<PendingData *> mPending;
         Hash mLastPendingHash;
 
         // Verify and process block then add it to the chain
-        ArcMist::Mutex mProcessBlockMutex;
+        ArcMist::Mutex mProcessMutex;
         bool processBlock(Block *pBlock);
         //TODO Remove orphaned blocks //bool removeBlock(const Hash &pHash);
 
