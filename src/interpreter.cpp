@@ -244,7 +244,7 @@ namespace BitCoin
     
     void ScriptInterpreter::writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput)
     {
-        if(pSize < MAX_SINGLE_BYTE_PUSH_DATA_CODE)
+        if(pSize <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
             pOutput->writeByte(pSize);
         else if(pSize < 0xff)
         {
@@ -284,7 +284,7 @@ namespace BitCoin
                 continue;
             }
 
-            if(opCode < MAX_SINGLE_BYTE_PUSH_DATA_CODE)
+            if(opCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
             {
                 result += "<PUSH=";
                 result += pScript.readHexString(opCode);
@@ -530,7 +530,7 @@ namespace BitCoin
             if(opCode == 0x00)
                 continue;
 
-            if(opCode < MAX_SINGLE_BYTE_PUSH_DATA_CODE)
+            if(opCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
             {
                 pOutputScript.writeStream(&pInputScript, opCode);
                 continue;
@@ -836,7 +836,7 @@ namespace BitCoin
                 continue;
             }
 
-            if(opCode < MAX_SINGLE_BYTE_PUSH_DATA_CODE)
+            if(opCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
             {
                 if(!ifStackTrue())
                     continue;
