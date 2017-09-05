@@ -13,8 +13,6 @@
 
 #include <cstdint>
 
-#define PROTOCOL_VERSION 70015
-
 
 namespace BitCoin
 {

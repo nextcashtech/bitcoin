@@ -19,6 +19,19 @@ namespace BitCoin
     Network network() { return sNetwork; }
     void setNetwork(Network pNetwork) { sNetwork = pNetwork; }
 
+    const char *networkName()
+    {
+        switch(sNetwork)
+        {
+            case MAINNET:
+                return "Main Net";
+            case TESTNET:
+                return "Test Net";
+        }
+
+        return "Unknown Net";
+    }
+
     const char *networkStartString()
     {
         switch(sNetwork)

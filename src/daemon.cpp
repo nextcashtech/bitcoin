@@ -123,18 +123,7 @@ namespace BitCoin
         previousSigIntHandler = signal(SIGINT, handleSigInt);
         previousSigPipeHandler = signal(SIGPIPE, handleSigPipe);
 
-        switch(network())
-        {
-            case MAINNET:
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Starting BitCoin Daemon on Main Net");
-                break;
-            case TESTNET:
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Starting BitCoin Daemon on Test Net");
-                break;
-            default:
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Starting BitCoin Daemon on Unknown Net");
-                return false;
-        }
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Starting %s on %s", BITCOIN_USER_AGENT, networkName());
 
         Info::instance(); // Load data
         mLastInfoSave = getTime();

@@ -11,8 +11,6 @@
 #include <cstring>
 
 #define BITCOIN_MESSAGE_LOG_NAME "BitCoin Message"
-#define BITCOIN_USER_AGENT "/ArcMist BitCoin Cash 0.0.1/"
-
 
 
 namespace BitCoin

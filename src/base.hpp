@@ -7,6 +7,9 @@
 #include <cstdint>
 #include <ctime>
 
+#define BITCOIN_USER_AGENT "/ArcMist BitCoin Cash 0.0.1/"
+#define PROTOCOL_VERSION 70015
+
 
 namespace BitCoin
 {
@@ -26,6 +29,7 @@ namespace BitCoin
         return (double)pSatoshis / 100000000;
     }
 
+    const char *networkName();
     const char *networkStartString();
     const uint8_t *networkStartBytes();
     const char *networkPortString();
