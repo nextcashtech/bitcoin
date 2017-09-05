@@ -156,6 +156,24 @@ namespace BitCoin
         OP_OR                  = 0x85, //  x1 x2  out  Boolean or between each bit in the inputs. disabled.
         OP_XOR                 = 0x86, //  x1 x2  out  Boolean exclusive or between each bit in the inputs. disabled.
 
+
+        // Reserved
+        OP_RESERVED            = 0x50, //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+        OP_VER                 = 0x62, //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+        OP_VERIF               = 0x65, //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
+        OP_VERNOTIF            = 0x66, //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
+        OP_RESERVED1           = 0x89, //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+        OP_RESERVED2           = 0x8a, //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+        OP_NOP1                = 0xb0, // The word is ignored. Does not mark transaction as invalid.
+        //OP_NOP2              = 0xb1, // Changed to OP_CHECKLOCKTIMEVERIFY
+        //OP_NOP3              = 0xb2, // Changed to OP_CHECKSEQUENCEVERIFY
+        OP_NOP4                = 0xb3, // The word is ignored. Does not mark transaction as invalid.
+        OP_NOP5                = 0xb4, // The word is ignored. Does not mark transaction as invalid.
+        OP_NOP6                = 0xb5, // The word is ignored. Does not mark transaction as invalid.
+        OP_NOP7                = 0xb6, // The word is ignored. Does not mark transaction as invalid.
+        OP_NOP8                = 0xb7, // The word is ignored. Does not mark transaction as invalid.
+        OP_NOP9                = 0xb8, // The word is ignored. Does not mark transaction as invalid.
+        OP_NOP10               = 0xb9  // The word is ignored. Does not mark transaction as invalid.
         //TODO More operation codes
     };
 
@@ -668,6 +686,54 @@ namespace BitCoin
                     break;
 
 
+                // Reserved
+                case OP_RESERVED: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                    result += "<OP_RESERVED>";
+                    break;
+                case OP_VER: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                    result += "<OP_VER>";
+                    break;
+                case OP_VERIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
+                    result += "<OP_VERIF>";
+                    break;
+                case OP_VERNOTIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
+                    result += "<OP_VERNOTIF>";
+                    break;
+                case OP_RESERVED1: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                    result += "<OP_RESERVED1>";
+                    break;
+                case OP_RESERVED2: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                    result += "<OP_RESERVED2>";
+                    break;
+
+                case OP_NOP1: // The word is ignored. Does not mark transaction as invalid.
+                    result += "<OP_NOP1>";
+                    break;
+                //OP_NOP2              = 0xb1, // Changed to OP_CHECKLOCKTIMEVERIFY
+                //OP_NOP3              = 0xb2, // Changed to OP_CHECKSEQUENCEVERIFY
+                case OP_NOP4:  // The word is ignored. Does not mark transaction as invalid.
+                    result += "<OP_NOP4>";
+                    break;
+                case OP_NOP5:  // The word is ignored. Does not mark transaction as invalid.
+                    result += "<OP_NOP5>";
+                    break;
+                case OP_NOP6:  // The word is ignored. Does not mark transaction as invalid.
+                    result += "<OP_NOP6>";
+                    break;
+                case OP_NOP7:  // The word is ignored. Does not mark transaction as invalid.
+                    result += "<OP_NOP7>";
+                    break;
+                case OP_NOP8:  // The word is ignored. Does not mark transaction as invalid.
+                    result += "<OP_NOP8>";
+                    break;
+                case OP_NOP9:  // The word is ignored. Does not mark transaction as invalid.
+                    result += "<OP_NOP9>";
+                    break;
+                case OP_NOP10: // The word is ignored. Does not mark transaction as invalid.
+                    result += "<OP_NOP10>";
+                    break;
+
+
                 default:
                     result += "<!!!UNDEFINED!!!>";
                     ArcMist::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, "Undefined : %x", opCode);
@@ -769,7 +835,7 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack : %s", pText);
 
         unsigned int index = 1;
-        for(std::list<ArcMist::Buffer *>::iterator i = mStack.begin();i!=mStack.end();++i,index++)
+        for(std::list<ArcMist::Buffer *>::reverse_iterator i = mStack.rbegin();i!=mStack.rend();++i,index++)
         {
             (*i)->setReadOffset(0);
             ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -944,53 +1010,6 @@ namespace BitCoin
             bytes[--startOffset] = 0x00;
         }
 
-        // if(startOffset == 4 && (negative || bytes[startOffset] & 0x80))
-        // {
-            // // Needs compacting
-            // int64_t value = pValue;
-            // if(negative)
-                // value = -value;
-
-            // std::memcpy(bytes, &value, 8);
-            // if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
-                // ArcMist::Endian::reverse(bytes, 8);
-
-            // startOffset = 0;
-            // // Skip zero bytes
-            // for(int i=startOffset;i<4;i++)
-                // if(bytes[i] == 0x00)
-                    // startOffset++;
-                // else
-                    // break;
-
-            // if(bytes[startOffset] & 0x80) // Highest bit set
-            // {
-                // if(negative)
-                // {
-                    // //    - If the most significant byte is >= 0x80 and the value is negative, push a
-                    // //    new 0x80 byte that will be popped off when converting to an integral.
-                    // bytes[--startOffset] = 0x80; // Add a new 0x80 byte
-                // }
-                // else
-                // {
-                    // //    - If the most significant byte is >= 0x80 and the value is positive, push a
-                    // //    new zero-byte to make the significant byte < 0x80 again.
-                    // bytes[--startOffset] = 0x00; // Add a new 0x00 byte
-                // }
-            // }
-            // else if(negative)
-            // {
-                // //    - If the most significant byte is < 0x80 and the value is negative, add
-                // //    0x80 to it, since it will be subtracted and interpreted as a negative when
-                // //    converting to an integral.
-                // bytes[--startOffset] = 0x80;
-            // }
-        // }
-        // else if(negative && bytes[startOffset] == 0xff)
-            // startOffset--;
-        // else if(!negative && bytes[startOffset] == 0x00)
-            // startOffset--;
-
         if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
         {
             ArcMist::Endian::reverse(bytes, 8);
@@ -1012,7 +1031,7 @@ namespace BitCoin
 
         while(pScript.remaining())
         {
-            if(mStack.size() > 100)
+            if(mStack.size() > 1000)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
                   "Stack overflow %d items", mStack.size());
@@ -1035,7 +1054,7 @@ namespace BitCoin
                 if(!ifStackTrue())
                     continue;
 
-                // Push an empty value onto the stack (OP_FALSE)
+                // Push an empty value onto the stack (OP_0, OP_FALSE)
                 push()->writeByte(0);
                 continue;
             }
@@ -1078,8 +1097,19 @@ namespace BitCoin
                         return false;
                     }
 
-                    mIfStack.push_back(!bufferIsZero(top()));
-                    pop();
+                    // if(!bufferIsZero(top()))
+                        // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          // "OP_IF pushing to on");
+                    // else
+                        // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          // "OP_IF pushing to off");
+                    if(ifStackTrue())
+                    {
+                        mIfStack.push_back(!bufferIsZero(top()));
+                        pop();
+                    }
+                    else
+                        mIfStack.push_back(true);
                     break;
                 case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
                     if(pIsSignatureScript)
@@ -1096,8 +1126,19 @@ namespace BitCoin
                         return false;
                     }
 
-                    mIfStack.push_back(bufferIsZero(top()));
-                    pop();
+                    // if(bufferIsZero(top()))
+                        // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          // "OP_NOTIF pushing to on");
+                    // else
+                        // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          // "OP_NOTIF pushing to off");
+                    if(ifStackTrue())
+                    {
+                        mIfStack.push_back(bufferIsZero(top()));
+                        pop();
+                    }
+                    else
+                        mIfStack.push_back(true);
                     break;
                 case OP_ELSE: // If the preceding OP_IF or OP_NOTIF or OP_ELSE was not executed then these statements are and if the preceding OP_IF or OP_NOTIF or OP_ELSE was executed then these statements are not.
                     if(pIsSignatureScript)
@@ -1108,7 +1149,15 @@ namespace BitCoin
                     }
 
                     if(mIfStack.size() > 0)
+                    {
+                        // if(mIfStack.back())
+                            // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                              // "OP_ELSE switching to off");
+                        // else
+                            // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                              // "OP_ELSE switching to on");
                         mIfStack.back() = !mIfStack.back();
+                    }
                     else
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "No if before else");
@@ -1124,6 +1173,7 @@ namespace BitCoin
                         return false;
                     }
 
+                    //ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "OP_ENDIF");
                     if(mIfStack.size() > 0)
                         mIfStack.pop_back();
                     else
@@ -1590,6 +1640,13 @@ namespace BitCoin
                 }
                 case OP_CHECKLOCKTIMEVERIFY:
                 {
+                    /*TODO If nVersion = 4. The new rules are in effect for every block (at height H) with nVersion = 4
+                     *   and at least 750 out of 1000 blocks preceding it (with heights H-1000..H-1) also have
+                     *   nVersion >= 4. Furthermore, when 950 out of the 1000 blocks preceding a block do have
+                     *   nVersion >= 4, nVersion < 4 blocks become invalid, and all further blocks enforce the
+                     *   new rules.*/
+                    break;
+
                     if(pIsSignatureScript)
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1617,6 +1674,14 @@ namespace BitCoin
                 }
                 case OP_CHECKSEQUENCEVERIFY:
                 {
+                    /*TODO This BIP is to be deployed by "versionbits" BIP9 using bit 0.
+                     * For Bitcoin mainnet, the BIP9 starttime will be midnight 1st May 2016 UTC (Epoch timestamp 1462060800)
+                     *   and BIP9 timeout will be midnight 1st May 2017 UTC (Epoch timestamp 1493596800).
+                     * For Bitcoin testnet, the BIP9 starttime will be midnight 1st March 2016 UTC (Epoch timestamp 1456790400)
+                     *   and BIP9 timeout will be midnight 1st May 2017 UTC (Epoch timestamp 1493596800).
+                     * This BIP must be deployed simultaneously with BIP68 and BIP113 using the same deployment mechanism. */
+                    break;
+
                     if(pIsSignatureScript)
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1679,12 +1744,6 @@ namespace BitCoin
                     push()->writeStream(&pScript, count);
                     break;
 
-                case OP_0: // An empty array of bytes is pushed to the stack
-                //case OP_FALSE: // An empty array of bytes is pushed to the stack
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(0);
-                    break;
                 case OP_1NEGATE: // The number -1 is pushed
                     if(!ifStackTrue())
                         break;
@@ -1825,12 +1884,12 @@ namespace BitCoin
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_2MUL is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_2DIV: //    in    out    The input is divided by 2. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_2DIV is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_NEGATE: //    in    out    The sign of the input is flipped.
                 {
                     if(!ifStackTrue())
@@ -1998,27 +2057,27 @@ namespace BitCoin
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_MUL is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_DIV: //    a b   out    a is divided by b. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_DIV is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_MOD: //    a b   out    Returns the remainder after dividing a by b. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_MOD is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_LSHIFT is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RSHIFT is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_BOOLAND: //    a b   out    If both a and b are not 0, the output is 1. Otherwise 0.
                 {
                     if(!ifStackTrue())
@@ -2572,6 +2631,7 @@ namespace BitCoin
                     break;
                 }
                 case OP_PICK: // 0x79//     xn ... x2 x1 x0 <n>    xn ... x2 x1 x0 xn    The item n back in the stack is copied to the top.
+                {
                     if(!ifStackTrue())
                         break;
 
@@ -2582,8 +2642,30 @@ namespace BitCoin
                         return false;
                     }
 
-                    push(new ArcMist::Buffer(*mStack.front()));
+                    int64_t n;
+                    if(!arithmeticRead(top(), n))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+                    pop();
+
+                    if(!checkStackSize(n))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        mValid = false;
+                        return false;
+                    }
+
+                    std::list<ArcMist::Buffer *>::iterator item = mStack.end();
+                    --item; // get last item
+
+                    for(unsigned int i=0;i<n;i++)
+                        --item;
+
+                    push(new ArcMist::Buffer(**item));
                     break;
+                }
                 case OP_ROLL: // 0x7a//     xn ... x2 x1 x0 <n>    ... x2 x1 x0 xn    The item n back in the stack is moved to the top.
                 {
                     if(!ifStackTrue())
@@ -2617,7 +2699,8 @@ namespace BitCoin
                     for(unsigned int i=0;i<n;i++)
                         --item;
 
-                    push(new ArcMist::Buffer(**item));
+                    push(*item);
+                    mStack.erase(item);
                     break;
                 }
                 case OP_ROT: // 0x7b//     x1 x2 x3    x2 x3 x1    The top three items on the stack are rotated to the left.
@@ -2838,22 +2921,22 @@ namespace BitCoin
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_CAT is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_SUBSTR: //  in begin size  out  Returns a section of a string. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_SUBSTR is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_LEFT: //  in size  out  Keeps only characters left of the specified point in a string. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_LEFT is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_RIGHT: //  in size  out  Keeps only characters right of the specified point in a string. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_SIZE: //  in  in size  Pushes the string length of the top element of the stack (without popping it).
                 {
                     if(!ifStackTrue())
@@ -2878,21 +2961,48 @@ namespace BitCoin
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
-                    break;
+                    return false;
                 case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs. disabled.
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
+                    return false;
+
+
+                // Reserved
+                case OP_RESERVED: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                case OP_VER: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                case OP_VERIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
+                case OP_VERNOTIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
+                case OP_RESERVED1: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                case OP_RESERVED2: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                    if(!ifStackTrue())
+                        break;
+                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                      "OP_RESERVED op code executed");
+                    mValid = false;
+                    return false;
+
+                case OP_NOP1: // The word is ignored. Does not mark transaction as invalid.
+                //OP_NOP2              = 0xb1, // Changed to OP_CHECKLOCKTIMEVERIFY
+                //OP_NOP3              = 0xb2, // Changed to OP_CHECKSEQUENCEVERIFY
+                case OP_NOP4:  // The word is ignored. Does not mark transaction as invalid.
+                case OP_NOP5:  // The word is ignored. Does not mark transaction as invalid.
+                case OP_NOP6:  // The word is ignored. Does not mark transaction as invalid.
+                case OP_NOP7:  // The word is ignored. Does not mark transaction as invalid.
+                case OP_NOP8:  // The word is ignored. Does not mark transaction as invalid.
+                case OP_NOP9:  // The word is ignored. Does not mark transaction as invalid.
+                case OP_NOP10: // The word is ignored. Does not mark transaction as invalid.
                     break;
             }
         }

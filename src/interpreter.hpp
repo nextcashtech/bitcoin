@@ -187,12 +187,9 @@ namespace BitCoin
             if(mIfStack.size() == 0)
                 return true;
 
-            std::list<bool>::iterator i = mIfStack.begin();
-            while(i != mIfStack.end())
+            for(std::list<bool>::iterator i = mIfStack.begin();i != mIfStack.end();++i)
                 if(!(*i))
                     return false;
-                else
-                    ++i;
 
             return true;
         }

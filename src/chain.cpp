@@ -315,7 +315,8 @@ namespace BitCoin
             mNextBlockHeight++;
             mLastBlockHash = pBlock->hash;
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added block to chain at height %d : %s", mNextBlockHeight - 1, pBlock->hash.hex().text());
+              "Added block to chain at height %d (%d trans) : %s", mNextBlockHeight - 1, pBlock->transactionCount,
+              pBlock->hash.hex().text());
         }
         else
         {
@@ -705,7 +706,7 @@ namespace BitCoin
                     }
 
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                      "Block %010d is valid : %d transactions", height, block.transactions.size());
+                      "Block %010d is valid : %6d transactions", height, block.transactions.size());
                     //block.print();
 
                     previousHash = block.hash;
@@ -980,7 +981,7 @@ namespace BitCoin
         // Block newBlock;
 
         // newBlock.read(&file, true);
-        // newBlock.print();
+        // //newBlock.print();
 
         // if(newBlock.process(unspents, 532))
             // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed New Block test");

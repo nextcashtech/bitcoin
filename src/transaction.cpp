@@ -278,6 +278,7 @@ namespace BitCoin
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d script did not verify : ", index+1);
                     (*input)->print(ArcMist::Log::VERBOSE);
+                    interpreter.printStack("After fail verify");
                     if(unspent != NULL)
                     {
                         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Unspent :");
