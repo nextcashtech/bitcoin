@@ -768,16 +768,13 @@ namespace BitCoin
 
     bool arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue)
     {
-        //TODO This is a mess and needs to be cleaned up. Unit test below should cover it.
-        // For logging
+        //TODO This is a still messy and should be cleaned up. Unit test below should cover it.
         pBuffer->setReadOffset(0);
-        ArcMist::String inputValue = pBuffer->readHexString(pBuffer->length());
-
         if(pBuffer->length() > 8)
         {
             pBuffer->setReadOffset(0);
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
-              "Arithmetic read to many bytes : %s", inputValue.text());
+              "Arithmetic read to many bytes : %s", pBuffer->readHexString(pBuffer->length()).text());
             return false;
         }
         else if(pBuffer->length() == 0)
@@ -791,7 +788,6 @@ namespace BitCoin
         uint8_t bytes[8];
         pBuffer->setReadOffset(0);
         std::memset(bytes, 0, 8);
-        //pBuffer->read(bytes + (8 - pBuffer->length()), pBuffer->length());
         if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
         {
             for(unsigned int i=7;pBuffer->remaining();i--)
@@ -803,172 +799,182 @@ namespace BitCoin
                 bytes[i] = pBuffer->readByte();
         }
 
-        bool negative = false;
+        // Zeroize any previous bytes
+        std::memset(bytes, 0x00, startOffset);
 
-        // Skip 0xff (all bits true) bytes
-        for(int i=startOffset;i<8;i++)
-            if(bytes[i] == 0xff)
-            {
-                negative = true;
-                startOffset++;
-            }
-            else
-                break;
-
-        if(startOffset == 8) // all 0xff
-        {
-            pValue = -1;
-            return true;
-        }
-
-        negative = negative || bytes[startOffset] & 0x80;
-
+        bool negative = bytes[startOffset] & 0x80;
+        bool dropFirstByte = false;
         if(negative)
         {
             if(bytes[startOffset] == 0x80)
-                startOffset++; // Skip 0x80 byte
+            {
+                bytes[startOffset] = 0x00;
+                startOffset++;
+                dropFirstByte = true;
+            }
             else
                 bytes[startOffset] ^= 0x80; // Flip highest bit
-
-            // Set any previous bytes to 0xff
-            std::memset(bytes, 0xff, startOffset);
         }
         else
         {
-            // Zeroize any previous bytes
-            std::memset(bytes, 0, startOffset);
-
-            // Skip zero bytes
-            for(int i=startOffset;i<8;i++)
-                if(bytes[i] == 0x00)
-                    startOffset++;
-                else
-                    break;
-        }
-
-        if(startOffset == 8)
-        {
-            if(negative) // All 0xff
-                pValue = -1; // this might not get hit
-            else // All 0x00
-                pValue = 0;
-        }
-        else
-        {
-            if(negative && bytes[startOffset] == 0x80)
+            if(bytes[startOffset] == 0x00)
             {
-                if(startOffset < 3)
-                {
-                    pBuffer->setReadOffset(0);
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
-                      "Arithmetic read to many bytes (negative) : %s", inputValue.text());
-                    return false;
-                }
+                startOffset++;
+                dropFirstByte = true;
             }
-            else if(pBuffer->length() > 5)
+        }
+
+        if(dropFirstByte)
+        {
+            if(pBuffer->length() > 5)
             {
                 pBuffer->setReadOffset(0);
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
-                  "Arithmetic read to many bytes (positive) : %s", inputValue.text());
+                  "Arithmetic read to many bytes (negative with 0x80) : %s",
+                  pBuffer->readHexString(pBuffer->length()).text());
                 return false;
             }
-
-            // Adjust for system endian
-            if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
-                ArcMist::Endian::reverse(bytes, 8);
-            std::memcpy(&pValue, bytes, 8);
-
-            if(negative)
-            {
-                pValue = -pValue;
-                std::memset((uint8_t *)&pValue + startOffset, 0xff, 8 - startOffset);
-            }
+        }
+        else if(pBuffer->length() > 4)
+        {
+            pBuffer->setReadOffset(0);
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+              "Arithmetic read to many bytes : %s", pBuffer->readHexString(pBuffer->length()).text());
+            return false;
         }
 
+        // Adjust for system endian
+        if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
+            ArcMist::Endian::reverse(bytes, 8);
+        std::memcpy(&pValue, bytes, 8);
+
+        if(negative)
+        {
+            pValue = -pValue;
+            std::memset((uint8_t *)&pValue + startOffset, 0xff, 8 - startOffset);
+        }
+
+        pBuffer->setReadOffset(0);
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-          "Arithmetic read : %s -> %08x%08x", inputValue.text(), pValue >> 32, pValue);
+          "Arithmetic read : %s -> %08x%08x (%d)", pBuffer->readHexString(pBuffer->length()).text(), pValue >> 32, pValue, pValue & 0xffffffff);
         return true;
     }
 
     void arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue)
     {
-        //TODO This is a mess and needs to be cleaned up. Unit test below should cover it.
+        //TODO This is a still messy and should be cleaned up. Unit test below should cover it.
         uint8_t bytes[8];
         int startOffset = 0;
-        bool negative = pValue < 0;
+        bool negative = false;
+        int64_t value;
+        if(pValue < 0)
+        {
+            negative = true;
+            value = -pValue;
+        }
+        else
+            value = pValue;
 
-        std::memcpy(bytes, &pValue, 8);
+        pBuffer->clear();
+
+        std::memcpy(bytes, &value, 8);
         if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
             ArcMist::Endian::reverse(bytes, 8);
 
-        // Minimal encoding. Remove leading 0xff bytes
+        // Skip zero bytes
+        for(int i=startOffset;i<8;i++)
+            if(bytes[i] == 0x00)
+                startOffset++;
+            else
+                break;
+
+        if(startOffset == 8)
+        {
+            // All zeros
+            if(negative) // was all 0xff
+                pBuffer->writeByte(0x80);
+            else
+                pBuffer->writeByte(0x00);
+            return;
+        }
+
         if(negative)
         {
-            // Skip 0xff bytes
-            for(int i=startOffset;i<5;i++)
-                if(bytes[i] == 0xff)
-                    startOffset++;
-                else
-                    break;
-        }
-        else
-        {
-            // Skip zero bytes
-            for(int i=startOffset;i<8;i++)
-                if(bytes[i] == 0x00)
-                    startOffset++;
-                else
-                    break;
-        }
-
-        if(startOffset == 4 && (negative || bytes[startOffset] & 0x80))
-        {
-            // Needs compacting
-            int64_t value = pValue;
-            if(negative)
-                value = -value;
-
-            std::memcpy(bytes, &value, 8);
-            if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
-                ArcMist::Endian::reverse(bytes, 8);
-
-            startOffset = 0;
-            // Skip zero bytes
-            for(int i=startOffset;i<4;i++)
-                if(bytes[i] == 0x00)
-                    startOffset++;
-                else
-                    break;
-
-            if(bytes[startOffset] & 0x80) // Highest bit set
+            if(bytes[startOffset] & 0x80) // Top bit already set
             {
-                if(negative)
+                if(startOffset == 0)
                 {
-                    //    - If the most significant byte is >= 0x80 and the value is negative, push a
-                    //    new 0x80 byte that will be popped off when converting to an integral.
-                    bytes[--startOffset] = 0x80; // Add a new 0x80 byte
+                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                      "Arithmetic write (too many bytes) : %08x%08x -> %s", pValue >> 32, pValue);
+                    return;
                 }
-                else
-                {
-                    //    - If the most significant byte is >= 0x80 and the value is positive, push a
-                    //    new zero-byte to make the significant byte < 0x80 again.
-                    bytes[--startOffset] = 0x00; // Add a new 0x00 byte
-                }
-            }
-            else if(negative)
-            {
-                //    - If the most significant byte is < 0x80 and the value is negative, add
-                //    0x80 to it, since it will be subtracted and interpreted as a negative when
-                //    converting to an integral.
+
+                // Prepend 0x80 byte
                 bytes[--startOffset] = 0x80;
             }
+            else // Set top bit
+                bytes[startOffset] |= 0x80;
         }
-        else if(negative && bytes[startOffset] == 0xff)
-            startOffset--;
-        else if(!negative && bytes[startOffset] == 0x00)
-            startOffset--;
+        else if(bytes[startOffset] & 0x80)
+        {
+            if(startOffset == 0)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Arithmetic write (too many bytes) : %08x%08x -> %s", pValue >> 32, pValue);
+                return;
+            }
 
-        pBuffer->clear();
+            // Prepend 0x00 byte
+            bytes[--startOffset] = 0x00;
+        }
+
+        // if(startOffset == 4 && (negative || bytes[startOffset] & 0x80))
+        // {
+            // // Needs compacting
+            // int64_t value = pValue;
+            // if(negative)
+                // value = -value;
+
+            // std::memcpy(bytes, &value, 8);
+            // if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
+                // ArcMist::Endian::reverse(bytes, 8);
+
+            // startOffset = 0;
+            // // Skip zero bytes
+            // for(int i=startOffset;i<4;i++)
+                // if(bytes[i] == 0x00)
+                    // startOffset++;
+                // else
+                    // break;
+
+            // if(bytes[startOffset] & 0x80) // Highest bit set
+            // {
+                // if(negative)
+                // {
+                    // //    - If the most significant byte is >= 0x80 and the value is negative, push a
+                    // //    new 0x80 byte that will be popped off when converting to an integral.
+                    // bytes[--startOffset] = 0x80; // Add a new 0x80 byte
+                // }
+                // else
+                // {
+                    // //    - If the most significant byte is >= 0x80 and the value is positive, push a
+                    // //    new zero-byte to make the significant byte < 0x80 again.
+                    // bytes[--startOffset] = 0x00; // Add a new 0x00 byte
+                // }
+            // }
+            // else if(negative)
+            // {
+                // //    - If the most significant byte is < 0x80 and the value is negative, add
+                // //    0x80 to it, since it will be subtracted and interpreted as a negative when
+                // //    converting to an integral.
+                // bytes[--startOffset] = 0x80;
+            // }
+        // }
+        // else if(negative && bytes[startOffset] == 0xff)
+            // startOffset--;
+        // else if(!negative && bytes[startOffset] == 0x00)
+            // startOffset--;
+
         if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
         {
             ArcMist::Endian::reverse(bytes, 8);
@@ -978,7 +984,8 @@ namespace BitCoin
             pBuffer->write(bytes + startOffset, 8 - startOffset);
         pBuffer->setReadOffset(0);
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-          "Arithmetic write : %08x%08x -> %s", pValue >> 32, pValue, pBuffer->readHexString(pBuffer->length()).text());
+          "Arithmetic write : %08x%08x (%d) -> %s", pValue >> 32, pValue, pValue & 0xffffffff,
+          pBuffer->readHexString(pBuffer->length()).text());
     }
 
     bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript, bool pECDSA_DER_SigsOnly)
@@ -1574,7 +1581,8 @@ namespace BitCoin
                 case OP_1NEGATE: // The number -1 is pushed
                     if(!ifStackTrue())
                         break;
-                    push()->writeByte(-1);
+                    push();
+                    arithmeticWrite(top(), -1);
                     break;
                 case OP_1: // The number 1 is pushed
                 //case OP_TRUE: // The number 1 is pushed
@@ -2839,7 +2847,7 @@ namespace BitCoin
          ***********************************************************************************************/
         testData.clear();
         testData.writeHex("ffffffff");
-        value = 0xffffffffffffffff;
+        value = 0xffffffff80000001; //0xffffffffffffffff;
 
         if(arithmeticRead(&testData, testValue) && value == testValue)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xffffffff");
@@ -2858,7 +2866,7 @@ namespace BitCoin
          ***********************************************************************************************/
         testData.clear();
         testData.writeHex("ffffffff");
-        value = 0xffffffffffffffff;
+        value = 0xffffffff80000001; //0xffffffffffffffff;
         arithmeticWrite(&data, value);
 
         data.setReadOffset(0);
@@ -2875,19 +2883,19 @@ namespace BitCoin
         }
 
         /***********************************************************************************************
-         * Arithmetic write 0xffffff7f80 - Lowest 32 bit negative number (first and last bits 1) == ‭-2,147,483,647‬
+         * Arithmetic write 0xffffffff80
          ***********************************************************************************************/
         testData.clear();
-        testData.writeHex("ffffff7f80");
-        value = 0xffffffff80000001; // 64 bit form of ‭-2,147,483,647‬
-        arithmeticWrite(&data, value); // Compress to as few bytes as possible (which is 5 : 0xfeffffff80)
+        testData.writeHex("ffffffff80");
+        value = 0xffffffff00000001; // 64 bit form of ‭-4,294,967,295‬
+        arithmeticWrite(&data, value);
 
         data.setReadOffset(0);
         if(data == testData)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xffffff7f80");
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xffffffff80");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xffffff7f80");
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xffffffff80");
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %s", testData.readHexString(testData.length()).text());
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
@@ -2896,17 +2904,17 @@ namespace BitCoin
         }
 
         /***********************************************************************************************
-         * Arithmetic read 0xffffff7f80 - Lowest 32 bit negative number (first and last bits 1) == ‭-2,147,483,647‬
+         * Arithmetic read 0xffffffff80
          ***********************************************************************************************/
         testData.clear();
-        testData.writeHex("ffffff7f80");
-        value = 0xffffffff80000001;
+        testData.writeHex("ffffffff80");
+        value = 0xffffffff00000001;
 
         if(arithmeticRead(&testData, testValue) && value == testValue)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xffffff7f80");
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xffffffff80");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xffffff7f80");
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xffffffff80");
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %08x%08x", value >> 32, value);
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
@@ -3027,6 +3035,46 @@ namespace BitCoin
         else
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xfeffffff00");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct   : %s", testData.readHexString(testData.length()).text());
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Written : %s", data.readHexString(data.length()).text());
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic read 0x82
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("82");
+        value = -2;
+
+        if(arithmeticRead(&testData, testValue) && value == testValue)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0x82");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0x82");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Correct : %08x%08x", value >> 32, value);
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Read    : %08x%08x", testValue >> 32, testValue);
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * Arithmetic write 0x82
+         ***********************************************************************************************/
+        testData.clear();
+        testData.writeHex("82");
+        value = -2;
+        arithmeticWrite(&data, value);
+
+        data.setReadOffset(0);
+        if(data == testData)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0x82");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0x82");
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct   : %s", testData.readHexString(testData.length()).text());
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,

@@ -239,8 +239,7 @@ namespace BitCoin
         {
             //TODO Add hash to blacklist. So it isn't downloaded again.
 
-            // Print the block info and save it to a file
-            pBlock->print(ArcMist::Log::VERBOSE);
+            // Save the block to a file
             ArcMist::String filePathName = Info::instance().path();
             filePathName.pathAppend(pBlock->hash.hex() + ".invalid");
             ArcMist::FileOutputStream file(filePathName, true);
