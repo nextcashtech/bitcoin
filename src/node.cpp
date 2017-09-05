@@ -31,7 +31,7 @@ namespace BitCoin
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
         mLastBlockHashRequest = 0;
-        mLastReceiveTime = 0;
+        mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
         if(!mConnection.open(AF_INET6, pAddress.ip, pAddress.port))
@@ -57,7 +57,7 @@ namespace BitCoin
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
         mLastBlockHashRequest = 0;
-        mLastReceiveTime = 0;
+        mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
         if(!mConnection.open(pIP, pPort))
@@ -85,7 +85,7 @@ namespace BitCoin
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
         mLastBlockHashRequest = 0;
-        mLastReceiveTime = 0;
+        mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
         if(!mConnection.open(pFamily, pIP, pPort))
@@ -122,7 +122,7 @@ namespace BitCoin
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
         mLastBlockHashRequest = 0;
-        mLastReceiveTime = 0;
+        mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
         mHeaderRequested.clear();
@@ -207,8 +207,11 @@ namespace BitCoin
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
               "[%d] Sent <%s>", mID, Message::nameFor(pData->type));
         else
+        {
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
               "[%d] Failed to send <%s>", mID, Message::nameFor(pData->type));
+            mLastReceiveTime = 0; // Tell daemon to disconnect
+        }
         return success;
     }
 
