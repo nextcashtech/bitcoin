@@ -48,9 +48,16 @@ namespace BitCoin
         OP_EQUAL               = 0x87, // Returns 1 if the inputs are exactly equal, 0 otherwise
         OP_EQUALVERIFY         = 0x88, // Same as OP_EQUAL, but runs OP_VERIFY afterward.
 
+
+        // Hashes
+        OP_RIPEMD160           = 0xa6, // in   hash   The input is hashed using RIPEMD-160.
+        OP_SHA1                = 0xa7, // in  hash  The input is hashed using SHA-1.
+        OP_SHA256              = 0xa8, // in  hash  The input is hashed using SHA-256.
         OP_HASH160             = 0xa9, // The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
         OP_HASH256             = 0xaa, // The input is hashed two times with SHA-256.
         
+
+        // Signatures
         OP_CODESEPARATOR       = 0xab, // All of the signature checking words will only match signatures to the data after the most recently-executed OP_CODESEPARATOR.
 
         OP_CHECKSIG            = 0xac,
@@ -358,6 +365,15 @@ namespace BitCoin
                     break;
                 case OP_EQUALVERIFY:
                     result += "<OP_EQUALVERIFY>";
+                    break;
+                case OP_RIPEMD160:
+                    result += "<OP_RIPEMD160>";
+                    break;
+                case OP_SHA1:
+                    result += "<OP_SHA1>";
+                    break;
+                case OP_SHA256:
+                    result += "<OP_SHA256>";
                     break;
                 case OP_HASH160:
                     result += "<OP_HASH160>";
@@ -1205,6 +1221,102 @@ namespace BitCoin
 
                     break;
                 }
+                case OP_RIPEMD160:
+                {
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid op code for signature script : OP_SHA1");
+                        mValid = false;
+                        return false;
+                    }
+
+                    if(!ifStackTrue())
+                        break;
+                    
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_SHA1");
+                        mValid = false;
+                        return false;
+                    }
+
+                    // Hash top stack item and pop it
+                    top()->setReadOffset(0);
+                    ArcMist::Digest digest(ArcMist::Digest::RIPEMD160);
+                    digest.writeStream(top(), top()->length());
+                    digest.getResult(&mHash);
+                    pop();
+
+                    // Push the hash
+                    mHash.write(push());
+                    break;
+                }
+                case OP_SHA1:
+                {
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid op code for signature script : OP_SHA1");
+                        mValid = false;
+                        return false;
+                    }
+
+                    if(!ifStackTrue())
+                        break;
+                    
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_SHA1");
+                        mValid = false;
+                        return false;
+                    }
+
+                    // Hash top stack item and pop it
+                    top()->setReadOffset(0);
+                    ArcMist::Digest digest(ArcMist::Digest::SHA1);
+                    digest.writeStream(top(), top()->length());
+                    digest.getResult(&mHash);
+                    pop();
+
+                    // Push the hash
+                    mHash.write(push());
+                    break;
+                }
+                case OP_SHA256:
+                {
+                    if(pIsSignatureScript)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid op code for signature script : OP_SHA256");
+                        mValid = false;
+                        return false;
+                    }
+
+                    if(!ifStackTrue())
+                        break;
+                    
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_SHA256");
+                        mValid = false;
+                        return false;
+                    }
+
+                    // Hash top stack item and pop it
+                    top()->setReadOffset(0);
+                    ArcMist::Digest digest(ArcMist::Digest::SHA256);
+                    digest.writeStream(top(), top()->length());
+                    digest.getResult(&mHash);
+                    pop();
+
+                    // Push the hash
+                    mHash.write(push());
+                    break;
+                }
                 case OP_HASH160: // The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
                 {
                     if(pIsSignatureScript)
@@ -1232,10 +1344,7 @@ namespace BitCoin
                     pop();
 
                     // Push the hash
-                    ArcMist::Buffer *hash160Buffer = new ArcMist::Buffer();
-                    mHash.write(hash160Buffer);
-                    push(hash160Buffer);
-
+                    mHash.write(push());
                     break;
                 }
                 case OP_HASH256: // The input is hashed two times with SHA-256.
@@ -1267,9 +1376,7 @@ namespace BitCoin
                     pop();
 
                     // Push the hash
-                    ArcMist::Buffer *hash256Buffer = new ArcMist::Buffer();
-                    mHash.write(hash256Buffer);
-                    push(hash256Buffer);
+                    mHash.write(push());
                     break;
                 }
 
