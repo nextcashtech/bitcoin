@@ -26,8 +26,10 @@ void printHelp(const char *pPath);
 
 int main(int pArgumentCount, char **pArguments)
 {
-    bool nextIsPath = false, nextIsSeed = false, noDaemon = false;
+    bool nextIsPath = false, nextIsSeed = false;
     ArcMist::String path = "/home/curtis/Development/bcc_test/", seed;
+    bool start = false;
+    bool noDaemon = false;
     bool stop = false;
     bool validate = false;
     bool rebuild = false;
@@ -58,6 +60,10 @@ int main(int pArgumentCount, char **pArguments)
             ArcMist::Log::setLevel(ArcMist::Log::VERBOSE);
         else if(std::strcmp(pArguments[i], "-vv") == 0)
             ArcMist::Log::setLevel(ArcMist::Log::DEBUG);
+        else if(std::strcmp(pArguments[i], "stop") == 0)
+            stop = true;
+        else if(std::strcmp(pArguments[i], "start") == 0)
+            start = true;
         else if(std::strcmp(pArguments[i], "--nodaemon") == 0)
             noDaemon = true;
         else if(std::strcmp(pArguments[i], "--path") == 0)
@@ -66,13 +72,13 @@ int main(int pArgumentCount, char **pArguments)
             mainnet = true;
         else if(std::strcmp(pArguments[i], "--seed") == 0)
             nextIsSeed = true;
-        else if(std::strcmp(pArguments[i], "--validate") == 0)
+        else if(std::strcmp(pArguments[i], "validate") == 0)
             validate = true;
-        else if(std::strcmp(pArguments[i], "--rebuild") == 0)
+        else if(std::strcmp(pArguments[i], "rebuild") == 0)
             rebuild = true;
-        else if(std::strcmp(pArguments[i], "--listblocks") == 0)
+        else if(std::strcmp(pArguments[i], "listblocks") == 0)
             listblocks = true;
-        else if(std::strcmp(pArguments[i], "--printblock") == 0)
+        else if(std::strcmp(pArguments[i], "printblock") == 0)
             nextIsPrintBlock = true;
         else if(std::strcmp(pArguments[i], "help") == 0 ||
           std::strcmp(pArguments[i], "--help") == 0 ||
@@ -81,10 +87,9 @@ int main(int pArgumentCount, char **pArguments)
             printHelp(path);
             return 0;
         }
-        else if(std::strcmp(pArguments[i], "--stop") == 0)
-            stop = true;
         else
         {
+            std::cerr << "Unknown command line parameter : " << pArguments[i] << std::endl;
             printHelp(path);
             return 0;
         }
@@ -171,6 +176,11 @@ int main(int pArgumentCount, char **pArguments)
         }
 
         return 0;
+    }
+    else if(!start)
+    {
+        printHelp(path);
+        return 1;
     }
 
     if(!noDaemon)
@@ -266,15 +276,21 @@ pid_t daemonPID(const char *pPath)
 
 void printHelp(const char *pPath)
 {
-    std::cerr << "Usage :" << std::endl;
-    std::cerr << "    help or --help or -h -> Display this message" << std::endl;
-    std::cerr << "    --stop               -> Kill active daemon" << std::endl;
-    std::cerr << "    --path PATH          -> Specify directory for daemon files. Default : " << pPath << std::endl;
-    std::cerr << "    --seed SEED_NAME     -> Start daemon and load peers from seed" << std::endl;
-    std::cerr << "    -v                   -> Verbose logging" << std::endl;
-    std::cerr << "    -vv                  -> Debug logging" << std::endl;
-    std::cerr << "    --nodaemon           -> Don't perform daemon process fork" << std::endl;
-    std::cerr << "    --listblocks         -> List hashes of all blocks and exit" << std::endl;
-    std::cerr << "    --validate           -> Validate local block chain and exit" << std::endl;
+    std::cerr << "Usage : bitcoin command [options]" << std::endl;
+    std::cerr << "Commands :" << std::endl;
+    std::cerr << "    help                            -> Display this message" << std::endl;
+    std::cerr << "    start                           -> Start daemon" << std::endl;
+    std::cerr << "    stop                            -> Stop active daemon" << std::endl;
+    std::cerr << "    listblocks                      -> List hashes of all blocks" << std::endl;
+    std::cerr << "    printblock BLOCKNUM or HASH     -> Display block information" << std::endl;
+    std::cerr << "    validate                        -> Validate local block chain" << std::endl;
+    std::cerr << "    rebuild                         -> Validate and rebuild unspent transactions from block chain" << std::endl;
+    std::cerr << "Options :" << std::endl;
+    std::cerr << "    --help or -h                    -> Display this message" << std::endl;
+    std::cerr << "    --path PATH                     -> Specify directory for daemon files. Default : " << pPath << std::endl;
+    std::cerr << "    --seed SEED_NAME                -> Start daemon and load peers from seed" << std::endl;
+    std::cerr << "    --nodaemon                      -> Don't do daemon fork. (i.e. run in this process)" << std::endl;
+    std::cerr << "    -v                              -> Verbose logging" << std::endl;
+    std::cerr << "    -vv                             -> Debug logging" << std::endl;
     std::cerr << std::endl;
 }
