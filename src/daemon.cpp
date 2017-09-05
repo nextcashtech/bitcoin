@@ -234,6 +234,8 @@ namespace BitCoin
         for(unsigned int i=0;i<tempNodes.size();i++)
             delete tempNodes[i];
 
+        UnspentPool::instance().save();
+
         Chain::destroy();
         UnspentPool::destroy();
         Info::destroy();
