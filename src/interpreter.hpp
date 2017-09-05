@@ -14,10 +14,11 @@
 
 namespace BitCoin
 {
-    inline bool bufferIsZero(ArcMist::Buffer &pBuffer)
+    inline bool bufferIsZero(ArcMist::Buffer *pBuffer)
     {
-        while(pBuffer.remaining() > 0)
-            if(pBuffer.readByte() != 0)
+        pBuffer->setReadOffset(0);
+        while(pBuffer->remaining() > 0)
+            if(pBuffer->readByte() != 0)
                 return false;
         return true;
     }
@@ -26,10 +27,10 @@ namespace BitCoin
     {
     public:
 
-        ScriptInterpreter() { mValid = true; mVerified = false; mInputOffset = 0; }
+        ScriptInterpreter() { mValid = true; mVerified = true; mTransaction = NULL; mInputOffset = 0; }
         ~ScriptInterpreter() { clear(); }
 
-        void setTransaction(Transaction &pTransaction);
+        void setTransaction(Transaction *pTransaction);
         void setInputOffset(unsigned int pOffset) { mInputOffset = pOffset; }
 
         // Process script
@@ -64,8 +65,7 @@ namespace BitCoin
             // Valid if top stack item is not zero
             if(mStack.size() > 0)
             {
-                top()->setReadOffset(0);
-                if(bufferIsZero(*top()))
+                if(bufferIsZero(top()))
                     return false; // Top stack item is zero
                 else
                     return true; // Top stack item is not zero
@@ -78,7 +78,7 @@ namespace BitCoin
         {
             mValid = true;
             mVerified = true;
-            mTransaction.clear();
+            mTransaction = NULL;
             mInputOffset = 0;
 
             std::list<ArcMist::Buffer *>::iterator iter;
@@ -96,18 +96,7 @@ namespace BitCoin
         }
 
         // For debugging
-        void printStack(const char *pText)
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack : %s", pText);
-
-            unsigned int index = 1;
-            for(std::list<ArcMist::Buffer *>::iterator i = mStack.begin();i!=mStack.end();++i,index++)
-            {
-                (*i)->setReadOffset(0);
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-                  "    %d (%d bytes) : %s", index, (*i)->length(), (*i)->readHexString((*i)->length()).text());
-            }
-        }
+        void printStack(const char *pText);
 
         int readStackUnsignedInt()
         {
@@ -185,7 +174,7 @@ namespace BitCoin
         bool mValid;
         bool mVerified;
         Hash mHash;
-        Transaction mTransaction;
+        Transaction *mTransaction;
         unsigned int mInputOffset;
 
         void writeSigHashAllData(ArcMist::Buffer &pData, ArcMist::Buffer &pSubScript);
@@ -202,6 +191,8 @@ namespace BitCoin
             while(i != mIfStack.end())
                 if(!(*i))
                     return false;
+                else
+                    ++i;
 
             return true;
         }

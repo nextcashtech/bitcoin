@@ -38,6 +38,7 @@ namespace BitCoin
         static void handleSigTermChild(int pValue);
         static void handleSigTerm(int pValue);
         static void handleSigInt(int pValue);
+        static void handleSigPipe(int pValue);
 
     protected:
 
@@ -54,12 +55,17 @@ namespace BitCoin
         uint64_t mLastNodeAdd;
         uint64_t mLastRequestCheck;
         uint64_t mLastInfoSave;
+        uint64_t mLastUnspentSave;
         bool mRunning, mStopping, mStopRequested;
         unsigned int mMaxConcurrentDownloads;
+        unsigned int mNodeCount;
 
         void (*previousSigTermChildHandler)(int);
         void (*previousSigTermHandler)(int);
         void (*previousSigIntHandler)(int);
+        void (*previousSigPipeHandler)(int);
+
+        void getRandomizedNodeList(std::vector<Node *> &pList);
 
         unsigned int nodesWithBlocks();
         Node *nodeNeedingBlockHashes();
@@ -67,7 +73,9 @@ namespace BitCoin
         unsigned int nodesWaitingForHeaders();
 
         unsigned int nodesWaitingForBlocks();
+        Node *nodeWithBlockHashes();
         Node *nodeWithBlock(const Hash &pBlockHeaderHash);
+        void requestBlocks();
 
         // Query peers from a seed
         // Returns number of peers actually connected

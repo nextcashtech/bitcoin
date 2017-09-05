@@ -57,7 +57,7 @@ namespace BitCoin
     {
         mValid = true;
         mModified = false;
-        mNextBlockHeight = 0;
+        mBlockHeight = 0;
     }
 
     UnspentPool::~UnspentPool()
@@ -132,10 +132,10 @@ namespace BitCoin
             return false;
         }
 
-        if(pBlockHeight != mNextBlockHeight)
+        if(pBlockHeight != mBlockHeight)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_UNSPENT_LOG_NAME,
-              "Can't commit non matching block height %08d. Should be %08d", pBlockHeight, mNextBlockHeight);
+              "Can't commit non matching block height %d. Should be %d", pBlockHeight, mBlockHeight);
             return false;
         }
 
@@ -158,7 +158,7 @@ namespace BitCoin
         }
         mPendingSpend.clear();
 
-        mNextBlockHeight++;
+        mBlockHeight++;
         mModified = true;
         mMutex.unlock();
         return true;
@@ -223,13 +223,13 @@ namespace BitCoin
         filePathName.pathAppend("height");
         file = new ArcMist::FileInputStream(filePathName);
         file->setInputEndian(ArcMist::Endian::LITTLE);
-        mNextBlockHeight = file->readUnsignedInt();
+        mBlockHeight = file->readUnsignedInt();
         delete file;
 
         mMutex.unlock();
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME,
-          "Loaded %d tranactions at block height %d", mUnspentCount, mNextBlockHeight - 1);
+          "Loaded %d tranactions at block height %d", mUnspentCount, mBlockHeight);
 
         return mValid;
     }
@@ -283,7 +283,7 @@ namespace BitCoin
         filePathName.pathAppend("height");
         file = new ArcMist::FileOutputStream(filePathName, true);
         file->setOutputEndian(ArcMist::Endian::LITTLE);
-        file->writeUnsignedInt(mNextBlockHeight);
+        file->writeUnsignedInt(mBlockHeight);
         delete file;
 
         mModified = false;

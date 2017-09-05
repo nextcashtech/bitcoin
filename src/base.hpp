@@ -42,6 +42,13 @@ namespace BitCoin
             std::memset(ip, 0, 16);
             port = 0;
         }
+        IPAddress(const IPAddress &pCopy)
+        {
+            time = pCopy.time;
+            services = pCopy.services;
+            std::memcpy(ip, pCopy.ip, 16);
+            port = pCopy.port;
+        }
 
         void write(ArcMist::OutputStream *pStream) const;
         bool read(ArcMist::InputStream *pStream);
@@ -90,6 +97,10 @@ namespace BitCoin
         ArcMist::String userAgent;
         uint32_t fails; // The number of failed attempts since the last success
         IPAddress address;
+
+    private:
+        Peer(Peer &pCopy);
+        Peer &operator = (Peer &pRight);
 
     };
 
@@ -263,11 +274,16 @@ namespace BitCoin
     class HashList : public std::vector<Hash *>
     {
     public:
+        HashList() {}
         ~HashList()
         {
             for(unsigned int i=0;i<size();i++)
                 delete at(i);
         }
+
+    private:
+        HashList(HashList &pCopy);
+        HashList &operator = (HashList &pRight);
     };
 
     enum Base58Type { PUBLIC_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY, TEST_PUBLIC_KEY_HASH, TEST_SCRIPT_HASH };

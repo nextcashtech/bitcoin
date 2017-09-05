@@ -31,21 +31,23 @@ namespace BitCoin
         bool shouldRequestBlocks(); // Returns true if node has no block hashes and hasn't requested any recently
         bool hasBlock(const Hash &pHash); // Block inventory received for specified hash
         void clearBlockHashes(); // Clear block inventory information
-        void requestBlockHashes(); // Request an inventory of blocks
+        bool requestBlockHashes(); // Request an inventory of blocks
 
-        void requestHeaders(const Hash &pStartingHash);
+        bool requestHeaders(const Hash &pStartingHash);
         bool waitingForHeaders() { return !mHeaderRequested.isEmpty() && getTime() - mLastHeaderRequest < 300; }
 
-        void requestBlock(const Hash &pHash);
+        bool requestBlock(const Hash &pHash);
         bool waitingForBlock() { return !mBlockRequested.isEmpty() && getTime() - mLastBlockRequest < 300; }
+
+        uint64_t lastReceiveTime() { return mLastReceiveTime; }
 
     private:
 
         bool versionSupported(int32_t pVersion);
 
-        void sendMessage(Message::Data *pData);
-        void sendVersion();
-        void sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
+        bool sendMessage(Message::Data *pData);
+        bool sendVersion();
+        bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
 
         unsigned int mID;
         IPAddress mAddress;
@@ -54,7 +56,8 @@ namespace BitCoin
 
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;
-        uint64_t mLastTime;
+        uint64_t mLastReceiveTime;
+        uint64_t mLastPingTime;
         uint64_t mPingNonce;
         uint64_t mMinimumFeeRate;
 

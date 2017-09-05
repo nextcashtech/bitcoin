@@ -270,6 +270,25 @@ namespace BitCoin
             // Command Name (12 bytes padded with nulls)
             ArcMist::String command = pInput->readString(12);
 
+            // Check for valid command
+            // unsigned int commandLength = command.length();
+            // if(commandLength == 0 || commandLength > 12)
+            // {
+                // pInput->flush();
+                // return NULL;
+            // }
+
+            // char commandChar;
+            // for(unsigned int i=0;i<commandLength;i++)
+            // {
+                // commandChar = command[i];
+                // if(!ArcMist::isLetter(commandChar) && !ArcMist::isInt(commandChar) && commandChar != 0)
+                // {
+                    // pInput->flush();
+                    // return NULL;
+                // }
+            // }
+
             // Payload Size (4 bytes)
             uint32_t payloadSize = pInput->readUnsignedInt();
 
@@ -382,7 +401,7 @@ namespace BitCoin
                 default:
                 case UNKNOWN:
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
-                      "Unknown command name (%s). Discarding.", command);
+                      "Unknown command name (%s). Discarding.", command.text());
                     result = NULL;
                     break;
             }

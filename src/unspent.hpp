@@ -96,7 +96,7 @@ namespace BitCoin
         void revert();
 
         // Height of last block
-        unsigned int blockHeight() { return mNextBlockHeight - 1; }
+        unsigned int blockHeight() { return mBlockHeight - 1; }
 
         // Number of unspent transactions
         unsigned int count()
@@ -129,7 +129,7 @@ namespace BitCoin
         {
             mMutex.lock();
             mValid = true;
-            mNextBlockHeight = 0;
+            mBlockHeight = 0;
 
             for(std::list<Unspent *>::iterator iter=mPendingAdd.begin();iter!=mPendingAdd.end();++iter)
                 delete *iter;
@@ -147,7 +147,7 @@ namespace BitCoin
         bool mModified;
         bool mValid;
         unsigned int mUnspentCount;
-        unsigned int mNextBlockHeight;
+        unsigned int mBlockHeight;
 
         static UnspentPool *sInstance;
 

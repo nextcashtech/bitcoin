@@ -20,7 +20,6 @@ namespace BitCoin
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
         mSendHeaders = false;
-        mLastTime = 0;
         mPingNonce = 0;
         mMinimumFeeRate = 0;
         mVersionData = NULL;
@@ -32,6 +31,8 @@ namespace BitCoin
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
         mLastBlockHashRequest = 0;
+        mLastReceiveTime = 0;
+        mLastPingTime = 0;
 
         if(!mConnection.open(AF_INET6, pAddress.ip, pAddress.port))
         {
@@ -48,7 +49,6 @@ namespace BitCoin
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
         mSendHeaders = false;
-        mLastTime = 0;
         mPingNonce = 0;
         mMinimumFeeRate = 0;
         mVersionData = NULL;
@@ -57,6 +57,8 @@ namespace BitCoin
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
         mLastBlockHashRequest = 0;
+        mLastReceiveTime = 0;
+        mLastPingTime = 0;
 
         if(!mConnection.open(pIP, pPort))
         {
@@ -75,7 +77,6 @@ namespace BitCoin
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
         mSendHeaders = false;
-        mLastTime = 0;
         mPingNonce = 0;
         mMinimumFeeRate = 0;
         mVersionData = NULL;
@@ -84,6 +85,8 @@ namespace BitCoin
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
         mLastBlockHashRequest = 0;
+        mLastReceiveTime = 0;
+        mLastPingTime = 0;
 
         if(!mConnection.open(pFamily, pIP, pPort))
         {
@@ -98,6 +101,7 @@ namespace BitCoin
 
     Node::~Node()
     {
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Disconnecting", mID);
         mConnection.close();
         if(mVersionData != NULL)
             delete mVersionData;
@@ -110,7 +114,6 @@ namespace BitCoin
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
         mSendHeaders = false;
-        mLastTime = 0;
         mPingNonce = 0;
         mMinimumFeeRate = 0;
         if(mVersionData != NULL)
@@ -119,6 +122,9 @@ namespace BitCoin
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
         mLastBlockHashRequest = 0;
+        mLastReceiveTime = 0;
+        mLastPingTime = 0;
+
         mHeaderRequested.clear();
         mBlockRequested.clear();
 
@@ -192,68 +198,93 @@ namespace BitCoin
         return true;
     }
 
-    void Node::sendMessage(Message::Data *pData)
+    bool Node::sendMessage(Message::Data *pData)
     {
         ArcMist::Buffer send;
         Message::writeFull(pData, &send);
-        mConnection.send(&send);
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Sent <%s>", mID, Message::nameFor(pData->type));
+        bool success = mConnection.send(&send);
+        if(success)
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+              "[%d] Sent <%s>", mID, Message::nameFor(pData->type));
+        else
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+              "[%d] Failed to send <%s>", mID, Message::nameFor(pData->type));
+        return success;
     }
 
-    void Node::requestBlockHashes()
+    bool Node::requestBlockHashes()
     {
         Chain &chain = Chain::instance();
         HashList hashList;
 
         chain.getReverseBlockHashes(hashList, 32);
         if(hashList.size() == 0)
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requesting block hashes starting from genesis", mID);
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
+              "[%d] Requesting block hashes starting from genesis", mID);
         else
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requesting block hashes starting from %s", mID, hashList.front()->hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
+              "[%d] Requesting block hashes starting from %s", mID, hashList.front()->hex().text());
 
         Message::GetBlocksData getBlocksData;
         for(HashList::iterator hash=hashList.begin();hash!=hashList.end();++hash)
             getBlocksData.blockHeaderHashes.push_back(**hash);
-        sendMessage(&getBlocksData);
-        mLastBlockHashRequest = getTime();
+        bool success = sendMessage(&getBlocksData);
+        if(success)
+            mLastBlockHashRequest = getTime();
+        return success;
     }
 
-    void Node::requestHeaders(const Hash &pStartingHash)
+    bool Node::requestHeaders(const Hash &pStartingHash)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requesting block headers starting from %s", mID, pStartingHash.hex().text());
+        if(!pStartingHash.isEmpty())
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
+              "[%d] Requesting block headers starting from %s", mID, pStartingHash.hex().text());
+        else
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
+              "[%d] Requesting block headers starting from genesis block", mID);
         Message::GetHeadersData getHeadersData;
-        getHeadersData.blockHeaderHashes.push_back(pStartingHash);
-        sendMessage(&getHeadersData);
-        mHeaderRequested = pStartingHash;
-        mLastHeaderRequest = getTime();
+        if(!pStartingHash.isEmpty())
+            getHeadersData.blockHeaderHashes.push_back(pStartingHash);
+        bool success = sendMessage(&getHeadersData);
+        if(success)
+        {
+            mHeaderRequested = pStartingHash;
+            mLastHeaderRequest = getTime();
+        }
+        return success;
     }
 
-    void Node::requestBlock(const Hash &pHash)
+    bool Node::requestBlock(const Hash &pHash)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requesting block : %s", mID, pHash.hex().text());
         Message::GetDataData getDataData;
         getDataData.inventory.push_back(Message::InventoryHash(Message::InventoryHash::BLOCK, pHash));
-        sendMessage(&getDataData);
-        mBlockRequested = pHash;
-        mLastBlockRequest = getTime();
-        Events::instance().post(Event::BLOCK_REQUESTED);
-        Chain::instance().markBlockRequested(pHash);
+        bool success = sendMessage(&getDataData);
+        if(success)
+        {
+            mBlockRequested = pHash;
+            mLastBlockRequest = getTime();
+            Events::instance().post(Event::BLOCK_REQUESTED);
+            Chain::instance().markBlockRequested(pHash);
+        }
+        return success;
     }
 
-    void Node::sendVersion()
+    bool Node::sendVersion()
     {
         Chain &chain = Chain::instance();
         Info &info = Info::instance();
         Message::VersionData versionMessage(mConnection.ipv6Bytes(), mConnection.port(), info.ip, info.port,
-          info.fullMode, chain.blockCount(), chain.chainIsCurrent());
-        sendMessage(&versionMessage);
+          info.fullMode, chain.blockHeight(), chain.chainIsCurrent());
+        bool success = sendMessage(&versionMessage);
         mVersionSent = true;
+        return success;
     }
 
-    void Node::sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason)
+    bool Node::sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason)
     {
         Message::RejectData rejectMessage(pCommand, pCode, pReason, NULL);
-        sendMessage(&rejectMessage);
+        return sendMessage(&rejectMessage);
     }
 
     void Node::process()
@@ -267,19 +298,19 @@ namespace BitCoin
 
         if(message == NULL)
         {
-            // Check type of pending message
-            Message::Type pendingType = Message::pendingType(&mReceiveBuffer);
-            if(pendingType == Message::BLOCK)
+            uint64_t time = getTime();
+            if(time - mLastReceiveTime > 1200 && // 20 minutes
+              time - mLastPingTime > 30)
             {
-                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "Started receiving block");
-                Events::instance().post(Event::BLOCK_RECEIVE_PARTIAL);
+                Message::PingData pingData;
+                sendMessage(&pingData);
+                mLastPingTime = getTime();
             }
-
             return;
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Received <%s>", mID, Message::nameFor(message->type));
-        mLastTime = getTime();
+        mLastReceiveTime = getTime();
 
         switch(message->type)
         {

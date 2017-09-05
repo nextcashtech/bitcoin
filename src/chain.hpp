@@ -28,6 +28,10 @@ namespace BitCoin
         Hash hash;
         unsigned int fileID;
         unsigned int height;
+
+    private:
+        BlockInfo(BlockInfo &pCopy);
+        BlockInfo &operator = (BlockInfo &pRight);
     };
 
     class BlockSet : public std::list<BlockInfo *>, public ArcMist::Mutex
@@ -47,12 +51,16 @@ namespace BitCoin
                     return true;
             return false;
         }
+
+    private:
+        BlockSet(BlockSet &pCopy);
+        BlockSet &operator = (BlockSet &pRight);
     };
-    
+
     class PendingData
     {
     public:
-    
+
         PendingData(Block *pBlock)
         {
             block = pBlock;
@@ -76,9 +84,8 @@ namespace BitCoin
 
         uint64_t requestedTime;
         Block *block;
-        
+
     private:
-        PendingData();
         PendingData(PendingData &pCopy);
         PendingData &operator = (PendingData &pRight);
     };
@@ -90,7 +97,7 @@ namespace BitCoin
         static Chain &instance();
         static void destroy();
 
-        unsigned int blockCount() const { return mNextBlockHeight; }
+        unsigned int blockHeight() const { return mNextBlockHeight - 1; }
         const Hash &lastBlockHash() const { return mLastBlockHash; }
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
 
@@ -123,6 +130,8 @@ namespace BitCoin
         void getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount);
 
         // Get the block with a specific hash
+        bool getBlockHash(unsigned int pHeight, Hash &pHash);
+        bool getBlock(unsigned int pHeight, Block &pBlock);
         bool getBlock(const Hash &pHash, Block &pBlock);
 
         // Load block data from file system
@@ -171,16 +180,6 @@ namespace BitCoin
 
         static Chain *sInstance;
 
-    };
-
-    class BlockList : public std::vector<Block *>
-    {
-    public:
-        ~BlockList()
-        {
-            for(unsigned int i=0;i<size();i++)
-                delete at(i);
-        }
     };
 }
 

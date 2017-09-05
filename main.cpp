@@ -33,6 +33,8 @@ int main(int pArgumentCount, char **pArguments)
     bool rebuild = false;
     bool listblocks = false;
     bool mainnet = false;
+    ArcMist::String printBlock;
+    bool nextIsPrintBlock = false;
 
     for(int i=1;i<pArgumentCount;i++)
         if(nextIsPath)
@@ -46,6 +48,11 @@ int main(int pArgumentCount, char **pArguments)
         {
             seed = pArguments[i];
             nextIsSeed = false;
+        }
+        else if(nextIsPrintBlock)
+        {
+            printBlock = pArguments[i];
+            nextIsPrintBlock = false;
         }
         else if(std::strcmp(pArguments[i], "-v") == 0)
             ArcMist::Log::setLevel(ArcMist::Log::VERBOSE);
@@ -65,6 +72,8 @@ int main(int pArgumentCount, char **pArguments)
             rebuild = true;
         else if(std::strcmp(pArguments[i], "--listblocks") == 0)
             listblocks = true;
+        else if(std::strcmp(pArguments[i], "--printblock") == 0)
+            nextIsPrintBlock = true;
         else if(std::strcmp(pArguments[i], "help") == 0 ||
           std::strcmp(pArguments[i], "--help") == 0 ||
           std::strcmp(pArguments[i], "-h") == 0)
@@ -81,6 +90,45 @@ int main(int pArgumentCount, char **pArguments)
         }
 
     BitCoin::Info::setPath(path);
+
+    if(printBlock)
+    {
+        BitCoin::Chain &chain = BitCoin::Chain::instance();
+        BitCoin::Hash hash;
+        BitCoin::Block block;
+
+        if(printBlock.length() == 32)
+        {
+            ArcMist::Buffer buffer;
+            buffer.writeString(printBlock.text(), printBlock.length());
+            hash.read(&buffer, 32);
+        }
+        else
+        {
+            if(!chain.getBlockHash(std::stol(printBlock.text()), hash))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, MAIN_LOG_NAME,
+                  "Failed to find hash at height : %d", std::stol(printBlock.text()));
+                return 1;
+            }
+
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
+              "Found hash at height : %s", hash.hex().text());
+        }
+
+        chain.loadBlocks(false);
+
+        if(chain.getBlock(hash, block))
+        {
+            block.print(ArcMist::Log::INFO);
+            return 0;
+        }
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, MAIN_LOG_NAME, "Failed to read block");
+            return 1;
+        }
+    }
 
     if(listblocks)
     {

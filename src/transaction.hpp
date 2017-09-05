@@ -107,10 +107,7 @@ namespace BitCoin
     public:
 
         Transaction() { version = 1; mFee = 0; lockTime = 0xffffffff; }
-        Transaction(const Transaction &pCopy) { *this = pCopy; }
         ~Transaction();
-
-        Transaction &operator = (const Transaction &pRight);
 
         void write(ArcMist::OutputStream *pStream);
 
@@ -156,6 +153,9 @@ namespace BitCoin
 
         int64_t mFee;
         std::vector<Unspent *> mUnspents;
+
+        Transaction(const Transaction &pCopy);// { *this = pCopy; }
+        Transaction &operator = (const Transaction &pRight);
 
     };
 }
