@@ -56,6 +56,7 @@ namespace BitCoin
         uint64_t mLastRequestCheck;
         uint64_t mLastInfoSave;
         uint64_t mLastUnspentSave;
+        uint64_t mLastClean;
         bool mRunning, mStopping, mStopRequested;
         unsigned int mMaxConcurrentDownloads;
         unsigned int mNodeCount;
@@ -67,14 +68,10 @@ namespace BitCoin
 
         void getRandomizedNodeList(std::vector<Node *> &pList);
 
-        unsigned int nodesWithBlocks();
-        Node *nodeNeedingBlockHashes();
-
+        Node *nodeWithInventory();
+        Node *nodeWithBlock(const Hash &pHash);
         unsigned int nodesWaitingForHeaders();
-
-        unsigned int nodesWaitingForBlocks();
-        Node *nodeWithBlockHashes();
-        Node *nodeWithBlock(const Hash &pBlockHeaderHash);
+        void requestInventories();
         void requestBlocks();
 
         // Query peers from a seed

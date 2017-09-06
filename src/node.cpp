@@ -128,10 +128,10 @@ namespace BitCoin
         mHeaderRequested.clear();
         mBlockRequested.clear();
 
-        clearBlockHashes();
+        clearInventory();
     }
 
-    bool Node::shouldRequestBlocks()
+    bool Node::shouldRequestInventory()
     {
         mBlockHashMutex.lock();
         uint64_t time = getTime();
@@ -141,7 +141,7 @@ namespace BitCoin
         return result;
     }
 
-    bool Node::hasBlocks()
+    bool Node::hasInventory()
     {
         mBlockHashMutex.lock();
         bool result = mBlockHashCount != 0;
@@ -163,7 +163,7 @@ namespace BitCoin
         return false;
     }
 
-    void Node::clearBlockHashes()
+    void Node::clearInventory()
     {
         mBlockHashMutex.lock();
         std::list<Hash> *set = mBlockHashes;
@@ -176,7 +176,7 @@ namespace BitCoin
         mBlockHashMutex.unlock();
     }
 
-    void Node::addBlockHeaderHash(Hash &pHash)
+    void Node::addBlockHash(Hash &pHash)
     {
         mBlockHashMutex.lock();
         std::list<Hash> &hashes = mBlockHashes[pHash.lookup()];
@@ -189,6 +189,22 @@ namespace BitCoin
 
         mBlockHashCount++;
         hashes.push_back(pHash);
+        mBlockHashMutex.unlock();
+    }
+
+    void Node::removeBlockHash(Hash &pHash)
+    {
+        mBlockHashMutex.lock();
+        std::list<Hash> &hashes = mBlockHashes[pHash.lookup()];
+        for(std::list<Hash>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+            if(*hash == pHash)
+            {
+                hashes.erase(hash);
+                mBlockHashCount--;
+                mBlockHashMutex.unlock();
+                break;
+            }
+
         mBlockHashMutex.unlock();
     }
 
@@ -215,7 +231,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Node::requestBlockHashes()
+    bool Node::requestInventory()
     {
         Chain &chain = Chain::instance();
         HashList hashList;
@@ -271,6 +287,15 @@ namespace BitCoin
             Chain::instance().markBlockRequested(pHash);
         }
         return success;
+    }
+
+    bool Node::sendBlock(Block &pBlock)
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Sending block : %s",
+          mID, pBlock.hash.hex().text());
+        Message::BlockData blockData;
+        blockData.block = &pBlock;
+        return sendMessage(&blockData);
     }
 
     bool Node::sendVersion()
@@ -464,7 +489,7 @@ namespace BitCoin
                 for(std::vector<Hash>::iterator i=getBlocksData->blockHeaderHashes.begin();i!=getBlocksData->blockHeaderHashes.end();++i)
                     if(chain.blockInChain(*i))
                     {
-                        chain.getBlockHashes(hashes, *i, 1000);
+                        chain.getBlockHashes(hashes, *i, 500);
                         break;
                     }
 
@@ -472,12 +497,12 @@ namespace BitCoin
                 {
                     // No matching starting hashes found. Start from genesis
                     Hash emptyHash;
-                    chain.getBlockHashes(hashes, emptyHash, 1000);
+                    chain.getBlockHashes(hashes, emptyHash, 500);
                 }
 
                 unsigned int count = hashes.size();
-                if(count > 1000) // Maximum of 1000
-                    count = 1000;
+                if(count > 500) // Maximum of 500
+                    count = 500;
 
                 // Add inventory to message
                 bool dontStop = getBlocksData->stopHeaderHash.isZero();
@@ -493,6 +518,8 @@ namespace BitCoin
                 }
                 inventoryData.inventory.resize(finalCount);
 
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+                  "[%d] Sending %d block hashes", mID, finalCount);
                 sendMessage(&inventoryData);
                 break;
             }
@@ -509,13 +536,76 @@ namespace BitCoin
                 break;
             }
             case Message::GET_DATA:
-                // TODO Implement GET_DATA
-                break;
+            {
+                Message::GetDataData *getDataData = (Message::GetDataData *)message;
+                Message::NotFoundData notFoundData;
+                Chain &chain = Chain::instance();
+                Block block;
+                bool fail = false;
 
+                for(std::vector<Message::InventoryHash>::iterator item=getDataData->inventory.begin();item!=getDataData->inventory.end();++item)
+                {
+                    switch(item->type)
+                    {
+                    case Message::InventoryHash::BLOCK:
+                    {
+                        if(chain.getBlock(item->hash, block))
+                        {
+                            if(!sendBlock(block))
+                                fail = true;
+                        }
+                        else
+                            notFoundData.inventory.push_back(*item);
+                        break;
+                    }
+                    case Message::InventoryHash::TRANSACTION:
+                        //TODO Implement GET_DATA transactions (TRANSACTION)
+                        // For mempool and relay set
+                        break;
+                    case Message::InventoryHash::FILTERED_BLOCK:
+                        //TODO Implement GET_DATA filtered blocks (MERKLE_BLOCK)
+                        break;
+                    case Message::InventoryHash::UNKNOWN:
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+                          "[%d] Unknown inventory item type %d", mID, item->type);
+                        break;
+                    }
+
+                    if(fail)
+                        break;
+                }
+
+                if(notFoundData.inventory.size() > 0)
+                    sendMessage(&notFoundData);
+                break;
+            }
             case Message::GET_HEADERS:
-                // TODO Implement GET_HEADERS
-                break;
+            {
+                Message::GetHeadersData *getHeadersData = (Message::GetHeadersData *)message;
+                Chain &chain = Chain::instance();
+                BlockList blockList;
 
+                for(std::vector<Hash>::iterator hash=getHeadersData->blockHeaderHashes.begin();hash!=getHeadersData->blockHeaderHashes.end();++hash)
+                    if(chain.getBlockHeaders(blockList, *hash, getHeadersData->stopHeaderHash, 2000))
+                        break; // match found
+
+                if(blockList.size() > 0)
+                {
+                    Message::HeadersData headersData;
+                    // Load up the message
+                    for(BlockList::iterator block=blockList.begin();block!=blockList.end();++block)
+                    {
+                        headersData.headers.push_back(*block);
+                        if((*block)->hash == getHeadersData->stopHeaderHash)
+                            break;
+                    }
+
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+                      "[%d] Sending %d block headers", mID, headersData.headers.size());
+                    sendMessage(&headersData);
+                }
+                break;
+            }
             case Message::HEADERS:
             {
                 Message::HeadersData *headersData = (Message::HeadersData *)message;
@@ -557,7 +647,7 @@ namespace BitCoin
                         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_NODE_LOG_NAME,
                           "[%d] Inventory block hash : %s", mID, (*i).hash.hex().text());
 
-                        addBlockHeaderHash((*i).hash);
+                        addBlockHash((*i).hash);
                     }
                     else if((*i).type == Message::InventoryHash::TRANSACTION)
                     {
@@ -577,9 +667,37 @@ namespace BitCoin
                 break;
 
             case Message::NOT_FOUND:
-                // TODO Implement NOT_FOUND
+            {
+                Message::NotFoundData *notFoundData = (Message::NotFoundData *)message;
+                for(std::vector<Message::InventoryHash>::iterator item=notFoundData->inventory.begin();item!=notFoundData->inventory.end();++item)
+                {
+                    switch(item->type)
+                    {
+                    case Message::InventoryHash::BLOCK:
+                    {
+                        if(item->hash == mBlockRequested)
+                        {
+                            Chain::instance().markBlockNotRequested(item->hash);
+                            removeBlockHash(item->hash);
+                            mBlockRequested.clear();
+                            mLastBlockRequest = 0;
+                        }
+                        break;
+                    }
+                    case Message::InventoryHash::TRANSACTION:
+                        //TODO Implement Transaction not found
+                        break;
+                    case Message::InventoryHash::FILTERED_BLOCK:
+                        //TODO Implement filtered blocks not found
+                        break;
+                    case Message::InventoryHash::UNKNOWN:
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+                          "[%d] Unknown not found inventory item type %d", mID, item->type);
+                        break;
+                    }
+                }
                 break;
-
+            }
             case Message::TRANSACTION:
                 // TODO Implement TRANSACTION
                 break;

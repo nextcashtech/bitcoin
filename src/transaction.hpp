@@ -106,7 +106,7 @@ namespace BitCoin
     {
     public:
 
-        Transaction() { version = 1; mFee = 0; lockTime = 0xffffffff; }
+        Transaction() { version = 1; mFee = 0; lockTime = 0xffffffff; size = 0; }
         ~Transaction();
 
         void write(ArcMist::OutputStream *pStream);
@@ -127,6 +127,7 @@ namespace BitCoin
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
 
         // Hash
+        unsigned int size;
         Hash hash;
 
         // Data
@@ -135,13 +136,14 @@ namespace BitCoin
         std::vector<Output *> outputs;
         uint32_t lockTime;
 
-        unsigned int size();
+        unsigned int calculatedSize();
         uint64_t feeRate();
 
         uint64_t fee() const { return mFee; }
 
         void calculateHash();
-        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase, uint32_t pBlockVersion);
+        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase,
+          int32_t pBlockVersion, int32_t pBlockVersionFlags);
 
         bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
           ArcMist::Buffer &pOutputScript, Signature::HashType pSigHashType);
@@ -154,7 +156,7 @@ namespace BitCoin
         int64_t mFee;
         std::vector<Unspent *> mUnspents;
 
-        Transaction(const Transaction &pCopy);// { *this = pCopy; }
+        Transaction(const Transaction &pCopy);
         Transaction &operator = (const Transaction &pRight);
 
     };

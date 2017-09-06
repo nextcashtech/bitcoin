@@ -160,7 +160,8 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase, uint32_t pBlockVersion)
+    bool Transaction::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase,
+      int32_t pBlockVersion, int32_t pBlockVersionFlags)
     {
         ScriptInterpreter interpreter;
         Unspent *unspent = NULL;
@@ -182,11 +183,8 @@ namespace BitCoin
                     return false;
                 }
 
-                /* BIP34 Block version 2 - Requires block height in coinbase input script
-                 *   Reject version 2 blocks without block height at block 224,412
-                 *   Reject version 1 blocks at block 227,930
-                 */
-                if((pBlockVersion == 2 && pBlockHeight >= 224412) || pBlockVersion > 2)
+                // BIP-0034
+                if((pBlockVersion == 2 && pBlockVersionFlags & BLOCK_VERSION_2_ACTIVE) || pBlockVersion > 2)
                 {
                     interpreter.clear();
                     interpreter.setTransaction(this);
@@ -201,8 +199,8 @@ namespace BitCoin
                         return false;
                     }
 
-                    int blockHeight = interpreter.readStackUnsignedInt();
-                    if(blockHeight != (int)pBlockHeight)
+                    uint64_t blockHeight = interpreter.readFirstStackNumber();
+                    if(blockHeight != pBlockHeight)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Version 2 block with non matching block height after 224,412 : actual %d, specified %d",
@@ -338,7 +336,7 @@ namespace BitCoin
         return true;
     }
 
-    unsigned int Transaction::size()
+    unsigned int Transaction::calculatedSize()
     {
         unsigned int result = 4; // Version
 
@@ -364,7 +362,9 @@ namespace BitCoin
 
     uint64_t Transaction::feeRate()
     {
-        unsigned int currentSize = size();
+        unsigned int currentSize = size;
+        if(currentSize == 0)
+            currentSize = calculatedSize();
         if(mFee < currentSize)
             return 0;
         else
@@ -443,6 +443,9 @@ namespace BitCoin
 
     void Transaction::write(ArcMist::OutputStream *pStream)
     {
+        unsigned int startOffset = pStream->writeOffset();
+        size = 0;
+
         // Version
         pStream->writeUnsignedInt(version);
 
@@ -462,6 +465,8 @@ namespace BitCoin
 
         // Lock Time
         pStream->writeUnsignedInt(lockTime);
+
+        size = pStream->writeOffset() - startOffset;
     }
 
     bool Input::writeSignatureData(ArcMist::OutputStream *pStream, ArcMist::Buffer *pSubScript)
@@ -527,6 +532,9 @@ namespace BitCoin
 
     bool Transaction::read(ArcMist::InputStream *pStream, bool pCalculateHash)
     {
+        unsigned int startOffset = pStream->readOffset();
+        size = 0;
+
         // Create hash
         ArcMist::Digest *digest = NULL;
         if(pCalculateHash)
@@ -615,6 +623,8 @@ namespace BitCoin
 
         if(digest != NULL)
             delete digest;
+
+        size = pStream->readOffset() - startOffset;
         return true;
     }
 

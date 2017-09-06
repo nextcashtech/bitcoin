@@ -98,23 +98,14 @@ namespace BitCoin
         // For debugging
         void printStack(const char *pText);
 
-        int readStackUnsignedInt()
+        int64_t readFirstStackNumber()
         {
             if(!checkStackSize(1))
                 return 0;
 
-            ArcMist::Buffer *heightBuffer = mStack.front();
-            heightBuffer->setReadOffset(0);
-            if(heightBuffer->length() == 1)
-                return heightBuffer->readByte();
-            else if(heightBuffer->length() == 2)
-                return heightBuffer->readShort();
-            else if(heightBuffer->length() == 3)
-                return heightBuffer->readByte() + (heightBuffer->readShort() << 8);
-            else if(heightBuffer->length() == 4)
-                return heightBuffer->readInt();
-
-            return 0;
+            int64_t value = 0;
+            arithmeticRead(mStack.front(), value);
+            return value;
         }
 
         enum ScriptType
@@ -166,6 +157,9 @@ namespace BitCoin
 
         // Write to a script to push the following size of data to the stack
         static void writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput);
+        
+        static bool arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue);
+        static void arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue);
 
         static bool test();
 

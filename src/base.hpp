@@ -29,6 +29,14 @@ namespace BitCoin
         return (double)pSatoshis / 100000000;
     }
 
+    // Transaction functionality codes
+    static const int32_t BLOCK_VERSION_2_ACTIVE     = 0x00000004;
+    static const int32_t REQUIRE_BLOCK_VERSION_2    = 0x00000008;
+    static const int32_t BLOCK_VERSION_4_ACTIVE     = 0x00000010;
+    static const int32_t REQUIRE_BLOCK_VERSION_4    = 0x00000011;
+    static const int32_t CHECKLOCKTIMEVERIFY_ACTIVE = 0x00000012;
+    static const int32_t CHECKSEQUENCEVERIFY_ACTIVE = 0x00000014;
+
     const char *networkName();
     const char *networkStartString();
     const uint8_t *networkStartBytes();

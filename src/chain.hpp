@@ -117,6 +117,7 @@ namespace BitCoin
         Hash nextBlockNeeded();
         // Mark a block as requested
         void markBlockRequested(const Hash &pHash);
+        void markBlockNotRequested(const Hash &pHash);
 
         // Add block to queue to be processed and added to top of chain
         bool addPendingBlock(Block *pBlock);
@@ -127,7 +128,7 @@ namespace BitCoin
         void getReverseBlockHashes(HashList &pHashes, unsigned int pCount);
 
         // Retrieve block headers starting at a specific hash. (empty starting hash for first block)
-        void getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount);
+        bool getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, const Hash &pStoppingHash, unsigned int pCount);
 
         // Get the block with a specific hash
         bool getBlockHash(unsigned int pHeight, Hash &pHash);
@@ -177,6 +178,18 @@ namespace BitCoin
         ArcMist::Mutex mBlockFileMutex;
         std::vector<unsigned int> mLockedBlockFileIDs;
         unsigned int mLastFileID;
+
+        // Last 1000 block's versions
+        std::list<uint32_t> mBlockVersions;
+        void addBlockVersion(uint32_t pVersion)
+        {
+            mBlockVersions.push_back(pVersion);
+            if(mBlockVersions.size() > 2016)
+                mBlockVersions.erase(mBlockVersions.begin());
+        }
+        uint32_t mBlockVersionFlags;
+        void updateBlockVersionFlags();
+        void updateTimeFlags();
 
         static Chain *sInstance;
 

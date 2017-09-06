@@ -35,6 +35,7 @@ namespace BitCoin
     {
         mNextBlockHeight = 0;
         mLastFileID = 0;
+        mBlockVersionFlags = 0x00000000;
     }
 
     Chain::~Chain()
@@ -43,6 +44,58 @@ namespace BitCoin
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             delete *pending;
         mPendingMutex.unlock();
+    }
+
+    void Chain::updateTimeFlags()
+    {
+        if(!(mBlockVersionFlags & CHECKSEQUENCEVERIFY_ACTIVE))
+        {
+            //uint64_t time = getTime();
+            switch(network())
+            {
+            case MAINNET:
+                break;
+            case TESTNET:
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
+    void Chain::updateBlockVersionFlags()
+    {
+        if(mBlockVersionFlags & REQUIRE_BLOCK_VERSION_4)
+            return;
+
+        int version4OrHigherCount = 0;
+        int version2OrHigherCount = 0;
+        int count = 0;
+        for(std::list<uint32_t>::iterator version=mBlockVersions.begin();version!=mBlockVersions.end();++version)
+        {
+            if(count < 1000)
+            {
+                if(*version >= 4)
+                {
+                    version4OrHigherCount++;
+                    version2OrHigherCount++;
+                }
+                else if(*version >= 2)
+                    version2OrHigherCount++;
+            }
+            count++;
+        }
+
+        if(version4OrHigherCount >= 750)
+            mBlockVersionFlags &= BLOCK_VERSION_4_ACTIVE;
+        if(version4OrHigherCount >= 950)
+            mBlockVersionFlags &= REQUIRE_BLOCK_VERSION_4;
+
+        // BIP-0034
+        if(version2OrHigherCount >= 750)
+            mBlockVersionFlags &= BLOCK_VERSION_2_ACTIVE;
+        if(version2OrHigherCount >= 950)
+            mBlockVersionFlags &= REQUIRE_BLOCK_VERSION_2;
     }
 
     bool Chain::headerAvailable(Hash &pHash)
@@ -192,6 +245,18 @@ namespace BitCoin
         mPendingMutex.unlock();
     }
 
+    void Chain::markBlockNotRequested(const Hash &pHash)
+    {
+        mPendingMutex.lock();
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            if((*pending)->block->hash == pHash)
+            {
+                (*pending)->requestedTime = 0;
+                break;
+            }
+        mPendingMutex.unlock();
+    }
+
     Hash Chain::nextBlockNeeded()
     {
         Hash result;
@@ -209,7 +274,6 @@ namespace BitCoin
 
     bool Chain::addPendingBlock(Block *pBlock)
     {
-        //TODO Find pending header entry and replace the header with the full block
         bool success = false;
 
         mPendingMutex.lock();
@@ -234,8 +298,10 @@ namespace BitCoin
 
         mProcessMutex.lock();
 
+        updateTimeFlags();
+
         // Process block
-        if(!pBlock->process(unspentPool, mNextBlockHeight))
+        if(!pBlock->process(unspentPool, mNextBlockHeight, mBlockVersionFlags))
         {
             //TODO Add hash to blacklist. So it isn't downloaded again.
 
@@ -312,11 +378,15 @@ namespace BitCoin
             mBlockLookup[lookup].push_back(new BlockInfo(pBlock->hash, mLastFileID, mNextBlockHeight));
             mBlockLookup[lookup].unlock();
 
+            addBlockVersion(pBlock->version);
+            updateBlockVersionFlags();
+
             mNextBlockHeight++;
             mLastBlockHash = pBlock->hash;
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Added block to chain at height %d (%d trans) : %s", mNextBlockHeight - 1, pBlock->transactionCount,
               pBlock->hash.hex().text());
+
         }
         else
         {
@@ -438,31 +508,40 @@ namespace BitCoin
         }
     }
 
-    void Chain::getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount)
+    bool Chain::getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, const Hash &pStoppingHash, unsigned int pCount)
     {
         BlockFile *blockFile;
         Hash hash = pStartingHash;
         unsigned int fileID = blockFileID(hash);
 
-        if(fileID == 0xffffffff)
-            return; // hash not found
-
         pBlockHeaders.clear();
+
+        if(fileID == 0xffffffff)
+            return false; // hash not found
 
         while(pBlockHeaders.size() < pCount)
         {
             lockBlockFile(fileID);
             blockFile = new BlockFile(fileID, blockFileName(fileID));
 
-            if(!blockFile->readBlockHeaders(pBlockHeaders, hash, pCount))
+            if(!blockFile->readBlockHeaders(pBlockHeaders, hash, pStoppingHash, pCount))
+            {
+                delete blockFile;
+                unlockBlockFile(fileID);
                 break;
+            }
 
             delete blockFile;
             unlockBlockFile(fileID);
 
+            if(pBlockHeaders.size() > 0 && pBlockHeaders.back()->hash == pStoppingHash)
+                break;
+
             hash.clear();
             fileID++;
         }
+
+        return pBlockHeaders.size() > 0;
     }
 
     bool Chain::getBlockHash(unsigned int pHeight, Hash &pHash)
@@ -548,6 +627,7 @@ namespace BitCoin
         bool success = true;
         bool done = false;
         Hash emptyHash;
+        std::list<uint32_t> blockFileVersions;
 
         mProcessMutex.lock();
 
@@ -574,7 +654,8 @@ namespace BitCoin
                     break;
                 }
 
-                if(!blockFile->readBlockHashes(hashes, emptyHash, BlockFile::MAX_BLOCKS))
+                if(!blockFile->readBlockHashes(hashes, emptyHash, BlockFile::MAX_BLOCKS) ||
+                  !blockFile->readVersions(blockFileVersions))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read hashes from block file %s", filePathName.text());
                     delete blockFile;
@@ -584,6 +665,10 @@ namespace BitCoin
                 }
                 delete blockFile;
                 unlockBlockFile(fileID);
+
+                // Add block versions
+                for(std::list<uint32_t>::iterator version=blockFileVersions.begin();version!=blockFileVersions.end();++version)
+                    addBlockVersion(*version);
 
                 if(pList)
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Block file %s", filePathName.text());
@@ -634,6 +719,7 @@ namespace BitCoin
 
         if(success && lastBlock != NULL)
             mLastBlockHash = *lastBlock;
+        updateBlockVersionFlags();
         return success;
     }
 
@@ -691,7 +777,7 @@ namespace BitCoin
                         return false;
                     }
 
-                    if(!block.process(unspent, height))
+                    if(!block.process(unspent, height, mBlockVersionFlags))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                           "Block %010d failed to process", height);
@@ -957,7 +1043,7 @@ namespace BitCoin
             /***********************************************************************************************
              * Block read process
              ***********************************************************************************************/
-            if(readBlock.process(unspents, 1))
+            if(readBlock.process(unspents, 1, 0))
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed read block process");
             else
             {
@@ -990,6 +1076,21 @@ namespace BitCoin
             // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed New Block test");
             // success = false;
         // }
+        
+        // Test of get headers and printing
+        // Chain &chain = Chain::instance();
+        // BlockList headers;
+        // Hash zeroHash(32);
+        // ArcMist::Buffer hashData;
+        // hashData.writeHex("add5df18f427437ace8b40064b3806583217a3f724672cf72cf8c18300000000");
+        // Hash startingHash;
+        // startingHash.read(&hashData, 32);
+        // chain.loadBlocks(false);
+        // chain.getBlockHeaders(headers, startingHash, zeroHash, 50);
+        
+        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Retrieved %d headers", headers.size());
+        // for(BlockList::iterator i=headers.begin();i!=headers.end();++i)
+            // (*i)->print();
 
         return success;
     }

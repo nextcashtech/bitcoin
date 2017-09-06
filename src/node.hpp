@@ -27,11 +27,11 @@ namespace BitCoin
         void process();
         void clear();
 
-        bool hasBlocks(); // Block inventories have been received
-        bool shouldRequestBlocks(); // Returns true if node has no block hashes and hasn't requested any recently
+        bool hasInventory(); // Block inventories have been received
+        bool shouldRequestInventory(); // Returns true if node has no block hashes and hasn't requested any recently
+        void clearInventory(); // Clear block inventory information
+        bool requestInventory(); // Request an inventory of blocks
         bool hasBlock(const Hash &pHash); // Block inventory received for specified hash
-        void clearBlockHashes(); // Clear block inventory information
-        bool requestBlockHashes(); // Request an inventory of blocks
 
         bool requestHeaders(const Hash &pStartingHash);
         bool waitingForHeaders() { return !mHeaderRequested.isEmpty() && getTime() - mLastHeaderRequest < 300; }
@@ -48,6 +48,7 @@ namespace BitCoin
         bool sendMessage(Message::Data *pData);
         bool sendVersion();
         bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
+        bool sendBlock(Block &pBlock);
 
         unsigned int mID;
         IPAddress mAddress;
@@ -63,7 +64,8 @@ namespace BitCoin
 
         // List of pending block headers this node is known to have
         ArcMist::Mutex mBlockHashMutex;
-        void addBlockHeaderHash(Hash &pHash);
+        void addBlockHash(Hash &pHash);
+        void removeBlockHash(Hash &pHash);
         std::list<Hash> mBlockHashes[0xffff];
         unsigned int mBlockHashCount;
         uint64_t mLastBlockHashRequest;

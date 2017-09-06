@@ -14,11 +14,8 @@ namespace BitCoin
     {
     public:
 
-        Block() : previousHash(32), merkleHash(32) { version = 4; transactionCount = 0; mFees = 0; }
+        Block() : previousHash(32), merkleHash(32) { version = 4; transactionCount = 0; mFees = 0; size = 0; }
         ~Block();
-
-        // Checks if block follows version specific validation rules
-        bool versionIsValid(unsigned int pHeight);
 
         // Verify hash is lower than target difficulty specified by targetBits
         bool hasProofOfWork();
@@ -34,10 +31,11 @@ namespace BitCoin
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
 
         // Hash
+        unsigned int size;
         Hash hash;
 
         // Header
-        uint32_t version;
+        int32_t version;
         Hash previousHash;
         Hash merkleHash;
         uint32_t time;
@@ -53,7 +51,7 @@ namespace BitCoin
 
         void calculateHash();
         void calculateMerkleHash(Hash &pMerkleHash);
-        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight);
+        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, int32_t pBlockVersionFlags);
 
         // Amount of Satoshis generated for mining a block at this height
         static uint64_t coinBaseAmount(uint64_t pBlockHeight);
@@ -73,6 +71,7 @@ namespace BitCoin
     class BlockList : public std::vector<Block *>
     {
     public:
+        BlockList() {}
         ~BlockList()
         {
             for(unsigned int i=0;i<size();i++)
@@ -122,9 +121,11 @@ namespace BitCoin
 
         // Read list of block hashes from this file. If pStartingHash is empty then start with first block
         bool readBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount);
+        bool readVersions(std::list<uint32_t> &pVersions);
 
         // Read list of block headers from this file. If pStartingHash is empty then start with first block
-        bool readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount);
+        bool readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash,
+          const Hash &pStoppingHash, unsigned int pCount);
 
         // Read block for specified hash
         bool readBlock(const Hash &pHash, Block &pBlock, bool pIncludeTransactions);

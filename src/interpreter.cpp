@@ -848,7 +848,7 @@ namespace BitCoin
         mTransaction = pTransaction;
     }
 
-    bool arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue)
+    bool ScriptInterpreter::arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue)
     {
         //TODO This is a still messy and should be cleaned up. Unit test below should cover it.
         pBuffer->setReadOffset(0);
@@ -942,7 +942,7 @@ namespace BitCoin
         return true;
     }
 
-    void arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue)
+    void ScriptInterpreter::arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue)
     {
         //TODO This is a still messy and should be cleaned up. Unit test below should cover it.
         uint8_t bytes[8];

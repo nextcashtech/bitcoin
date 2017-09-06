@@ -971,11 +971,32 @@ namespace BitCoin
 
         void NotFoundData::write(ArcMist::OutputStream *pStream)
         {
-            
+            // Inventory Hash Count
+            writeCompactInteger(pStream, inventory.size());
+
+            // Inventory
+            for(uint64_t i=0;i<inventory.size();i++)
+                inventory[i].write(pStream);
         }
 
         bool NotFoundData::read(ArcMist::InputStream *pStream, unsigned int pSize)
         {
+            if(pSize < 1)
+                return false;
+
+            unsigned int startReadOffset = pStream->readOffset();
+
+            // Inventory Hash Count
+            uint64_t count = readCompactInteger(pStream);
+            if(pSize - pStream->readOffset() - startReadOffset < count)
+                return false;
+
+            // Inventory
+            inventory.resize(count);
+            for(uint64_t i=0;i<count;i++)
+                if(!inventory[i].read(pStream))
+                    return false;
+
             return true;
         }
 

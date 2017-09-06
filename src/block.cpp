@@ -17,31 +17,6 @@ namespace BitCoin
                 delete *transaction;
     }
 
-    bool Block::versionIsValid(unsigned int pHeight)
-    {
-        // Version 1 - Reject version 1 blocks at block 227,930
-        if(version == 1 && pHeight >= 227930)
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-              "Version 1 block after 227,930 : %d", pHeight);
-            return false;
-        }
-
-        /* BIP34 Block version 2 - Requires block height in coinbase
-         *   Reject version 2 blocks without block height at block 224,412
-         *   Reject version 1 blocks at block 227,930
-         * Implemented in transaction.cpp process function
-         */
-
-        /* BIP66 Version 3 - Requires ECDSA DER encoded signatures
-         * Implemented in interpreter.cpp Signature::read function
-         */
-
-        //TODO Version 4 - Added support for OP_CHECKLOCKTIMEVERIFY operation code.
-
-        return true;
-    }
-
     bool Block::hasProofOfWork()
     {
         //TODO Validate that targetBits is correct for the chain and height
@@ -52,6 +27,9 @@ namespace BitCoin
 
     void Block::write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount)
     {
+        unsigned int startOffset = pStream->writeOffset();
+        size = 0;
+
         // Version
         pStream->writeUnsignedInt(version);
 
@@ -71,7 +49,10 @@ namespace BitCoin
         pStream->writeUnsignedInt(nonce);
 
         if(!pIncludeTransactionCount)
+        {
+            size = pStream->writeOffset() - startOffset;
             return;
+        }
 
         // Transaction Count
         if(pIncludeTransactions)
@@ -79,16 +60,22 @@ namespace BitCoin
         else
         {
             writeCompactInteger(pStream, 0);
+            size = pStream->writeOffset() - startOffset;
             return;
         }
 
         // Transactions
         for(uint64_t i=0;i<transactions.size();i++)
             transactions[i]->write(pStream);
+
+        size = pStream->writeOffset() - startOffset;
     }
 
     bool Block::read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pCalculateHash)
     {
+        unsigned int startOffset = pStream->readOffset();
+        size = 0;
+
         // Create hash
         ArcMist::Digest *digest = NULL;
         if(pCalculateHash)
@@ -150,7 +137,10 @@ namespace BitCoin
         transactionCount = readCompactInteger(pStream);
 
         if(!pIncludeTransactions)
+        {
+            size = pStream->readOffset() - startOffset;
             return true;
+        }
 
         if(pStream->remaining() < transactionCount)
         {
@@ -175,6 +165,7 @@ namespace BitCoin
                 *transaction = NULL;
         }
 
+        size = pStream->readOffset() - startOffset;
         return !fail;
     }
 
@@ -329,7 +320,7 @@ namespace BitCoin
         return result;
     }
 
-    bool Block::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight)
+    bool Block::process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, int32_t pBlockVersionFlags)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Processing block %08d", pBlockHeight);
 
@@ -337,6 +328,46 @@ namespace BitCoin
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
             return false;
+        }
+        
+        
+        
+        // // Version 1 - Reject version 1 blocks at block 227,930
+        // if(version == 1 && pHeight >= 227930)
+        // {
+            // ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              // "Version 1 block after 227,930 : %d", pHeight);
+            // return false;
+        // }
+
+        // /* BIP34 Block version 2 - Requires block height in coinbase
+         // *   Reject version 2 blocks without block height at block 224,412
+         // *   Reject version 1 blocks at block 227,930
+         // * Implemented in transaction.cpp process function
+         // */
+
+        // /* BIP66 Version 3 - Requires ECDSA DER encoded signatures
+         // * Implemented in interpreter.cpp Signature::read function
+         // */
+
+        // //TODO Version 4 - Added support for OP_CHECKLOCKTIMEVERIFY operation code.
+
+        
+        
+        
+        
+        // BIP-0034
+        if(pBlockVersionFlags & REQUIRE_BLOCK_VERSION_2 && version < 2)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Version 2 required");
+            return false;
+        }
+
+        // BIP-0009
+        if((version & 0x00000007) == 4) // Deployments might be active (least significant bits == 001)
+        {
+            //TODO BIP-0009 Deployements
+            
         }
 
         // Validate Merkle Hash
@@ -357,7 +388,7 @@ namespace BitCoin
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
             //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Processing transaction %d", transactionOffset++);
-            if(!(*transaction)->process(pUnspentPool, pBlockHeight, isCoinBase, version))
+            if(!(*transaction)->process(pUnspentPool, pBlockHeight, isCoinBase, version, pBlockVersionFlags))
                 return false;
             if(!isCoinBase)
                 mFees += (*transaction)->fee();
@@ -630,8 +661,35 @@ namespace BitCoin
         return true;
     }
 
+    bool BlockFile::readVersions(std::list<uint32_t> &pVersions)
+    {
+        pVersions.clear();
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        mInputFile->setReadOffset(HASHES_OFFSET + 32); // Set offset to offset of first data offset location in file
+        unsigned int blockOffset, previousOffset;
+        for(unsigned int i=0;i<MAX_BLOCKS;i++)
+        {
+            blockOffset = mInputFile->readUnsignedInt();
+            if(blockOffset == 0)
+                return true;
+
+            previousOffset = mInputFile->readOffset() + 32; // Add 32 to skip hash
+            mInputFile->setReadOffset(blockOffset);
+            pVersions.push_back(mInputFile->readUnsignedInt());
+            mInputFile->setReadOffset(previousOffset);
+        }
+
+        return true;
+    }
+
     // If pStartingHash is empty then start with first block in file
-    bool BlockFile::readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, unsigned int pCount)
+    bool BlockFile::readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash,
+      const Hash &pStoppingHash, unsigned int pCount)
     {
         pBlockHeaders.clear();
         if(!openFile())
@@ -643,55 +701,56 @@ namespace BitCoin
         Hash hash(32);
         Block *newBlockHeader;
         unsigned int fileOffset;
-        unsigned int nextHashOffset = 0;
         unsigned int fileHashOffset = 0;
         bool startAtFirst = pStartingHash.isEmpty();
+        bool found = false;
+
+        // Find starting hash
+        mInputFile->setReadOffset(HASHES_OFFSET);
+        for(unsigned int i=0;i<MAX_BLOCKS;i++)
+        {
+            if(!hash.read(mInputFile))
+                return false;
+
+            if(mInputFile->readUnsignedInt() == 0)
+                return false;
+
+            if(startAtFirst || hash == pStartingHash)
+            {
+                found = true;
+                break;
+            }
+
+            fileHashOffset++;
+        }
+
+        if(!found)
+            return false; // Hash not found
+
         while(pBlockHeaders.size() < pCount)
         {
-            if(nextHashOffset == 0)
+            mInputFile->setReadOffset(HASHES_OFFSET + (fileHashOffset * HEADER_ITEM_SIZE));
+            if(!hash.read(mInputFile))
+                return false;
+
+            fileOffset = mInputFile->readUnsignedInt();
+            if(fileOffset == 0)
+                return pBlockHeaders.size() > 0;
+
+            fileHashOffset++;
+
+            // Go to file offset of block data
+            mInputFile->setReadOffset(fileOffset);
+            newBlockHeader = new Block();
+            if(!newBlockHeader->read(mInputFile, false))
             {
-                // Find starting hash
-                mInputFile->setReadOffset(HASHES_OFFSET);
-                for(unsigned int i=0;i<MAX_BLOCKS;i++)
-                {
-                    if(!hash.read(mInputFile))
-                        return false;
-
-                    fileOffset = mInputFile->readUnsignedInt();
-                    if(fileOffset == 0)
-                        return false;
-
-                    if(startAtFirst || hash == pStartingHash)
-                    {
-                        // Go to file offset of block data
-                        nextHashOffset = mInputFile->readOffset();
-                        mInputFile->setReadOffset(fileOffset);
-                    }
-
-                    fileHashOffset++;
-                }
-
-                if(nextHashOffset == 0)
-                    return false; // Hash not found
+                delete newBlockHeader;
+                return false;
             }
-            else
-            {
-                mInputFile->setReadOffset(nextHashOffset);
-                if(!hash.read(mInputFile))
-                    return false;
+            pBlockHeaders.push_back(newBlockHeader);
 
-                fileOffset = mInputFile->readUnsignedInt();
-                if(fileOffset == 0)
-                    return pBlockHeaders.size() > 0;
-
-                // Go to file offset of block data
-                nextHashOffset = mInputFile->readOffset();
-                mInputFile->setReadOffset(fileOffset);
-                fileHashOffset++;
-                newBlockHeader = new Block();
-                newBlockHeader->read(mInputFile, false);
-                pBlockHeaders.push_back(newBlockHeader);
-            }
+            if(newBlockHeader->hash == pStoppingHash)
+                break;
 
             if(fileHashOffset == MAX_BLOCKS)
                 return pBlockHeaders.size() > 0; // Reached last block in file

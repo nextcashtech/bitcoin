@@ -370,7 +370,7 @@ namespace BitCoin
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize);
 
-            // TODO Not Found Data
+            std::vector<InventoryHash> inventory;
 
         };
 
