@@ -937,8 +937,9 @@ namespace BitCoin
         }
 
         pBuffer->setReadOffset(0);
-        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-          "Arithmetic read : %s -> %08x%08x (%d)", pBuffer->readHexString(pBuffer->length()).text(), pValue >> 32, pValue, pValue & 0xffffffff);
+        //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+        //  "Arithmetic read : %s -> %08x%08x (%d)", pBuffer->readHexString(pBuffer->length()).text(),
+        //  pValue >> 32, pValue, pValue & 0xffffffff);
         return true;
     }
 
@@ -1018,9 +1019,9 @@ namespace BitCoin
         else
             pBuffer->write(bytes + startOffset, 8 - startOffset);
         pBuffer->setReadOffset(0);
-        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-          "Arithmetic write : %08x%08x (%d) -> %s", pValue >> 32, pValue, pValue & 0xffffffff,
-          pBuffer->readHexString(pBuffer->length()).text());
+        //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+        //  "Arithmetic write : %08x%08x (%d) -> %s", pValue >> 32, pValue, pValue & 0xffffffff,
+        //  pBuffer->readHexString(pBuffer->length()).text());
     }
 
     bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript, bool pECDSA_DER_SigsOnly)
