@@ -231,7 +231,7 @@ int main(int pArgumentCount, char **pArguments)
 
     // Set up daemon to log to a file
     if(!noDaemon)
-        ArcMist::Log::setOutput(new ArcMist::FileOutputStream(logFilePath.text(), false, true), true);
+        ArcMist::Log::setOutputFile(logFilePath);
 
     // Write pid to file
     if(!noDaemon)
