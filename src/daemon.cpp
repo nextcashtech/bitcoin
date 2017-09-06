@@ -523,8 +523,8 @@ namespace BitCoin
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Found %d nodes from %s", ipList.size(), pName);
 
-        for(unsigned int i=0;i<ipList.size() && !mStopping;i++)
-            if(addNode(ipList[i], networkPortString()))
+        for(ArcMist::Network::IPList::iterator ip=ipList.begin();ip!=ipList.end() && !mStopping;++ip)
+            if(addNode(*ip, networkPortString()))
                 result++;
 
         return result;
