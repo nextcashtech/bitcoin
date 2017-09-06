@@ -213,7 +213,7 @@ int main(int pArgumentCount, char **pArguments)
         if(currentPID != 0)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, MAIN_LOG_NAME, "Daemon is already running under PID %d", currentPID);
-            ArcMist::Log::add(ArcMist::Log::WARNING, MAIN_LOG_NAME, "Call with parameter --stop");
+            ArcMist::Log::add(ArcMist::Log::WARNING, MAIN_LOG_NAME, "Call with \"stop\" command");
             return 1;
         }
     }

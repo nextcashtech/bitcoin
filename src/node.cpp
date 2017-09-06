@@ -30,6 +30,7 @@ namespace BitCoin
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
+        mInventoryHeight = 0;
         mLastBlockHashRequest = 0;
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
@@ -56,6 +57,7 @@ namespace BitCoin
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
+        mInventoryHeight = 0;
         mLastBlockHashRequest = 0;
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
@@ -84,6 +86,7 @@ namespace BitCoin
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
+        mInventoryHeight = 0;
         mLastBlockHashRequest = 0;
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
@@ -122,6 +125,8 @@ namespace BitCoin
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
         mLastBlockHashRequest = 0;
+        mBlockHashCount = 0;
+        mInventoryHeight = 0;
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
@@ -135,8 +140,8 @@ namespace BitCoin
     {
         mBlockHashMutex.lock();
         uint64_t time = getTime();
-        bool result = (mBlockHashCount == 0 && time - mLastBlockHashRequest > 300) ||
-          time - mLastBlockHashRequest > 21600;
+        bool result = (mBlockHashCount == 0 && time - mLastBlockHashRequest > 60) ||
+          Chain::instance().blockHeight() > mInventoryHeight + 200;
         mBlockHashMutex.unlock();
         return result;
     }
@@ -144,7 +149,7 @@ namespace BitCoin
     bool Node::hasInventory()
     {
         mBlockHashMutex.lock();
-        bool result = mBlockHashCount != 0;
+        bool result = mBlockHashCount != 0 && Chain::instance().blockHeight() + 200 > mInventoryHeight;
         mBlockHashMutex.unlock();
         return result;
     }
@@ -235,6 +240,9 @@ namespace BitCoin
     {
         Chain &chain = Chain::instance();
         HashList hashList;
+
+        clearInventory();
+        mInventoryHeight = chain.blockHeight();
 
         chain.getReverseBlockHashes(hashList, 32);
         if(hashList.size() == 0)

@@ -40,6 +40,8 @@ namespace BitCoin
         bool waitingForBlock() { return !mBlockRequested.isEmpty() && getTime() - mLastBlockRequest < 300; }
 
         uint64_t lastReceiveTime() { return mLastReceiveTime; }
+        
+        const IPAddress &address() { return mAddress; } 
 
     private:
 
@@ -67,7 +69,7 @@ namespace BitCoin
         void addBlockHash(Hash &pHash);
         void removeBlockHash(Hash &pHash);
         std::list<Hash> mBlockHashes[0xffff];
-        unsigned int mBlockHashCount;
+        unsigned int mBlockHashCount, mInventoryHeight;
         uint64_t mLastBlockHashRequest;
 
         Hash mHeaderRequested;

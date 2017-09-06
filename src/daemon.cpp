@@ -52,7 +52,6 @@ namespace BitCoin
         mLastInfoSave = 0;
         mLastUnspentSave = 0;
         mLastClean = 0;
-        mMaxConcurrentDownloads = 32;
         mNodeCount = 0;
     }
 
@@ -282,7 +281,7 @@ namespace BitCoin
         std::vector<Node *> toDelete;
         mNodeMutex.lock();
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
-            if(time - (*node)->lastReceiveTime() > 1800) // 30 minutes
+            if(!(*node)->isOpen() || time - (*node)->lastReceiveTime() > 1800) // 30 minutes
             {
                 toDelete.push_back(*node);
                 node = mNodes.erase(node);
@@ -304,7 +303,7 @@ namespace BitCoin
         {
             if((*node)->hasInventory())
                 hasInventory++;
-            else if((*node)->shouldRequestInventory())
+            if((*node)->shouldRequestInventory())
                 (*node)->requestInventory();
         }
 
@@ -441,15 +440,13 @@ namespace BitCoin
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Nodes thread started");
 
         Daemon &daemon = Daemon::instance();
-        std::vector<Node *> nodes, liveNodes, deadNodes;
+        std::vector<Node *> nodes;
 
         while(!daemon.mStopping)
         {
             daemon.mNodeMutex.lock();
             nodes = daemon.mNodes;
             daemon.mNodeMutex.unlock();
-            liveNodes.clear();
-            deadNodes.clear();
 
             for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
             {
@@ -457,26 +454,12 @@ namespace BitCoin
                     break;
 
                 if((*node)->isOpen())
-                {
-                    liveNodes.push_back(*node); // Add nodes to keep
                     (*node)->process();
-                }
-                else
-                    deadNodes.push_back(*node);
             }
 
             if(daemon.mStopping)
                 break;
 
-            // Clean nodes
-            daemon.mNodeMutex.lock();
-            daemon.mNodes = liveNodes; // Copy live nodes back to main list
-            daemon.mNodeMutex.unlock();
-            for(unsigned int i=0;i<deadNodes.size();i++)
-                delete deadNodes[i];
-
-            if(daemon.mStopping)
-                break;
             ArcMist::Thread::sleep(200); // 5hz
         }
 
@@ -553,12 +536,25 @@ namespace BitCoin
         Info &info = Info::instance();
         std::vector<Peer *> peers;
         unsigned int count = 0;
+        bool found;
 
         info.randomizePeers(peers);
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers", peers.size());
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
         {
-            //TODO Ensure only one connection is made to an address. Check that this peer doesn't already have a node.
+            // Skip nodes already connected
+            found = false;
+            mNodeMutex.lock();
+            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+                if((*node)->address() == (*peer)->address)
+                {
+                    found = true;
+                    break;
+                }
+            mNodeMutex.unlock();
+            if(found)
+                continue;
+
             if(addNode((*peer)->address))
                 count++;
 

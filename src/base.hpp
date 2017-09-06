@@ -67,12 +67,19 @@ namespace BitCoin
 
         bool matches(IPAddress &pOther) { return std::memcmp(ip, pOther.ip, 16) == 0 && port == pOther.port; }
         void updateTime() { time = getTime(); }
+
+        bool operator == (const IPAddress &pRight) const
+        {
+            return std::memcmp(ip, pRight.ip, 16);
+        }
+
         void operator = (ArcMist::Connection &pConnection)
         {
             if(pConnection.ipv6Bytes())
                 std::memcpy(ip, pConnection.ipv6Bytes(), 16);
             port = pConnection.port();
         }
+
         bool isValid()
         {
             bool zeroes = true;

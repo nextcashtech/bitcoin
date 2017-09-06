@@ -47,7 +47,7 @@ namespace BitCoin
         ip = 0;
         port = 8333;
         fullMode = false;
-        maxConnections = 10;
+        maxConnections = 32;
         minFee = 1; // satoshis per KiB
         mPeersModified = false;
 

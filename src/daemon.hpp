@@ -58,7 +58,6 @@ namespace BitCoin
         uint64_t mLastUnspentSave;
         uint64_t mLastClean;
         bool mRunning, mStopping, mStopRequested;
-        unsigned int mMaxConcurrentDownloads;
         unsigned int mNodeCount;
 
         void (*previousSigTermChildHandler)(int);
