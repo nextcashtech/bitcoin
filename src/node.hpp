@@ -40,7 +40,7 @@ namespace BitCoin
         bool waitingForBlock() { return !mBlockRequested.isEmpty() && getTime() - mLastBlockRequest < 300; }
 
         uint64_t lastReceiveTime() { return mLastReceiveTime; }
-        
+
         const IPAddress &address() { return mAddress; } 
 
     private:
