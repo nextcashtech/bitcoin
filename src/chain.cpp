@@ -158,8 +158,8 @@ namespace BitCoin
                 mBlockFileMutex.unlock();
                 return;
             }
-            ArcMist::Thread::sleep(100);
             mBlockFileMutex.unlock();
+            ArcMist::Thread::sleep(100);
         }
     }
 
