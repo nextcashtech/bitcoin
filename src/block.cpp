@@ -631,7 +631,7 @@ namespace BitCoin
     }
 
     // If pStartingHash is empty then start with first hash in file
-    bool BlockFile::readBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount)
+    bool BlockFile::readBlockHashes(HashList &pHashes)
     {
         pHashes.clear();
         if(!openFile())
@@ -641,9 +641,8 @@ namespace BitCoin
         }
 
         Hash hash(32);
-        bool started = pStartingHash.isEmpty();
         mInputFile->setReadOffset(HASHES_OFFSET);
-        for(unsigned int i=0;i<MAX_BLOCKS && pHashes.size()<pCount;i++)
+        for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
             if(!hash.read(mInputFile))
                 return false;
@@ -651,11 +650,7 @@ namespace BitCoin
             if(mInputFile->readUnsignedInt() == 0)
                 return true;
 
-            if(started || hash == pStartingHash)
-            {
-                started = true;
-                pHashes.push_back(new Hash(hash));
-            }
+            pHashes.push_back(new Hash(hash));
         }
 
         return true;

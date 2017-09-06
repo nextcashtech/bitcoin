@@ -487,11 +487,8 @@ namespace BitCoin
 
                 // Find appropriate hashes
                 for(std::vector<Hash>::iterator i=getBlocksData->blockHeaderHashes.begin();i!=getBlocksData->blockHeaderHashes.end();++i)
-                    if(chain.blockInChain(*i))
-                    {
-                        chain.getBlockHashes(hashes, *i, 500);
+                    if(chain.getBlockHashes(hashes, *i, 500))
                         break;
-                    }
 
                 if(hashes.size() == 0)
                 {

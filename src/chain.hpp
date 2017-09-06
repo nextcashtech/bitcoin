@@ -123,7 +123,7 @@ namespace BitCoin
         bool addPendingBlock(Block *pBlock);
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
-        void getBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount);
+        bool getBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount);
         // Retrieve list of block hashes starting at top, going down and skipping around 100 between each.
         void getReverseBlockHashes(HashList &pHashes, unsigned int pCount);
 

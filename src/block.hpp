@@ -120,7 +120,7 @@ namespace BitCoin
         bool readBlock(unsigned int pOffset, Block &pBlock, bool pIncludeTransactions);
 
         // Read list of block hashes from this file. If pStartingHash is empty then start with first block
-        bool readBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount);
+        bool readBlockHashes(HashList &pHashes);
         bool readVersions(std::list<uint32_t> &pVersions);
 
         // Read list of block headers from this file. If pStartingHash is empty then start with first block

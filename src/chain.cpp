@@ -453,14 +453,23 @@ namespace BitCoin
         }
     }
 
-    void Chain::getBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount)
+    bool Chain::getBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount)
     {
-        Hash hash = pStartingHash;
         BlockFile *blockFile;
-        unsigned int fileID = blockFileID(hash);
+        unsigned int fileID;
+        HashList fileList;
+        bool started = false;
+
+        if(pStartingHash.isEmpty())
+        {
+            started = true;
+            fileID = 0;
+        }
+        else
+            fileID = blockFileID(pStartingHash);
 
         if(fileID == 0xffffffff)
-            return;
+            return false;
 
         pHashes.clear();
 
@@ -469,15 +478,30 @@ namespace BitCoin
             lockBlockFile(fileID);
             blockFile = new BlockFile(fileID, blockFileName(fileID));
 
-            if(!blockFile->readBlockHashes(pHashes, hash, pCount))
+            if(!blockFile->readBlockHashes(fileList))
                 break;
 
             delete blockFile;
             unlockBlockFile(fileID);
+            
+            for(HashList::iterator i=fileList.begin();i!=fileList.end();)
+                if(started || **i == pStartingHash)
+                {
+                    started = true;
+                    pHashes.push_back(*i);
+                    i = fileList.erase(i);
+                    if(pHashes.size() >= pCount)
+                        break;
+                }
+                else
+                    ++i;
 
-            hash.clear();
+            if(pHashes.size() >= pCount)
+                break;
             fileID++;
         }
+
+        return pHashes.size() > 0;
     }
 
     void Chain::getReverseBlockHashes(HashList &pHashes, unsigned int pCount)
@@ -654,8 +678,7 @@ namespace BitCoin
                     break;
                 }
 
-                if(!blockFile->readBlockHashes(hashes, emptyHash, BlockFile::MAX_BLOCKS) ||
-                  !blockFile->readVersions(blockFileVersions))
+                if(!blockFile->readBlockHashes(hashes) || !blockFile->readVersions(blockFileVersions))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read hashes from block file %s", filePathName.text());
                     delete blockFile;
@@ -1077,6 +1100,7 @@ namespace BitCoin
             // success = false;
         // }
         
+        // Info::instance().setPath("/var/bitcoin/testnet");
         // Test of get headers and printing
         // Chain &chain = Chain::instance();
         // BlockList headers;
@@ -1091,6 +1115,13 @@ namespace BitCoin
         // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Retrieved %d headers", headers.size());
         // for(BlockList::iterator i=headers.begin();i!=headers.end();++i)
             // (*i)->print();
+
+        // HashList list;
+        // chain.getBlockHashes(list, startingHash, 500);
+        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Retreived %d hashes", list.size());
+
+        // for(HashList::iterator i=list.begin();i!=list.end();++i)
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Hash : %s", (*i)->hex().text());
 
         return success;
     }
