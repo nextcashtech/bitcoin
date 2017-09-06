@@ -27,7 +27,7 @@ void printHelp(const char *pPath);
 int main(int pArgumentCount, char **pArguments)
 {
     bool nextIsPath = false, nextIsSeed = false;
-    ArcMist::String path = "/home/curtis/Development/bcc_test/", seed;
+    ArcMist::String path, seed;
     bool start = false;
     bool noDaemon = false;
     bool stop = false;
@@ -70,6 +70,8 @@ int main(int pArgumentCount, char **pArguments)
             nextIsPath = true;
         else if(std::strcmp(pArguments[i], "--mainnet") == 0)
             mainnet = true;
+        else if(std::strcmp(pArguments[i], "--testnet") == 0)
+            mainnet = false;
         else if(std::strcmp(pArguments[i], "--seed") == 0)
             nextIsSeed = true;
         else if(std::strcmp(pArguments[i], "validate") == 0)
@@ -94,6 +96,20 @@ int main(int pArgumentCount, char **pArguments)
             return 0;
         }
 
+    if(mainnet)
+        BitCoin::setNetwork(BitCoin::MAINNET);
+    else
+        BitCoin::setNetwork(BitCoin::TESTNET);
+
+    if(!path)
+    {
+        if(mainnet)
+            path = "/var/bitcoin/mainnet/";
+        else
+            path = "/var/bitcoin/testnet/";
+    }
+
+    ArcMist::createDirectory(path);
     BitCoin::Info::setPath(path);
 
     if(printBlock)
@@ -153,8 +169,12 @@ int main(int pArgumentCount, char **pArguments)
             return 1;
     }
 
-    ArcMist::String logFilePath = BitCoin::Info::path() + "daemon.log";
-    ArcMist::String pidFilePath = BitCoin::Info::path() + "pid";
+    ArcMist::String logFilePath = BitCoin::Info::path();
+    logFilePath.pathAppend("logs");
+    ArcMist::createDirectory(logFilePath);
+    logFilePath.pathAppend("daemon.log");
+    ArcMist::String pidFilePath = BitCoin::Info::path();
+    pidFilePath.pathAppend("pid");
 
     if(stop)
     {
@@ -223,10 +243,6 @@ int main(int pArgumentCount, char **pArguments)
             return 1;
     }
 
-    if(mainnet)
-        BitCoin::setNetwork(BitCoin::MAINNET);
-    else
-        BitCoin::setNetwork(BitCoin::TESTNET);
     BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
 
     // Set up daemon to log to a file
