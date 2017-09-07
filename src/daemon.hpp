@@ -67,13 +67,11 @@ namespace BitCoin
         void (*previousSigIntHandler)(int);
         void (*previousSigPipeHandler)(int);
 
-        void getRandomizedNodeList(std::vector<Node *> &pList);
-
         Node *nodeWithInventory();
         Node *nodeWithBlock(const Hash &pHash);
-        unsigned int nodesWaitingForHeaders();
-        void requestInventories();
-        void requestBlocks();
+        void processRequests();
+
+        void printStats();
 
         // Query peers from a seed
         // Returns number of peers actually connected

@@ -242,7 +242,13 @@ namespace BitCoin
 
     bool Node::requestInventory()
     {
+        if(getTime() - mLastBlockHashRequest < 120) // Recently requested
+            return false;
+
         Chain &chain = Chain::instance();
+        if(mBlockHashCount != 0 && !chain.isInSync() && chain.blockHeight() < mInventoryHeight + 200)
+            return false;
+
         HashList hashList;
 
         clearInventory();
@@ -270,9 +276,12 @@ namespace BitCoin
         if(!pStartingHash.isEmpty())
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
               "[%d] Requesting block headers starting from %s", mID, pStartingHash.hex().text());
-        else
+        else if(hasBlock(pStartingHash))
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
               "[%d] Requesting block headers starting from genesis block", mID);
+        else
+            return false;
+
         Message::GetHeadersData getHeadersData;
         if(!pStartingHash.isEmpty())
             getHeadersData.blockHeaderHashes.push_back(pStartingHash);
@@ -287,6 +296,9 @@ namespace BitCoin
 
     bool Node::requestBlock(const Hash &pHash)
     {
+        if(waitingForBlock() || !hasBlock(pHash))
+            return false;
+
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requesting block : %s", mID, pHash.hex().text());
         Message::GetDataData getDataData;
         getDataData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::BLOCK, pHash));
@@ -315,7 +327,7 @@ namespace BitCoin
         Chain &chain = Chain::instance();
         Info &info = Info::instance();
         Message::VersionData versionMessage(mConnection.ipv6Bytes(), mConnection.port(), info.ip, info.port,
-          info.fullMode, chain.blockHeight(), chain.chainIsCurrent());
+          info.fullMode, chain.blockHeight(), chain.isInSync());
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
         return success;

@@ -101,8 +101,8 @@ namespace BitCoin
         const Hash &lastBlockHash() const { return mLastBlockHash; }
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
 
-        // All but most recent blocks are downloaded
-        bool chainIsCurrent() { return false; }
+        // Chain is up to date with most chains
+        bool isInSync() { return false; }
 
         // Check if a block is already in the chain
         bool blockInChain(Hash &pHash) { return mBlockLookup[pHash.lookup()].contains(pHash); }
