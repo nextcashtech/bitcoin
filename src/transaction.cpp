@@ -47,6 +47,7 @@ namespace BitCoin
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Hash      : %s", hash.hex().text());
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Version   : %d", version);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Lock Time : %08x", lockTime);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Fee       : %f", bitcoins(mFee));
 
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "%d Inputs", inputs.size());
         unsigned int index = 1;
@@ -348,7 +349,7 @@ namespace BitCoin
 
     uint64_t Transaction::feeRate()
     {
-        unsigned int currentSize = size;
+        unsigned int currentSize = mSize;
         if(currentSize == 0)
             currentSize = calculatedSize();
         if(mFee < currentSize)
@@ -430,7 +431,7 @@ namespace BitCoin
     void Transaction::write(ArcMist::OutputStream *pStream)
     {
         unsigned int startOffset = pStream->writeOffset();
-        size = 0;
+        mSize = 0;
 
         // Version
         pStream->writeUnsignedInt(version);
@@ -452,7 +453,7 @@ namespace BitCoin
         // Lock Time
         pStream->writeUnsignedInt(lockTime);
 
-        size = pStream->writeOffset() - startOffset;
+        mSize = pStream->writeOffset() - startOffset;
     }
 
     bool Input::writeSignatureData(ArcMist::OutputStream *pStream, ArcMist::Buffer *pSubScript, bool pZeroSequence)
@@ -626,7 +627,7 @@ namespace BitCoin
     bool Transaction::read(ArcMist::InputStream *pStream, bool pCalculateHash)
     {
         unsigned int startOffset = pStream->readOffset();
-        size = 0;
+        mSize = 0;
 
         // Create hash
         ArcMist::Digest *digest = NULL;
@@ -717,7 +718,7 @@ namespace BitCoin
         if(digest != NULL)
             delete digest;
 
-        size = pStream->readOffset() - startOffset;
+        mSize = pStream->readOffset() - startOffset;
         return true;
     }
 

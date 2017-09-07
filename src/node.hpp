@@ -68,7 +68,7 @@ namespace BitCoin
         ArcMist::Mutex mBlockHashMutex;
         void addBlockHash(Hash &pHash);
         void removeBlockHash(Hash &pHash);
-        std::list<Hash> mBlockHashes[0xffff];
+        std::list<Hash *> mBlockHashes[0x10000];
         unsigned int mBlockHashCount, mInventoryHeight;
         uint64_t mLastBlockHashRequest;
 

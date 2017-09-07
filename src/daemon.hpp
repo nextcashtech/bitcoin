@@ -57,8 +57,10 @@ namespace BitCoin
         uint64_t mLastInfoSave;
         uint64_t mLastUnspentSave;
         uint64_t mLastClean;
+        uint64_t mStatReport;
         bool mRunning, mStopping, mStopRequested;
         unsigned int mNodeCount;
+        unsigned int mMaxPendingSize; // Maximum pending memory usage
 
         void (*previousSigTermChildHandler)(int);
         void (*previousSigTermHandler)(int);

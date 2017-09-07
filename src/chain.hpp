@@ -111,10 +111,12 @@ namespace BitCoin
 
         // Number of pending headers/blocks
         unsigned int pendingCount();
+        // Bytes used by pending blocks
+        unsigned int pendingSize();
         // Add block header to queue to be requested and downloaded
         bool addPendingHeader(Block *pBlock);
         // Returns the hash of the next block needed
-        Hash nextBlockNeeded();
+        Hash nextBlockNeeded(bool pReduceOnly);
         // Mark a block as requested
         void markBlockRequested(const Hash &pHash);
         void markBlockNotRequested(const Hash &pHash);
@@ -153,12 +155,13 @@ namespace BitCoin
         Chain();
         ~Chain();
 
-        BlockSet mBlockLookup[0xffff];
+        BlockSet mBlockLookup[0x10000];
 
         // Block headers for blocks not yet on chain
         ArcMist::Mutex mPendingMutex;
         std::list<PendingData *> mPending;
         Hash mLastPendingHash;
+        unsigned int mPendingSize;
 
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;
@@ -179,7 +182,7 @@ namespace BitCoin
         std::vector<unsigned int> mLockedBlockFileIDs;
         unsigned int mLastFileID;
 
-        // Last 1000 block's versions
+        // Last 2016 block's versions
         std::list<uint32_t> mBlockVersions;
         void addBlockVersion(uint32_t pVersion)
         {

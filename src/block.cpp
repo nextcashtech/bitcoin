@@ -28,7 +28,7 @@ namespace BitCoin
     void Block::write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount)
     {
         unsigned int startOffset = pStream->writeOffset();
-        size = 0;
+        mSize = 0;
 
         // Version
         pStream->writeUnsignedInt(version);
@@ -50,7 +50,7 @@ namespace BitCoin
 
         if(!pIncludeTransactionCount)
         {
-            size = pStream->writeOffset() - startOffset;
+            mSize = pStream->writeOffset() - startOffset;
             return;
         }
 
@@ -60,7 +60,7 @@ namespace BitCoin
         else
         {
             writeCompactInteger(pStream, 0);
-            size = pStream->writeOffset() - startOffset;
+            mSize = pStream->writeOffset() - startOffset;
             return;
         }
 
@@ -68,13 +68,13 @@ namespace BitCoin
         for(uint64_t i=0;i<transactions.size();i++)
             transactions[i]->write(pStream);
 
-        size = pStream->writeOffset() - startOffset;
+        mSize = pStream->writeOffset() - startOffset;
     }
 
     bool Block::read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pCalculateHash)
     {
         unsigned int startOffset = pStream->readOffset();
-        size = 0;
+        mSize = 0;
 
         // Create hash
         ArcMist::Digest *digest = NULL;
@@ -138,7 +138,7 @@ namespace BitCoin
 
         if(!pIncludeTransactions)
         {
-            size = pStream->readOffset() - startOffset;
+            mSize = pStream->readOffset() - startOffset;
             return true;
         }
 
@@ -165,7 +165,7 @@ namespace BitCoin
                 *transaction = NULL;
         }
 
-        size = pStream->readOffset() - startOffset;
+        mSize = pStream->readOffset() - startOffset;
         return !fail;
     }
 
@@ -184,6 +184,7 @@ namespace BitCoin
                 delete *transaction;
         transactions.clear();
         mFees = 0;
+        mSize = 0;
     }
 
     void Block::print(ArcMist::Log::Level pLevel)
@@ -195,6 +196,7 @@ namespace BitCoin
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Time          : %d", time);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Bits          : %08x", targetBits);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Nonce         : %08x", nonce);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Total Fees    : %f", bitcoins(mFees));
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "%d Transactions", transactionCount);
 
         unsigned int index = 0;
@@ -396,9 +398,9 @@ namespace BitCoin
         }
 
         // Check that coinbase output amount - fees is correct for block height
-        if(-transactions.front()->fee() - mFees != coinBaseAmount(pBlockHeight))
+        if(-transactions.front()->fee() - mFees > coinBaseAmount(pBlockHeight))
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Coinbase outputs are not the correct amount");
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Coinbase outputs are too high");
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Coinbase %.08f", bitcoins(-transactions.front()->fee()));
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Fees     %.08f", bitcoins(mFees));
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Block %08d Coinbase amount should be %.08f", pBlockHeight, bitcoins(coinBaseAmount(pBlockHeight)));

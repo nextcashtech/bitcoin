@@ -125,24 +125,6 @@ namespace BitCoin
                 return UNKNOWN;
         }
 
-        void InventoryHash::write(ArcMist::OutputStream *pStream) const
-        {
-            // Type
-            pStream->writeUnsignedInt(type);
-
-            // Hash
-            hash.write(pStream);
-        }
-
-        bool InventoryHash::read(ArcMist::InputStream *pStream)
-        {
-            // Type
-            type = static_cast<InventoryHash::Type>(pStream->readUnsignedInt());
-
-            // Hash
-            return hash.read(pStream);
-        }
-
         void writeFull(Data *pData, ArcMist::Buffer *pOutput)
         {
             pOutput->setOutputEndian(ArcMist::Endian::LITTLE);
@@ -412,6 +394,67 @@ namespace BitCoin
 
             pInput->flush();
             return result;
+        }
+
+        void InventoryHash::write(ArcMist::OutputStream *pStream) const
+        {
+            // Type
+            pStream->writeUnsignedInt(type);
+
+            // Hash
+            hash.write(pStream);
+        }
+
+        bool InventoryHash::read(ArcMist::InputStream *pStream)
+        {
+            // Type
+            type = static_cast<InventoryHash::Type>(pStream->readUnsignedInt());
+
+            // Hash
+            return hash.read(pStream);
+        }
+
+        Inventory::~Inventory()
+        {
+            for(iterator item=begin();item!=end();++item)
+                if(*item != NULL)
+                    delete *item;
+        }
+
+        void Inventory::write(ArcMist::OutputStream *pStream) const
+        {
+            // Inventory Hash Count
+            writeCompactInteger(pStream, size());
+
+            // Inventory
+            for(const_iterator item=begin();item!=end();++item)
+                (*item)->write(pStream);
+        }
+
+        bool Inventory::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        {
+            // Inventory Hash Count
+            unsigned int startReadOffset = pStream->readOffset();
+            uint64_t count = readCompactInteger(pStream);
+            if(pSize - pStream->readOffset() - startReadOffset < count)
+                return false;
+
+            // Inventory
+            resize(count);
+            unsigned int readCount = 0;
+            for(iterator item=begin();item!=end();++item)
+            {
+                *item = new InventoryHash();
+                readCount++;
+                if(!(*item)->read(pStream))
+                {
+                    delete *item;
+                    resize(readCount-1);
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         VersionData::VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort,
@@ -764,37 +807,6 @@ namespace BitCoin
             return true;
         }
 
-        void GetDataData::write(ArcMist::OutputStream *pStream)
-        {
-            // Inventory Hash Count
-            writeCompactInteger(pStream, inventory.size());
-
-            // Inventory
-            for(uint64_t i=0;i<inventory.size();i++)
-                inventory[i].write(pStream);
-        }
-
-        bool GetDataData::read(ArcMist::InputStream *pStream, unsigned int pSize)
-        {
-            if(pSize < 1)
-                return false;
-
-            unsigned int startReadOffset = pStream->readOffset();
-
-            // Inventory Hash Count
-            uint64_t count = readCompactInteger(pStream);
-            if(pSize - pStream->readOffset() - startReadOffset < count)
-                return false;
-
-            // Inventory
-            inventory.resize(count);
-            for(uint64_t i=0;i<count;i++)
-                if(!inventory[i].read(pStream))
-                    return false;
-
-            return true;
-        }
-
         void GetHeadersData::write(ArcMist::OutputStream *pStream)
         {
             // Version
@@ -878,37 +890,6 @@ namespace BitCoin
             return true;
         }
 
-        void InventoryData::write(ArcMist::OutputStream *pStream)
-        {
-            // Inventory Hash Count
-            writeCompactInteger(pStream, inventory.size());
-
-            // Inventory
-            for(uint64_t i=0;i<inventory.size();i++)
-                inventory[i].write(pStream);
-        }
-
-        bool InventoryData::read(ArcMist::InputStream *pStream, unsigned int pSize)
-        {
-            if(pSize < 1)
-                return false;
-
-            unsigned int startReadOffset = pStream->readOffset();
-
-            // Inventory Hash Count
-            uint64_t count = readCompactInteger(pStream);
-            if(pSize - pStream->readOffset() - startReadOffset < count)
-                return false;
-
-            // Inventory
-            inventory.resize(count);
-            for(uint64_t i=0;i<count;i++)
-                if(!inventory[i].read(pStream))
-                    return false;
-
-            return true;
-        }
-
         void MerkleBlockData::write(ArcMist::OutputStream *pStream)
         {
             // Block Header
@@ -965,37 +946,6 @@ namespace BitCoin
 
             // Flags
             pStream->readStream(&flags, count);
-
-            return true;
-        }
-
-        void NotFoundData::write(ArcMist::OutputStream *pStream)
-        {
-            // Inventory Hash Count
-            writeCompactInteger(pStream, inventory.size());
-
-            // Inventory
-            for(uint64_t i=0;i<inventory.size();i++)
-                inventory[i].write(pStream);
-        }
-
-        bool NotFoundData::read(ArcMist::InputStream *pStream, unsigned int pSize)
-        {
-            if(pSize < 1)
-                return false;
-
-            unsigned int startReadOffset = pStream->readOffset();
-
-            // Inventory Hash Count
-            uint64_t count = readCompactInteger(pStream);
-            if(pSize - pStream->readOffset() - startReadOffset < count)
-                return false;
-
-            // Inventory
-            inventory.resize(count);
-            for(uint64_t i=0;i<count;i++)
-                if(!inventory[i].read(pStream))
-                    return false;
 
             return true;
         }
@@ -1527,8 +1477,10 @@ namespace BitCoin
                 if(getDataData.inventory.size() != receivedGetDataData->inventory.size())
                     getDataDataMatches = false;
 
-                for(unsigned int i=0;i<getDataData.inventory.size();i++)
-                    if(getDataData.inventory[i] != receivedGetDataData->inventory[i])
+                Inventory::iterator item = getDataData.inventory.begin();
+                Inventory::iterator receivedItem = receivedGetDataData->inventory.begin();
+                for(;item!=getDataData.inventory.end() && receivedItem!=receivedGetDataData->inventory.end();++item,++receivedItem)
+                    if(**item != **receivedItem)
                         getDataDataMatches = false;
 
                 if(getDataDataMatches)
@@ -1653,8 +1605,10 @@ namespace BitCoin
                 if(inventoryData.inventory.size() != receivedInventoryData->inventory.size())
                     inventoryDataMatches = false;
 
-                for(unsigned int i=0;i<inventoryData.inventory.size();i++)
-                    if(inventoryData.inventory[i] != receivedInventoryData->inventory[i])
+                Inventory::iterator item = inventoryData.inventory.begin();
+                Inventory::iterator receivedItem = receivedInventoryData->inventory.begin();
+                for(;item!=inventoryData.inventory.end() && receivedItem!=receivedInventoryData->inventory.end();++item,++receivedItem)
+                    if(**item != **receivedItem)
                         inventoryDataMatches = false;
 
                 if(inventoryDataMatches)

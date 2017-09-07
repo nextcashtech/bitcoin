@@ -53,6 +53,8 @@ namespace BitCoin
         mLastUnspentSave = 0;
         mLastClean = 0;
         mNodeCount = 0;
+        mStatReport = 0;
+        mMaxPendingSize = 104857600; // 100 MiB
     }
 
     Daemon::~Daemon()
@@ -158,6 +160,7 @@ namespace BitCoin
         }
 
         mLastClean = getTime();
+        mStatReport = getTime();
         mManagerThread = new ArcMist::Thread("Manager", processManager);
         if(mManagerThread == NULL)
         {
@@ -308,13 +311,22 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "%d/%d Nodes have block inventory", hasInventory, mNodeCount);
+          "%d/%d nodes have block inventory", hasInventory, mNodeCount);
     }
 
     void Daemon::requestBlocks()
     {
         Chain &chain = Chain::instance();
-        Hash nextBlockHash = chain.nextBlockNeeded();
+        bool reduceOnly = chain.pendingSize() > mMaxPendingSize;
+
+        if(reduceOnly)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Max pending block memory usage : %d", chain.pendingSize());
+            return;
+        }
+
+        Hash nextBlockHash = chain.nextBlockNeeded(reduceOnly);
         if(nextBlockHash.isEmpty())
             return;
 
@@ -329,14 +341,14 @@ namespace BitCoin
             else if((*node)->hasBlock(nextBlockHash) && (*node)->requestBlock(nextBlockHash))
             {
                 downloading++;
-                nextBlockHash = chain.nextBlockNeeded();
+                nextBlockHash = chain.nextBlockNeeded(reduceOnly);
                 if(nextBlockHash.isEmpty())
                     return;
             }
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "%d/%d Nodes are downloading blocks", downloading, mNodeCount);
+          "%d/%d nodes are downloading blocks", downloading, mNodeCount);
     }
 
     void Daemon::processManager()
@@ -363,14 +375,14 @@ namespace BitCoin
                 if(pendingCount < 100)
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                      "%d Pending block/headers. Attempting to get more.", pendingCount);
+                      "%d pending block/headers. Attempting to get more.", pendingCount);
 
                     // Check for header request
                     nodesWaitingForHeaders = daemon.nodesWaitingForHeaders();
                     if(nodesWaitingForHeaders < 4)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                          "%d/%d Nodes waiting for headers", nodesWaitingForHeaders, daemon.mNodeCount);
+                          "%d/%d nodes waiting for headers", nodesWaitingForHeaders, daemon.mNodeCount);
 
                         if(chain.blockHeight() <= 1)
                         {
@@ -398,6 +410,16 @@ namespace BitCoin
                 break;
 
             chain.process();
+
+            if(daemon.mStopping)
+                break;
+
+            if(time - daemon.mStatReport > 30)
+            {
+                daemon.mStatReport = time;
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Pending block memory usage : %d", chain.pendingSize());
+            }
 
             if(daemon.mStopping)
                 break;

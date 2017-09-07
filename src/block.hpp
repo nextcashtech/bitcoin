@@ -14,7 +14,7 @@ namespace BitCoin
     {
     public:
 
-        Block() : previousHash(32), merkleHash(32) { version = 4; transactionCount = 0; mFees = 0; size = 0; }
+        Block() : previousHash(32), merkleHash(32) { version = 4; transactionCount = 0; mFees = 0; mSize = 0; }
         ~Block();
 
         // Verify hash is lower than target difficulty specified by targetBits
@@ -31,7 +31,6 @@ namespace BitCoin
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
 
         // Hash
-        unsigned int size;
         Hash hash;
 
         // Header
@@ -48,6 +47,7 @@ namespace BitCoin
 
         // Total of fees collected from transactions (set during process), not including coin base
         uint64_t fees() const { return mFees; }
+        unsigned int size() const { return mSize; }
 
         void calculateHash();
         void calculateMerkleHash(Hash &pMerkleHash);
@@ -62,6 +62,7 @@ namespace BitCoin
     private:
 
         uint64_t mFees;
+        unsigned int mSize;
 
         Block(Block &pCopy);
         Block &operator = (Block &pRight);

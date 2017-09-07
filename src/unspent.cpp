@@ -194,7 +194,7 @@ namespace BitCoin
         ArcMist::createDirectory(filePath.text());
 
         mMutex.lock();
-        for(unsigned int i=0;i<0xffff;i++)
+        for(unsigned int i=0;i<0x10000;i++)
         {
             fileName.clear();
             fileID = ArcMist::Endian::convert(i, ArcMist::Endian::LITTLE);
@@ -264,7 +264,7 @@ namespace BitCoin
         ArcMist::createDirectory(filePath.text());
 
         mMutex.lock();
-        for(unsigned int i=0;i<0xffff;i++)
+        for(unsigned int i=0;i<0x10000;i++)
         {
             fileName.clear();
             fileID = ArcMist::Endian::convert(i, ArcMist::Endian::LITTLE);
@@ -294,7 +294,7 @@ namespace BitCoin
     void UnspentPool::reset()
     {
         mMutex.lock();
-        for(unsigned int i=0;i<0xffff;i++)
+        for(unsigned int i=0;i<0x10000;i++)
             mSets[i].clear();
         mMutex.unlock();
     }

@@ -42,11 +42,8 @@ namespace BitCoin
             enum Type { UNKNOWN=0x00, TRANSACTION=0x01, BLOCK=0x02, FILTERED_BLOCK=0x03 };
 
             InventoryHash() : hash(32) { type = UNKNOWN; }
-            InventoryHash(Type pType, const Hash &pHash)
-            {
-                type = pType;
-                hash = pHash;
-            }
+            InventoryHash(Type pType, const Hash &pHash) { type = pType; hash = pHash; }
+            InventoryHash(InventoryHash &pCopy) : hash(pCopy.hash) { type = pCopy.type; }
 
             bool operator == (const InventoryHash &pRight) { return type == pRight.type && hash == pRight.hash; }
             bool operator != (const InventoryHash &pRight) { return type != pRight.type || hash != pRight.hash; }
@@ -56,7 +53,24 @@ namespace BitCoin
 
             Type type;
             Hash hash;
+            
+        private:
+            InventoryHash &operator = (InventoryHash &pRight);
+        };
+        
+        class Inventory : public std::vector<InventoryHash *>
+        {
+        public:
 
+            Inventory() {}
+            ~Inventory();
+
+            void write(ArcMist::OutputStream *pStream) const;
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+
+        private:
+            Inventory(Inventory &pCopy);
+            Inventory &operator = (Inventory &pRight);
         };
 
         class Data;
@@ -270,10 +284,10 @@ namespace BitCoin
 
             GetDataData() : Data(GET_DATA) { }
 
-            void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            void write(ArcMist::OutputStream *pStream) { inventory.write(pStream); }
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize) { return inventory.read(pStream, pSize); }
 
-            std::vector<InventoryHash> inventory;
+            Inventory inventory;
 
         };
 
@@ -324,10 +338,10 @@ namespace BitCoin
 
             InventoryData() : Data(INVENTORY) { }
 
-            void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            void write(ArcMist::OutputStream *pStream) { inventory.write(pStream); }
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize) { return inventory.read(pStream, pSize); }
 
-            std::vector<InventoryHash> inventory;
+            Inventory inventory;
 
         };
 
@@ -367,10 +381,10 @@ namespace BitCoin
 
             NotFoundData() : Data(NOT_FOUND) { }
 
-            void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            void write(ArcMist::OutputStream *pStream) { inventory.write(pStream); }
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize) { return inventory.read(pStream, pSize); }
 
-            std::vector<InventoryHash> inventory;
+            Inventory inventory;
 
         };
 

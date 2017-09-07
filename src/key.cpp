@@ -261,14 +261,6 @@ namespace BitCoin
         if(secp256k1_ecdsa_signature_parse_der(mContext->context, (secp256k1_ecdsa_signature*)mData, input, pLength))
             return true;
 
-        // Try with one less
-        if(secp256k1_ecdsa_signature_parse_der(mContext->context, (secp256k1_ecdsa_signature*)mData, input, pLength-1))
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
-              "Signature parsed with one less byte than specified. %d - 1", pLength);
-            return true;
-        }
-
         ArcMist::String hex;
         hex.writeHex(input, pLength);
         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,

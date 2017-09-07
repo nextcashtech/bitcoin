@@ -142,7 +142,7 @@ namespace BitCoin
         }
 
         ArcMist::Mutex mMutex;
-        UnspentSet mSets[0xffff];
+        UnspentSet mSets[0x10000];
         std::list<Unspent *> mPendingAdd, mPendingSpend;
         bool mModified;
         bool mValid;

@@ -36,6 +36,7 @@ namespace BitCoin
         mNextBlockHeight = 0;
         mLastFileID = 0;
         mBlockVersionFlags = 0x00000000;
+        mPendingSize = 0;
     }
 
     Chain::~Chain()
@@ -182,6 +183,14 @@ namespace BitCoin
         mPendingMutex.unlock();
         return result;
     }
+    
+    unsigned int Chain::pendingSize()
+    {
+        mPendingMutex.lock();
+        unsigned int result = mPendingSize;
+        mPendingMutex.unlock();
+        return result;
+    }
 
     // Add block header to queue to be requested and downloaded
     bool Chain::addPendingHeader(Block *pBlock)
@@ -221,6 +230,7 @@ namespace BitCoin
         // Add to pending list
         mPending.push_back(new PendingData(pBlock));
         mLastPendingHash = pBlock->hash;
+        mPendingSize += pBlock->size();
 
         //TODO if(!result) check if this header is from an alternate chain.
         //  Check if previous hash is in the chain, but not at the top and determine if a fork is needed
@@ -257,18 +267,40 @@ namespace BitCoin
         mPendingMutex.unlock();
     }
 
-    Hash Chain::nextBlockNeeded()
+    Hash Chain::nextBlockNeeded(bool pReduceOnly)
     {
         Hash result;
         uint64_t time = getTime();
+        bool fullFoundAfter = false;
         mPendingMutex.lock();
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
-            if(time - (*pending)->requestedTime > 120)
+        {
+            if((*pending)->isFull())
             {
-                result = (*pending)->block->hash;
-                break;
+                if(!result.isEmpty())
+                {
+                    fullFoundAfter = true;
+                    break;
+                }
             }
+            else if(time - (*pending)->requestedTime > 60)
+            {
+                if(pReduceOnly)
+                {
+                    if(result.isEmpty())
+                        result = (*pending)->block->hash;
+                }
+                else
+                {
+                    result = (*pending)->block->hash;
+                    break;
+                }
+            }
+        }
         mPendingMutex.unlock();
+        if(pReduceOnly && !fullFoundAfter)
+            // Don't return hashes that don't have full blocks after them because we are trying to reduce pending memory usage
+            result.clear();
         return result;
     }
 
@@ -280,7 +312,9 @@ namespace BitCoin
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             if((*pending)->block->hash == pBlock->hash)
             {
+                mPendingSize -= (*pending)->block->size();
                 (*pending)->replace(pBlock);
+                mPendingSize += pBlock->size();
                 success = true;
                 break;
             }
@@ -424,6 +458,8 @@ namespace BitCoin
                 // Delete block
                 delete nextPending;
 
+                mPendingSize -= nextPending->block->size();
+
                 // Remove from pending
                 mPending.erase(mPending.begin());
                 if(mPending.size() == 0)
@@ -441,6 +477,7 @@ namespace BitCoin
                     delete *pending;
                 mPending.clear();
                 mLastPendingHash.clear();
+                mPendingSize = 0;
                 mPendingMutex.unlock();
 
                 //TODO Figure out how to recover from this
@@ -1073,8 +1110,6 @@ namespace BitCoin
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed read block process");
                 success = false;
             }
-
-            unspents.revert();
         }
 
         delete genesis;
@@ -1086,19 +1121,20 @@ namespace BitCoin
         // Info::instance().setPath("/var/bitcoin/testnet");
         // unspents.load();
 
-        // ArcMist::FileInputStream file("/var/bitcoin/testnet/6ec23c2efed09c82529cba7ac75e1f8256bb481603bfcef7ffa5e80e00000000.invalid");
+        // ArcMist::FileInputStream file("/var/bitcoin/testnet/4c9896aebed9238ed3090a4ef6fcff7c3a46b9487373cb3b33e2861500000000.invalid");
         // Block newBlock;
 
         // newBlock.read(&file, true);
-        // //newBlock.print();
 
-        // if(newBlock.process(unspents, 532, 0))
+        // if(newBlock.process(unspents, unspents.blockHeight(), 0))
             // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed New Block test");
         // else
         // {
             // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed New Block test");
             // success = false;
         // }
+
+        // newBlock.print();
 
         // Info::instance().setPath("/var/bitcoin/testnet");
         // Test of get headers and printing

@@ -34,7 +34,7 @@ int main(int pArgumentCount, char **pArguments)
     bool validate = false;
     bool rebuild = false;
     bool listblocks = false;
-    bool mainnet = false;
+    bool testnet = false;
     ArcMist::String printBlock;
     bool nextIsPrintBlock = false;
 
@@ -68,10 +68,8 @@ int main(int pArgumentCount, char **pArguments)
             noDaemon = true;
         else if(std::strcmp(pArguments[i], "--path") == 0)
             nextIsPath = true;
-        else if(std::strcmp(pArguments[i], "--mainnet") == 0)
-            mainnet = true;
         else if(std::strcmp(pArguments[i], "--testnet") == 0)
-            mainnet = false;
+            testnet = true;
         else if(std::strcmp(pArguments[i], "--seed") == 0)
             nextIsSeed = true;
         else if(std::strcmp(pArguments[i], "validate") == 0)
@@ -96,17 +94,17 @@ int main(int pArgumentCount, char **pArguments)
             return 0;
         }
 
-    if(mainnet)
-        BitCoin::setNetwork(BitCoin::MAINNET);
-    else
+    if(testnet)
         BitCoin::setNetwork(BitCoin::TESTNET);
+    else
+        BitCoin::setNetwork(BitCoin::MAINNET);
 
     if(!path)
     {
-        if(mainnet)
-            path = "/var/bitcoin/mainnet/";
-        else
+        if(testnet)
             path = "/var/bitcoin/testnet/";
+        else
+            path = "/var/bitcoin/mainnet/";
     }
 
     ArcMist::createDirectory(path);
@@ -305,6 +303,7 @@ void printHelp(const char *pPath)
     std::cerr << "    --help or -h                    -> Display this message" << std::endl;
     std::cerr << "    --path PATH                     -> Specify directory for daemon files. Default : " << pPath << std::endl;
     std::cerr << "    --seed SEED_NAME                -> Start daemon and load peers from seed" << std::endl;
+    std::cerr << "    --testnet                       -> Run on testnet instead of mainnet" << std::endl;
     std::cerr << "    --nodaemon                      -> Don't do daemon fork. (i.e. run in this process)" << std::endl;
     std::cerr << "    -v                              -> Verbose logging" << std::endl;
     std::cerr << "    -vv                             -> Debug logging" << std::endl;
