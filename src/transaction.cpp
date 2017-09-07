@@ -11,20 +11,6 @@
 
 namespace BitCoin
 {
-    // Transaction &Transaction::operator = (const Transaction &pRight)
-    // {
-        // hash = pRight.hash;
-        // version = pRight.version;
-        // lockTime = pRight.lockTime;
-
-        // for(std::vector<Input *>::const_iterator i=pRight.inputs.begin();i!=pRight.inputs.end();++i)
-            // inputs.push_back(new Input(**i));
-        // for(std::vector<Output *>::const_iterator i=pRight.outputs.begin();i!=pRight.outputs.end();++i)
-            // outputs.push_back(new Output(**i));
-
-        // return *this;
-    // }
-
     Transaction::~Transaction()
     {
         for(unsigned int i=0;i<mUnspents.size();i++)
@@ -469,7 +455,7 @@ namespace BitCoin
         size = pStream->writeOffset() - startOffset;
     }
 
-    bool Input::writeSignatureData(ArcMist::OutputStream *pStream, ArcMist::Buffer *pSubScript)
+    bool Input::writeSignatureData(ArcMist::OutputStream *pStream, ArcMist::Buffer *pSubScript, bool pZeroSequence)
     {
         outpoint.write(pStream);
         if(pSubScript == NULL)
@@ -480,53 +466,160 @@ namespace BitCoin
             pSubScript->setReadOffset(0);
             pStream->writeStream(pSubScript, pSubScript->length());
         }
-        pStream->writeUnsignedInt(sequence);
+
+        if(pZeroSequence)
+            pStream->writeUnsignedInt(0);
+        else
+            pStream->writeUnsignedInt(sequence);
         return true;
     }
 
     bool Transaction::writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
       ArcMist::Buffer &pOutputScript, Signature::HashType pHashType)
     {
-        if(pHashType != Signature::ALL)
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
-              "Unsupported signature hash type : %d", pHashType);
-            return false;
-        }
+        // Extract ANYONECANPAY (0x80) flag from hash type
+        Signature::HashType hashType = pHashType;
+        bool anyoneCanPay = hashType & Signature::ANYONECANPAY;
+        if(anyoneCanPay)
+            hashType = static_cast<Signature::HashType>(pHashType ^ Signature::ANYONECANPAY);
 
         // Build subscript from unspent/output script
+        unsigned int offset;
         ArcMist::Buffer subScript;
         ScriptInterpreter::removeCodeSeparators(pOutputScript, subScript);
 
         // Version
         pStream->writeUnsignedInt(version);
 
-        // Input Count
-        writeCompactInteger(pStream, inputs.size());
-
-        // Inputs
-        unsigned int offset = 0;
-        for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+        switch(hashType)
         {
-            if(pInputOffset == offset++)
-                (*input)->writeSignatureData(pStream, &subScript);
+        case Signature::ALL:
+        {
+            // if(anyoneCanPay)
+                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+                  // "Signature hash type ALL with ANYONECANPAY");
+            // else
+                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+                  // "Signature hash type ALL");
+
+            // Input Count
+            if(anyoneCanPay)
+                writeCompactInteger(pStream, 1);
             else
-                (*input)->writeSignatureData(pStream, NULL);
+                writeCompactInteger(pStream, inputs.size());
+
+            // Inputs
+            offset = 0;
+            for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+            {
+                if(pInputOffset == offset++)
+                    (*input)->writeSignatureData(pStream, &subScript, false);
+                else if(!anyoneCanPay)
+                    (*input)->writeSignatureData(pStream, NULL, false);
+            }
+
+            // Output Count
+            writeCompactInteger(pStream, outputs.size());
+
+            // Outputs
+            for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
+                (*output)->write(pStream);
+
+            break;
         }
+        case Signature::NONE:
+        {
+            // if(anyoneCanPay)
+                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+                  // "Signature hash type NONE with ANYONECANPAY");
+            // else
+                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+                  // "Signature hash type NONE");
 
-        // Output Count
-        writeCompactInteger(pStream, outputs.size());
+            // Input Count
+            if(anyoneCanPay)
+                writeCompactInteger(pStream, 1);
+            else
+                writeCompactInteger(pStream, inputs.size());
 
-        // Outputs
-        for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
-            (*output)->write(pStream);
+            // Inputs
+            offset = 0;
+            for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+            {
+                if(pInputOffset == offset++)
+                    (*input)->writeSignatureData(pStream, &subScript, false);
+                else if(!anyoneCanPay)
+                    (*input)->writeSignatureData(pStream, NULL, true);
+            }
+
+            // Output Count
+            writeCompactInteger(pStream, 0);
+            break;
+        }
+        case Signature::SINGLE:
+        {
+            // if(anyoneCanPay)
+                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+                  // "Signature hash type SINGLE with ANYONECANPAY");
+            // else
+                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+                  // "Signature hash type SINGLE");
+
+            // Input Count
+            if(anyoneCanPay)
+                writeCompactInteger(pStream, 1);
+            else
+                writeCompactInteger(pStream, inputs.size());
+
+            // Inputs
+            offset = 0;
+            for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+            {
+                if(pInputOffset == offset++)
+                    (*input)->writeSignatureData(pStream, &subScript, false);
+                else if(!anyoneCanPay)
+                    (*input)->writeSignatureData(pStream, NULL, true);
+            }
+
+            // Output Count
+            writeCompactInteger(pStream, pInputOffset + 1);
+
+            // Outputs
+            std::vector<Output *>::iterator output=outputs.begin();
+            for(offset=0;offset<pInputOffset+1;offset++)
+                if(output!=outputs.end())
+                {
+                    if(offset == pInputOffset)
+                        (*output)->write(pStream);
+                    else
+                    {
+                        // Write -1 amount output
+                        pStream->writeLong(-1);
+                        writeCompactInteger(pStream, 0);
+                    }
+                    ++output;
+                }
+                else
+                {
+                    // Write blank output
+                    pStream->writeLong(0);
+                    writeCompactInteger(pStream, 0);
+                }
+
+            break;
+        }
+        default:
+        case Signature::INVALID:
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+              "Unsupported signature hash type : %x", hashType);
+            return false;
+        }
 
         // Lock Time
         pStream->writeUnsignedInt(lockTime);
 
         // Add signature hash type to the end as a 32 bit value
         pStream->writeUnsignedInt(pHashType);
-
         return true;
     }
 

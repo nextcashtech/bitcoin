@@ -848,8 +848,8 @@ namespace BitCoin
 
         //genesis->print(ArcMist::Log::INFO);
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Current coin base amount : %f",
-         (double)Block::coinBaseAmount(485000) / 100000000.0); // 100,000,000 Satoshis in a BitCoin
+        //ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Current coin base amount : %f",
+        // (double)bitcoins(Block::coinBaseAmount(485000)));
 
         /***********************************************************************************************
          * Genesis block merkle hash
@@ -1083,23 +1083,23 @@ namespace BitCoin
          * New Block
          ***********************************************************************************************/
         // Requires unspents to be setup
-        // Info::instance().setPath("../bcc_test");
+        // Info::instance().setPath("/var/bitcoin/testnet");
         // unspents.load();
 
-        // ArcMist::FileInputStream file("../bcc_test/add5df18f427437ace8b40064b3806583217a3f724672cf72cf8c18300000000.invalid");
+        // ArcMist::FileInputStream file("/var/bitcoin/testnet/6ec23c2efed09c82529cba7ac75e1f8256bb481603bfcef7ffa5e80e00000000.invalid");
         // Block newBlock;
 
         // newBlock.read(&file, true);
         // //newBlock.print();
 
-        // if(newBlock.process(unspents, 532))
+        // if(newBlock.process(unspents, 532, 0))
             // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed New Block test");
         // else
         // {
             // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed New Block test");
             // success = false;
         // }
-        
+
         // Info::instance().setPath("/var/bitcoin/testnet");
         // Test of get headers and printing
         // Chain &chain = Chain::instance();

@@ -64,7 +64,7 @@ namespace BitCoin
         // Print human readable version to log
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
         
-        bool writeSignatureData(ArcMist::OutputStream *pStream, ArcMist::Buffer *pSubScript);
+        bool writeSignatureData(ArcMist::OutputStream *pStream, ArcMist::Buffer *pSubScript, bool pZeroSequence);
 
         Outpoint outpoint;
         ArcMist::Buffer script;
@@ -146,7 +146,7 @@ namespace BitCoin
           int32_t pBlockVersion, int32_t pBlockVersionFlags);
 
         bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
-          ArcMist::Buffer &pOutputScript, Signature::HashType pSigHashType);
+          ArcMist::Buffer &pOutputScript, Signature::HashType pHashType);
 
         // Run unit tests
         static bool test();
