@@ -1483,7 +1483,7 @@ namespace BitCoin
                     }
                     pop();
 
-                    // Check the signature with the public key
+                    // Check the signature (at the top of the stack) with the public key we just popped from the stack
                     if(checkSignature(publicKey, top(), pECDSA_DER_SigsOnly, pScript, sigStartOffset))
                     {
                         pop();
