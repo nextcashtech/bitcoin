@@ -222,11 +222,14 @@ namespace BitCoin
         mPeerMutex.unlock();
     }
 
-    void Info::randomizePeers(std::vector<Peer *> &pPeers)
+    void Info::randomizePeers(std::vector<Peer *> &pPeers, int pMinimumRating)
     {
+        pPeers.clear();
+
         mPeerMutex.lock();
-        for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
-            pPeers.push_back(*i);
+        for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
+            if((*peer)->rating >= pMinimumRating)
+                pPeers.push_back(*peer);
         mPeerMutex.unlock();
 
         // Sort Randomly
@@ -239,12 +242,17 @@ namespace BitCoin
             return;
 
         mPeerMutex.lock();
-        for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
+        for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
         {
-            if((*i)->address.matches(pAddress))
+            if((*peer)->address.matches(pAddress))
             {
                 // Update
-                (*i)->fails++;
+                (*peer)->rating--;
+                if((*peer)->rating < 0)
+                {
+                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Removed peer");
+                    mPeers.erase(peer);
+                }
                 mPeersModified = true;
                 break;
             }
@@ -258,14 +266,14 @@ namespace BitCoin
             return;
 
         mPeerMutex.lock();
-        for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
+        for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
         {
-            if((*i)->address.matches(pAddress))
+            if((*peer)->address.matches(pAddress))
             {
                 // Update existing
-                (*i)->userAgent = pUserAgent;
-                (*i)->address = pAddress;
-                (*i)->fails = 0;
+                (*peer)->userAgent = pUserAgent;
+                (*peer)->address = pAddress;
+                (*peer)->rating++;
                 mPeersModified = true;
                 mPeerMutex.unlock();
                 return;

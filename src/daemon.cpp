@@ -487,7 +487,32 @@ namespace BitCoin
         unsigned int count = 0;
         bool found;
 
-        info.randomizePeers(peers);
+        // Try peers with good ratings first
+        info.randomizePeers(peers, 1);
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers with good ratings", peers.size());
+        for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
+        {
+            // Skip nodes already connected
+            found = false;
+            mNodeMutex.lock();
+            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+                if((*node)->address() == (*peer)->address)
+                {
+                    found = true;
+                    break;
+                }
+            mNodeMutex.unlock();
+            if(found)
+                continue;
+
+            if(addNode((*peer)->address))
+                count++;
+
+            if(mStopping || count >= pCount / 2) // Limit good to half
+                break;
+        }
+
+        info.randomizePeers(peers, 0);
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers", peers.size());
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
         {

@@ -133,8 +133,8 @@ namespace BitCoin
         // User Agent
         pStream->writeString(userAgent);
 
-        // Fails
-        pStream->writeUnsignedInt(fails);
+        // Rating
+        pStream->writeInt(rating);
 
         // Address
         address.write(pStream);
@@ -174,8 +174,8 @@ namespace BitCoin
         // User Agent
         userAgent = pStream->readString(userAgentLength);
 
-        // Fails
-        fails = pStream->readUnsignedInt();
+        // Rating
+        rating = pStream->readInt();
 
         // Address
         return address.read(pStream);

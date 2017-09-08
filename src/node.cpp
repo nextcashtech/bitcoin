@@ -44,7 +44,8 @@ namespace BitCoin
         sendVersion();
     }
 
-    Node::Node(const char *pIP, const char *pPort) : mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
+    Node::Node(const char *pIP, const char *pPort) :
+      mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
     {
         mVersionSent = false;
         mVersionAcknowledged = false;
@@ -73,7 +74,8 @@ namespace BitCoin
         sendVersion();
     }
 
-    Node::Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort) : mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
+    Node::Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort) :
+      mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
     {
         mVersionSent = false;
         mVersionAcknowledged = false;
@@ -480,7 +482,7 @@ namespace BitCoin
                 std::vector<Peer *> peers;
 
                 // Get list of peers
-                Info::instance().randomizePeers(peers);
+                Info::instance().randomizePeers(peers, 1);
 
                 unsigned int count = peers.size();
                 if(count > 100) // Maximum of 100
@@ -590,7 +592,10 @@ namespace BitCoin
                     mLastBlockRequest = 0;
                 mBlockRequestMutex.unlock();
                 if(Chain::instance().addPendingBlock(((Message::BlockData *)message)->block))
+                {
                     ((Message::BlockData *)message)->block = NULL; // Memory has been handed off
+                    Info::instance().updatePeer(mAddress, mVersionData->userAgent);
+                }
                 break;
             }
             case Message::GET_DATA:
@@ -689,6 +694,9 @@ namespace BitCoin
                     else
                         ++header;
                 }
+
+                if(addedCount > 0)
+                    Info::instance().updatePeer(mAddress, mVersionData->userAgent);
 
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
                   "[%d] Added %d pending headers", mID, addedCount);

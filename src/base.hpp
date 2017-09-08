@@ -108,13 +108,13 @@ namespace BitCoin
     {
     public:
 
-        Peer() { fails = 0; }
+        Peer() { rating = 0; }
 
         void write(ArcMist::OutputStream *pStream) const;
         bool read(ArcMist::InputStream *pStream);
 
         ArcMist::String userAgent;
-        uint32_t fails; // The number of failed attempts since the last success
+        int32_t rating;
         IPAddress address;
 
     private:
