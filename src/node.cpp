@@ -14,7 +14,7 @@ namespace BitCoin
 {
     unsigned int Node::mNextID = 256;
 
-    Node::Node(IPAddress &pAddress) : mBlockHashMutex("Node Block Header Hash")
+    Node::Node(IPAddress &pAddress) : mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
     {
         mVersionSent = false;
         mVersionAcknowledged = false;
@@ -35,7 +35,7 @@ namespace BitCoin
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
-        if(!mConnection.open(AF_INET6, pAddress.ip, pAddress.port))
+        if(!mConnection.open(AF_INET6, pAddress.ip, pAddress.port, 5))
         {
             Info::instance().addPeerFail(pAddress);
             return;
@@ -44,7 +44,7 @@ namespace BitCoin
         sendVersion();
     }
 
-    Node::Node(const char *pIP, const char *pPort) : mBlockHashMutex("Node Block Header Hash")
+    Node::Node(const char *pIP, const char *pPort) : mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
     {
         mVersionSent = false;
         mVersionAcknowledged = false;
@@ -62,7 +62,7 @@ namespace BitCoin
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
-        if(!mConnection.open(pIP, pPort))
+        if(!mConnection.open(pIP, pPort, 5))
         {
             mAddress = mConnection;
             Info::instance().addPeerFail(mAddress);
@@ -73,7 +73,7 @@ namespace BitCoin
         sendVersion();
     }
 
-    Node::Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort) : mBlockHashMutex("Node Block Header Hash")
+    Node::Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort) : mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
     {
         mVersionSent = false;
         mVersionAcknowledged = false;
@@ -91,7 +91,7 @@ namespace BitCoin
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
-        if(!mConnection.open(pFamily, pIP, pPort))
+        if(!mConnection.open(pFamily, pIP, pPort, 5))
         {
             mAddress = mConnection;
             Info::instance().addPeerFail(mAddress);
@@ -132,7 +132,7 @@ namespace BitCoin
         mLastPingTime = 0;
 
         mHeaderRequested.clear();
-        mBlockRequested.clear();
+        mBlocksRequested.clear();
 
         clearInventory();
     }
@@ -294,22 +294,52 @@ namespace BitCoin
         return success;
     }
 
-    bool Node::requestBlock(const Hash &pHash)
+    bool Node::requestBlocks(unsigned int pCount, bool pReduceOnly)
     {
-        if(waitingForBlock() || !hasBlock(pHash))
+        Chain &chain = Chain::instance();
+        Hash startHash = chain.nextBlockNeeded(pReduceOnly);
+
+        if(waitingForBlock() || startHash.isEmpty() || !hasBlock(startHash))
             return false;
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "[%d] Requesting block : %s", mID, pHash.hex().text());
+        mBlockRequestMutex.lock();
+        mBlocksRequested.clear();
+
+        Hash nextBlockHash = startHash;
         Message::GetDataData getDataData;
-        getDataData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::BLOCK, pHash));
+        unsigned int sentCount = 0;
+        while(true)
+        {
+            getDataData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::BLOCK, nextBlockHash));
+            mBlocksRequested.push_back(new Hash(nextBlockHash));
+            Chain::instance().markBlockRequested(nextBlockHash);
+            sentCount++;
+            if(sentCount < pCount)
+            {
+                nextBlockHash = chain.nextBlockNeeded(pReduceOnly);
+                if(!hasBlock(nextBlockHash))
+                    break;
+            }
+            else
+                break;
+        }
+
         bool success = sendMessage(&getDataData);
         if(success)
         {
-            mBlockRequested = pHash;
             mLastBlockRequest = getTime();
             Events::instance().post(Event::BLOCK_REQUESTED);
-            Chain::instance().markBlockRequested(pHash);
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+              "[%d] Requested %d blocks starting at : %s", mID, sentCount, startHash.hex().text());
         }
+        else
+        {
+            for(HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
+                Chain::instance().markBlockNotRequested(**hash);
+            mBlocksRequested.clear();
+        }
+
+        mBlockRequestMutex.unlock();
         return success;
     }
 
@@ -548,11 +578,17 @@ namespace BitCoin
             case Message::BLOCK:
             {
                 Events::instance().post(Event::BLOCK_RECEIVE_FINISHED);
-                if(mBlockRequested == ((Message::BlockData *)message)->block->hash)
-                {
-                    mBlockRequested.clear();
+                mBlockRequestMutex.lock();
+                for(HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
+                    if(**hash == ((Message::BlockData *)message)->block->hash)
+                    {
+                        delete *hash;
+                        mBlocksRequested.erase(hash);
+                        break;
+                    }
+                if(mBlocksRequested.size() == 0)
                     mLastBlockRequest = 0;
-                }
+                mBlockRequestMutex.unlock();
                 if(Chain::instance().addPendingBlock(((Message::BlockData *)message)->block))
                     ((Message::BlockData *)message)->block = NULL; // Memory has been handed off
                 break;
@@ -697,13 +733,19 @@ namespace BitCoin
                     {
                     case Message::InventoryHash::BLOCK:
                     {
-                        if((*item)->hash == mBlockRequested)
-                        {
-                            Chain::instance().markBlockNotRequested((*item)->hash);
-                            removeBlockHash((*item)->hash);
-                            mBlockRequested.clear();
+                        mBlockRequestMutex.lock();
+                        for(HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
+                            if(**hash == (*item)->hash)
+                            {
+                                delete *hash;
+                                mBlocksRequested.erase(hash);
+                                Chain::instance().markBlockNotRequested((*item)->hash);
+                                removeBlockHash((*item)->hash);
+                                break;
+                            }
+                        if(mBlocksRequested.size() == 0)
                             mLastBlockRequest = 0;
-                        }
+                        mBlockRequestMutex.unlock();
                         break;
                     }
                     case Message::InventoryHash::TRANSACTION:

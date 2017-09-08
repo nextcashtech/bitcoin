@@ -255,11 +255,13 @@ namespace BitCoin
 
     void Daemon::processRequests()
     {
+        Chain &chain = Chain::instance();
+        chain.prioritizePending();
+
         mNodeMutex.lock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
 
-        Chain &chain = Chain::instance();
         int pendingCount = chain.pendingCount();
         bool reduceOnly = chain.pendingSize() > mMaxPendingSize;
         Hash nextBlock = chain.nextBlockNeeded(reduceOnly);
@@ -278,8 +280,8 @@ namespace BitCoin
                 (*node)->requestInventory();
             else if(pendingCount < 100)
                 (*node)->requestHeaders(chain.lastPendingBlockHash());
-            else if(!nextBlock.isEmpty() && (*node)->requestBlock(nextBlock))
-                nextBlock = chain.nextBlockNeeded(reduceOnly);
+            else if(!nextBlock.isEmpty())
+                (*node)->requestBlocks(5, reduceOnly);
         }
 
         mNodeMutex.unlock();
@@ -302,8 +304,10 @@ namespace BitCoin
         mNodeMutex.unlock();
 
         Chain &chain = Chain::instance();
+        unsigned int blocks = chain.pendingBlockCount();
+        unsigned int totalPending = chain.pendingCount();
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Pending : %d blocks/headers (%d bytes)", chain.pendingCount(), chain.pendingSize());
+          "Pending : %d blocks, %d headers (%d bytes)", blocks, totalPending - blocks, chain.pendingSize());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Nodes : %d (%d have inventory) (%d downloading)", count, inventory, downloading);
     }
@@ -373,6 +377,8 @@ namespace BitCoin
                 break;
 
             ArcMist::Thread::sleep(1000);
+            if(daemon.mStopping)
+                break;
         }
 
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Manager thread finished");
@@ -402,6 +408,8 @@ namespace BitCoin
                 break;
 
             ArcMist::Thread::sleep(200); // 5hz
+            if(daemon.mStopping)
+                break;
         }
 
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Nodes thread finished");
@@ -512,7 +520,6 @@ namespace BitCoin
 
         Daemon &daemon = Daemon::instance();
         Info &info = Info::instance();
-        unsigned int count;
         uint64_t time;
 
         while(!daemon.mStopping)
@@ -531,16 +538,16 @@ namespace BitCoin
             if(daemon.mNodes.size() < info.maxConnections && time - daemon.mLastNodeAdd > 60)
             {
                 daemon.mLastNodeAdd = time;
-                count = info.maxConnections - daemon.mNodes.size();
-                if(count > 10)
-                    count = 10; // Don't attempt more than 10 at a time
-                daemon.pickNodes(count);
+                if(info.maxConnections > daemon.mNodes.size())
+                    daemon.pickNodes(info.maxConnections - daemon.mNodes.size());
             }
 
             if(daemon.mStopping)
                 break;
 
-            ArcMist::Thread::sleep(200); // 5hz
+            ArcMist::Thread::sleep(500); // 5hz
+            if(daemon.mStopping)
+                break;
         }
 
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Connections thread finished");

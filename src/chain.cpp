@@ -37,6 +37,7 @@ namespace BitCoin
         mLastFileID = 0;
         mBlockVersionFlags = 0x00000000;
         mPendingSize = 0;
+        mPendingBlocks = 0;
     }
 
     Chain::~Chain()
@@ -183,6 +184,14 @@ namespace BitCoin
         mPendingMutex.unlock();
         return result;
     }
+
+    unsigned int Chain::pendingBlockCount()
+    {
+        mPendingMutex.lock();
+        unsigned int result = mPendingBlocks;
+        mPendingMutex.unlock();
+        return result;
+    }
     
     unsigned int Chain::pendingSize()
     {
@@ -267,6 +276,41 @@ namespace BitCoin
         mPendingMutex.unlock();
     }
 
+    unsigned int PendingData::timeout()
+    {
+        int tempPriority = priority;
+        unsigned int result = 180;
+
+        while(tempPriority > 0)
+        {
+            result /= 2;
+            tempPriority--;
+        }
+
+        return result;
+    }
+
+    void Chain::prioritizePending()
+    {
+        unsigned int fullCount = 0;
+        mPendingMutex.lock();
+        for(std::list<PendingData *>::reverse_iterator pending=mPending.rbegin();pending!=mPending.rend();++pending)
+        {
+            if((*pending)->isFull())
+                fullCount++;
+            else
+            {
+                if(fullCount > 40)
+                    (*pending)->priority = 4;
+                else if(fullCount > 20)
+                    (*pending)->priority = 3;
+                else if(fullCount > 10)
+                    (*pending)->priority = 2;
+            }
+        }
+        mPendingMutex.unlock();
+    }
+
     Hash Chain::nextBlockNeeded(bool pReduceOnly)
     {
         Hash result;
@@ -282,8 +326,11 @@ namespace BitCoin
                     fullFoundAfter = true;
                     break;
                 }
+                else
+                    continue;
             }
-            else if(time - (*pending)->requestedTime > 60)
+
+            if(time - (*pending)->requestedTime > (*pending)->timeout())
             {
                 if(pReduceOnly)
                 {
@@ -307,21 +354,60 @@ namespace BitCoin
     bool Chain::addPendingBlock(Block *pBlock)
     {
         bool success = false;
+        bool found = false;
 
         mPendingMutex.lock();
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             if((*pending)->block->hash == pBlock->hash)
             {
-                mPendingSize -= (*pending)->block->size();
-                (*pending)->replace(pBlock);
-                mPendingSize += pBlock->size();
-                success = true;
+                found = true;
+                if(!(*pending)->isFull())
+                {
+                    mPendingSize -= (*pending)->block->size();
+                    (*pending)->replace(pBlock);
+                    mPendingSize += pBlock->size();
+                    mPendingBlocks++;
+                    success = true;
+                }
                 break;
             }
         mPendingMutex.unlock();
 
-        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
-          "Added pending block : %s", pBlock->hash.hex().text());
+        if(success)
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
+              "Added pending block : %s", pBlock->hash.hex().text());
+        else if(!found)
+        {
+            // Check if this is the latest block
+            mPendingMutex.lock();
+            if(pBlock->hash == mLastBlockHash && mPending.size() == 0)
+            {
+                if(!pBlock->hasProofOfWork())
+                {
+                    mPendingMutex.unlock();
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      "Not enough proof of work : %s", pBlock->hash.hex().text());
+                    Hash target;
+                    target.setDifficulty(pBlock->targetBits);
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      "Target                   : %s", target.hex().text());
+                    return false;
+                }
+
+                // Add to pending list
+                mPending.push_back(new PendingData(pBlock));
+                mLastPendingHash = pBlock->hash;
+                mPendingSize += pBlock->size();
+                mPendingBlocks++;
+                mPendingMutex.unlock();
+            }
+            else
+            {
+                mPendingMutex.unlock();
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                  "Received block not found in pending : %s", pBlock->hash.hex().text());
+            }
+        }
 
         return success;
     }
@@ -459,6 +545,7 @@ namespace BitCoin
                 delete nextPending;
 
                 mPendingSize -= nextPending->block->size();
+                mPendingBlocks--;
 
                 // Remove from pending
                 mPending.erase(mPending.begin());
@@ -478,6 +565,7 @@ namespace BitCoin
                 mPending.clear();
                 mLastPendingHash.clear();
                 mPendingSize = 0;
+                mPendingBlocks = 0;
                 mPendingMutex.unlock();
 
                 //TODO Figure out how to recover from this

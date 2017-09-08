@@ -36,8 +36,8 @@ namespace BitCoin
         bool requestHeaders(const Hash &pStartingHash);
         bool waitingForHeaders() { return !mHeaderRequested.isEmpty() && getTime() - mLastHeaderRequest < 300; }
 
-        bool requestBlock(const Hash &pHash);
-        bool waitingForBlock() { return !mBlockRequested.isEmpty() && getTime() - mLastBlockRequest < 300; }
+        bool requestBlocks(unsigned int pCount, bool pReduceOnly);
+        bool waitingForBlock() { return mBlocksRequested.size() != 0 && getTime() - mLastBlockRequest < 300; }
 
         uint64_t lastReceiveTime() { return mLastReceiveTime; }
 
@@ -74,7 +74,9 @@ namespace BitCoin
 
         Hash mHeaderRequested;
         uint64_t mLastHeaderRequest;
-        Hash mBlockRequested;
+
+        ArcMist::Mutex mBlockRequestMutex;
+        HashList mBlocksRequested;
         uint64_t mLastBlockRequest;
 
         static unsigned int mNextID;

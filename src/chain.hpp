@@ -65,6 +65,7 @@ namespace BitCoin
         {
             block = pBlock;
             requestedTime = 0;
+            priority = 1;
         }
         ~PendingData()
         {
@@ -81,9 +82,12 @@ namespace BitCoin
 
         // Return true if this is a full block and not just a header
         bool isFull() { return block->transactionCount > 0; }
+        
+        unsigned int timeout();
 
-        uint64_t requestedTime;
         Block *block;
+        uint64_t requestedTime;
+        unsigned int priority;
 
     private:
         PendingData(PendingData &pCopy);
@@ -111,8 +115,12 @@ namespace BitCoin
 
         // Number of pending headers/blocks
         unsigned int pendingCount();
+        // Number of pending full blocks
+        unsigned int pendingBlockCount();
         // Bytes used by pending blocks
         unsigned int pendingSize();
+        // Update priorities on pending data
+        void prioritizePending();
         // Add block header to queue to be requested and downloaded
         bool addPendingHeader(Block *pBlock);
         // Returns the hash of the next block needed
@@ -161,7 +169,7 @@ namespace BitCoin
         ArcMist::Mutex mPendingMutex;
         std::list<PendingData *> mPending;
         Hash mLastPendingHash;
-        unsigned int mPendingSize;
+        unsigned int mPendingSize, mPendingBlocks;
 
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;

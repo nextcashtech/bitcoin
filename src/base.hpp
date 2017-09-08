@@ -296,8 +296,15 @@ namespace BitCoin
         HashList() {}
         ~HashList()
         {
-            for(unsigned int i=0;i<size();i++)
-                delete at(i);
+            for(iterator hash=begin();hash!=end();++hash)
+                delete *hash;
+        }
+
+        void clear()
+        {
+            for(iterator hash=begin();hash!=end();++hash)
+                delete *hash;
+            std::vector<Hash *>::clear();
         }
 
     private:
