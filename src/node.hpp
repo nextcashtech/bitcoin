@@ -19,10 +19,11 @@ namespace BitCoin
         Node(const char *pIP, const char *pPort);
         Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort);
         Node(IPAddress &pAddress);
+        Node(ArcMist::Network::Connection *pConnection);
         ~Node();
 
         unsigned int id() { return mID; }
-        bool isOpen() { return mConnection.isOpen(); }
+        bool isOpen() { return mConnection != NULL && mConnection->isOpen(); }
 
         void process();
         void clear();
@@ -54,7 +55,7 @@ namespace BitCoin
 
         unsigned int mID;
         IPAddress mAddress;
-        ArcMist::Connection mConnection;
+        ArcMist::Network::Connection *mConnection;
         ArcMist::Buffer mReceiveBuffer;
 
         Message::VersionData *mVersionData;

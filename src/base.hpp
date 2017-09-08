@@ -73,7 +73,7 @@ namespace BitCoin
             return std::memcmp(ip, pRight.ip, 16);
         }
 
-        void operator = (ArcMist::Connection &pConnection)
+        void operator = (ArcMist::Network::Connection &pConnection)
         {
             if(pConnection.ipv6Bytes())
                 std::memcpy(ip, pConnection.ipv6Bytes(), 16);

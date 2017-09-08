@@ -35,11 +35,14 @@ namespace BitCoin
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
-        if(!mConnection.open(AF_INET6, pAddress.ip, pAddress.port, 5))
+        mConnection = new ArcMist::Network::Connection(AF_INET6, pAddress.ip, pAddress.port, 5);
+        if(!mConnection->isOpen())
         {
             Info::instance().addPeerFail(pAddress);
             return;
         }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Connected", mID);
 
         sendVersion();
     }
@@ -63,14 +66,16 @@ namespace BitCoin
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
-        if(!mConnection.open(pIP, pPort, 5))
+        mConnection = new ArcMist::Network::Connection(pIP, pPort, 5);
+        mAddress = *mConnection;
+        if(!mConnection->isOpen())
         {
-            mAddress = mConnection;
             Info::instance().addPeerFail(mAddress);
             return;
         }
 
-        mAddress = mConnection;
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Connected", mID);
+
         sendVersion();
     }
 
@@ -93,14 +98,48 @@ namespace BitCoin
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
 
-        if(!mConnection.open(pFamily, pIP, pPort, 5))
+        mConnection = new ArcMist::Network::Connection(pFamily, pIP, pPort, 5);
+        mAddress = *mConnection;
+        if(!mConnection->isOpen())
         {
-            mAddress = mConnection;
             Info::instance().addPeerFail(mAddress);
             return;
         }
 
-        mAddress = mConnection;
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Connected", mID);
+
+        sendVersion();
+    }
+
+    Node::Node(ArcMist::Network::Connection *pConnection) :
+      mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
+    {
+        mVersionSent = false;
+        mVersionAcknowledged = false;
+        mVersionAcknowledgeSent = false;
+        mSendHeaders = false;
+        mPingNonce = 0;
+        mMinimumFeeRate = 0;
+        mVersionData = NULL;
+        mID = mNextID++;
+        mLastHeaderRequest = 0;
+        mLastBlockRequest = 0;
+        mBlockHashCount = 0;
+        mInventoryHeight = 0;
+        mLastBlockHashRequest = 0;
+        mLastReceiveTime = getTime();
+        mLastPingTime = 0;
+
+        mConnection = pConnection;
+        mAddress = *mConnection;
+        if(!mConnection->isOpen())
+        {
+            Info::instance().addPeerFail(mAddress);
+            return;
+        }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Connected", mID);
+
         sendVersion();
     }
 
@@ -108,14 +147,19 @@ namespace BitCoin
     {
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Disconnecting", mID);
         clearInventory();
-        mConnection.close();
+        if(mConnection != NULL)
+            delete mConnection;
         if(mVersionData != NULL)
             delete mVersionData;
     }
 
     void Node::clear()
     {
-        mConnection.close();
+        if(mConnection != NULL)
+        {
+            delete mConnection;
+            mConnection = NULL;
+        }
         mVersionSent = false;
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
@@ -227,9 +271,12 @@ namespace BitCoin
 
     bool Node::sendMessage(Message::Data *pData)
     {
+        if(mConnection == NULL)
+            return false;
+
         ArcMist::Buffer send;
         Message::writeFull(pData, &send);
-        bool success = mConnection.send(&send);
+        bool success = mConnection->send(&send);
         if(success)
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
               "[%d] Sent <%s>", mID, Message::nameFor(pData->type));
@@ -356,10 +403,14 @@ namespace BitCoin
 
     bool Node::sendVersion()
     {
+        if(mConnection == NULL)
+            return false;
+
         Chain &chain = Chain::instance();
         Info &info = Info::instance();
-        Message::VersionData versionMessage(mConnection.ipv6Bytes(), mConnection.port(), info.ip, info.port,
-          info.fullMode, chain.blockHeight(), chain.isInSync());
+        // Apparently if relay is off most of main net won't send blocks or headers
+        Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip, info.port,
+          info.fullMode, chain.blockHeight(), true); //chain.isInSync()); 
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
         return success;
@@ -373,7 +424,10 @@ namespace BitCoin
 
     void Node::process()
     {
-        if(!mConnection.isOpen() || !mConnection.receive(&mReceiveBuffer))
+        if(mConnection == NULL)
+            return;
+
+        if(!mConnection->isOpen() || !mConnection->receive(&mReceiveBuffer))
             return;
 
         // Check for a complete message
@@ -393,7 +447,8 @@ namespace BitCoin
             return;
         }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Received <%s>", mID, Message::nameFor(message->type));
+        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_NODE_LOG_NAME, "[%d] Received <%s>",
+          mID, Message::nameFor(message->type));
         mLastReceiveTime = getTime();
 
         switch(message->type)

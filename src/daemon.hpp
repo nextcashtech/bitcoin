@@ -23,6 +23,7 @@ namespace BitCoin
 
         static Daemon &instance();
         static void destroy();
+        static void listen();
         static void processConnections();
         static void processNodes();
         static void processManager();
@@ -32,7 +33,7 @@ namespace BitCoin
         bool start(bool pInDaemonMode);
         bool isRunning() { return mRunning; }
         bool stopping() { return mStopping; }
-        
+
         void requestStop() { mStopRequested = true; }
 
         static void handleSigTermChild(int pValue);
@@ -48,12 +49,14 @@ namespace BitCoin
         void stop();
 
         ArcMist::Thread *mConnectionThread;
+        ArcMist::Thread *mListenerThread;
         ArcMist::Thread *mNodeThread;
         ArcMist::Thread *mManagerThread;
         ArcMist::Mutex mNodeMutex;
         std::vector<Node *> mNodes;
         uint64_t mLastNodeAdd;
         uint64_t mLastRequestCheck;
+        uint64_t mLastHeaderRequest;
         uint64_t mLastInfoSave;
         uint64_t mLastUnspentSave;
         uint64_t mLastClean;
@@ -82,6 +85,7 @@ namespace BitCoin
         // Returns number of peers actually connected
         bool addNode(IPAddress &pAddress);
         bool addNode(const char *pIPAddress, const char *pPort);
+        bool addNode(ArcMist::Network::Connection *pConnection);
         unsigned int pickNodes(unsigned int pCount);
         void cleanNodes();
 

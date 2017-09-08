@@ -504,9 +504,8 @@ namespace BitCoin
             mNextBlockHeight++;
             mLastBlockHash = pBlock->hash;
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added block to chain at height %d (%d trans) : %s", mNextBlockHeight - 1, pBlock->transactionCount,
-              pBlock->hash.hex().text());
-
+              "Added block to chain at height %d (%d trans) (%d bytes) : %s", mNextBlockHeight - 1, pBlock->transactionCount,
+              pBlock->size(), pBlock->hash.hex().text());
         }
         else
         {

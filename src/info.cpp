@@ -248,7 +248,7 @@ namespace BitCoin
             {
                 // Update
                 (*peer)->rating--;
-                if((*peer)->rating < 0)
+                if((*peer)->rating < -5)
                 {
                     ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Removed peer");
                     mPeers.erase(peer);
@@ -284,6 +284,8 @@ namespace BitCoin
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Adding new peer");
         Peer *newPeer = new Peer;
         newPeer->userAgent = pUserAgent;
+        if(pUserAgent == NULL)
+            newPeer->rating = -5;
         newPeer->address = pAddress;
         mPeers.push_front(newPeer);
         mPeersModified = true;
