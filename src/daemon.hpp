@@ -2,14 +2,12 @@
 #define BITCOIN_DAEMON_HPP
 
 #include "arcmist/io/stream.hpp"
-#include "arcmist/io/network.hpp"
 #include "arcmist/base/thread.hpp"
 #include "arcmist/base/mutex.hpp"
 #include "base.hpp"
 #include "node.hpp"
 
 #include <cstdint>
-#include <cstring>
 #include <vector>
 
 
@@ -36,6 +34,7 @@ namespace BitCoin
 
         void requestStop() { mStopRequested = true; }
 
+        // Signals
         static void handleSigTermChild(int pValue);
         static void handleSigTerm(int pValue);
         static void handleSigInt(int pValue);
@@ -47,13 +46,15 @@ namespace BitCoin
         ~Daemon();
 
         void stop();
+        bool mRunning, mStopping, mStopRequested;
 
+        // Threads
         ArcMist::Thread *mConnectionThread;
         ArcMist::Thread *mListenerThread;
         ArcMist::Thread *mNodeThread;
         ArcMist::Thread *mManagerThread;
-        ArcMist::Mutex mNodeMutex;
-        std::vector<Node *> mNodes;
+
+        // Timers
         uint64_t mLastNodeAdd;
         uint64_t mLastRequestCheck;
         uint64_t mLastHeaderRequest;
@@ -61,33 +62,35 @@ namespace BitCoin
         uint64_t mLastUnspentSave;
         uint64_t mLastClean;
         uint64_t mStatReport;
-        bool mRunning, mStopping, mStopRequested;
-        unsigned int mNodeCount;
         unsigned int mMaxPendingSize; // Maximum pending memory usage
 
+        // Signals
         void (*previousSigTermChildHandler)(int);
         void (*previousSigTermHandler)(int);
         void (*previousSigIntHandler)(int);
         void (*previousSigPipeHandler)(int);
 
-        Node *nodeWithInventory();
-        Node *nodeWithBlock(const Hash &pHash);
-        void processRequests();
-
         void printStats();
 
+        ArcMist::String mSeed;
         // Query peers from a seed
         // Returns number of peers actually connected
-        ArcMist::String mSeed;
         unsigned int querySeed(const char *pName);
 
-        // Randomly choose peers and open nodes on them until specified count is reached.
-        // Returns number of peers actually connected
+        // Nodes
+        ArcMist::Mutex mNodeMutex;
+        std::vector<Node *> mNodes;
+        unsigned int mNodeCount;
+
         bool addNode(IPAddress &pAddress);
         bool addNode(const char *pIPAddress, const char *pPort);
         bool addNode(ArcMist::Network::Connection *pConnection);
         unsigned int pickNodes(unsigned int pCount);
         void cleanNodes();
+
+        Node *nodeWithInventory();
+        Node *nodeWithBlock(const Hash &pHash);
+        void processRequests();
 
         static Daemon *sInstance;
     };

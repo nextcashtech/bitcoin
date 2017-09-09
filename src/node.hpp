@@ -8,6 +8,7 @@
 #include "message.hpp"
 
 #include <cstdint>
+#include <list>
 
 
 namespace BitCoin

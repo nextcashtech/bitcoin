@@ -40,16 +40,23 @@ namespace BitCoin
         BlockSet() : Mutex("Block Set") {}
         ~BlockSet()
         {
-            for(std::list<BlockInfo *>::iterator iter=begin();iter!=end();++iter)
-                delete *iter;
+            for(iterator info=begin();info!=end();++info)
+                delete *info;
         }
 
         bool contains(Hash &pHash)
         {
-            for(std::list<BlockInfo *>::iterator iter=begin();iter!=end();++iter)
-                if((*iter)->hash == pHash)
+            for(iterator info=begin();info!=end();++info)
+                if((*info)->hash == pHash)
                     return true;
             return false;
+        }
+
+        void clear()
+        {
+            for(iterator info=begin();info!=end();++info)
+                delete *info;
+            std::list<BlockInfo *>::clear();
         }
 
     private:

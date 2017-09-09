@@ -75,8 +75,15 @@ namespace BitCoin
         BlockList() {}
         ~BlockList()
         {
-            for(unsigned int i=0;i<size();i++)
-                delete at(i);
+            for(iterator block=begin();block!=end();++block)
+                delete *block;
+        }
+
+        void clear()
+        {
+            for(iterator block=begin();block!=end();++block)
+                delete *block;
+            std::vector<Block *>::clear();
         }
 
     private:

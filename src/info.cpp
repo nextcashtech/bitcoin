@@ -295,7 +295,7 @@ namespace BitCoin
     bool Info::test()
     {
         bool success = true;
-        
+
         return success;
     }
 }

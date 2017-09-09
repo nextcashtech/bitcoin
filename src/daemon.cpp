@@ -1,13 +1,13 @@
 #include "daemon.hpp"
 
 #include "arcmist/base/log.hpp"
+#include "arcmist/io/network.hpp"
 #include "info.hpp"
 #include "block.hpp"
 #include "events.hpp"
 #include "block.hpp"
 #include "chain.hpp"
 
-#include <unistd.h>
 #include <csignal>
 #include <algorithm>
 
@@ -321,6 +321,9 @@ namespace BitCoin
         mNodeMutex.unlock();
 
         Chain &chain = Chain::instance();
+        UnspentPool &unspent = UnspentPool::instance();
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Block Chain : %d blocks, %d UTXOs", chain.blockHeight(), unspent.count());
         unsigned int blocks = chain.pendingBlockCount();
         unsigned int totalPending = chain.pendingCount();
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
@@ -450,7 +453,10 @@ namespace BitCoin
             return true;
         }
         else
+        {
+            delete node;
             return false;
+        }
     }
 
     bool Daemon::addNode(IPAddress &pAddress)
@@ -471,7 +477,10 @@ namespace BitCoin
             return true;
         }
         else
+        {
+            delete node;
             return false;
+        }
     }
 
     unsigned int Daemon::querySeed(const char *pName)
@@ -574,7 +583,10 @@ namespace BitCoin
             return true;
         }
         else
+        {
+            delete node;
             return false;
+        }
     }
 
     void Daemon::listen()
@@ -604,7 +616,8 @@ namespace BitCoin
                 if(daemon.mNodeCount < info.maxConnections)
                 {
                     ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Adding node from listener");
-                    daemon.addNode(newConnection); // Add node for this connection
+                    if(!daemon.addNode(newConnection)) // Add node for this connection
+                        delete newConnection;
                 }
                 else
                     delete newConnection; // Drop this connection

@@ -410,7 +410,7 @@ namespace BitCoin
         Info &info = Info::instance();
         // Apparently if relay is off most of main net won't send blocks or headers
         Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip, info.port,
-          info.fullMode, chain.blockHeight(), true); //chain.isInSync()); 
+          info.fullMode, chain.blockHeight(), true); //chain.isInSync());
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
         return success;

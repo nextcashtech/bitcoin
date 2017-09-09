@@ -128,8 +128,8 @@ namespace BitCoin
 
         mBlockLookup[lookup].lock();
 
-        std::list<BlockInfo *>::iterator end = mBlockLookup[lookup].end();
-        for(std::list<BlockInfo *>::iterator i=mBlockLookup[lookup].begin();i!=end;++i)
+        BlockSet::iterator end = mBlockLookup[lookup].end();
+        for(BlockSet::iterator i=mBlockLookup[lookup].begin();i!=end;++i)
             if(pHash == (*i)->hash)
             {
                 result = (*i)->fileID;
@@ -192,7 +192,7 @@ namespace BitCoin
         mPendingMutex.unlock();
         return result;
     }
-    
+
     unsigned int Chain::pendingSize()
     {
         mPendingMutex.lock();
@@ -404,8 +404,12 @@ namespace BitCoin
             else
             {
                 mPendingMutex.unlock();
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                  "Received block not found in pending : %s", pBlock->hash.hex().text());
+                if(blockInChain(pBlock->hash))
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      "Received block already in chain : %s", pBlock->hash.hex().text());
+                else
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      "Received unknown block : %s", pBlock->hash.hex().text());
             }
         }
 
@@ -540,11 +544,11 @@ namespace BitCoin
             {
                 mPendingMutex.lock();
 
-                // Delete block
-                delete nextPending;
-
                 mPendingSize -= nextPending->block->size();
                 mPendingBlocks--;
+
+                // Delete block
+                delete nextPending;
 
                 // Remove from pending
                 mPending.erase(mPending.begin());
@@ -607,7 +611,7 @@ namespace BitCoin
 
             delete blockFile;
             unlockBlockFile(fileID);
-            
+
             for(HashList::iterator i=fileList.begin();i!=fileList.end();)
                 if(started || **i == pStartingHash)
                 {
@@ -939,7 +943,7 @@ namespace BitCoin
                     }
 
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                      "Block %010d is valid : %6d transactions", height, block.transactions.size());
+                      "Block %010d is valid : %6d transactions, %d bytes", height, block.transactions.size(), block.size());
                     //block.print();
 
                     previousHash = block.hash;
@@ -1234,7 +1238,7 @@ namespace BitCoin
         // startingHash.read(&hashData, 32);
         // chain.loadBlocks(false);
         // chain.getBlockHeaders(headers, startingHash, zeroHash, 50);
-        
+
         // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Retrieved %d headers", headers.size());
         // for(BlockList::iterator i=headers.begin();i!=headers.end();++i)
             // (*i)->print();
