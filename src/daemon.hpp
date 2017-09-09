@@ -92,6 +92,10 @@ namespace BitCoin
         Node *nodeWithBlock(const Hash &pHash);
         void processRequests();
 
+        void collectNetworkTracking();
+        uint64_t mBytesReceived;
+        uint64_t mBytesSent;
+
         static Daemon *sInstance;
     };
 }

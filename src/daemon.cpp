@@ -57,6 +57,8 @@ namespace BitCoin
         mNodeCount = 0;
         mStatReport = 0;
         mMaxPendingSize = 104857600; // 100 MiB
+        mBytesReceived = 0;
+        mBytesSent = 0;
     }
 
     Daemon::~Daemon()
@@ -251,6 +253,18 @@ namespace BitCoin
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Stopped");
     }
 
+    void Daemon::collectNetworkTracking()
+    {
+        mNodeMutex.lock();
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+        {
+            mBytesReceived += (*node)->bytesReceived();
+            mBytesSent += (*node)->bytesSent();
+            (*node)->resetNetworkByteCounts();
+        }
+        mNodeMutex.unlock();
+    }
+
     void Daemon::cleanNodes()
     {
         uint64_t time = getTime();
@@ -320,16 +334,21 @@ namespace BitCoin
         }
         mNodeMutex.unlock();
 
+        collectNetworkTracking();
+
         Chain &chain = Chain::instance();
         UnspentPool &unspent = UnspentPool::instance();
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks, %d UTXOs", chain.blockHeight(), unspent.count());
         unsigned int blocks = chain.pendingBlockCount();
         unsigned int totalPending = chain.pendingCount();
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Block Chain : %d blocks, %d UTXOs", chain.blockHeight(), unspent.count());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Pending : %d blocks, %d headers (%d bytes)", blocks, totalPending - blocks, chain.pendingSize());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Nodes : %d (%d have inventory) (%d downloading)", count, inventory, downloading);
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Network : %d bytes received, %d bytes sent", mBytesReceived, mBytesSent);
     }
 
     void Daemon::processManager()

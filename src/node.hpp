@@ -45,6 +45,11 @@ namespace BitCoin
 
         const IPAddress &address() { return mAddress; }
 
+        // Network tracking
+        uint64_t bytesReceived() const { if(mConnection == NULL) return 0; return mConnection->bytesReceived(); }
+        uint64_t bytesSent() const { if(mConnection == NULL) return 0; return mConnection->bytesSent(); }
+        void resetNetworkByteCounts() { if(mConnection != NULL) mConnection->resetByteCounts(); }
+
     private:
 
         bool versionSupported(int32_t pVersion);
