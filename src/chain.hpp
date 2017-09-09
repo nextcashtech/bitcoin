@@ -89,7 +89,7 @@ namespace BitCoin
 
         // Return true if this is a full block and not just a header
         bool isFull() { return block->transactionCount > 0; }
-        
+
         unsigned int timeout();
 
         Block *block;
@@ -151,6 +151,10 @@ namespace BitCoin
         bool getBlockHash(unsigned int pHeight, Hash &pHash);
         bool getBlock(unsigned int pHeight, Block &pBlock);
         bool getBlock(const Hash &pHash, Block &pBlock);
+
+        // Update the unspent transaction pool for any blocks it is missing
+        // Note : Doesn't use block version flags
+        bool updateUnspent(UnspentPool &pUnspentPool);
 
         // Load block data from file system
         //   If pList is true then all the block hashes will be output

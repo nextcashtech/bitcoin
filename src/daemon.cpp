@@ -139,15 +139,15 @@ namespace BitCoin
 
         if(!UnspentPool::instance().load())
             return false;
-        mLastUnspentSave = getTime();
 
-        if(UnspentPool::instance().blockHeight() != Chain::instance().blockHeight())
+        if(!Chain::instance().updateUnspent(UnspentPool::instance()))
         {
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
               "Unspent height %d doesn't match chain height %d", UnspentPool::instance().blockHeight(),
               Chain::instance().blockHeight());
             return false;
         }
+        mLastUnspentSave = getTime();
 
         mConnectionThread = new ArcMist::Thread("Connection", processConnections);
         if(mConnectionThread == NULL)

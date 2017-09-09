@@ -765,19 +765,111 @@ namespace BitCoin
         return result;
     }
 
+    bool Chain::updateUnspent(UnspentPool &pUnspentPool)
+    {
+        unsigned int height = pUnspentPool.blockHeight();
+        if(height == blockHeight())
+            return true;
+
+        height++;
+
+        Hash startHash;
+        if(!getBlockHash(height, startHash))
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to get next block to update unspent");
+            return false;
+        }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+          "Updating unspent transactions from block height %d to %d", height - 1, blockHeight());
+
+        ArcMist::String filePathName;
+        unsigned int fileID = blockFileID(startHash);
+        HashList hashes;
+        BlockFile *blockFile = NULL;
+        Block block;
+        unsigned int blockOffset;
+
+        while(true)
+        {
+            lockBlockFile(fileID);
+            filePathName = blockFileName(fileID);
+            if(ArcMist::fileExists(filePathName))
+            {
+                blockFile = new BlockFile(fileID, filePathName);
+                if(!blockFile->isValid())
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                      "Block file %s is invalid", filePathName.text());
+                    delete blockFile;
+                    unlockBlockFile(fileID);
+                    return false;
+                }
+
+                if(!blockFile->readBlockHashes(hashes))
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                      "Failed to read hashes from block file %s", filePathName.text());
+                    delete blockFile;
+                    unlockBlockFile(fileID);
+                    return false;
+                }
+
+                delete blockFile;
+                unlockBlockFile(fileID);
+
+                blockOffset = 0;
+                for(HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                {
+                    if(startHash.isEmpty() || **hash == startHash)
+                    {
+                        startHash.clear();
+                        if(blockFile->readBlock(blockOffset, block, true))
+                        {
+                            if(block.process(pUnspentPool, height, 0))
+                                pUnspentPool.commit(height++);
+                            else
+                            {
+                                pUnspentPool.revert();
+                                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                                  "Failed to process block %d from block file %08x : %s", blockOffset, fileID, (*hash)->hex().text());
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                              "Failed to read block %d from block file %08x : %s", blockOffset, fileID, (*hash)->hex().text());
+                            return false;
+                        }
+                    }
+                    blockOffset++;
+                }
+            }
+            else
+            {
+                unlockBlockFile(fileID);
+                break;
+            }
+
+            fileID++;
+        }
+
+        pUnspentPool.save();
+        return pUnspentPool.blockHeight() == blockHeight();
+    }
+
     // Load block info from files
     bool Chain::loadBlocks(bool pList)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Loading blocks");
 
-        // Load hashes from block files
         BlockFile *blockFile = NULL;
         uint16_t lookup;
         ArcMist::String filePathName;
         HashList hashes;
         Hash *lastBlock = NULL;
         bool success = true;
-        bool done = false;
         Hash emptyHash;
         std::list<uint32_t> blockFileVersions;
 
@@ -790,13 +882,12 @@ namespace BitCoin
 
         ArcMist::createDirectory(blockFilePath());
 
-        for(unsigned int fileID=0;!done;fileID++)
+        for(unsigned int fileID=0;;fileID++)
         {
             lockBlockFile(fileID);
             filePathName = blockFileName(fileID);
             if(ArcMist::fileExists(filePathName))
             {
-                // Load hashes from file
                 blockFile = new BlockFile(fileID, filePathName);
                 if(!blockFile->isValid())
                 {
@@ -826,24 +917,16 @@ namespace BitCoin
 
                 mLastFileID = fileID;
                 for(HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
-                    if((*hash)->isZero())
-                    {
-                        done = true;
-                        delete blockFile;
-                        unlockBlockFile(fileID);
-                        break;
-                    }
-                    else
-                    {
-                        if(pList)
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Block %08d : %s", mNextBlockHeight, (*hash)->hex().text());
-                        lookup = (*hash)->lookup();
-                        mBlockLookup[lookup].lock();
-                        mBlockLookup[lookup].push_back(new BlockInfo(**hash, fileID, mNextBlockHeight));
-                        mBlockLookup[lookup].unlock();
-                        mNextBlockHeight++;
-                        lastBlock = *hash;
-                    }
+                {
+                    if(pList)
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Block %08d : %s", mNextBlockHeight, (*hash)->hex().text());
+                    lookup = (*hash)->lookup();
+                    mBlockLookup[lookup].lock();
+                    mBlockLookup[lookup].push_back(new BlockInfo(**hash, fileID, mNextBlockHeight));
+                    mBlockLookup[lookup].unlock();
+                    mNextBlockHeight++;
+                    lastBlock = *hash;
+                }
             }
             else
             {
