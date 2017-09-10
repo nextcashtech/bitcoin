@@ -1599,7 +1599,7 @@ namespace BitCoin
                     {
                         signatureVerified = false;
                         while(publicKeyOffset < publicKeyCount)
-                            if(checkSignature(*publicKeys[publicKeyOffset], signatures[i],
+                            if(checkSignature(*publicKeys[publicKeyOffset++], signatures[i],
                               pECDSA_DER_SigsOnly, pScript, sigStartOffset))
                             {
                                 signatureVerified = true;
