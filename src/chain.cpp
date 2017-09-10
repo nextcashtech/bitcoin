@@ -423,7 +423,7 @@ namespace BitCoin
     unsigned int PendingData::timeout()
     {
         int tempPriority = priority;
-        unsigned int result = 180;
+        unsigned int result = 360;
 
         while(tempPriority > 0)
         {
@@ -747,6 +747,7 @@ namespace BitCoin
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   "Stopping daemon because this is currently unrecoverable");
                 Daemon::instance().requestStop();
+                return;
             }
         }
     }

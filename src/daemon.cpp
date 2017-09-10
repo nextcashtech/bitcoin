@@ -416,6 +416,7 @@ namespace BitCoin
                 break;
 
             ArcMist::Thread::sleep(1000);
+
             if(daemon.mStopping)
                 break;
         }
