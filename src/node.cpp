@@ -16,6 +16,7 @@ namespace BitCoin
 
     Node::Node(IPAddress &pAddress) : mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
     {
+        mConnected = false;
         mVersionSent = false;
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
@@ -43,6 +44,7 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Connected", mID);
+        mConnected = true;
 
         sendVersion();
     }
@@ -50,6 +52,7 @@ namespace BitCoin
     Node::Node(const char *pIP, const char *pPort) :
       mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
     {
+        mConnected = false;
         mVersionSent = false;
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
@@ -75,6 +78,7 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Connected", mID);
+        mConnected = true;
 
         sendVersion();
     }
@@ -82,6 +86,7 @@ namespace BitCoin
     Node::Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort) :
       mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
     {
+        mConnected = false;
         mVersionSent = false;
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
@@ -107,6 +112,7 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Connected", mID);
+        mConnected = true;
 
         sendVersion();
     }
@@ -114,6 +120,7 @@ namespace BitCoin
     Node::Node(ArcMist::Network::Connection *pConnection) :
       mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
     {
+        mConnected = false;
         mVersionSent = false;
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
@@ -139,13 +146,15 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Connected", mID);
+        mConnected = true;
 
         sendVersion();
     }
 
     Node::~Node()
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Disconnecting", mID);
+        if(mConnected)
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME, "[%d] Disconnecting", mID);
         clearInventory();
         if(mConnection != NULL)
             delete mConnection;

@@ -86,6 +86,8 @@ namespace BitCoin
         HashList mBlocksRequested;
         uint64_t mLastBlockRequest;
 
+        bool mConnected;
+
         static unsigned int mNextID;
 
     };

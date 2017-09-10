@@ -55,13 +55,13 @@ namespace BitCoin
         ArcMist::Thread *mManagerThread;
 
         // Timers
-        uint64_t mLastNodeAdd;
-        uint64_t mLastRequestCheck;
-        uint64_t mLastHeaderRequest;
-        uint64_t mLastInfoSave;
-        uint64_t mLastUnspentSave;
-        uint64_t mLastClean;
-        uint64_t mStatReport;
+        uint32_t mLastNodeAdd;
+        uint32_t mLastRequestCheck;
+        uint32_t mLastHeaderRequest;
+        uint32_t mLastInfoSave;
+        uint32_t mLastUnspentSave;
+        uint32_t mLastClean;
+        uint32_t mStatReport;
         unsigned int mMaxPendingSize; // Maximum pending memory usage
 
         // Signals

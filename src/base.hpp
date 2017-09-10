@@ -19,7 +19,7 @@ namespace BitCoin
     void setNetwork(Network pNetwork);
 
     // Seconds since epoch
-    inline int64_t getTime()
+    inline int32_t getTime()
     {
         return std::time(NULL);
     }
@@ -311,6 +311,9 @@ namespace BitCoin
         HashList(HashList &pCopy);
         HashList &operator = (HashList &pRight);
     };
+
+    // Multiply a target bits encoded 256 bit number by a factor
+    uint32_t multiplyTargetBits(uint32_t pTargetBits, double factor, uint32_t pMax = 0x1d00ffff);
 
     enum Base58Type { PUBLIC_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY, TEST_PUBLIC_KEY_HASH, TEST_SCRIPT_HASH };
     ArcMist::String base58Encode(Base58Type pType, ArcMist::InputStream *pStream, unsigned int pSize);

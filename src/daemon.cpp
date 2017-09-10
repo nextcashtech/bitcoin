@@ -134,7 +134,7 @@ namespace BitCoin
         Info::instance(); // Load data
         mLastInfoSave = getTime();
 
-        if(!Chain::instance().loadBlocks(false))
+        if(!Chain::instance().load(false))
             return false;
 
         if(!UnspentPool::instance().load())

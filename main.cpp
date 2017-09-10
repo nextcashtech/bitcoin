@@ -124,18 +124,19 @@ int main(int pArgumentCount, char **pArguments)
         }
         else
         {
-            if(!chain.getBlockHash(std::stol(printBlock.text()), hash))
+            unsigned int height = std::stol(printBlock.text());
+            if(!chain.getBlockHash(height, hash))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, MAIN_LOG_NAME,
-                  "Failed to find hash at height : %d", std::stol(printBlock.text()));
+                  "Failed to find hash at height %d", height);
                 return 1;
             }
 
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
-              "Found hash at height : %s", hash.hex().text());
+              "Found hash at height %d : %s", height, hash.hex().text());
         }
 
-        chain.loadBlocks(false);
+        chain.load(false);
 
         if(chain.getBlock(hash, block))
         {
@@ -152,7 +153,7 @@ int main(int pArgumentCount, char **pArguments)
     if(listblocks)
     {
         ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
-        if(BitCoin::Chain::instance().loadBlocks(true))
+        if(BitCoin::Chain::instance().load(true))
             return 0;
         else
             return 1;

@@ -38,6 +38,9 @@ namespace BitCoin
         mBlockVersionFlags = 0x00000000;
         mPendingSize = 0;
         mPendingBlocks = 0;
+        mTargetBits = 0;
+        mLastTargetTime = 0;
+        mLastBlockTime = 0;
     }
 
     Chain::~Chain()
@@ -46,6 +49,145 @@ namespace BitCoin
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             delete *pending;
         mPendingMutex.unlock();
+    }
+
+    bool Chain::revertTargetBits()
+    {
+        mTargetBits = mPreviousTargetBits;
+        mLastTargetTime = mPreviousLastTargetTime;
+        mLastBlockTime = mPreviousLastBlockTime;
+        return saveTargetBits();
+    }
+
+    bool Chain::updateTargetBits(unsigned int pHeight, uint32_t pNextBlockTime)
+    {
+        // Save values in case we have to undo this
+        mPreviousTargetBits = mTargetBits;
+        mPreviousLastTargetTime = mLastTargetTime;
+        mPreviousLastBlockTime = mLastBlockTime;
+
+        if(mLastTargetTime == 0)
+        {
+            // This is the first block
+            mTargetBits = 0x1d00ffff;
+            mLastTargetTime = pNextBlockTime;
+            mLastBlockTime = pNextBlockTime;
+
+            return saveTargetBits();
+        }
+        else if(pHeight == 0 || pHeight % 2016 != 0)
+        {
+            mLastBlockTime = pNextBlockTime;
+            return true;
+        }
+
+        // Calculate percent of time actually taken for the last 2016 blocks by the goal time of 2 weeks
+        // Adjust factor over 1.0 means the target is going up, which also means the difficulty to
+        //   find a hash under the target goes down
+        // Adjust factor below 1.0 means the target is going down, which also means the difficulty to
+        //   find a hash under the target goes up
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+          "Time spent on last 2016 blocks %d - %d = %d", mLastBlockTime, mLastTargetTime, mLastBlockTime - mLastTargetTime);
+        double adjustFactor = (double)(mLastBlockTime - mLastTargetTime) / 1209600.0;
+
+        if(adjustFactor > 1.0)
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "Increasing target bits %08x by a factor of %f to reduce difficulty by %.02f%%", mTargetBits,
+              adjustFactor, ((1.0 / adjustFactor) - 1.0) * 100.0);
+        else
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "Decreasing target bits %08x by a factor of %f to increase difficulty by %.02f%%", mTargetBits,
+              adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
+
+        if(adjustFactor < 0.25)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "Changing target adjust factor to 0.25 because of maximum decrease of 75%");
+            adjustFactor = 0.25; // Maximum decrease of 75%
+        }
+        else if(adjustFactor > 4.0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "Changing target adjust factor to 4.0 because of maximum increase of 400%");
+            adjustFactor = 4.0; // Maximum increase of 400%
+        }
+
+        /* Note: an off-by-one error in the Bitcoin Core implementation causes the difficulty to be
+         * updated every 2,016 blocks using timestamps from only 2,015 blocks, creating a slight skew.
+         */
+
+        // Treat targetValue as a 256 bit number and multiply it by adjustFactor
+        mTargetBits = multiplyTargetBits(mTargetBits, adjustFactor);
+        mLastTargetTime = pNextBlockTime;
+        mLastBlockTime = pNextBlockTime;
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+          "New target bits for block height %d : %08x", pHeight, mTargetBits);
+        return saveTargetBits();
+    }
+
+    bool Chain::saveTargetBits()
+    {
+        // Save to a file
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("blocks");
+        filePathName.pathAppend("target");
+        ArcMist::FileOutputStream *file = new ArcMist::FileOutputStream(filePathName, true);
+        file->setOutputEndian(ArcMist::Endian::LITTLE);
+        if(file->isValid())
+        {
+            file->writeUnsignedInt(mLastTargetTime);
+            file->writeUnsignedInt(mTargetBits);
+        }
+        else
+        {
+            delete file;
+            return false;
+        }
+        delete file;
+        return true;
+    }
+
+    bool Chain::loadTargetBits()
+    {
+        if(mNextBlockHeight == 0)
+        {
+            mLastBlockTime = 0;
+            mLastTargetTime = 0;
+            mTargetBits = 0;
+            return true;
+        }
+
+        // Get last block time
+        Block block;
+        if(!getBlock(mNextBlockHeight - 1, block))
+        {
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Failed to read last block from file");
+            return false;
+        }
+        mLastBlockTime = block.time;
+
+        bool success = true;
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("blocks");
+        filePathName.pathAppend("target");
+        ArcMist::FileInputStream *file = new ArcMist::FileInputStream(filePathName);
+        file->setInputEndian(ArcMist::Endian::LITTLE);
+        if(file->isValid())
+        {
+            mLastTargetTime = file->readUnsignedInt();
+            mTargetBits = file->readUnsignedInt();
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "Loaded target bits of %08x", mTargetBits);
+        }
+        else
+        {
+            //TODO Recalculate
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Failed to read target bits file");
+            success = false;
+        }
+        delete file;
+        return success;
     }
 
     void Chain::updateTimeFlags()
@@ -224,6 +366,8 @@ namespace BitCoin
             return false;
         }
 
+        // This just checks that the proof of work meets the target bits in the header.
+        //   The validity of the target bits value is checked before adding the full block to the chain.
         if(!pBlock->hasProofOfWork())
         {
             mPendingMutex.unlock();
@@ -424,6 +568,28 @@ namespace BitCoin
 
         updateTimeFlags();
 
+        // Check target bits
+        bool useTestMinDifficulty = network() == TESTNET && pBlock->time - mLastBlockTime > 1200;
+        updateTargetBits(mNextBlockHeight, pBlock->time);
+        if(pBlock->targetBits != mTargetBits)
+        {
+            // If on TestNet and 20 minutes since last block
+            if(useTestMinDifficulty && pBlock->targetBits == 0x1d00ffff)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                  "Using TestNet special minimum difficulty rule 1d00ffff for block %d", mNextBlockHeight);
+            }
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                  "Block target bits don't match chain's current target bits : chain %08x != block %08x",
+                  mTargetBits, pBlock->targetBits);
+                revertTargetBits();
+                mProcessMutex.unlock();
+                return false;
+            }
+        }
+
         // Process block
         if(!pBlock->process(unspentPool, mNextBlockHeight, mBlockVersionFlags))
         {
@@ -435,6 +601,7 @@ namespace BitCoin
             ArcMist::FileOutputStream file(filePathName, true);
             pBlock->write(&file, true);
 
+            revertTargetBits();
             unspentPool.revert();
             mProcessMutex.unlock();
             return false;
@@ -445,6 +612,7 @@ namespace BitCoin
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to commit unspent transaction pool");
+            revertTargetBits();
             unspentPool.revert();
             mProcessMutex.unlock();
             return false;
@@ -513,6 +681,8 @@ namespace BitCoin
         }
         else
         {
+            revertTargetBits();
+            unspentPool.revert();
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to add to block to file %08d : %s", mLastFileID, pBlock->hash.hex().text());
         }
@@ -860,7 +1030,7 @@ namespace BitCoin
     }
 
     // Load block info from files
-    bool Chain::loadBlocks(bool pList)
+    bool Chain::load(bool pList)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Loading blocks");
 
@@ -935,25 +1105,33 @@ namespace BitCoin
             }
         }
 
+        if(!loadTargetBits())
+            success = false;
+
         mProcessMutex.unlock();
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Loaded block chain height of %d", mNextBlockHeight);
-
-        if(success && mNextBlockHeight == 0)
+        if(success)
         {
-            // Add genesis block
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Creating genesis block");
-            Block *genesis = Block::genesis();
-            bool success = processBlock(genesis);
-            delete genesis;
-            if(!success)
-                return false;
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Loaded block chain height of %d", mNextBlockHeight);
+
+            if(mNextBlockHeight == 0)
+            {
+                // Add genesis block
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Creating genesis block");
+                Block *genesis = Block::genesis();
+                bool success = processBlock(genesis);
+                delete genesis;
+                if(!success)
+                    return false;
+            }
+
+            if(lastBlock != NULL)
+                mLastBlockHash = *lastBlock;
+
+            updateBlockVersionFlags();
         }
 
-        if(success && lastBlock != NULL)
-            mLastBlockHash = *lastBlock;
-        updateBlockVersionFlags();
         return success;
     }
 
@@ -963,6 +1141,7 @@ namespace BitCoin
         Hash previousHash(32), merkleHash;
         Block block;
         unsigned int i, height = 0;
+        bool useTestMinDifficulty;
         ArcMist::String filePathName;
         UnspentPool &unspent = UnspentPool::instance();
 
@@ -1011,6 +1190,25 @@ namespace BitCoin
                         return false;
                     }
 
+                    useTestMinDifficulty = network() == TESTNET && block.time - mLastBlockTime > 1200;
+                    updateTargetBits(height, block.time);
+                    if(mTargetBits != block.targetBits)
+                    {
+                        // If on TestNet and 20 minutes since last block
+                        if(useTestMinDifficulty && block.targetBits == 0x1d00ffff)
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                              "Using TestNet special minimum difficulty rule 1d00ffff for block %d", height);
+                        }
+                        else
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                              "Block %010d target bits don't match chain's current target bits : chain %08x != block %08x",
+                              height, mTargetBits, block.targetBits);
+                            return false;
+                        }
+                    }
+
                     if(!block.process(unspent, height, mBlockVersionFlags))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
@@ -1041,7 +1239,11 @@ namespace BitCoin
         }
 
         if(pRebuildUnspent)
+        {
             unspent.save();
+            if(!saveTargetBits())
+                return false;
+        }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Unspent transactions :  %d", unspent.count());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Validated block height of %d", height);

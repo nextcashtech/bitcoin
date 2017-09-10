@@ -229,7 +229,7 @@ namespace BitCoin
         mMutex.unlock();
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME,
-          "Loaded %d tranactions at block height %d", mUnspentCount, mBlockHeight);
+          "Loaded %d transactions at block height %d", mUnspentCount, mBlockHeight);
 
         return mValid;
     }

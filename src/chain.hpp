@@ -158,7 +158,7 @@ namespace BitCoin
 
         // Load block data from file system
         //   If pList is true then all the block hashes will be output
-        bool loadBlocks(bool pList);
+        bool load(bool pList);
 
         // Process pending headers and blocks
         void process();
@@ -200,6 +200,18 @@ namespace BitCoin
         ArcMist::Mutex mBlockFileMutex;
         std::vector<unsigned int> mLockedBlockFileIDs;
         unsigned int mLastFileID;
+
+        // Target
+        uint32_t mTargetBits;
+        uint32_t mLastTargetTime, mLastBlockTime;
+        // For reverting target
+        uint32_t mPreviousTargetBits;
+        uint32_t mPreviousLastTargetTime, mPreviousLastBlockTime;
+
+        bool updateTargetBits(unsigned int pHeight, uint32_t pNextBlockTime);
+        bool revertTargetBits();
+        bool saveTargetBits();
+        bool loadTargetBits();
 
         // Last 2016 block's versions
         std::list<uint32_t> mBlockVersions;
