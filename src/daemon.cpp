@@ -252,41 +252,6 @@ namespace BitCoin
         mNodeMutex.unlock();
     }
 
-    void Daemon::cleanNodes()
-    {
-        uint64_t time = getTime();
-        mNodeMutex.lock();
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
-        {
-            if(!(*node)->isOpen())
-            {
-                delete *node;
-                node = mNodes.erase(node);
-                mNodeCount--;
-            }
-            else if(time - (*node)->lastReceiveTime() > 1800) // 30 minutes
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Dropping node [%d] because it is not responding", (*node)->id());
-                delete *node;
-                node = mNodes.erase(node);
-                mNodeCount--;
-            }
-            else if((*node)->notResponding())
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Dropping node [%d] because it is not responding to requests", (*node)->id());
-                Info::instance().addPeerFail((*node)->address());
-                delete *node;
-                node = mNodes.erase(node);
-                mNodeCount--;
-            }
-            else
-                ++node;
-        }
-        mNodeMutex.unlock();
-    }
-
     void Daemon::processRequests()
     {
         Chain &chain = Chain::instance();
@@ -415,15 +380,6 @@ namespace BitCoin
             {
                 daemon.mLastUnspentSave = time;
                 unspentPool.save();
-            }
-
-            if(daemon.mStopping)
-                break;
-
-            if(time - daemon.mLastClean > 10)
-            {
-                daemon.mLastClean = time;
-                daemon.cleanNodes();
             }
 
             if(daemon.mStopping)
@@ -617,6 +573,41 @@ namespace BitCoin
         }
     }
 
+    void Daemon::cleanNodes()
+    {
+        uint64_t time = getTime();
+        mNodeMutex.lock();
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
+        {
+            if(!(*node)->isOpen())
+            {
+                delete *node;
+                node = mNodes.erase(node);
+                mNodeCount--;
+            }
+            else if((*node)->lastReceiveTime() != 0 && time - (*node)->lastReceiveTime() > 1800) // 30 minutes
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Dropping node [%d] because it is not responding", (*node)->id());
+                delete *node;
+                node = mNodes.erase(node);
+                mNodeCount--;
+            }
+            else if((*node)->notResponding())
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Dropping node [%d] because it is not responding to requests", (*node)->id());
+                Info::instance().addPeerFail((*node)->address());
+                delete *node;
+                node = mNodes.erase(node);
+                mNodeCount--;
+            }
+            else
+                ++node;
+        }
+        mNodeMutex.unlock();
+    }
+
     void Daemon::processConnections()
     {
         Daemon &daemon = Daemon::instance();
@@ -677,6 +668,15 @@ namespace BitCoin
                 daemon.mLastNodeAdd = time;
                 if(info.maxConnections > daemon.mNodes.size())
                     daemon.pickNodes(info.maxConnections - daemon.mNodes.size());
+            }
+
+            if(daemon.mStopping)
+                break;
+
+            if(time - daemon.mLastClean > 10)
+            {
+                daemon.mLastClean = time;
+                daemon.cleanNodes();
             }
 
             if(daemon.mStopping)

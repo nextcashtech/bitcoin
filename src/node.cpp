@@ -38,6 +38,8 @@ namespace BitCoin
         mBlocksRequestedCount = 0;
         mBlocksReceivedCount = 0;
         mLastBlockReceiveTime = 0;
+        mMessagesReceived = 0;
+        mConnectedTime = getTime();
 
         mConnection = new ArcMist::Network::Connection(AF_INET6, pAddress.ip, pAddress.port, 5);
         if(!mConnection->isOpen())
@@ -74,6 +76,8 @@ namespace BitCoin
         mBlocksRequestedCount = 0;
         mBlocksReceivedCount = 0;
         mLastBlockReceiveTime = 0;
+        mMessagesReceived = 0;
+        mConnectedTime = getTime();
 
         mConnection = new ArcMist::Network::Connection(pIP, pPort, 5);
         mAddress = *mConnection;
@@ -111,6 +115,8 @@ namespace BitCoin
         mBlocksRequestedCount = 0;
         mBlocksReceivedCount = 0;
         mLastBlockReceiveTime = 0;
+        mMessagesReceived = 0;
+        mConnectedTime = getTime();
 
         mConnection = new ArcMist::Network::Connection(pFamily, pIP, pPort, 5);
         mAddress = *mConnection;
@@ -148,6 +154,8 @@ namespace BitCoin
         mBlocksRequestedCount = 0;
         mBlocksReceivedCount = 0;
         mLastBlockReceiveTime = 0;
+        mMessagesReceived = 0;
+        mConnectedTime = getTime();
 
         mConnection = pConnection;
         mAddress = *mConnection;
@@ -209,7 +217,9 @@ namespace BitCoin
     bool Node::notResponding() const
     {
         uint32_t time = getTime();
+        // Requested inventory not received within 2 minutes of request
         return (mLastInventoryRequest != 0 && mBlockHashCount == 0 && time - mLastInventoryRequest > 120) ||
+        // Requested blocks not received within 5 minutes of request
           (mLastBlockRequest != 0 && time - mLastBlockRequest > 300 && mLastBlockRequest > mLastBlockReceiveTime);
     }
 
@@ -468,6 +478,16 @@ namespace BitCoin
         if(message == NULL)
         {
             uint64_t time = getTime();
+
+            if(mMessagesReceived == 0 && time - mConnectedTime > 60)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_NODE_LOG_NAME,
+                  "[%d] No valid messages within 60 seconds of connecting", mID);
+                mConnection->close();
+                Info::instance().addPeerFail(mAddress);
+                return;
+            }
+
             if(time - mLastReceiveTime > 1200 && // 20 minutes
               time - mLastPingTime > 30)
             {
@@ -475,12 +495,26 @@ namespace BitCoin
                 sendMessage(&pingData);
                 mLastPingTime = getTime();
             }
+
             return;
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_NODE_LOG_NAME, "[%d] Received <%s>",
           mID, Message::nameFor(message->type));
         mLastReceiveTime = getTime();
+
+        if(mMessagesReceived == 0 && message->type != Message::VERSION && message->type != Message::VERACK)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_NODE_LOG_NAME,
+              "[%d] First message not a version or verack message : <%s>",
+              mID, Message::nameFor(message->type));
+            mConnection->close();
+            Info::instance().addPeerFail(mAddress);
+            delete message;
+            return;
+        }
+
+        ++mMessagesReceived;
 
         switch(message->type)
         {

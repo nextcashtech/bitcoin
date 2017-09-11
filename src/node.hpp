@@ -29,6 +29,8 @@ namespace BitCoin
         void process();
         void clear();
 
+        // Time that the node connected
+        uint32_t connectedTime() { return mConnectedTime; }
         // Last time a message was received from this peer
         uint32_t lastReceiveTime() { return mLastReceiveTime; }
 
@@ -99,6 +101,8 @@ namespace BitCoin
         unsigned int mBlocksReceivedCount;
 
         bool mConnected;
+        uint32_t mConnectedTime;
+        unsigned int mMessagesReceived;
 
         static unsigned int mNextID;
 
