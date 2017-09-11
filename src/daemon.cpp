@@ -41,7 +41,6 @@ namespace BitCoin
         mStopping = false;
         mStopRequested = false;
         mConnectionThread = NULL;
-        mListenerThread = NULL;
         mNodeThread = NULL;
         mManagerThread = NULL;
         previousSigTermChildHandler = NULL;
@@ -156,13 +155,6 @@ namespace BitCoin
             return false;
         }
 
-        mListenerThread = new ArcMist::Thread("Listener", listen);
-        if(mListenerThread == NULL)
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create listener thread");
-            return false;
-        }
-
         mNodeThread = new ArcMist::Thread("Node", processNodes);
         if(mNodeThread == NULL)
         {
@@ -219,11 +211,6 @@ namespace BitCoin
             delete mConnectionThread;
         mConnectionThread = NULL;
 
-        // Wait for listener to finish
-        if(mListenerThread != NULL)
-            delete mListenerThread;
-        mListenerThread = NULL;
-
         // Wait for manager to finish
         if(mManagerThread != NULL)
             delete mManagerThread;
@@ -270,7 +257,14 @@ namespace BitCoin
         uint64_t time = getTime();
         mNodeMutex.lock();
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
-            if(!(*node)->isOpen() || time - (*node)->lastReceiveTime() > 1800) // 30 minutes
+        {
+            if(!(*node)->isOpen())
+            {
+                delete *node;
+                node = mNodes.erase(node);
+                mNodeCount--;
+            }
+            else if(time - (*node)->lastReceiveTime() > 1800) // 30 minutes
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Dropping node [%d] because it is not responding", (*node)->id());
@@ -289,6 +283,7 @@ namespace BitCoin
             }
             else
                 ++node;
+        }
         mNodeMutex.unlock();
     }
 
@@ -328,15 +323,12 @@ namespace BitCoin
         }
 
         // Request blocks
-        unsigned int toRequestPer = chain.pendingCount() - chain.pendingBlockCount();
-        if(toRequestPer > 0 && availableToRequestBlocks > 0)
+        int blocksToRequest = chain.pendingCount() - chain.pendingBlockCount();
+        if(blocksToRequest > 0 && availableToRequestBlocks > 0)
         {
-            toRequestPer /= availableToRequestBlocks;
-            if(toRequestPer > 50)
-                toRequestPer = 50; // Request a maximum of 50 blocks per node
-            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end()&&!nextBlock.isEmpty();++node)
-                if((*node)->hasInventory() && !(*node)->waitingForBlocks() && (*node)->requestBlocks(toRequestPer, reduceOnly))
-                    nextBlock = chain.nextBlockNeeded(reduceOnly);
+            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end()&&blocksToRequest>0;++node)
+                if((*node)->hasInventory() && !(*node)->waitingForBlocks() && (*node)->requestBlocks(50, reduceOnly))
+                    blocksToRequest -= 50;
         }
 
         mNodeMutex.unlock();
@@ -377,8 +369,6 @@ namespace BitCoin
 
     void Daemon::processManager()
     {
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Manager thread started");
-
         Daemon &daemon = Daemon::instance();
         Chain &chain = Chain::instance();
         UnspentPool &unspentPool = UnspentPool::instance();
@@ -444,14 +434,10 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
         }
-
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Manager thread finished");
     }
 
     void Daemon::processNodes()
     {
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Nodes thread started");
-
         Daemon &daemon = Daemon::instance();
         std::vector<Node *> nodes;
 
@@ -475,8 +461,6 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
         }
-
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Nodes thread finished");
     }
 
     bool Daemon::addNode(const char *pIPAddress, const char *pPort)
@@ -633,13 +617,13 @@ namespace BitCoin
         }
     }
 
-    void Daemon::listen()
+    void Daemon::processConnections()
     {
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Listener thread started");
-
         Daemon &daemon = Daemon::instance();
         Info &info = Info::instance();
-        ArcMist::Network::Listener listener(networkPort(), 5, 1);
+        ArcMist::Network::Listener listener(AF_INET6, networkPort(), 5, 1);
+        ArcMist::Network::Connection *newConnection;
+        uint64_t time;
 
         if(!listener.isValid())
         {
@@ -651,43 +635,32 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Listening for connections on port %d", listener.port());
 
-        ArcMist::Network::Connection *newConnection = new ArcMist::Network::Connection();
-
         while(!daemon.mStopping)
         {
-            if(listener.accept(*newConnection))
+            newConnection = listener.accept();
+            if(newConnection != NULL)
             {
                 if(daemon.mNodeCount < info.maxConnections)
                 {
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Adding node from listener");
+                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                      "Adding node from incoming connection");
                     if(!daemon.addNode(newConnection)) // Add node for this connection
-                        delete newConnection;
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                          "Add node for incoming connection failed");
+                    }
                 }
                 else
+                {
+                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                      "Dropping incoming connection because of connection limit");
                     delete newConnection; // Drop this connection
-
-                newConnection = new ArcMist::Network::Connection();
+                }
             }
 
-            ArcMist::Thread::sleep(500); // 5hz
             if(daemon.mStopping)
                 break;
-        }
 
-        delete newConnection;
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Listener thread finished");
-    }
-
-    void Daemon::processConnections()
-    {
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Connections thread started");
-
-        Daemon &daemon = Daemon::instance();
-        Info &info = Info::instance();
-        uint64_t time;
-
-        while(!daemon.mStopping)
-        {
             time = getTime();
 
             if(daemon.mSeed)
@@ -713,7 +686,5 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
         }
-
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Connections thread finished");
     }
 }

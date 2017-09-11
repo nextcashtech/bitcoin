@@ -21,7 +21,6 @@ namespace BitCoin
 
         static Daemon &instance();
         static void destroy();
-        static void listen();
         static void processConnections();
         static void processNodes();
         static void processManager();
@@ -50,7 +49,6 @@ namespace BitCoin
 
         // Threads
         ArcMist::Thread *mConnectionThread;
-        ArcMist::Thread *mListenerThread;
         ArcMist::Thread *mNodeThread;
         ArcMist::Thread *mManagerThread;
 
