@@ -741,6 +741,8 @@ namespace BitCoin
                 mPendingBlocks = 0;
                 mPendingMutex.unlock();
 
+                //TODO Black list block hash
+
                 //TODO Figure out how to recover from this
 
                 // Stop daemon
@@ -986,9 +988,6 @@ namespace BitCoin
                     return false;
                 }
 
-                delete blockFile;
-                unlockBlockFile(fileID);
-
                 blockOffset = 0;
                 for(HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
                 {
@@ -1004,6 +1003,8 @@ namespace BitCoin
                                 pUnspentPool.revert();
                                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                                   "Failed to process block %d from block file %08x : %s", blockOffset, fileID, (*hash)->hex().text());
+                                delete blockFile;
+                                unlockBlockFile(fileID);
                                 return false;
                             }
                         }
@@ -1011,11 +1012,16 @@ namespace BitCoin
                         {
                             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                               "Failed to read block %d from block file %08x : %s", blockOffset, fileID, (*hash)->hex().text());
+                            delete blockFile;
+                            unlockBlockFile(fileID);
                             return false;
                         }
                     }
                     blockOffset++;
                 }
+
+                delete blockFile;
+                unlockBlockFile(fileID);
             }
             else
             {
