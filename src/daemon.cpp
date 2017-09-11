@@ -272,6 +272,17 @@ namespace BitCoin
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
             if(!(*node)->isOpen() || time - (*node)->lastReceiveTime() > 1800) // 30 minutes
             {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Dropping node [%d] because it is not responding", (*node)->id());
+                delete *node;
+                node = mNodes.erase(node);
+                mNodeCount--;
+            }
+            else if((*node)->notResponding())
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Dropping node [%d] because it is not responding to requests", (*node)->id());
+                Info::instance().addPeerFail((*node)->address());
                 delete *node;
                 node = mNodes.erase(node);
                 mNodeCount--;
@@ -302,17 +313,30 @@ namespace BitCoin
         }
 
         // Loop through nodes
+        unsigned int availableToRequestBlocks = 0;
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
         {
             if(!(*node)->hasInventory())
                 (*node)->requestInventory();
-            else if(pendingCount < 100 && time - mLastHeaderRequest > 60)
+            else if(pendingCount < 1000 && time - mLastHeaderRequest > 60)
             {
                 if((*node)->requestHeaders(chain.lastPendingBlockHash()))
                     mLastHeaderRequest = getTime();
             }
-            else if(!nextBlock.isEmpty())
-                (*node)->requestBlocks(5, reduceOnly);
+            else if(!(*node)->waitingForBlocks())
+                ++availableToRequestBlocks;
+        }
+
+        // Request blocks
+        unsigned int toRequestPer = chain.pendingCount() - chain.pendingBlockCount();
+        if(toRequestPer > 0 && availableToRequestBlocks > 0)
+        {
+            toRequestPer /= availableToRequestBlocks;
+            if(toRequestPer > 50)
+                toRequestPer = 50; // Request a maximum of 50 blocks per node
+            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end()&&!nextBlock.isEmpty();++node)
+                if((*node)->hasInventory() && !(*node)->waitingForBlocks() && (*node)->requestBlocks(toRequestPer, reduceOnly))
+                    nextBlock = chain.nextBlockNeeded(reduceOnly);
         }
 
         mNodeMutex.unlock();
@@ -329,7 +353,7 @@ namespace BitCoin
             count++;
             if((*node)->hasInventory())
                 inventory++;
-            if((*node)->waitingForBlock())
+            if((*node)->waitingForBlocks())
                 downloading++;
         }
         mNodeMutex.unlock();

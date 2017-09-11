@@ -32,9 +32,12 @@ namespace BitCoin
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
         mInventoryHeight = 0;
-        mLastBlockHashRequest = 0;
+        mLastInventoryRequest = 0;
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
+        mBlocksRequestedCount = 0;
+        mBlocksReceivedCount = 0;
+        mLastBlockReceiveTime = 0;
 
         mConnection = new ArcMist::Network::Connection(AF_INET6, pAddress.ip, pAddress.port, 5);
         if(!mConnection->isOpen())
@@ -65,9 +68,12 @@ namespace BitCoin
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
         mInventoryHeight = 0;
-        mLastBlockHashRequest = 0;
+        mLastInventoryRequest = 0;
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
+        mBlocksRequestedCount = 0;
+        mBlocksReceivedCount = 0;
+        mLastBlockReceiveTime = 0;
 
         mConnection = new ArcMist::Network::Connection(pIP, pPort, 5);
         mAddress = *mConnection;
@@ -99,9 +105,12 @@ namespace BitCoin
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
         mInventoryHeight = 0;
-        mLastBlockHashRequest = 0;
+        mLastInventoryRequest = 0;
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
+        mBlocksRequestedCount = 0;
+        mBlocksReceivedCount = 0;
+        mLastBlockReceiveTime = 0;
 
         mConnection = new ArcMist::Network::Connection(pFamily, pIP, pPort, 5);
         mAddress = *mConnection;
@@ -133,9 +142,12 @@ namespace BitCoin
         mLastBlockRequest = 0;
         mBlockHashCount = 0;
         mInventoryHeight = 0;
-        mLastBlockHashRequest = 0;
+        mLastInventoryRequest = 0;
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
+        mBlocksRequestedCount = 0;
+        mBlocksReceivedCount = 0;
+        mLastBlockReceiveTime = 0;
 
         mConnection = pConnection;
         mAddress = *mConnection;
@@ -180,11 +192,13 @@ namespace BitCoin
         mVersionData = NULL;
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
-        mLastBlockHashRequest = 0;
+        mLastInventoryRequest = 0;
         mBlockHashCount = 0;
         mInventoryHeight = 0;
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
+        mBlocksRequestedCount = 0;
+        mBlocksReceivedCount = 0;
 
         mHeaderRequested.clear();
         mBlocksRequested.clear();
@@ -192,11 +206,18 @@ namespace BitCoin
         clearInventory();
     }
 
+    bool Node::notResponding() const
+    {
+        uint32_t time = getTime();
+        return (mLastInventoryRequest != 0 && mBlockHashCount == 0 && time - mLastInventoryRequest > 120) ||
+          (mLastBlockRequest != 0 && time - mLastBlockRequest > 300 && mLastBlockRequest > mLastBlockReceiveTime);
+    }
+
     bool Node::shouldRequestInventory()
     {
         mBlockHashMutex.lock();
         uint64_t time = getTime();
-        bool result = (mBlockHashCount == 0 && time - mLastBlockHashRequest > 60) ||
+        bool result = (mBlockHashCount == 0 && time - mLastInventoryRequest > 60) ||
           Chain::instance().blockHeight() > mInventoryHeight + 200;
         mBlockHashMutex.unlock();
         return result;
@@ -300,11 +321,11 @@ namespace BitCoin
 
     bool Node::requestInventory()
     {
-        if(getTime() - mLastBlockHashRequest < 120) // Recently requested
+        if(getTime() - mLastInventoryRequest < 180) // Recently requested
             return false;
 
         Chain &chain = Chain::instance();
-        if(mBlockHashCount != 0 && !chain.isInSync() && chain.blockHeight() < mInventoryHeight + 200)
+        if(mBlockHashCount != 0 && !chain.isInSync() && chain.blockHeight() < mInventoryHeight + 500)
             return false;
 
         HashList hashList;
@@ -312,7 +333,7 @@ namespace BitCoin
         clearInventory();
         mInventoryHeight = chain.blockHeight();
 
-        chain.getReverseBlockHashes(hashList, 32);
+        chain.getReverseBlockHashes(hashList, 10);
         if(hashList.size() == 0)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
               "[%d] Requesting block hashes starting from genesis", mID);
@@ -325,7 +346,7 @@ namespace BitCoin
             getBlocksData.blockHeaderHashes.push_back(**hash);
         bool success = sendMessage(&getBlocksData);
         if(success)
-            mLastBlockHashRequest = getTime();
+            mLastInventoryRequest = getTime();
         return success;
     }
 
@@ -357,7 +378,7 @@ namespace BitCoin
         Chain &chain = Chain::instance();
         Hash startHash = chain.nextBlockNeeded(pReduceOnly);
 
-        if(waitingForBlock() || startHash.isEmpty() || !hasBlock(startHash))
+        if(waitingForBlocks() || startHash.isEmpty() || !hasBlock(startHash))
             return false;
 
         mBlockRequestMutex.lock();
@@ -375,7 +396,7 @@ namespace BitCoin
             if(sentCount < pCount)
             {
                 nextBlockHash = chain.nextBlockNeeded(pReduceOnly);
-                if(!hasBlock(nextBlockHash))
+                if(nextBlockHash.isEmpty() || !hasBlock(nextBlockHash))
                     break;
             }
             else
@@ -385,6 +406,7 @@ namespace BitCoin
         bool success = sendMessage(&getDataData);
         if(success)
         {
+            mBlocksRequestedCount += sentCount;
             mLastBlockRequest = getTime();
             Events::instance().post(Event::BLOCK_REQUESTED);
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
@@ -652,11 +674,11 @@ namespace BitCoin
                         mBlocksRequested.erase(hash);
                         break;
                     }
-                if(mBlocksRequested.size() == 0)
-                    mLastBlockRequest = 0;
                 mBlockRequestMutex.unlock();
                 if(Chain::instance().addPendingBlock(((Message::BlockData *)message)->block))
                 {
+                    mLastBlockReceiveTime = getTime();
+                    ++mBlocksReceivedCount;
                     ((Message::BlockData *)message)->block = NULL; // Memory has been handed off
                     Info::instance().updatePeer(mAddress, mVersionData->userAgent);
                 }

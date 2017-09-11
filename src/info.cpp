@@ -236,7 +236,7 @@ namespace BitCoin
         std::random_shuffle(pPeers.begin(), pPeers.end());
     }
 
-    void Info::addPeerFail(IPAddress &pAddress)
+    void Info::addPeerFail(const IPAddress &pAddress)
     {
         if(!pAddress.isValid())
             return;
@@ -260,7 +260,7 @@ namespace BitCoin
         mPeerMutex.unlock();
     }
 
-    void Info::updatePeer(IPAddress &pAddress, const char *pUserAgent)
+    void Info::updatePeer(const IPAddress &pAddress, const char *pUserAgent)
     {
         if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) || !pAddress.services)
             return;

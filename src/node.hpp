@@ -29,6 +29,12 @@ namespace BitCoin
         void process();
         void clear();
 
+        // Last time a message was received from this peer
+        uint32_t lastReceiveTime() { return mLastReceiveTime; }
+
+        // True if the node is not responding to block hash/header/full requests
+        bool notResponding() const;
+
         bool hasInventory(); // Block inventories have been received
         bool shouldRequestInventory(); // Returns true if node has no block hashes and hasn't requested any recently
         void clearInventory(); // Clear block inventory information
@@ -39,9 +45,12 @@ namespace BitCoin
         bool waitingForHeaders() { return !mHeaderRequested.isEmpty() && getTime() - mLastHeaderRequest < 300; }
 
         bool requestBlocks(unsigned int pCount, bool pReduceOnly);
-        bool waitingForBlock() { return mBlocksRequested.size() != 0 && getTime() - mLastBlockRequest < 300; }
+        bool waitingForBlocks() { return mBlocksRequested.size() != 0; }
 
-        uint64_t lastReceiveTime() { return mLastReceiveTime; }
+        uint32_t lastBlockRequestTime() { return mLastBlockRequest; }
+        uint32_t lastBlockReceiveTime() { return mLastBlockReceiveTime; }
+        unsigned int blocksRequestedCount() const { return mBlocksRequestedCount; }
+        unsigned int blocksReceivedCount() const { return mBlocksReceivedCount; }
 
         const IPAddress &address() { return mAddress; }
 
@@ -66,8 +75,8 @@ namespace BitCoin
 
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;
-        uint64_t mLastReceiveTime;
-        uint64_t mLastPingTime;
+        uint32_t mLastReceiveTime;
+        uint32_t mLastPingTime;
         uint64_t mPingNonce;
         uint64_t mMinimumFeeRate;
 
@@ -77,14 +86,17 @@ namespace BitCoin
         void removeBlockHash(Hash &pHash);
         std::list<Hash *> mBlockHashes[0x10000];
         unsigned int mBlockHashCount, mInventoryHeight;
-        uint64_t mLastBlockHashRequest;
+        uint32_t mLastInventoryRequest;
 
         Hash mHeaderRequested;
-        uint64_t mLastHeaderRequest;
+        uint32_t mLastHeaderRequest;
 
         ArcMist::Mutex mBlockRequestMutex;
         HashList mBlocksRequested;
-        uint64_t mLastBlockRequest;
+        uint32_t mLastBlockRequest;
+        uint32_t mLastBlockReceiveTime;
+        unsigned int mBlocksRequestedCount;
+        unsigned int mBlocksReceivedCount;
 
         bool mConnected;
 

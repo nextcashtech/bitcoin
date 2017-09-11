@@ -422,14 +422,14 @@ namespace BitCoin
 
     unsigned int PendingData::timeout()
     {
-        int tempPriority = priority;
+        // int tempPriority = priority;
         unsigned int result = 360;
 
-        while(tempPriority > 0)
-        {
-            result /= 2;
-            tempPriority--;
-        }
+        // while(tempPriority > 0)
+        // {
+            // result /= 2;
+            // tempPriority--;
+        // }
 
         return result;
     }
