@@ -197,6 +197,7 @@ namespace BitCoin
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Bits          : %08x", targetBits);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Nonce         : %08x", nonce);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Total Fees    : %f", bitcoins(mFees));
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Size (bytes)  : %d", mSize);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "%d Transactions", transactionCount);
 
         unsigned int index = 0;

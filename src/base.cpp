@@ -227,7 +227,7 @@ namespace BitCoin
     uint32_t multiplyTargetBits(uint32_t pTargetBits, double pFactor, uint32_t pMax)
     {
         // Note: Negative values are not handled by this function
-        uint8_t length = ((pTargetBits >> 24) & 0xff) - 1;
+        uint8_t length = (pTargetBits >> 24) & 0xff;
         uint32_t value = pTargetBits & 0x00ffffff;
 
         // Remove leading zero byte
@@ -237,48 +237,48 @@ namespace BitCoin
             // value <<= 8;
         // }
 
-        //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
-        //  "Initial : length %02x value %08x", length, value);
+        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+          // "Initial : length %02x value %08x", length, value);
 
         if(pFactor < 1.0) // Reduce
         {
             // Decrease length to handle a reduction in value
             --length;
             value <<= 8;
-            //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
-            //  "After shift up : length %02x value %08x", length, value);
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+              // "After shift up : length %02x value %08x", length, value);
 
             value *= pFactor;
-            //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
-            //  "After factor : length %02x value %08x", length, value);
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+              // "After factor : length %02x value %08x", length, value);
 
             if(value & 0xff000000)
             {
                 // Increase length
                 ++length;
                 value >>= 8;
-                //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
-                //  "After shift down : length %02x value %08x", length, value);
+                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+                  // "After shift down : length %02x value %08x", length, value);
             }
         }
         else // Increase
         {
             value *= pFactor;
-            //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
-            //  "After factor : length %02x value %08x", length, value);
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+              // "After factor : length %02x value %08x", length, value);
 
             if(value & 0xff000000)
             {
                 // Increase length
                 ++length;
                 value >>= 8;
-                //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
-                //  "After shift down : length %02x value %08x", length, value);
+                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+                  // "After shift down : length %02x value %08x", length, value);
             }
         }
 
         // Apply maximum
-        uint8_t maxLength = ((pMax >> 24) & 0xff) - 1;
+        uint8_t maxLength = (pMax >> 24) & 0xff;
         uint32_t maxValue = pMax & 0x00ffffff;
         // Remove leading zero byte
         // if((maxValue & 0x00ff0000) == 0x00)
@@ -299,7 +299,7 @@ namespace BitCoin
             value >>= 8;
         }
 
-        uint32_t result = (length + 1) << 24;
+        uint32_t result = length << 24;
         result += value & 0x00ffffff;
         return result;
     }
@@ -636,24 +636,6 @@ namespace BitCoin
             if(previousTarget != correctNewTarget)
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Multiply by 4");
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
-                success = false;
-            }
-            else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Multiply by 4");
-
-            /***********************************************************************************************
-             * Target Bits Multiply by 0.25
-             ***********************************************************************************************/
-            previousTarget = 0x1c3fffc0;
-            correctNewTarget = 0x1d00ffff;
-
-            previousTarget = multiplyTargetBits(previousTarget, 0.25);
-
-            if(previousTarget != correctNewTarget)
-            {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Multiply by 0.25");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
                 success = false;

@@ -202,14 +202,22 @@ namespace BitCoin
         unsigned int mLastFileID;
 
         // Target
-        uint32_t mTargetBits;
-        uint32_t mLastTargetTime, mLastBlockTime;
+        uint32_t mTargetBits; // Current target bits
+        uint32_t mLastTargetTime; // Time of last block that was used to update target
+        uint32_t mLastBlockTime; // Time of last block
+        uint32_t mLastTargetBits; // Target bits of last block
         // For reverting target
-        uint32_t mPreviousTargetBits;
-        uint32_t mPreviousLastTargetTime, mPreviousLastBlockTime;
+        uint32_t mRevertTargetBits;
+        uint32_t mRevertLastTargetTime;
+        uint32_t mRevertLastBlockTime;
+        uint32_t mRevertLastTargetBits;
 
-        bool updateTargetBits(unsigned int pHeight, uint32_t pNextBlockTime);
+        // Update target bits based on new block
+        bool updateTargetBits(unsigned int pHeight, uint32_t pNextBlockTime, uint32_t pNextBlockTargetBits);
+        // Revert target bits to state before last update
         bool revertTargetBits();
+
+        // Save/Load target bits state from file system
         bool saveTargetBits();
         bool loadTargetBits();
 

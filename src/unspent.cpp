@@ -180,7 +180,7 @@ namespace BitCoin
 
     bool UnspentPool::load()
     {
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME, "Loading unspent transactions");
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME, "Loading unspent transaction outputs");
         clear();
 
         // Load from file system
@@ -229,7 +229,7 @@ namespace BitCoin
         mMutex.unlock();
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME,
-          "Loaded %d transactions at block height %d", mUnspentCount, mBlockHeight);
+          "Loaded %d unspent transaction outputs at block height %d", mUnspentCount, mBlockHeight);
 
         return mValid;
     }
@@ -247,12 +247,12 @@ namespace BitCoin
 
         if(!mModified)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_UNSPENT_LOG_NAME, "Not saving unspent transactions. They weren't modified");
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_UNSPENT_LOG_NAME, "Not saving unspent transaction outputs. They weren't modified");
             Events::instance().post(Event::UNSPENTS_SAVED);
             return true;
         }
 
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_UNSPENT_LOG_NAME, "Saving unspent transactions");
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_UNSPENT_LOG_NAME, "Saving unspent transaction outputs");
 
         ArcMist::String filePath = Info::instance().path();
         ArcMist::String filePathName, fileName;
