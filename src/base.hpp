@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <ctime>
 
-#define BITCOIN_USER_AGENT "/ArcMist BitCoin Cash 0.0.1/"
+#define BITCOIN_USER_AGENT "/ArcMist 0.0.1/"
 #define PROTOCOL_VERSION 70015
 
 
