@@ -133,17 +133,17 @@ namespace BitCoin
         Info::instance(); // Load data
         mLastInfoSave = getTime();
 
-        if(!Chain::instance().load(false))
+        if(!mUnspentPool.load())
             return false;
 
-        if(!UnspentPool::instance().load())
+        if(!mChain.load(mUnspentPool, false))
             return false;
 
-        if(!Chain::instance().updateUnspent(UnspentPool::instance()))
+        if(!mChain.updateUnspent(mUnspentPool))
         {
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
-              "Unspent height %d doesn't match chain height %d", UnspentPool::instance().blockHeight(),
-              Chain::instance().blockHeight());
+              "Unspent height %d doesn't match chain height %d", mUnspentPool.blockHeight(),
+              mChain.blockHeight());
             return false;
         }
         mLastUnspentSave = getTime();
@@ -229,10 +229,7 @@ namespace BitCoin
         for(unsigned int i=0;i<tempNodes.size();i++)
             delete tempNodes[i];
 
-        UnspentPool::instance().save();
-
-        Chain::destroy();
-        UnspentPool::destroy();
+        mUnspentPool.save();
         Info::destroy();
 
         mRunning = false;
@@ -254,33 +251,32 @@ namespace BitCoin
 
     void Daemon::processRequests()
     {
-        Chain &chain = Chain::instance();
-        chain.prioritizePending();
+        mChain.prioritizePending();
 
         mNodeMutex.lock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
 
-        int pendingCount = chain.pendingCount();
-        bool reduceOnly = chain.pendingSize() > mMaxPendingSize;
-        Hash nextBlock = chain.nextBlockNeeded(reduceOnly);
+        int pendingCount = mChain.pendingCount();
+        bool reduceOnly = mChain.pendingSize() > mMaxPendingSize;
+        Hash nextBlock = mChain.nextBlockNeeded(reduceOnly);
         uint64_t time = getTime();
 
         if(reduceOnly)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
-              "Max pending block memory usage : %d", chain.pendingSize());
+              "Max pending block memory usage : %d", mChain.pendingSize());
         }
 
         // Loop through nodes
         unsigned int availableToRequestBlocks = 0;
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
         {
-            if(!(*node)->hasInventory())
-                (*node)->requestInventory();
+            if(!(*node)->hasInventory(mChain))
+                (*node)->requestInventory(mChain);
             else if(pendingCount < 1000 && time - mLastHeaderRequest > 60)
             {
-                if((*node)->requestHeaders(chain.lastPendingBlockHash()))
+                if((*node)->requestHeaders(mChain.lastPendingBlockHash()))
                     mLastHeaderRequest = getTime();
             }
             else if(!(*node)->waitingForBlocks())
@@ -288,11 +284,11 @@ namespace BitCoin
         }
 
         // Request blocks
-        int blocksToRequest = chain.pendingCount() - chain.pendingBlockCount();
+        int blocksToRequest = mChain.pendingCount() - mChain.pendingBlockCount();
         if(blocksToRequest > 0 && availableToRequestBlocks > 0)
         {
             for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end()&&blocksToRequest>0;++node)
-                if((*node)->hasInventory() && !(*node)->waitingForBlocks() && (*node)->requestBlocks(50, reduceOnly))
+                if((*node)->hasInventory(mChain) && !(*node)->waitingForBlocks() && (*node)->requestBlocks(mChain, 50, reduceOnly))
                     blocksToRequest -= 50;
         }
 
@@ -308,7 +304,7 @@ namespace BitCoin
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
         {
             count++;
-            if((*node)->hasInventory())
+            if((*node)->hasInventory(mChain))
                 inventory++;
             if((*node)->waitingForBlocks())
                 downloading++;
@@ -317,15 +313,13 @@ namespace BitCoin
 
         collectNetworkTracking();
 
-        Chain &chain = Chain::instance();
-        UnspentPool &unspent = UnspentPool::instance();
-        unsigned int blocks = chain.pendingBlockCount();
-        unsigned int totalPending = chain.pendingCount();
+        unsigned int blocks = mChain.pendingBlockCount();
+        unsigned int totalPending = mChain.pendingCount();
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks, %d UTXOs", chain.blockHeight(), unspent.count());
+          "Block Chain : %d blocks, %d UTXOs", mChain.blockHeight(), mUnspentPool.count());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Pending : %d blocks, %d headers (%d bytes)", blocks, totalPending - blocks, chain.pendingSize());
+          "Pending : %d blocks, %d headers (%d bytes)", blocks, totalPending - blocks, mChain.pendingSize());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Nodes : %d (%d have inventory) (%d downloading)", count, inventory, downloading);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
@@ -335,8 +329,6 @@ namespace BitCoin
     void Daemon::processManager()
     {
         Daemon &daemon = Daemon::instance();
-        Chain &chain = Chain::instance();
-        UnspentPool &unspentPool = UnspentPool::instance();
         Info &info = Info::instance();
         uint64_t time;
 
@@ -353,7 +345,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            chain.process();
+            daemon.mChain.process(daemon.mUnspentPool);
 
             if(daemon.mStopping)
                 break;
@@ -379,7 +371,7 @@ namespace BitCoin
             if(time - daemon.mLastUnspentSave > 300)
             {
                 daemon.mLastUnspentSave = time;
-                unspentPool.save();
+                daemon.mUnspentPool.save();
             }
 
             if(daemon.mStopping)
@@ -406,7 +398,7 @@ namespace BitCoin
                     break;
 
                 if((*node)->isOpen())
-                    (*node)->process();
+                    (*node)->process(daemon.mChain);
             }
             daemon.mNodeMutex.unlock();
 
@@ -427,7 +419,7 @@ namespace BitCoin
             return false;
         }
 
-        Node *node = new Node(pIPAddress, pPort);
+        Node *node = new Node(pIPAddress, pPort, mChain);
         if(node->isOpen())
         {
             mNodeMutex.lock();
@@ -451,7 +443,7 @@ namespace BitCoin
             return false;
         }
 
-        Node *node = new Node(pAddress);
+        Node *node = new Node(pAddress, mChain);
         if(node->isOpen())
         {
             mNodeMutex.lock();
@@ -557,7 +549,7 @@ namespace BitCoin
             return false;
         }
 
-        Node *node = new Node(pConnection);
+        Node *node = new Node(pConnection, mChain);
         if(node->isOpen())
         {
             mNodeMutex.lock();

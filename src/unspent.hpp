@@ -7,11 +7,12 @@
 #include "base.hpp"
 
 #include <list>
+#include <stdlib.h>
 
 
 namespace BitCoin
 {
-    // Unspent transaction UTXO
+    // Unspent transaction output (UTXO)
     class Unspent
     {
     public:
@@ -30,12 +31,17 @@ namespace BitCoin
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
+        bool operator == (const Unspent &pRight) const
+        {
+            return transactionID == pRight.transactionID && index == pRight.index;
+        }
+
         // Print human readable to log
-        void print(ArcMist::Log::Level pLevel);
+        void print(ArcMist::Log::Level pLevel = ArcMist::Log::VERBOSE);
 
     };
 
-    // Hash table of subset of unspent transactions
+    // Hash table of subset of unspent transaction outputs
     class UnspentSet
     {
     public:
@@ -44,7 +50,7 @@ namespace BitCoin
 
         UnspentSet() {}
         ~UnspentSet();
-        
+
         unsigned int size() const { return mPool.size(); }
 
         Unspent *find(const Hash &pTransactionID, uint32_t pIndex);
@@ -57,29 +63,33 @@ namespace BitCoin
 
         void clear();
 
+        // This will remove items from pOther as it finds matches
+        // Returns true if they match
+        bool compare(UnspentSet &pOther, const char *pName, const char *pOtherName);
+
     private:
 
         std::list<Unspent *> mPool;
 
     };
 
-    // Container for all unspent transactions
+    // Container for all unspent transaction outputs
     class UnspentPool
     {
     public:
 
-        static UnspentPool &instance();
-        static void destroy();
+        UnspentPool();
+        ~UnspentPool();
 
         bool isValid() const { return mValid; }
 
-        // Find an existing unspent transaction
+        // Find an existing unspent transaction output
         Unspent *find(const Hash &pTransactionID, uint32_t pIndex);
 
-        // Add a new unspent transaction
+        // Add a new unspent transaction output
         void add(Unspent &pUnspent);
 
-        // Remove an unspent transaction (use pointer returned from find())
+        // Remove an unspent transaction output (use pointer returned from find())
         void spend(Unspent *pUnspent);
         bool spend(const Hash &pTransactionID, uint32_t pIndex)
         {
@@ -98,7 +108,7 @@ namespace BitCoin
         // Height of last block
         unsigned int blockHeight() { return mBlockHeight - 1; }
 
-        // Number of unspent transactions
+        // Number of unspent transaction outputs
         unsigned int count()
         {
             mMutex.lock();
@@ -116,30 +126,15 @@ namespace BitCoin
         // Save to file system
         bool save();
 
-        // Clear all unspent transactions
-        void reset();
+        void clear();
+
+        // This will remove items from pOther as it finds matches
+        // Returns true if they match
+        bool compare(UnspentPool &pOther, const char *pName, const char *pOtherName);
 
     private:
 
-        UnspentPool();
-        ~UnspentPool();
         const UnspentPool &operator = (const UnspentPool &pRight);
-
-        void clear()
-        {
-            mMutex.lock();
-            mValid = true;
-            mBlockHeight = 0;
-
-            for(std::list<Unspent *>::iterator iter=mPendingAdd.begin();iter!=mPendingAdd.end();++iter)
-                delete *iter;
-            mPendingAdd.clear();
-            mPendingSpend.clear();
-
-            for(unsigned int i=0;i<0xffff;i++)
-                mSets[i].clear();
-            mMutex.unlock();
-        }
 
         ArcMist::Mutex mMutex;
         UnspentSet mSets[0x10000];
@@ -148,8 +143,6 @@ namespace BitCoin
         bool mValid;
         unsigned int mUnspentCount;
         unsigned int mBlockHeight;
-
-        static UnspentPool *sInstance;
 
     };
 }

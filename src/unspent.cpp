@@ -35,22 +35,202 @@ namespace BitCoin
         return *this;
     }
 
-    UnspentPool *UnspentPool::sInstance = NULL;
-
-    UnspentPool &UnspentPool::instance()
+    void Unspent::write(ArcMist::OutputStream *pStream)
     {
-        if(sInstance == NULL)
-        {
-            sInstance = new UnspentPool();
-            std::atexit(destroy);
-        }
-        return *sInstance;
+        // Amount
+        pStream->writeUnsignedLong(amount);
+
+        // Script Size
+        writeCompactInteger(pStream, script.length());
+
+        // Script
+        script.setReadOffset(0);
+        pStream->writeStream(&script, script.length());
+
+        // Transaction ID Size
+        writeCompactInteger(pStream, transactionID.size());
+
+        // Transaction ID
+        transactionID.write(pStream);
+
+        // Index
+        pStream->writeUnsignedInt(index);
+
+        // Hash Size
+        writeCompactInteger(pStream, hash.size());
+
+        // Hash
+        hash.write(pStream);
+
+        // Height
+        pStream->writeUnsignedInt(height);
     }
 
-    void UnspentPool::destroy()
+    bool Unspent::read(ArcMist::InputStream *pStream)
     {
-        delete UnspentPool::sInstance;
-        UnspentPool::sInstance = 0;
+        if(pStream->remaining() < 5)
+            return false;
+
+        // Amount
+        amount = pStream->readUnsignedLong();
+
+        // Script Size
+        uint64_t size = readCompactInteger(pStream);
+        if(pStream->remaining() < size)
+            return false;
+
+        // Script
+        script.clear();
+        pStream->readStream(&script, size);
+
+        // Transaction ID Size
+        size = readCompactInteger(pStream);
+        if(pStream->remaining() < size)
+            return false;
+
+        // Transaction ID
+        if(!transactionID.read(pStream, size))
+            return false;
+
+        if(pStream->remaining() < 4)
+            return false;
+
+        // Index
+        index = pStream->readUnsignedInt();
+
+        // Hash Size
+        size = readCompactInteger(pStream);
+        if(pStream->remaining() < size)
+            return false;
+
+        // Hash
+        if(!hash.read(pStream, size))
+            return false;
+
+        if(pStream->remaining() < 4)
+            return false;
+
+        // Height
+        height = pStream->readUnsignedInt();
+
+        return true;
+    }
+
+    void Unspent::print(ArcMist::Log::Level pLevel)
+    {
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Amount         : %.08f", bitcoins(amount));
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Script : (%d bytes)", script.length());
+        script.setReadOffset(0);
+        ScriptInterpreter::printScript(script, pLevel);
+        script.setReadOffset(0);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Transaction ID : %s", transactionID.hex().text());
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Index          : %x", index);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Hash           : %s", hash.hex().text());
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Height         : %d", height);
+    }
+
+    UnspentSet::~UnspentSet()
+    {
+        for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
+            delete *iter;
+    }
+
+    void UnspentSet::clear()
+    {
+        for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
+            delete *iter;
+        mPool.clear();
+    }
+
+    Unspent *UnspentSet::find(const Hash &pTransactionID, uint32_t pIndex)
+    {
+        for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
+            if((*iter)->transactionID == pTransactionID && (*iter)->index == pIndex)
+                return *iter;
+        return NULL;
+    }
+
+    void UnspentSet::add(Unspent *pUnspent)
+    {
+        mPool.push_back(pUnspent);
+    }
+
+    void UnspentSet::remove(Unspent *pUnspent)
+    {
+        mPool.remove(pUnspent);
+    }
+
+    void UnspentSet::write(ArcMist::OutputStream *pStream)
+    {
+        pStream->writeString(START_STRING);
+        pStream->writeUnsignedInt(mPool.size());
+        for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
+            (*iter)->write(pStream);
+    }
+
+    bool UnspentSet::read(ArcMist::InputStream *pStream)
+    {
+        ArcMist::String startString = pStream->readString(8);
+        if(startString != START_STRING)
+            return false;
+        if(pStream->remaining() < 4)
+            return false;
+        unsigned int count = pStream->readUnsignedInt();
+        Unspent *newUnspent;
+        for(unsigned int i=0;i<count;i++)
+        {
+            newUnspent = new Unspent();
+            if(!newUnspent->read(pStream))
+            {
+                delete newUnspent;
+                return false;
+            }
+            mPool.push_back(newUnspent);
+        }
+        return true;
+    }
+
+    bool UnspentSet::compare(UnspentSet &pOther, const char *pName, const char *pOtherName)
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_UNSPENT_LOG_NAME,
+          "Comparing unspent transaction output sets : %s (%d) - %s (%d)", pName, mPool.size(),
+          pOtherName, pOther.mPool.size());
+
+        bool found;
+        bool result = true;
+
+        // Loop through all unspent transaction outputs in this set
+        for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
+        {
+            found = false;
+
+            // Find a matching unspent transaction output in the other set
+            for(std::list<Unspent *>::iterator otherIter=pOther.mPool.begin();otherIter!=pOther.mPool.end();++otherIter)
+                if(**iter == **otherIter)
+                {
+                    found = true;
+                    pOther.mPool.erase(otherIter);
+                    break;
+                }
+
+            if(!found)
+            {
+                // This one doesn't match
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME, "Only in %s", pName);
+                (*iter)->print(ArcMist::Log::INFO);
+                result = false;
+            }
+        }
+
+        // Any remaining in pOther are not matching
+        for(std::list<Unspent *>::iterator iter=pOther.mPool.begin();iter!=pOther.mPool.end();)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME, "Only in %s", pOtherName);
+            (*iter)->print(ArcMist::Log::INFO);
+            result = false;
+        }
+
+        return result;
     }
 
     UnspentPool::UnspentPool() : mMutex("Unspent")
@@ -291,166 +471,39 @@ namespace BitCoin
         return true;
     }
 
-    void UnspentPool::reset()
+    void UnspentPool::clear()
     {
         mMutex.lock();
-        for(unsigned int i=0;i<0x10000;i++)
-            mSets[i].clear();
+        mValid = true;
+        mBlockHeight = 0;
+
+        for(std::list<Unspent *>::iterator iter=mPendingAdd.begin();iter!=mPendingAdd.end();++iter)
+            delete *iter;
+        mPendingAdd.clear();
+        mPendingSpend.clear();
+
+        unsigned int i = 0;
+        for(UnspentSet *set=mSets;i<0x10000;++i,++set)
+            set->clear();
         mMutex.unlock();
     }
 
-    UnspentSet::~UnspentSet()
+    bool UnspentPool::compare(UnspentPool &pOther, const char *pName, const char *pOtherName)
     {
-        for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
-            delete *iter;
-    }
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME,
+          "Comparing unspent transaction output pools : %s (%d) - %s (%d)", pName, count(), pOtherName, pOther.count());
 
-    void UnspentSet::clear()
-    {
-        for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
-            delete *iter;
-        mPool.clear();
-    }
+        bool result = true;
+        unsigned int i = 0;
+        UnspentSet *otherSet = pOther.mSets;
 
-    Unspent *UnspentSet::find(const Hash &pTransactionID, uint32_t pIndex)
-    {
-        for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
-            if((*iter)->transactionID == pTransactionID && (*iter)->index == pIndex)
-                return *iter;
-        return NULL;
-    }
+        for(UnspentSet *set=mSets;i<0x10000;++i,++set)
+            result = set->compare(*otherSet++, pName, pOtherName) && result;
 
-    void UnspentSet::add(Unspent *pUnspent)
-    {
-        mPool.push_back(pUnspent);
-    }
+        if(result)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_UNSPENT_LOG_NAME,
+              "Unspent transaction output pools are equal : %s (%d) == %s (%d)", pName, count(), pOtherName, pOther.count());
 
-    void UnspentSet::remove(Unspent *pUnspent)
-    {
-        mPool.remove(pUnspent);
-    }
-
-    void UnspentSet::write(ArcMist::OutputStream *pStream)
-    {
-        pStream->writeString(START_STRING);
-        pStream->writeUnsignedInt(mPool.size());
-        for(std::list<Unspent *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
-            (*iter)->write(pStream);
-    }
-
-    bool UnspentSet::read(ArcMist::InputStream *pStream)
-    {
-        ArcMist::String startString = pStream->readString(8);
-        if(startString != START_STRING)
-            return false;
-        if(pStream->remaining() < 4)
-            return false;
-        unsigned int count = pStream->readUnsignedInt();
-        Unspent *newUnspent;
-        for(unsigned int i=0;i<count;i++)
-        {
-            newUnspent = new Unspent();
-            if(!newUnspent->read(pStream))
-            {
-                delete newUnspent;
-                return false;
-            }
-            mPool.push_back(newUnspent);
-        }
-        return true;
-    }
-
-    void Unspent::write(ArcMist::OutputStream *pStream)
-    {
-        // Amount
-        pStream->writeUnsignedLong(amount);
-
-        // Script Size
-        writeCompactInteger(pStream, script.length());
-
-        // Script
-        script.setReadOffset(0);
-        pStream->writeStream(&script, script.length());
-
-        // Transaction ID Size
-        writeCompactInteger(pStream, transactionID.size());
-
-        // Transaction ID
-        transactionID.write(pStream);
-
-        // Index
-        pStream->writeUnsignedInt(index);
-
-        // Hash Size
-        writeCompactInteger(pStream, hash.size());
-
-        // Hash
-        hash.write(pStream);
-
-        // Height
-        pStream->writeUnsignedInt(height);
-    }
-
-    bool Unspent::read(ArcMist::InputStream *pStream)
-    {
-        if(pStream->remaining() < 5)
-            return false;
-
-        // Amount
-        amount = pStream->readUnsignedLong();
-
-        // Script Size
-        uint64_t size = readCompactInteger(pStream);
-        if(pStream->remaining() < size)
-            return false;
-
-        // Script
-        script.clear();
-        pStream->readStream(&script, size);
-
-        // Transaction ID Size
-        size = readCompactInteger(pStream);
-        if(pStream->remaining() < size)
-            return false;
-
-        // Transaction ID
-        if(!transactionID.read(pStream, size))
-            return false;
-
-        if(pStream->remaining() < 4)
-            return false;
-
-        // Index
-        index = pStream->readUnsignedInt();
-
-        // Hash Size
-        size = readCompactInteger(pStream);
-        if(pStream->remaining() < size)
-            return false;
-
-        // Hash
-        if(!hash.read(pStream, size))
-            return false;
-
-        if(pStream->remaining() < 4)
-            return false;
-
-        // Height
-        height = pStream->readUnsignedInt();
-
-        return true;
-    }
-
-    void Unspent::print(ArcMist::Log::Level pLevel)
-    {
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Amount         : %.08f", bitcoins(amount));
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Script : (%d bytes)", script.length());
-        script.setReadOffset(0);
-        ScriptInterpreter::printScript(script, pLevel);
-        script.setReadOffset(0);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Transaction ID : %s", transactionID.hex().text());
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Index          : %x", index);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Hash           : %s", hash.hex().text());
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_UNSPENT_LOG_NAME, "Height         : %d", height);
+        return result;
     }
 }

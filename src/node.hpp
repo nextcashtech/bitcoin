@@ -6,6 +6,7 @@
 #include "arcmist/io/network.hpp"
 #include "base.hpp"
 #include "message.hpp"
+#include "chain.hpp"
 
 #include <cstdint>
 #include <list>
@@ -17,16 +18,16 @@ namespace BitCoin
     {
     public:
 
-        Node(const char *pIP, const char *pPort);
-        Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort);
-        Node(IPAddress &pAddress);
-        Node(ArcMist::Network::Connection *pConnection);
+        Node(const char *pIP, const char *pPort, Chain &pChain);
+        Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort, Chain &pChain);
+        Node(IPAddress &pAddress, Chain &pChain);
+        Node(ArcMist::Network::Connection *pConnection, Chain &pChain);
         ~Node();
 
         unsigned int id() { return mID; }
         bool isOpen() { return mConnection != NULL && mConnection->isOpen(); }
 
-        void process();
+        void process(Chain &pChain);
         void clear();
 
         // Time that the node connected
@@ -37,16 +38,16 @@ namespace BitCoin
         // True if the node is not responding to block hash/header/full requests
         bool notResponding() const;
 
-        bool hasInventory(); // Block inventories have been received
-        bool shouldRequestInventory(); // Returns true if node has no block hashes and hasn't requested any recently
+        bool hasInventory(Chain &pChain); // Block inventories have been received
+        bool shouldRequestInventory(Chain &pChain); // Returns true if node has no block hashes and hasn't requested any recently
         void clearInventory(); // Clear block inventory information
-        bool requestInventory(); // Request an inventory of blocks
+        bool requestInventory(Chain &pChain); // Request an inventory of blocks
         bool hasBlock(const Hash &pHash); // Block inventory received for specified hash
 
         bool requestHeaders(const Hash &pStartingHash);
         bool waitingForHeaders() { return !mHeaderRequested.isEmpty() && getTime() - mLastHeaderRequest < 300; }
 
-        bool requestBlocks(unsigned int pCount, bool pReduceOnly);
+        bool requestBlocks(Chain &pChain, unsigned int pCount, bool pReduceOnly);
         bool waitingForBlocks() { return mBlocksRequested.size() != 0; }
 
         uint32_t lastBlockRequestTime() { return mLastBlockRequest; }
@@ -66,7 +67,7 @@ namespace BitCoin
         bool versionSupported(int32_t pVersion);
 
         bool sendMessage(Message::Data *pData);
-        bool sendVersion();
+        bool sendVersion(Chain &pChain);
         bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
         bool sendBlock(Block &pBlock);
 

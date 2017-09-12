@@ -1,4 +1,4 @@
-#ifndef BITCOIN_HAIN_HPP
+#ifndef BITCOIN_CHAIN_HPP
 #define BITCOIN_CHAIN_HPP
 
 #include "arcmist/base/string.hpp"
@@ -8,6 +8,7 @@
 
 #include <list>
 #include <vector>
+#include <stdlib.h>
 
 
 namespace BitCoin
@@ -105,8 +106,8 @@ namespace BitCoin
     {
     public:
 
-        static Chain &instance();
-        static void destroy();
+        Chain();
+        ~Chain();
 
         unsigned int blockHeight() const { return mNextBlockHeight - 1; }
         const Hash &lastBlockHash() const { return mLastBlockHash; }
@@ -158,21 +159,18 @@ namespace BitCoin
 
         // Load block data from file system
         //   If pList is true then all the block hashes will be output
-        bool load(bool pList);
+        bool load(UnspentPool &pUnspentPool, bool pList);
 
         // Process pending headers and blocks
-        void process();
+        void process(UnspentPool &pUnspentPool);
 
         // Validate the local block chain. Print output to log
         //   If pRebuildUnspent then it rebuilds unspent transactions
-        bool validate(bool pRebuildUnspent);
+        bool validate(UnspentPool &pUnspentPool, bool pRebuildUnspent);
 
         static bool test();
 
     private:
-
-        Chain();
-        ~Chain();
 
         BlockSet mBlockLookup[0x10000];
 
@@ -184,7 +182,7 @@ namespace BitCoin
 
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;
-        bool processBlock(Block *pBlock);
+        bool processBlock(Block *pBlock, UnspentPool &pUnspentPool);
         //TODO Remove orphaned blocks //bool removeBlock(const Hash &pHash);
 
         Hash mLastBlockHash; // Hash of last/top block on chain

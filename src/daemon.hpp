@@ -44,6 +44,9 @@ namespace BitCoin
         Daemon();
         ~Daemon();
 
+        Chain mChain;
+        UnspentPool mUnspentPool;
+        
         void stop();
         bool mRunning, mStopping, mStopRequested;
 

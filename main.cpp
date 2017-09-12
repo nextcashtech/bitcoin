@@ -38,7 +38,25 @@ int main(int pArgumentCount, char **pArguments)
     ArcMist::String printBlock;
     bool nextIsPrintBlock = false;
 
-    for(int i=1;i<pArgumentCount;i++)
+    if(std::strcmp(pArguments[1], "start") == 0)
+        start = true;
+    else if(std::strcmp(pArguments[1], "stop") == 0)
+        stop = true;
+    else if(std::strcmp(pArguments[1], "validate") == 0)
+        validate = true;
+    else if(std::strcmp(pArguments[1], "rebuild") == 0)
+        rebuild = true;
+    else if(std::strcmp(pArguments[1], "listblocks") == 0)
+        listblocks = true;
+    else if(std::strcmp(pArguments[1], "printblock") == 0)
+        nextIsPrintBlock = true;
+    else //if(std::strcmp(pArguments[1], "help") == 0)
+    {
+        printHelp(path);
+        return 0;
+    }
+
+    for(int i=2;i<pArgumentCount;i++)
         if(nextIsPath)
         {
             path = pArguments[i];
@@ -60,10 +78,6 @@ int main(int pArgumentCount, char **pArguments)
             ArcMist::Log::setLevel(ArcMist::Log::VERBOSE);
         else if(std::strcmp(pArguments[i], "-vv") == 0)
             ArcMist::Log::setLevel(ArcMist::Log::DEBUG);
-        else if(std::strcmp(pArguments[i], "stop") == 0)
-            stop = true;
-        else if(std::strcmp(pArguments[i], "start") == 0)
-            start = true;
         else if(std::strcmp(pArguments[i], "--nodaemon") == 0)
             noDaemon = true;
         else if(std::strcmp(pArguments[i], "--path") == 0)
@@ -72,16 +86,7 @@ int main(int pArgumentCount, char **pArguments)
             testnet = true;
         else if(std::strcmp(pArguments[i], "--seed") == 0)
             nextIsSeed = true;
-        else if(std::strcmp(pArguments[i], "validate") == 0)
-            validate = true;
-        else if(std::strcmp(pArguments[i], "rebuild") == 0)
-            rebuild = true;
-        else if(std::strcmp(pArguments[i], "listblocks") == 0)
-            listblocks = true;
-        else if(std::strcmp(pArguments[i], "printblock") == 0)
-            nextIsPrintBlock = true;
-        else if(std::strcmp(pArguments[i], "help") == 0 ||
-          std::strcmp(pArguments[i], "--help") == 0 ||
+        else if(std::strcmp(pArguments[i], "--help") == 0 ||
           std::strcmp(pArguments[i], "-h") == 0)
         {
             printHelp(path);
@@ -112,7 +117,7 @@ int main(int pArgumentCount, char **pArguments)
 
     if(printBlock)
     {
-        BitCoin::Chain &chain = BitCoin::Chain::instance();
+        BitCoin::Chain chain;
         BitCoin::Hash hash;
         BitCoin::Block block;
 
@@ -136,7 +141,8 @@ int main(int pArgumentCount, char **pArguments)
               "Found hash at height %d : %s", height, hash.hex().text());
         }
 
-        chain.load(false);
+        BitCoin::UnspentPool unspentPool;
+        chain.load(unspentPool, false);
 
         if(chain.getBlock(hash, block))
         {
@@ -150,10 +156,14 @@ int main(int pArgumentCount, char **pArguments)
         }
     }
 
+    // These have to be static or they overflows the stack
+    static BitCoin::Chain chain;
+    static BitCoin::UnspentPool unspentPool;
+
     if(listblocks)
     {
         ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
-        if(BitCoin::Chain::instance().load(true))
+        if(chain.load(unspentPool, true))
             return 0;
         else
             return 1;
@@ -162,10 +172,19 @@ int main(int pArgumentCount, char **pArguments)
     if(validate || rebuild)
     {
         ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
-        if(BitCoin::Chain::instance().validate(rebuild))
-            return 0;
-        else
+        if(!chain.validate(unspentPool, rebuild))
             return 1;
+
+        if(validate)
+        {
+            // Compare unspentPool with those loaded from files
+            BitCoin::UnspentPool savedUnspentPool;
+            if(!savedUnspentPool.load())
+                return 1;
+            unspentPool.compare(savedUnspentPool, "Calculated", "Saved");
+        }
+
+        return 0;
     }
 
     ArcMist::String logFilePath = BitCoin::Info::path();
