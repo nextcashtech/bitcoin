@@ -57,10 +57,8 @@ namespace BitCoin
 
         const IPAddress &address() { return mAddress; }
 
-        // Network tracking
-        uint64_t bytesReceived() const { if(mConnection == NULL) return 0; return mConnection->bytesReceived(); }
-        uint64_t bytesSent() const { if(mConnection == NULL) return 0; return mConnection->bytesSent(); }
-        void resetNetworkByteCounts() { if(mConnection != NULL) mConnection->resetByteCounts(); }
+        // Add statistics to collection and clear them
+        void collectStatistics(Statistics &pCollection);
 
     private:
 
@@ -75,6 +73,7 @@ namespace BitCoin
         IPAddress mAddress;
         ArcMist::Network::Connection *mConnection;
         ArcMist::Buffer mReceiveBuffer;
+        Statistics mStatistics;
 
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;

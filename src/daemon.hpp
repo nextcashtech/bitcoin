@@ -46,7 +46,7 @@ namespace BitCoin
 
         Chain mChain;
         UnspentPool mUnspentPool;
-        
+
         void stop();
         bool mRunning, mStopping, mStopRequested;
 
@@ -71,7 +71,6 @@ namespace BitCoin
         void (*previousSigIntHandler)(int);
         void (*previousSigPipeHandler)(int);
 
-        void printStats();
 
         ArcMist::String mSeed;
         // Query peers from a seed
@@ -93,9 +92,10 @@ namespace BitCoin
         Node *nodeWithBlock(const Hash &pHash);
         void processRequests();
 
-        void collectNetworkTracking();
-        uint64_t mBytesReceived;
-        uint64_t mBytesSent;
+        Statistics mStatistics;
+        void collectStatistics();
+        void saveStatistics();
+        void printStatistics();
 
         static Daemon *sInstance;
     };

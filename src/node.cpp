@@ -215,6 +215,15 @@ namespace BitCoin
         clearInventory();
     }
 
+    void Node::collectStatistics(Statistics &pCollection)
+    {
+        mStatistics.bytesReceived += mConnection->bytesReceived();
+        mStatistics.bytesSent += mConnection->bytesSent();
+        mConnection->resetByteCounts();
+        pCollection += mStatistics;
+        mStatistics.clear();
+    }
+
     bool Node::notResponding() const
     {
         uint32_t time = getTime();
@@ -438,7 +447,10 @@ namespace BitCoin
           mID, pBlock.hash.hex().text());
         Message::BlockData blockData;
         blockData.block = &pBlock;
-        return sendMessage(&blockData);
+        bool success = sendMessage(&blockData);
+        if(success)
+            ++mStatistics.blocksSent;
+        return success;
     }
 
     bool Node::sendVersion(Chain &pChain)
@@ -695,6 +707,7 @@ namespace BitCoin
             case Message::BLOCK:
             {
                 Events::instance().post(Event::BLOCK_RECEIVE_FINISHED);
+                ++mStatistics.blocksReceived;
                 mBlockRequestMutex.lock();
                 for(HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
                     if(**hash == ((Message::BlockData *)message)->block->hash)
@@ -778,7 +791,8 @@ namespace BitCoin
 
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
                       "[%d] Sending %d block headers", mID, headersData.headers.size());
-                    sendMessage(&headersData);
+                    if(sendMessage(&headersData))
+                        mStatistics.headersSent += headersData.headers.size();
                 }
                 break;
             }
@@ -791,6 +805,7 @@ namespace BitCoin
                   "[%d] Received %d block headers", mID, headersData->headers.size());
                 mHeaderRequested.clear();
                 mLastHeaderRequest = 0;
+                mStatistics.headersReceived += headersData->headers.size();
 
                 for(std::vector<Block *>::iterator header=headersData->headers.begin();header!=headersData->headers.end();)
                 {

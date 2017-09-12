@@ -136,6 +136,104 @@ namespace BitCoin
         IPAddress address;
     };
 
+    class Statistics
+    {
+    public:
+        Statistics()
+        {
+            startTime = getTime();
+            bytesReceived = 0;
+            bytesSent = 0;
+            headersReceived = 0;
+            headersSent = 0;
+            blocksReceived = 0;
+            blocksSent = 0;
+            incomingConnections = 0;
+            outgoingConnections = 0;
+        }
+
+        void clear()
+        {
+            startTime = getTime();
+            bytesReceived = 0;
+            bytesSent = 0;
+            headersReceived = 0;
+            headersSent = 0;
+            blocksReceived = 0;
+            blocksSent = 0;
+            incomingConnections = 0;
+            outgoingConnections = 0;
+        }
+
+        void operator += (Statistics &pRight)
+        {
+            bytesReceived += pRight.bytesReceived;
+            bytesSent += pRight.bytesSent;
+            headersReceived += pRight.headersReceived;
+            headersSent += pRight.headersSent;
+            blocksReceived += pRight.blocksReceived;
+            blocksSent += pRight.blocksSent;
+            incomingConnections += pRight.incomingConnections;
+            outgoingConnections += pRight.outgoingConnections;
+        }
+
+        void write(ArcMist::OutputStream *pStream) const
+        {
+            pStream->writeString("AMST");
+            pStream->writeByte(1); // Version
+            pStream->writeUnsignedInt(startTime);
+            pStream->writeUnsignedInt(bytesReceived);
+            pStream->writeUnsignedInt(bytesSent);
+            pStream->writeUnsignedInt(headersReceived);
+            pStream->writeUnsignedInt(headersSent);
+            pStream->writeUnsignedInt(blocksReceived);
+            pStream->writeUnsignedInt(blocksSent);
+            pStream->writeUnsignedInt(incomingConnections);
+            pStream->writeUnsignedInt(outgoingConnections);
+        }
+
+        bool read(ArcMist::InputStream *pStream)
+        {
+            ArcMist::String startString = pStream->readString(4);
+            if(startString != "AMST")
+                return false;
+
+            uint8_t version = pStream->readByte(); // Version
+            if(version != 1)
+                return false;
+
+            if(pStream->remaining() < 36)
+                return false;
+
+            startTime = pStream->readUnsignedInt();
+            bytesReceived = pStream->readUnsignedInt();
+            bytesSent = pStream->readUnsignedInt();
+            headersReceived = pStream->readUnsignedInt();
+            headersSent = pStream->readUnsignedInt();
+            blocksReceived = pStream->readUnsignedInt();
+            blocksSent = pStream->readUnsignedInt();
+            incomingConnections = pStream->readUnsignedInt();
+            outgoingConnections = pStream->readUnsignedInt();
+
+            return true;
+        }
+
+        unsigned int startTime;
+        unsigned int bytesReceived;
+        unsigned int bytesSent;
+        unsigned int headersReceived;
+        unsigned int headersSent;
+        unsigned int blocksReceived;
+        unsigned int blocksSent;
+        unsigned int incomingConnections;
+        unsigned int outgoingConnections;
+
+    private:
+        Statistics(const Statistics &pCopy);
+        Statistics &operator = (const Statistics &pRight);
+
+    };
+
     class Hash : public ArcMist::RawOutputStream // So ArcMist::Digest can write results to it
     {
     public:

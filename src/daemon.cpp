@@ -56,8 +56,6 @@ namespace BitCoin
         mNodeCount = 0;
         mStatReport = 0;
         mMaxPendingSize = 104857600; // 100 MiB
-        mBytesReceived = 0;
-        mBytesSent = 0;
     }
 
     Daemon::~Daemon()
@@ -237,16 +235,60 @@ namespace BitCoin
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Stopped");
     }
 
-    void Daemon::collectNetworkTracking()
+    void Daemon::collectStatistics()
     {
         mNodeMutex.lock();
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            (*node)->collectStatistics(mStatistics);
+        mNodeMutex.unlock();
+    }
+
+    void Daemon::saveStatistics()
+    {
+        collectStatistics();
+
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("statistics");
+        ArcMist::FileOutputStream file(filePathName, false, true);
+        if(!file.isValid())
         {
-            mBytesReceived += (*node)->bytesReceived();
-            mBytesSent += (*node)->bytesSent();
-            (*node)->resetNetworkByteCounts();
+            // Clear anyway so it doesn't try to save every manager loop
+            mStatistics.clear();
+            return;
+        }
+        mStatistics.write(&file);
+        mStatistics.clear();
+    }
+
+    void Daemon::printStatistics()
+    {
+        unsigned int count = 0;
+        unsigned int downloading = 0;
+        unsigned int inventory = 0;
+        mNodeMutex.lock();
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+        {
+            count++;
+            if((*node)->hasInventory(mChain))
+                inventory++;
+            if((*node)->waitingForBlocks())
+                downloading++;
         }
         mNodeMutex.unlock();
+
+        collectStatistics();
+
+        unsigned int blocks = mChain.pendingBlockCount();
+        unsigned int totalPending = mChain.pendingCount();
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Block Chain : %d blocks, %d UTXOs", mChain.blockHeight(), mUnspentPool.count());
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Pending : %d blocks, %d headers (%d bytes)", blocks, totalPending - blocks, mChain.pendingSize());
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Nodes : %d (%d have inventory) (%d downloading)", count, inventory, downloading);
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Network : %d bytes received, %d bytes sent", mStatistics.bytesReceived, mStatistics.bytesSent);
     }
 
     void Daemon::processRequests()
@@ -295,37 +337,6 @@ namespace BitCoin
         mNodeMutex.unlock();
     }
 
-    void Daemon::printStats()
-    {
-        unsigned int count = 0;
-        unsigned int downloading = 0;
-        unsigned int inventory = 0;
-        mNodeMutex.lock();
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
-        {
-            count++;
-            if((*node)->hasInventory(mChain))
-                inventory++;
-            if((*node)->waitingForBlocks())
-                downloading++;
-        }
-        mNodeMutex.unlock();
-
-        collectNetworkTracking();
-
-        unsigned int blocks = mChain.pendingBlockCount();
-        unsigned int totalPending = mChain.pendingCount();
-
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks, %d UTXOs", mChain.blockHeight(), mUnspentPool.count());
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Pending : %d blocks, %d headers (%d bytes)", blocks, totalPending - blocks, mChain.pendingSize());
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Nodes : %d (%d have inventory) (%d downloading)", count, inventory, downloading);
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Network : %d bytes received, %d bytes sent", mBytesReceived, mBytesSent);
-    }
-
     void Daemon::processManager()
     {
         Daemon &daemon = Daemon::instance();
@@ -353,7 +364,7 @@ namespace BitCoin
             if(time - daemon.mStatReport > 60)
             {
                 daemon.mStatReport = time;
-                daemon.printStats();
+                daemon.printStatistics();
             }
 
             if(daemon.mStopping)
@@ -373,6 +384,12 @@ namespace BitCoin
                 daemon.mLastUnspentSave = time;
                 daemon.mUnspentPool.save();
             }
+
+            if(daemon.mStopping)
+                break;
+
+            if(time - daemon.mStatistics.startTime > 3600)
+                daemon.saveStatistics();
 
             if(daemon.mStopping)
                 break;
@@ -419,6 +436,7 @@ namespace BitCoin
             return false;
         }
 
+        ++mStatistics.outgoingConnections;
         Node *node = new Node(pIPAddress, pPort, mChain);
         if(node->isOpen())
         {
@@ -443,6 +461,7 @@ namespace BitCoin
             return false;
         }
 
+        ++mStatistics.outgoingConnections;
         Node *node = new Node(pAddress, mChain);
         if(node->isOpen())
         {
@@ -467,6 +486,7 @@ namespace BitCoin
             return false;
         }
 
+        ++mStatistics.outgoingConnections;
         Node *node = new Node(pConnection, mChain);
         if(node->isOpen())
         {
@@ -574,6 +594,7 @@ namespace BitCoin
         {
             if(!(*node)->isOpen())
             {
+                (*node)->collectStatistics(mStatistics);
                 delete *node;
                 node = mNodes.erase(node);
                 mNodeCount--;
@@ -582,6 +603,7 @@ namespace BitCoin
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Dropping node [%d] because it is not responding", (*node)->id());
+                (*node)->collectStatistics(mStatistics);
                 delete *node;
                 node = mNodes.erase(node);
                 mNodeCount--;
@@ -591,6 +613,7 @@ namespace BitCoin
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Dropping node [%d] because it is not responding to requests", (*node)->id());
                 Info::instance().addPeerFail((*node)->address());
+                (*node)->collectStatistics(mStatistics);
                 delete *node;
                 node = mNodes.erase(node);
                 mNodeCount--;
@@ -624,6 +647,7 @@ namespace BitCoin
             newConnection = listener.accept();
             if(newConnection != NULL)
             {
+                ++daemon.mStatistics.incomingConnections;
                 if(daemon.mNodeCount < info.maxConnections)
                 {
                     ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
@@ -660,7 +684,7 @@ namespace BitCoin
             {
                 daemon.mLastNodeAdd = time;
                 if(info.maxConnections > daemon.mNodes.size())
-                    daemon.pickNodes(info.maxConnections - daemon.mNodes.size());
+                    daemon.pickNodes((info.maxConnections / 2) - daemon.mNodes.size());
             }
 
             if(daemon.mStopping)
