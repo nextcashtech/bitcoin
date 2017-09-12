@@ -74,6 +74,7 @@ namespace BitCoin
             block = pBlock;
             requestedTime = 0;
             priority = 1;
+            requestingNode = 0;
         }
         ~PendingData()
         {
@@ -96,6 +97,7 @@ namespace BitCoin
         Block *block;
         uint64_t requestedTime;
         unsigned int priority;
+        unsigned int requestingNode;
 
     private:
         PendingData(PendingData &pCopy);
@@ -111,6 +113,7 @@ namespace BitCoin
 
         unsigned int blockHeight() const { return mNextBlockHeight - 1; }
         const Hash &lastBlockHash() const { return mLastBlockHash; }
+        unsigned int pendingBlockHeight() const { return mNextBlockHeight - 1 + mPending.size(); }
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
 
         // Chain is up to date with most chains
@@ -134,8 +137,10 @@ namespace BitCoin
         // Returns the hash of the next block needed
         Hash nextBlockNeeded(bool pReduceOnly);
         // Mark a block as requested
-        void markBlockRequested(const Hash &pHash);
+        void markBlockRequested(const Hash &pHash, unsigned int pNodeID);
         void markBlockNotRequested(const Hash &pHash);
+        // Release all blocks requested by a specified node so they will be requested again
+        void releaseBlocksForNode(unsigned int pNodeID);
 
         // Add block to queue to be processed and added to top of chain
         bool addPendingBlock(Block *pBlock);
@@ -148,9 +153,12 @@ namespace BitCoin
         // Retrieve block headers starting at a specific hash. (empty starting hash for first block)
         bool getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, const Hash &pStoppingHash, unsigned int pCount);
 
-        // Get the block with a specific hash
+        // Get block or hash at specific height
         bool getBlockHash(unsigned int pHeight, Hash &pHash);
         bool getBlock(unsigned int pHeight, Block &pBlock);
+
+        // Get the block or height for a specific hash
+        unsigned int height(const Hash &pHash); // Returns 0xffffffff when hash is not found
         bool getBlock(const Hash &pHash, Block &pBlock);
 
         // Update the unspent transaction pool for any blocks it is missing

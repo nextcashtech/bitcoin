@@ -332,9 +332,9 @@ namespace BitCoin
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
             return false;
         }
-        
-        
-        
+
+
+
         // // Version 1 - Reject version 1 blocks at block 227,930
         // if(version == 1 && pHeight >= 227930)
         // {
@@ -355,10 +355,10 @@ namespace BitCoin
 
         // //TODO Version 4 - Added support for OP_CHECKLOCKTIMEVERIFY operation code.
 
-        
-        
-        
-        
+
+
+
+
         // BIP-0034
         if(pBlockVersionFlags & REQUIRE_BLOCK_VERSION_2 && version < 2)
         {
@@ -370,7 +370,7 @@ namespace BitCoin
         if((version & 0x00000007) == 4) // Deployments might be active (least significant bits == 001)
         {
             //TODO BIP-0009 Deployements
-            
+
         }
 
         // Validate Merkle Hash
@@ -826,6 +826,32 @@ namespace BitCoin
         }
 
         return false;
+    }
+
+    unsigned int BlockFile::hashOffset(const Hash &pHash)
+    {
+        if(!openFile())
+        {
+            mValid = false;
+            return 0;
+        }
+
+        // Find offset
+        Hash hash(32);
+        mInputFile->setReadOffset(HASHES_OFFSET);
+        for(unsigned int i=0;i<MAX_BLOCKS;i++)
+        {
+            if(!hash.read(mInputFile))
+                return 0;
+
+            if(mInputFile->readUnsignedInt() == 0)
+                return 0;
+
+            if(hash == pHash)
+                return i;
+        }
+
+        return 0;
     }
 
     void BlockFile::updateCRC()

@@ -14,6 +14,23 @@
 
 namespace BitCoin
 {
+    class BlockHashInfo
+    {
+    public:
+        BlockHashInfo(const Hash &pHash, unsigned int pHeight)
+        {
+            hash = pHash;
+            height = pHeight;
+        }
+
+        Hash hash;
+        unsigned int height;
+
+    private:
+        BlockHashInfo(BlockInfo &pCopy);
+        BlockHashInfo &operator = (BlockInfo &pRight);
+    };
+
     class Node
     {
     public:
@@ -26,6 +43,7 @@ namespace BitCoin
 
         unsigned int id() { return mID; }
         bool isOpen() { return mConnection != NULL && mConnection->isOpen(); }
+        void close() { if(mConnection != NULL) mConnection->close(); }
 
         void process(Chain &pChain);
         void clear();
@@ -38,17 +56,17 @@ namespace BitCoin
         // True if the node is not responding to block hash/header/full requests
         bool notResponding() const;
 
-        bool hasInventory(Chain &pChain); // Block inventories have been received
-        bool shouldRequestInventory(Chain &pChain); // Returns true if node has no block hashes and hasn't requested any recently
+        bool hasInventory(); // Block inventories have been received
+        uint32_t lastInventoryRequest() const { return mLastInventoryRequest; }
         void clearInventory(); // Clear block inventory information
-        bool requestInventory(Chain &pChain); // Request an inventory of blocks
+        bool requestInventory(Chain &pChain); // Request an inventory of block hashes
         bool hasBlock(const Hash &pHash); // Block inventory received for specified hash
 
-        bool requestHeaders(const Hash &pStartingHash);
+        bool requestHeaders(Chain &pChain, const Hash &pStartingHash);
         bool waitingForHeaders() { return !mHeaderRequested.isEmpty() && getTime() - mLastHeaderRequest < 300; }
 
         bool requestBlocks(Chain &pChain, unsigned int pCount, bool pReduceOnly);
-        bool waitingForBlocks() { return mBlocksRequested.size() != 0; }
+        bool waitingForBlocks() { return mBlocksRequested.size() > 0; }
 
         uint32_t lastBlockRequestTime() { return mLastBlockRequest; }
         uint32_t lastBlockReceiveTime() { return mLastBlockReceiveTime; }
@@ -84,10 +102,12 @@ namespace BitCoin
 
         // List of pending block headers this node is known to have
         ArcMist::Mutex mBlockHashMutex;
-        void addBlockHash(Hash &pHash);
+        void addBlockHash(Chain &pChain, Hash &pHash);
         void removeBlockHash(Hash &pHash);
-        std::list<Hash *> mBlockHashes[0x10000];
+        void refreshInventoryHeight(Chain &pChain);
+        std::list<BlockHashInfo *> mBlockHashes[0x10000];
         unsigned int mBlockHashCount, mInventoryHeight;
+        Hash mHighestInventoryHash;
         uint32_t mLastInventoryRequest;
 
         Hash mHeaderRequested;

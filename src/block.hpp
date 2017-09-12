@@ -138,6 +138,9 @@ namespace BitCoin
         // Read block for specified hash
         bool readBlock(const Hash &pHash, Block &pBlock, bool pIncludeTransactions);
 
+        // Give the offset of a specific hash into the file
+        unsigned int hashOffset(const Hash &pHash);
+
         void updateCRC();
 
     private:

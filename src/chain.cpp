@@ -270,6 +270,44 @@ namespace BitCoin
         return result;
     }
 
+    unsigned int Chain::height(const Hash &pHash)
+    {
+        unsigned int result = 0xffffffff;
+        if(pHash.isEmpty())
+            return result; // Empty hash means start from the beginning
+
+        uint16_t lookup = pHash.lookup();
+        mBlockLookup[lookup].lock();
+        BlockSet::iterator end = mBlockLookup[lookup].end();
+        for(BlockSet::iterator i=mBlockLookup[lookup].begin();i!=end;++i)
+            if(pHash == (*i)->hash)
+            {
+                result = (*i)->height;
+                break;
+            }
+
+        mBlockLookup[lookup].unlock();
+
+        if(result == 0xffffffff)
+        {
+            // Check pending
+            unsigned int currentHeight = blockHeight();
+            mPendingMutex.lock();
+            for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            {
+                ++currentHeight;
+                if((*pending)->block->hash == pHash)
+                {
+                    result = currentHeight;
+                    break;
+                }
+            }
+            mPendingMutex.unlock();
+        }
+
+        return result;
+    }
+
     void Chain::lockBlockFile(unsigned int pFileID)
     {
         bool found;
@@ -348,8 +386,12 @@ namespace BitCoin
         if(!result)
         {
             mPendingMutex.unlock();
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-              "Pending header not next : %s", pBlock->hash.hex().text());
+            if(blockInChain(pBlock->hash) || headerAvailable(pBlock->hash))
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
+                  "Header already downloaded : %s", pBlock->hash.hex().text());
+            else
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
+                  "Unknown header : %s", pBlock->hash.hex().text());
             return false;
         }
 
@@ -383,13 +425,14 @@ namespace BitCoin
         return result;
     }
 
-    void Chain::markBlockRequested(const Hash &pHash)
+    void Chain::markBlockRequested(const Hash &pHash, unsigned int pNodeID)
     {
         mPendingMutex.lock();
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             if((*pending)->block->hash == pHash)
             {
                 (*pending)->requestedTime = getTime();
+                (*pending)->requestingNode = pNodeID;
                 break;
             }
         mPendingMutex.unlock();
@@ -404,6 +447,15 @@ namespace BitCoin
                 (*pending)->requestedTime = 0;
                 break;
             }
+        mPendingMutex.unlock();
+    }
+
+    void Chain::releaseBlocksForNode(unsigned int pNodeID)
+    {
+        mPendingMutex.lock();
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            if((*pending)->requestingNode == pNodeID)
+                (*pending)->requestedTime = 0;
         mPendingMutex.unlock();
     }
 

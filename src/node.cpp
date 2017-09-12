@@ -202,8 +202,6 @@ namespace BitCoin
         mLastHeaderRequest = 0;
         mLastBlockRequest = 0;
         mLastInventoryRequest = 0;
-        mBlockHashCount = 0;
-        mInventoryHeight = 0;
         mLastReceiveTime = getTime();
         mLastPingTime = 0;
         mBlocksRequestedCount = 0;
@@ -233,30 +231,49 @@ namespace BitCoin
           (mLastBlockRequest != 0 && time - mLastBlockRequest > 300 && mLastBlockRequest > mLastBlockReceiveTime);
     }
 
-    bool Node::shouldRequestInventory(Chain &pChain)
+    // Update inventory height for any hashes that we didn't know the height of at the time we received them
+    void Node::refreshInventoryHeight(Chain &pChain)
     {
         mBlockHashMutex.lock();
-        uint64_t time = getTime();
-        bool result = (mBlockHashCount == 0 && time - mLastInventoryRequest > 60) ||
-          pChain.blockHeight() > mInventoryHeight + 200;
+        unsigned int previousInventoryHeight = mInventoryHeight;
+        std::list<BlockHashInfo *> *set = mBlockHashes;
+        for(unsigned int i=0;i<0x10000;i++)
+        {
+            for(std::list<BlockHashInfo *>::iterator hash=set->begin();hash!=set->end();++hash)
+            {
+                if((*hash)->height == 0xffffffff)
+                    (*hash)->height = pChain.height((*hash)->hash);
+                if((*hash)->height != 0xffffffff && (*hash)->height > mInventoryHeight)
+                {
+                    mHighestInventoryHash = (*hash)->hash;
+                    mInventoryHeight = (*hash)->height;
+                }
+            }
+            set++;
+        }
+        if(previousInventoryHeight != mInventoryHeight)
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+              "[%d] Inventory height changed from %d to %d", mID, previousInventoryHeight, mInventoryHeight);
         mBlockHashMutex.unlock();
-        return result;
     }
 
-    bool Node::hasInventory(Chain &pChain)
+    bool Node::hasInventory()
     {
         mBlockHashMutex.lock();
-        bool result = mBlockHashCount != 0 && pChain.blockHeight() + 200 > mInventoryHeight;
+        bool result = mInventoryHeight > 0;
         mBlockHashMutex.unlock();
         return result;
     }
 
     bool Node::hasBlock(const Hash &pHash)
     {
+        if(pHash.isEmpty())
+            return false;
+
         mBlockHashMutex.lock();
-        std::list<Hash *> &hashes = mBlockHashes[pHash.lookup()];
-        for(std::list<Hash *>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
-            if(**hash == pHash)
+        std::list<BlockHashInfo *> &hashes = mBlockHashes[pHash.lookup()];
+        for(std::list<BlockHashInfo *>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+            if((*hash)->hash == pHash)
             {
                 mBlockHashMutex.unlock();
                 return true;
@@ -268,41 +285,51 @@ namespace BitCoin
     void Node::clearInventory()
     {
         mBlockHashMutex.lock();
-        std::list<Hash *> *set = mBlockHashes;
+        std::list<BlockHashInfo *> *set = mBlockHashes;
         for(unsigned int i=0;i<0x10000;i++)
         {
-            for(std::list<Hash *>::iterator hash=set->begin();hash!=set->end();++hash)
+            for(std::list<BlockHashInfo *>::iterator hash=set->begin();hash!=set->end();++hash)
                 delete *hash;
             set->clear();
             set++;
         }
         mBlockHashCount = 0;
+        mHighestInventoryHash.clear();
+        mInventoryHeight = 0;
         mBlockHashMutex.unlock();
     }
 
-    void Node::addBlockHash(Hash &pHash)
+    void Node::addBlockHash(Chain &pChain, Hash &pHash)
     {
         mBlockHashMutex.lock();
         unsigned int lookup = pHash.lookup();
-        std::list<Hash *> &hashes = mBlockHashes[lookup];
-        for(std::list<Hash *>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
-            if(**hash == pHash)
+        std::list<BlockHashInfo *> &hashes = mBlockHashes[lookup];
+        for(std::list<BlockHashInfo *>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+            if((*hash)->hash == pHash)
             {
+                if((*hash)->height == 0xffffffff)
+                    (*hash)->height = pChain.height((*hash)->hash);
                 mBlockHashMutex.unlock();
                 return; // Already added
             }
 
         mBlockHashCount++;
-        hashes.push_back(new Hash(pHash));
+        unsigned int height = pChain.height(pHash);
+        if(height != 0xffffffff && height > mInventoryHeight)
+        {
+            mHighestInventoryHash = pHash;
+            mInventoryHeight = height;
+        }
+        hashes.push_back(new BlockHashInfo(pHash, height));
         mBlockHashMutex.unlock();
     }
 
     void Node::removeBlockHash(Hash &pHash)
     {
         mBlockHashMutex.lock();
-        std::list<Hash *> &hashes = mBlockHashes[pHash.lookup()];
-        for(std::list<Hash *>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
-            if(**hash == pHash)
+        std::list<BlockHashInfo *> &hashes = mBlockHashes[pHash.lookup()];
+        for(std::list<BlockHashInfo *>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+            if((*hash)->hash == pHash)
             {
                 delete *hash;
                 hashes.erase(hash);
@@ -328,7 +355,7 @@ namespace BitCoin
         Message::writeFull(pData, &send);
         bool success = mConnection->send(&send);
         if(success)
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_NODE_LOG_NAME,
               "[%d] Sent <%s>", mID, Message::nameFor(pData->type));
         else
         {
@@ -341,39 +368,66 @@ namespace BitCoin
 
     bool Node::requestInventory(Chain &pChain)
     {
-        if(getTime() - mLastInventoryRequest < 180) // Recently requested
+        if(mLastInventoryRequest != 0 && getTime() - mLastInventoryRequest < 180) // Recently requested
             return false;
 
-        if(mBlockHashCount != 0 && !pChain.isInSync() && pChain.blockHeight() < mInventoryHeight + 500)
+        if(mLastInventoryRequest != 0 && mBlockHashCount == 0)
+        {
+            // No response from previous inventory request
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_NODE_LOG_NAME,
+              "[%d] Did not send inventory. Dropping", mID);
+            if(mConnection != NULL)
+                mConnection->close();
+            return false;
+        }
+
+        refreshInventoryHeight(pChain);
+        unsigned int pendingHeight = pChain.pendingBlockHeight();
+        if(mInventoryHeight == pendingHeight)
             return false;
 
-        HashList hashList;
+        // Add latest block
+        Message::GetBlocksData getBlocksData;
+        if(mInventoryHeight > pChain.blockHeight())
+            getBlocksData.blockHeaderHashes.push_back(mHighestInventoryHash);
+        else if(pChain.blockHeight() > 1)
+        {
+            // Request second to last so that they will return me the last so I have something to line up on
+            Hash secondToLastHash;
+            pChain.getBlockHash(pChain.blockHeight() - 1, secondToLastHash);
+            getBlocksData.blockHeaderHashes.push_back(secondToLastHash);
+        }
 
-        clearInventory();
-        mInventoryHeight = pChain.blockHeight();
+        // Add some older blocks to help with matching
+        if(mInventoryHeight == 0)
+        {
+            HashList hashList;
+            pChain.getReverseBlockHashes(hashList, 10);
+            for(HashList::iterator hash=hashList.begin();hash!=hashList.end();++hash)
+                getBlocksData.blockHeaderHashes.push_back(**hash);
+        }
 
-        pChain.getReverseBlockHashes(hashList, 10);
-        if(hashList.size() == 0)
+        if(getBlocksData.blockHeaderHashes.size() == 0)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
-              "[%d] Requesting block hashes starting from genesis", mID);
+              "[%d] Requesting block hashes after genesis", mID);
         else
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
-              "[%d] Requesting block hashes starting from %s", mID, hashList.front()->hex().text());
+              "[%d] Requesting block hashes after (%d) : %s", mID,
+              pChain.height(getBlocksData.blockHeaderHashes.front()),
+              getBlocksData.blockHeaderHashes.front().hex().text());
 
-        Message::GetBlocksData getBlocksData;
-        for(HashList::iterator hash=hashList.begin();hash!=hashList.end();++hash)
-            getBlocksData.blockHeaderHashes.push_back(**hash);
         bool success = sendMessage(&getBlocksData);
         if(success)
             mLastInventoryRequest = getTime();
         return success;
     }
 
-    bool Node::requestHeaders(const Hash &pStartingHash)
+    bool Node::requestHeaders(Chain &pChain, const Hash &pStartingHash)
     {
         if(!pStartingHash.isEmpty())
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
-              "[%d] Requesting block headers starting from %s", mID, pStartingHash.hex().text());
+              "[%d] Requesting block headers starting from (%d) : %s", mID, pChain.height(pStartingHash),
+              pStartingHash.hex().text());
         else if(hasBlock(pStartingHash))
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
               "[%d] Requesting block headers starting from genesis block", mID);
@@ -409,8 +463,8 @@ namespace BitCoin
         {
             getDataData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::BLOCK, nextBlockHash));
             mBlocksRequested.push_back(new Hash(nextBlockHash));
-            pChain.markBlockRequested(nextBlockHash);
-            sentCount++;
+            pChain.markBlockRequested(nextBlockHash, mID);
+            ++sentCount;
             if(sentCount < pCount)
             {
                 nextBlockHash = pChain.nextBlockNeeded(pReduceOnly);
@@ -428,7 +482,8 @@ namespace BitCoin
             mLastBlockRequest = getTime();
             Events::instance().post(Event::BLOCK_REQUESTED);
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
-              "[%d] Requested %d blocks starting at : %s", mID, sentCount, startHash.hex().text());
+              "[%d] Requested %d blocks starting at (%d) : %s", mID, sentCount,
+              pChain.height(startHash), startHash.hex().text());
         }
         else
         {
@@ -564,8 +619,8 @@ namespace BitCoin
                 }
 
                 // Send "send headers" message
-                Message::Data sendHeadersData(Message::SEND_HEADERS);
-                sendMessage(&sendHeadersData);
+                //Message::Data sendHeadersData(Message::SEND_HEADERS);
+                //sendMessage(&sendHeadersData);
 
                 break;
             }
@@ -596,7 +651,7 @@ namespace BitCoin
             {
                 Message::RejectData *rejectData = (Message::RejectData *)message;
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_NODE_LOG_NAME, "[%d] Reject %s [%02x] - %s", mID,
-                  rejectData->command, rejectData->code, rejectData->reason);
+                  rejectData->command.text(), rejectData->code, rejectData->reason.text());
 
                 // TODO Determine if closing node is necessary
                 break;
@@ -833,6 +888,8 @@ namespace BitCoin
             case Message::INVENTORY:
             {
                 Message::InventoryData *inventoryData = (Message::InventoryData *)message;
+                unsigned int blockHashCount = 0;
+                unsigned int previousInventoryHeight = mInventoryHeight;
                 for(Message::Inventory::iterator item=inventoryData->inventory.begin();item!=inventoryData->inventory.end();++item)
                 {
                     if((*item)->type == Message::InventoryHash::BLOCK)
@@ -840,7 +897,8 @@ namespace BitCoin
                         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_NODE_LOG_NAME,
                           "[%d] Inventory block hash : %s", mID, (*item)->hash.hex().text());
 
-                        addBlockHash((*item)->hash);
+                        addBlockHash(pChain, (*item)->hash);
+                        blockHashCount++;
                     }
                     else if((*item)->type == Message::InventoryHash::TRANSACTION)
                     {
@@ -849,6 +907,12 @@ namespace BitCoin
                         //TODO Transaction inventory messages
                     }
                 }
+                if(blockHashCount > 0)
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+                      "[%d] Received %d block hashes", mID, blockHashCount);
+                if(previousInventoryHeight != mInventoryHeight)
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+                      "[%d] Inventory height changed from %d to %d", mID, previousInventoryHeight, mInventoryHeight);
                 break;
             }
             case Message::MEM_POOL:
@@ -872,6 +936,8 @@ namespace BitCoin
                         for(HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
                             if(**hash == (*item)->hash)
                             {
+                                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_NODE_LOG_NAME,
+                                  "[%d] Block hash returned not found : %s", mID, (*hash)->hex().text());
                                 delete *hash;
                                 mBlocksRequested.erase(hash);
                                 pChain.markBlockNotRequested((*item)->hash);
