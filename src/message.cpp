@@ -695,8 +695,8 @@ namespace BitCoin
             writeCompactInteger(pStream, addresses.size());
 
             // Addresses
-            for(unsigned int i=0;i<addresses.size();i++)
-                addresses[i].write(pStream);
+            for(std::vector<Peer>::iterator address=addresses.begin();address!=addresses.end();++address)
+                address->write(pStream);
         }
 
         bool AddressesData::read(ArcMist::InputStream *pStream, unsigned int pSize)
@@ -714,8 +714,8 @@ namespace BitCoin
             // Addresses
             addresses.clear();
             addresses.resize(count);
-            for(unsigned int i=0;i<addresses.size();i++)
-                if(!addresses[i].read(pStream))
+            for(std::vector<Peer>::iterator address=addresses.begin();address!=addresses.end();++address)
+                if(!address->read(pStream))
                     return false;
 
             return true;
@@ -1166,25 +1166,25 @@ namespace BitCoin
              * ADDRESSES
              ***********************************************************************************************/
             AddressesData addressesData;
-            IPAddress address;
+            Peer peer;
 
-            address.services = 0x01;
-            address.ip[15] = 0x80;
-            address.time = 123;
-            address.port = 321;
-            addressesData.addresses.push_back(address);
+            peer.time = 123;
+            peer.services = 0x01;
+            peer.address.ip[15] = 0x80;
+            peer.address.port = 321;
+            addressesData.addresses.push_back(peer);
 
-            address.services = 0x02;
-            address.ip[15] = 0x88;
-            address.time = 1234;
-            address.port = 4321;
-            addressesData.addresses.push_back(address);
+            peer.time = 1234;
+            peer.services = 0x02;
+            peer.address.ip[15] = 0x88;
+            peer.address.port = 4321;
+            addressesData.addresses.push_back(peer);
 
-            address.services = 0x03;
-            address.ip[15] = 0xF0;
-            address.time = 12345;
-            address.port = 54321;
-            addressesData.addresses.push_back(address);
+            peer.time = 12345;
+            peer.services = 0x03;
+            peer.address.ip[15] = 0xF0;
+            peer.address.port = 54321;
+            addressesData.addresses.push_back(peer);
 
             messageBuffer.clear();
             writeFull(&addressesData, &messageBuffer);
@@ -1208,24 +1208,15 @@ namespace BitCoin
                 if(addressesData.addresses.size() != addressesReceiveData->addresses.size())
                     addressesDataMatches = false;
 
-                if(addressesData.addresses[0].services != addressesReceiveData->addresses[0].services)
-                    addressesDataMatches = false;
-
-                if(addressesData.addresses[0].ip[15] != addressesReceiveData->addresses[0].ip[15])
-                    addressesDataMatches = false;
-
-                if(addressesData.addresses[1].ip[15] != addressesReceiveData->addresses[1].ip[15])
-                    addressesDataMatches = false;
-
-                if(addressesData.addresses[1].ip[0] != addressesReceiveData->addresses[1].ip[0])
-                    addressesDataMatches = false;
-
                 if(addressesData.addresses[2].time != addressesReceiveData->addresses[2].time)
                     addressesDataMatches = false;
 
-                if(addressesData.addresses[2].port != addressesReceiveData->addresses[2].port)
+                if(addressesData.addresses[0].services != addressesReceiveData->addresses[0].services)
                     addressesDataMatches = false;
-                
+
+                if(addressesData.addresses[0].address != addressesReceiveData->addresses[0].address)
+                    addressesDataMatches = false;
+
                 if(addressesDataMatches)
                     ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed addresses message");
                 else

@@ -459,6 +459,30 @@ namespace BitCoin
         }
     }
 
+    bool Daemon::addNode(ArcMist::Network::Connection *pConnection)
+    {
+        if(!isRunning())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "You must start BitCoin before adding a node");
+            return false;
+        }
+
+        Node *node = new Node(pConnection, mChain);
+        if(node->isOpen())
+        {
+            mNodeMutex.lock();
+            mNodes.push_back(node);
+            mNodeCount++;
+            mNodeMutex.unlock();
+            return true;
+        }
+        else
+        {
+            delete node;
+            return false;
+        }
+    }
+
     unsigned int Daemon::querySeed(const char *pName)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Querying seed %s", pName);
@@ -514,6 +538,7 @@ namespace BitCoin
                 break;
         }
 
+        peers.clear();
         info.randomizePeers(peers, 0);
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers", peers.size());
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
@@ -539,30 +564,6 @@ namespace BitCoin
         }
 
         return count;
-    }
-
-    bool Daemon::addNode(ArcMist::Network::Connection *pConnection)
-    {
-        if(!isRunning())
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "You must start BitCoin before adding a node");
-            return false;
-        }
-
-        Node *node = new Node(pConnection, mChain);
-        if(node->isOpen())
-        {
-            mNodeMutex.lock();
-            mNodes.push_back(node);
-            mNodeCount++;
-            mNodeMutex.unlock();
-            return true;
-        }
-        else
-        {
-            delete node;
-            return false;
-        }
     }
 
     void Daemon::cleanNodes()

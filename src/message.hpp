@@ -53,11 +53,11 @@ namespace BitCoin
 
             Type type;
             Hash hash;
-            
+
         private:
             InventoryHash &operator = (InventoryHash &pRight);
         };
-        
+
         class Inventory : public std::vector<InventoryHash *>
         {
         public:
@@ -127,7 +127,7 @@ namespace BitCoin
             int32_t startBlockHeight;
             uint8_t relay;
         };
-        
+
         class PingData : public Data
         {
         public:
@@ -198,7 +198,7 @@ namespace BitCoin
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize);
 
-            std::vector<IPAddress> addresses;
+            std::vector<Peer> addresses;
         };
 
         class FeeFilterData : public Data

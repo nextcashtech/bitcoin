@@ -546,11 +546,9 @@ namespace BitCoin
                 // Update peer
                 if(mVersionData->relay && mVersionAcknowledged)
                 {
-                    mAddress.updateTime();
-                    mAddress.services = mVersionData->transmittingServices;
                     if(mAddress.port == 0)
                         mAddress.port = mVersionData->transmittingPort;
-                    Info::instance().updatePeer(mAddress, mVersionData->userAgent);
+                    Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
                 }
 
                 // Send "send headers" message
@@ -565,11 +563,9 @@ namespace BitCoin
                 // Update peer
                 if(mVersionData != NULL && mVersionData->relay)
                 {
-                    mAddress.updateTime();
-                    mAddress.services = mVersionData->transmittingServices;
                     if(mAddress.port == 0)
                         mAddress.port = mVersionData->transmittingPort;
-                    Info::instance().updatePeer(mAddress, mVersionData->userAgent);
+                    Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
                 }
                 break;
 
@@ -608,8 +604,9 @@ namespace BitCoin
 
                 // Add peers to message
                 addressData.addresses.resize(count);
-                for(unsigned int i=0;i<count;i++)
-                    addressData.addresses[i] = peers[i]->address;
+                std::vector<Peer *>::iterator peer = peers.begin();
+                for(std::vector<Peer>::iterator toSend=addressData.addresses.begin();toSend!=addressData.addresses.end();++toSend)
+                    *toSend = (**peer++);
 
                 sendMessage(&addressData);
                 break;
@@ -620,7 +617,8 @@ namespace BitCoin
 
                 Info &info = Info::instance();
                 for(unsigned int i=0;i<addressesData->addresses.size();i++)
-                    info.updatePeer(addressesData->addresses[i], NULL);
+                for(std::vector<Peer>::iterator peer=addressesData->addresses.begin();peer!=addressesData->addresses.end();++peer)
+                    info.updatePeer(peer->address, NULL, peer->services);
 
                 break;
             }
@@ -711,7 +709,7 @@ namespace BitCoin
                     mLastBlockReceiveTime = getTime();
                     ++mBlocksReceivedCount;
                     ((Message::BlockData *)message)->block = NULL; // Memory has been handed off
-                    Info::instance().updatePeer(mAddress, mVersionData->userAgent);
+                    Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
                 }
                 break;
             }
@@ -810,7 +808,7 @@ namespace BitCoin
                 }
 
                 if(addedCount > 0)
-                    Info::instance().updatePeer(mAddress, mVersionData->userAgent);
+                    Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
 
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME,
                   "[%d] Added %d pending headers", mID, addedCount);

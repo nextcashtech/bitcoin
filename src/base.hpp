@@ -49,15 +49,11 @@ namespace BitCoin
 
         IPAddress()
         {
-            time = 0;
-            services = 0;
             std::memset(ip, 0, 16);
             port = 0;
         }
         IPAddress(const IPAddress &pCopy)
         {
-            time = pCopy.time;
-            services = pCopy.services;
             std::memcpy(ip, pCopy.ip, 16);
             port = pCopy.port;
         }
@@ -66,11 +62,15 @@ namespace BitCoin
         bool read(ArcMist::InputStream *pStream);
 
         bool matches(const IPAddress &pOther) const { return std::memcmp(ip, pOther.ip, 16) == 0 && port == pOther.port; }
-        void updateTime() { time = getTime(); }
 
         bool operator == (const IPAddress &pRight) const
         {
-            return std::memcmp(ip, pRight.ip, 16);
+            return std::memcmp(ip, pRight.ip, 16) == 0 && port == pRight.port;
+        }
+
+        bool operator != (const IPAddress &pRight) const
+        {
+            return std::memcmp(ip, pRight.ip, 16) != 0 || port != pRight.port;
         }
 
         void operator = (ArcMist::Network::Connection &pConnection)
@@ -91,15 +91,11 @@ namespace BitCoin
 
         const IPAddress &operator = (const IPAddress &pRight)
         {
-            time = pRight.time;
-            services = pRight.services;
             port = pRight.port;
             std::memcpy(ip, pRight.ip, 16);
             return *this;
         }
 
-        uint32_t time;
-        uint64_t services;
         uint8_t ip[16];
         uint16_t port;
     };
@@ -109,18 +105,35 @@ namespace BitCoin
     public:
 
         Peer() { rating = 0; }
+        Peer(const Peer &pCopy)
+        {
+            time = pCopy.time;
+            services = pCopy.services;
+            userAgent = pCopy.userAgent;
+            rating = pCopy.rating;
+            address = pCopy.address;
+        }
 
         void write(ArcMist::OutputStream *pStream) const;
         bool read(ArcMist::InputStream *pStream);
 
+        void updateTime() { time = getTime(); }
+
+        Peer &operator = (const Peer &pRight)
+        {
+            time = pRight.time;
+            services = pRight.services;
+            userAgent = pRight.userAgent;
+            rating = pRight.rating;
+            address = pRight.address;
+            return *this;
+        }
+
+        uint32_t time;
+        uint64_t services;
         ArcMist::String userAgent;
         int32_t rating;
         IPAddress address;
-
-    private:
-        Peer(Peer &pCopy);
-        Peer &operator = (Peer &pRight);
-
     };
 
     class Hash : public ArcMist::RawOutputStream // So ArcMist::Digest can write results to it

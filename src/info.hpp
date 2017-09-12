@@ -30,7 +30,7 @@ namespace BitCoin
 
         // Return list of peers in random order
         void randomizePeers(std::vector<Peer *> &pPeers, int pMinimumRating);
-        void updatePeer(const IPAddress &pAddress, const char *pUserAgent);
+        void updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices);
         void addPeerFail(const IPAddress &pAddress);
 
         void save();

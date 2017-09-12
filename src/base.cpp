@@ -86,12 +86,6 @@ namespace BitCoin
 
     void IPAddress::write(ArcMist::OutputStream *pStream) const
     {
-        // Time
-        pStream->writeUnsignedInt(time);
-
-        // Services
-        pStream->writeUnsignedLong(services);
-
         // IP
         pStream->write(ip, 16);
 
@@ -104,12 +98,6 @@ namespace BitCoin
 
     bool IPAddress::read(ArcMist::InputStream *pStream)
     {
-        // Time
-        time = pStream->readUnsignedInt();
-
-        // Services
-        services = pStream->readUnsignedLong();
-
         // IP
         pStream->read(ip, 16);
 
@@ -135,6 +123,12 @@ namespace BitCoin
 
         // Rating
         pStream->writeInt(rating);
+
+        // Time
+        pStream->writeUnsignedInt(time);
+
+        // Services
+        pStream->writeUnsignedLong(services);
 
         // Address
         address.write(pStream);
@@ -176,6 +170,12 @@ namespace BitCoin
 
         // Rating
         rating = pStream->readInt();
+
+        // Time
+        time = pStream->readUnsignedInt();
+
+        // Services
+        services = pStream->readUnsignedLong();
 
         // Address
         return address.read(pStream);

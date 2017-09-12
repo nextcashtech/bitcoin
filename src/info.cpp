@@ -260,9 +260,9 @@ namespace BitCoin
         mPeerMutex.unlock();
     }
 
-    void Info::updatePeer(const IPAddress &pAddress, const char *pUserAgent)
+    void Info::updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices)
     {
-        if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) || !pAddress.services)
+        if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) || pServices == 0)
             return;
 
         mPeerMutex.lock();
@@ -271,6 +271,8 @@ namespace BitCoin
             if((*peer)->address.matches(pAddress))
             {
                 // Update existing
+                (*peer)->updateTime();
+                (*peer)->services = pServices;
                 (*peer)->userAgent = pUserAgent;
                 (*peer)->address = pAddress;
                 (*peer)->rating++;
@@ -286,7 +288,9 @@ namespace BitCoin
         newPeer->userAgent = pUserAgent;
         if(pUserAgent == NULL)
             newPeer->rating = -5;
+        newPeer->updateTime();
         newPeer->address = pAddress;
+        newPeer->services = pServices;
         mPeers.push_front(newPeer);
         mPeersModified = true;
         mPeerMutex.unlock();
