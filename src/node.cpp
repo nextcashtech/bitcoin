@@ -761,6 +761,8 @@ namespace BitCoin
             }
             case Message::BLOCK:
             {
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_NODE_LOG_NAME,
+                  "[%d] Received block %s", mID, ((Message::BlockData *)message)->block->hash.hex().text());
                 Events::instance().post(Event::BLOCK_RECEIVE_FINISHED);
                 ++mStatistics.blocksReceived;
                 mBlockRequestMutex.lock();

@@ -348,15 +348,12 @@ namespace BitCoin
     {
         Daemon &daemon = Daemon::instance();
         Info &info = Info::instance();
-        uint64_t time;
 
         while(!daemon.mStopping)
         {
-            time = getTime();
-
-            if(time - daemon.mLastRequestCheck > 10)
+            if(getTime() - daemon.mLastRequestCheck > 10)
             {
-                daemon.mLastRequestCheck = time;
+                daemon.mLastRequestCheck = getTime();
                 daemon.processRequests();
             }
 
@@ -368,34 +365,34 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(time - daemon.mStatReport > 60)
+            if(getTime() - daemon.mStatReport > 60)
             {
-                daemon.mStatReport = time;
+                daemon.mStatReport = getTime();
                 daemon.printStatistics();
             }
 
             if(daemon.mStopping)
                 break;
 
-            if(time - daemon.mLastInfoSave > 300)
+            if(getTime() - daemon.mLastInfoSave > 300)
             {
-                daemon.mLastInfoSave = time;
+                daemon.mLastInfoSave = getTime();
                 info.save();
             }
 
             if(daemon.mStopping)
                 break;
 
-            if(time - daemon.mLastUnspentSave > 300)
+            if(getTime() - daemon.mLastUnspentSave > 300)
             {
-                daemon.mLastUnspentSave = time;
+                daemon.mLastUnspentSave = getTime();
                 daemon.mUnspentPool.save();
             }
 
             if(daemon.mStopping)
                 break;
 
-            if(time - daemon.mStatistics.startTime > 3600)
+            if(getTime() - daemon.mStatistics.startTime > 3600)
                 daemon.saveStatistics();
 
             if(daemon.mStopping)

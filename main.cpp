@@ -283,7 +283,7 @@ int main(int pArgumentCount, char **pArguments)
     daemon.run(seed, !noDaemon);
 
     if(!noDaemon)
-        std::remove(pidFilePath.text());
+        ArcMist::removeFile(pidFilePath.text());
 
     return 0;
 }

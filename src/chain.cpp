@@ -461,14 +461,14 @@ namespace BitCoin
 
     unsigned int PendingData::timeout()
     {
-        // int tempPriority = priority;
+        int tempPriority = priority;
         unsigned int result = 360;
 
-        // while(tempPriority > 0)
-        // {
-            // result /= 2;
-            // tempPriority--;
-        // }
+        while(tempPriority > 0)
+        {
+            result /= 2;
+            tempPriority--;
+        }
 
         return result;
     }
@@ -483,11 +483,11 @@ namespace BitCoin
                 fullCount++;
             else
             {
-                if(fullCount > 40)
+                if(fullCount > 1024)
                     (*pending)->priority = 4;
-                else if(fullCount > 20)
+                else if(fullCount > 512)
                     (*pending)->priority = 3;
-                else if(fullCount > 10)
+                else if(fullCount > 256)
                     (*pending)->priority = 2;
             }
         }
@@ -595,8 +595,9 @@ namespace BitCoin
         }
 
         mPendingMutex.unlock();
+        file.close();
+        ArcMist::removeFile(filePathName.text());
         return success;
-
     }
 
     Hash Chain::nextBlockNeeded(bool pReduceOnly)
@@ -871,17 +872,17 @@ namespace BitCoin
                 ArcMist::FileOutputStream file(filePathName, true);
                 nextPending->block->write(&file, true);
 
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Clearing all pending blocks/headers");
+                // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Clearing all pending blocks/headers");
 
-                // Clear pending blocks since they assumed this block was good
-                mPendingMutex.lock();
-                for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
-                    delete *pending;
-                mPending.clear();
-                mLastPendingHash.clear();
-                mPendingSize = 0;
-                mPendingBlocks = 0;
-                mPendingMutex.unlock();
+                // // Clear pending blocks since they assumed this block was good
+                // mPendingMutex.lock();
+                // for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+                    // delete *pending;
+                // mPending.clear();
+                // mLastPendingHash.clear();
+                // mPendingSize = 0;
+                // mPendingBlocks = 0;
+                // mPendingMutex.unlock();
 
                 //TODO Black list block hash
 
