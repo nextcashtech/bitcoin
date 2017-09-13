@@ -1642,10 +1642,10 @@ namespace BitCoin
          * New Block
          ***********************************************************************************************/
         // Requires unspents to be setup
-        //Info::instance().setPath("/var/bitcoin/testnet");
-        //unspents.load();
+        // Info::instance().setPath("/var/bitcoin/testnet");
+        // unspents.load();
 
-        // ArcMist::FileInputStream file("/var/bitcoin/testnet/6dee6a69e3eef00e67734637c5713172f52d50fb27ff928c6bf5118000000000.invalid");
+        // ArcMist::FileInputStream file("/var/bitcoin/testnet/pending");
         // Block newBlock;
 
         // newBlock.read(&file, true);

@@ -41,7 +41,6 @@ namespace BitCoin
         mStopping = false;
         mStopRequested = false;
         mConnectionThread = NULL;
-        mNodeThread = NULL;
         mManagerThread = NULL;
         previousSigTermChildHandler = NULL;
         previousSigTermHandler= NULL;
@@ -155,13 +154,6 @@ namespace BitCoin
             return false;
         }
 
-        mNodeThread = new ArcMist::Thread("Node", processNodes);
-        if(mNodeThread == NULL)
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create node thread");
-            return false;
-        }
-
         mLastClean = getTime();
         mStatReport = getTime();
         mManagerThread = new ArcMist::Thread("Manager", processManager);
@@ -216,22 +208,15 @@ namespace BitCoin
             delete mManagerThread;
         mManagerThread = NULL;
 
-        // Wait for nodes to finish
-        if(mNodeThread != NULL)
-            delete mNodeThread;
-        mNodeThread = NULL;
+        // Delete nodes
+        mNodeMutex.lock();
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            delete *node;
+        mNodes.clear();
+        mNodeMutex.unlock();
 
         saveStatistics();
         mChain.savePending();
-
-        // Delete nodes
-        mNodeMutex.lock();
-        std::vector<Node *> tempNodes = mNodes;
-        mNodes.clear();
-        mNodeMutex.unlock();
-        for(unsigned int i=0;i<tempNodes.size();i++)
-            delete tempNodes[i];
-
         mUnspentPool.save();
         Info::destroy();
 
@@ -405,93 +390,10 @@ namespace BitCoin
         }
     }
 
-    void Daemon::processNodes()
+    bool Daemon::addNode(ArcMist::Network::Connection *pConnection, bool pIsSeed)
     {
-        Daemon &daemon = Daemon::instance();
-        std::vector<Node *> nodes;
-
-        while(!daemon.mStopping)
-        {
-            daemon.mNodeMutex.lock();
-            for(std::vector<Node *>::iterator node=daemon.mNodes.begin();node!=daemon.mNodes.end();++node)
-            {
-                if(daemon.mStopping)
-                    break;
-
-                if((*node)->isOpen())
-                    (*node)->process(daemon.mChain);
-            }
-            daemon.mNodeMutex.unlock();
-
-            if(daemon.mStopping)
-                break;
-
-            ArcMist::Thread::sleep(200); // 5hz
-            if(daemon.mStopping)
-                break;
-        }
-    }
-
-    bool Daemon::addNode(const char *pIPAddress, const char *pPort)
-    {
-        if(!isRunning())
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "You must start BitCoin before adding a node");
-            return false;
-        }
-
         ++mStatistics.outgoingConnections;
-        Node *node = new Node(pIPAddress, pPort, mChain);
-        if(node->isOpen())
-        {
-            mNodeMutex.lock();
-            mNodes.push_back(node);
-            mNodeCount++;
-            mNodeMutex.unlock();
-            return true;
-        }
-        else
-        {
-            delete node;
-            return false;
-        }
-    }
-
-    bool Daemon::addNode(IPAddress &pAddress)
-    {
-        if(!isRunning())
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "You must start BitCoin before adding a node");
-            return false;
-        }
-
-        ++mStatistics.outgoingConnections;
-        Node *node = new Node(pAddress, mChain);
-        if(node->isOpen())
-        {
-            mNodeMutex.lock();
-            mNodes.push_back(node);
-            mNodeCount++;
-            mNodeMutex.unlock();
-            return true;
-        }
-        else
-        {
-            delete node;
-            return false;
-        }
-    }
-
-    bool Daemon::addNode(ArcMist::Network::Connection *pConnection)
-    {
-        if(!isRunning())
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "You must start BitCoin before adding a node");
-            return false;
-        }
-
-        ++mStatistics.outgoingConnections;
-        Node *node = new Node(pConnection, mChain);
+        Node *node = new Node(pConnection, mChain, pIsSeed);
         if(node->isOpen())
         {
             mNodeMutex.lock();
@@ -521,10 +423,15 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Found %d nodes from %s", ipList.size(), pName);
-
+        ArcMist::Network::Connection *connection;
         for(ArcMist::Network::IPList::iterator ip=ipList.begin();ip!=ipList.end() && !mStopping;++ip)
-            if(addNode(*ip, networkPortString()))
+        {
+            connection = new ArcMist::Network::Connection(*ip, networkPortString(), 5);
+            if(!connection->isOpen())
+                delete connection;
+            else if(addNode(connection, true))
                 result++;
+        }
 
         return result;
     }
@@ -539,6 +446,7 @@ namespace BitCoin
 
         // Try peers with good ratings first
         info.randomizePeers(peers, 1);
+        ArcMist::Network::Connection *connection;
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers with good ratings", peers.size());
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
         {
@@ -555,8 +463,11 @@ namespace BitCoin
             if(found)
                 continue;
 
-            if(addNode((*peer)->address))
-                count++;
+            connection = new ArcMist::Network::Connection(AF_INET6, (*peer)->address.ip, (*peer)->address.port, 5);
+            if(!connection->isOpen())
+                delete connection;
+            else if(addNode(connection))
+                    count++;
 
             if(mStopping || count >= pCount / 2) // Limit good to half
                 break;
@@ -580,8 +491,11 @@ namespace BitCoin
             if(found)
                 continue;
 
-            if(addNode((*peer)->address))
-                count++;
+            connection = new ArcMist::Network::Connection(AF_INET6, (*peer)->address.ip, (*peer)->address.port, 5);
+            if(!connection->isOpen())
+                delete connection;
+            else if(addNode(connection))
+                    count++;
 
             if(mStopping || count >= pCount)
                 break;

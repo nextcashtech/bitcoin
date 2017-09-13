@@ -2,6 +2,7 @@
 #define BITCOIN_NODE_HPP
 
 #include "arcmist/base/mutex.hpp"
+#include "arcmist/base/thread.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "arcmist/io/network.hpp"
 #include "base.hpp"
@@ -35,11 +36,10 @@ namespace BitCoin
     {
     public:
 
-        Node(const char *pIP, const char *pPort, Chain &pChain);
-        Node(unsigned int pFamily, const uint8_t *pIP, uint16_t pPort, Chain &pChain);
-        Node(IPAddress &pAddress, Chain &pChain);
-        Node(ArcMist::Network::Connection *pConnection, Chain &pChain);
+        Node(ArcMist::Network::Connection *pConnection, Chain &pChain, bool pIsSeed = false);
         ~Node();
+
+        static void run();
 
         unsigned int id() { return mID; }
         bool isOpen() { return mConnection != NULL && mConnection->isOpen(); }
@@ -88,10 +88,15 @@ namespace BitCoin
         bool sendBlock(Block &pBlock);
 
         unsigned int mID;
+        ArcMist::String mName;
+        ArcMist::Thread *mThread;
         IPAddress mAddress;
         ArcMist::Network::Connection *mConnection;
         ArcMist::Buffer mReceiveBuffer;
+        Chain &mChain;
         Statistics mStatistics;
+        bool mStop;
+        bool mIsSeed;
 
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;

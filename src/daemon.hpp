@@ -22,7 +22,6 @@ namespace BitCoin
         static Daemon &instance();
         static void destroy();
         static void processConnections();
-        static void processNodes();
         static void processManager();
 
         void run(ArcMist::String &pSeed, bool pInDaemonMode = true);
@@ -52,7 +51,6 @@ namespace BitCoin
 
         // Threads
         ArcMist::Thread *mConnectionThread;
-        ArcMist::Thread *mNodeThread;
         ArcMist::Thread *mManagerThread;
 
         // Timers
@@ -82,9 +80,7 @@ namespace BitCoin
         std::vector<Node *> mNodes;
         unsigned int mNodeCount;
 
-        bool addNode(IPAddress &pAddress);
-        bool addNode(const char *pIPAddress, const char *pPort);
-        bool addNode(ArcMist::Network::Connection *pConnection);
+        bool addNode(ArcMist::Network::Connection *pConnection, bool pIsSeed = false);
         unsigned int pickNodes(unsigned int pCount);
         void cleanNodes();
 
