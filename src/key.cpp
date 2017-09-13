@@ -314,7 +314,7 @@ namespace BitCoin
                 return false;
             }
 
-            if(input[offset] == 0x00 && !(input[offset+1] & 0x80))
+            while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
             {
                 ArcMist::String hex;
                 hex.writeHex(input, pLength);
@@ -327,9 +327,10 @@ namespace BitCoin
 
                 // Extra padding. Remove this
                 std::memmove(input + offset, input + offset + 1, totalLength - offset - 1);
-                --offset;
+                //--offset;
                 tryAgain = true;
                 --totalLength;
+                --subLength;
             }
 
             offset += subLength;
@@ -355,7 +356,7 @@ namespace BitCoin
                 return false;
             }
 
-            if(input[offset] == 0x00 && !(input[offset+1] & 0x80))
+            while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
             {
                 ArcMist::String hex;
                 hex.writeHex(input, pLength);
@@ -368,9 +369,10 @@ namespace BitCoin
 
                 // Extra padding. Remove this
                 std::memmove(input + offset, input + offset + 1, totalLength - offset - 1);
-                --offset;
+                //--offset;
                 tryAgain = true;
                 --totalLength;
+                --subLength;
             }
 
             offset += subLength;
