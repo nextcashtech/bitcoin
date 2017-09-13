@@ -494,6 +494,7 @@ namespace BitCoin
 
         switch(hashType)
         {
+        case Signature::INVALID:
         case Signature::ALL:
         {
             // if(anyoneCanPay)
@@ -610,7 +611,6 @@ namespace BitCoin
             break;
         }
         default:
-        case Signature::INVALID:
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
               "Unsupported signature hash type : %x", hashType);
             return false;
@@ -918,7 +918,7 @@ namespace BitCoin
         }
 
         /***********************************************************************************************
-         * Process Valid P2SH Transaction 
+         * Process Valid P2SH Transaction
          ***********************************************************************************************/
         // Create random redeemScript
         ArcMist::Buffer redeemScript;
