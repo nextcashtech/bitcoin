@@ -494,6 +494,111 @@ namespace BitCoin
         mPendingMutex.unlock();
     }
 
+    bool Chain::savePending()
+    {
+        mPendingMutex.lock();
+        if(mPending.size() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "No pending blocks/headers to save to the file system");
+            mPendingMutex.unlock();
+            return false;
+        }
+
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("pending");
+        ArcMist::FileOutputStream file(filePathName, true);
+
+        if(!file.isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+              "Failed to open file to save pending blocks/headers to the file system");
+            mPendingMutex.unlock();
+            return false;
+        }
+
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            (*pending)->block->write(&file, true, true);
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+          "Saved %d/%d pending blocks/headers to the file system",
+          mPendingBlocks, mPending.size() - mPendingBlocks);
+
+        mPendingMutex.unlock();
+        return true;
+    }
+
+    bool Chain::loadPending()
+    {
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("pending");
+        if(!ArcMist::fileExists(filePathName))
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "No file to load pending blocks/headers from the file system");
+            return true;
+        }
+
+        ArcMist::FileInputStream file(filePathName);
+        if(!file.isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+              "Failed to open file to load pending blocks/headers from the file system");
+            return false;
+        }
+
+        bool success = true;
+        Block *newBlock;
+
+        mPendingMutex.lock();
+
+        // Clear pending (just in case)
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            delete *pending;
+        mPending.clear();
+        mPendingSize = 0;
+        mPendingBlocks = 0;
+
+        // Read pending blocks/headers from file
+        while(file.remaining())
+        {
+            newBlock = new Block();
+            if(!newBlock->read(&file, true))
+            {
+                delete newBlock;
+                success = false;
+                break;
+            }
+            mPendingSize += newBlock->size();
+            if(newBlock->transactionCount > 0)
+                mPendingBlocks++;
+            mPending.push_back(new PendingData(newBlock));
+        }
+
+        if(success)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Loaded %d/%d pending blocks/headers from the file system",
+              mPendingBlocks, mPending.size() - mPendingBlocks);
+            mLastPendingHash = mPending.back()->block->hash;
+        }
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+              "Failed to load pending blocks/headers from the file system");
+            // Clear all pending that was read because it may be invalid
+            for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+                delete *pending;
+            mPending.clear();
+            mPendingSize = 0;
+            mPendingBlocks = 0;
+        }
+
+        mPendingMutex.unlock();
+        return success;
+
+    }
+
     Hash Chain::nextBlockNeeded(bool pReduceOnly)
     {
         Hash result;

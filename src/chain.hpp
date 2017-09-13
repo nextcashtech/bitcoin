@@ -134,6 +134,10 @@ namespace BitCoin
         void prioritizePending();
         // Add block header to queue to be requested and downloaded
         bool addPendingHeader(Block *pBlock);
+        // Save pending data to the file system
+        bool savePending();
+        // Load pending data from the file system
+        bool loadPending();
         // Returns the hash of the next block needed
         Hash nextBlockNeeded(bool pReduceOnly);
         // Mark a block as requested

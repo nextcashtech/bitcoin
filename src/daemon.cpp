@@ -137,6 +137,8 @@ namespace BitCoin
         if(!mChain.load(mUnspentPool, false))
             return false;
 
+        mChain.loadPending();
+
         if(!mChain.updateUnspent(mUnspentPool))
         {
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -220,6 +222,7 @@ namespace BitCoin
         mNodeThread = NULL;
 
         saveStatistics();
+        mChain.savePending();
 
         // Delete nodes
         mNodeMutex.lock();
