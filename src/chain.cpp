@@ -1646,20 +1646,26 @@ namespace BitCoin
          * New Block
          ***********************************************************************************************/
         // Requires unspents to be setup
-        // Info::instance().setPath("/var/bitcoin/testnet");
+        // Info::instance().setPath("/var/bitcoin/mainnet");
         // unspents.load();
 
-        // ArcMist::FileInputStream file("/var/bitcoin/testnet/pending");
+        // ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
         // Block newBlock;
 
-        // newBlock.read(&file, true);
-
-        // if(newBlock.process(unspents, unspents.blockHeight(), 0))
-            // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed New Block test");
+        // if(!newBlock.read(&file, true))
+        // {
+            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read New Block");
+            // success = false;
+        // }
         // else
         // {
-            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed New Block test");
-            // success = false;
+            // if(newBlock.process(unspents, unspents.blockHeight(), 0))
+                // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed New Block test");
+            // else
+            // {
+                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed New Block test");
+                // success = false;
+            // }
         // }
 
         // newBlock.print();

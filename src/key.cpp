@@ -268,7 +268,7 @@ namespace BitCoin
             return true;
         else
         {
-            // Try to hack it to work
+            // Try to hack it to work even though it is likely a badly formatted DER signature
             bool tryAgain = false;
             unsigned int totalLength = pLength;
             uint8_t offset = 0;
@@ -284,14 +284,29 @@ namespace BitCoin
 
             // Full length
             unsigned int fullLengthOffset = offset;
-            if(input[offset++] != pLength - 2)
+            if(input[offset] != totalLength - 2)
             {
-                ArcMist::String hex;
-                hex.writeHex(input, pLength);
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
-                  "Invalid total length byte in signature (%d bytes) : %s", pLength, hex.text());
-                return false;
+                if(input[offset] < totalLength - 2)
+                {
+                    ArcMist::String hex;
+                    hex.writeHex(input, pLength);
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+                      "Adjusting parse length %d to match total length in signature %d + 2 (header byte and length byte) : %s",
+                      totalLength, input[offset], hex.text());
+                    totalLength = input[offset] + 2;
+                    tryAgain = true;
+                }
+                else
+                {
+                    ArcMist::String hex;
+                    hex.writeHex(input, pLength);
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+                      "Invalid total length byte in signature (%d bytes) : %s", pLength, hex.text());
+                    return false;
+                }
             }
+
+            ++offset;
 
             // Integer header byte
             if(input[offset++] != 0x02)
