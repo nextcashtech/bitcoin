@@ -42,6 +42,7 @@ namespace BitCoin
         mStopped = false;
         mIsSeed = pIsSeed;
         mThread = NULL;
+        mSocketID = -1;
 
         mChain = pChain;
 
@@ -52,6 +53,7 @@ namespace BitCoin
         // Verify connection
         mConnectionMutex.lock();
         mConnection = pConnection;
+        mSocketID = pConnection->socket();
         mAddress = *mConnection;
         if(!mConnection->isOpen())
         {
@@ -63,19 +65,19 @@ namespace BitCoin
         }
         mConnected = true;
         mConnectionMutex.unlock();
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Connected");
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Connected (socket %d)", mSocketID);
 
         // Start thread
         mThread = new ArcMist::Thread(mName, run, this);
+        ArcMist::Thread::sleep(500); // Give the thread a chance to initialize
     }
 
     Node::~Node()
     {
         if(mConnected)
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Disconnecting");
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Disconnecting (socket %d)", mSocketID);
 
-        close();
-        mStop = true;
+        stop();
         if(mThread != NULL)
             delete mThread;
         clearInventory();
@@ -137,6 +139,8 @@ namespace BitCoin
 
     void Node::stop()
     {
+        if(mThread == NULL)
+            return;
         mStop = true;
         while(!mStopped)
             ArcMist::Thread::sleep(100);
@@ -276,15 +280,12 @@ namespace BitCoin
 
     bool Node::sendMessage(Message::Data *pData)
     {
-        mConnectionMutex.lock();
-        if(mConnection == NULL || !mConnection->isOpen())
-        {
-            mConnectionMutex.unlock();
+        if(!isOpen())
             return false;
-        }
 
         ArcMist::Buffer send;
         Message::writeFull(pData, &send);
+        mConnectionMutex.lock();
         bool success = mConnection->send(&send);
         mConnectionMutex.unlock();
         if(success)
@@ -299,6 +300,9 @@ namespace BitCoin
 
     bool Node::requestInventory(Chain &pChain)
     {
+        if(!isOpen())
+            return false;
+
         if(mLastInventoryRequest != 0 && getTime() - mLastInventoryRequest < 180) // Recently requested
             return false;
 
@@ -350,6 +354,9 @@ namespace BitCoin
 
     bool Node::requestHeaders(Chain &pChain, const Hash &pStartingHash)
     {
+        if(!isOpen())
+            return false;
+
         if(!pStartingHash.isEmpty())
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Requesting block headers starting from (%d) : %s",
               pChain.height(pStartingHash), pStartingHash.hex().text());
@@ -372,6 +379,9 @@ namespace BitCoin
 
     bool Node::requestBlocks(Chain &pChain, unsigned int pCount, bool pReduceOnly)
     {
+        if(!isOpen())
+            return false;
+
         Hash startHash = pChain.nextBlockNeeded(pReduceOnly);
 
         if(waitingForBlocks() || startHash.isEmpty() || !hasBlock(startHash))
@@ -421,6 +431,9 @@ namespace BitCoin
 
     bool Node::sendBlock(Block &pBlock)
     {
+        if(!isOpen())
+            return false;
+
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Sending block : %s", pBlock.hash.hex().text());
         Message::BlockData blockData;
         blockData.block = &pBlock;
@@ -432,10 +445,13 @@ namespace BitCoin
 
     bool Node::sendVersion(Chain &pChain)
     {
+        if(!isOpen())
+            return false;
+
         Info &info = Info::instance();
         // Apparently if relay is off most of main net won't send blocks or headers
-        Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip, info.port,
-          info.fullMode, pChain.blockHeight(), true); //chain.isInSync());
+        Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip,
+          info.port, info.fullMode, pChain.blockHeight(), true); //chain.isInSync());
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
         return success;
@@ -443,6 +459,9 @@ namespace BitCoin
 
     bool Node::sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason)
     {
+        if(!isOpen())
+            return false;
+
         Message::RejectData rejectMessage(pCommand, pCode, pReason, NULL);
         return sendMessage(&rejectMessage);
     }
@@ -450,10 +469,18 @@ namespace BitCoin
     void Node::run()
     {
         Node *node = (Node *)ArcMist::Thread::currentParameter();
-
         if(node == NULL)
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_NODE_LOG_NAME, "Thread parameter is null. Stopping");
+            return;
+        }
+
+        ArcMist::String name = node->mName;
+
+        if(node->mStop)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, name, "Node stopped before thread started");
+            node->mStopped = true;
             return;
         }
 

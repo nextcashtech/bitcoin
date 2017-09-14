@@ -82,6 +82,8 @@ namespace BitCoin
 
     private:
 
+        int mSocketID;
+
         bool versionSupported(int32_t pVersion);
 
         bool sendMessage(Message::Data *pData);

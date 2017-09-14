@@ -412,20 +412,11 @@ namespace BitCoin
             return false;
         }
 
-        if(node->isOpen())
-        {
-            mNodeLock.writeLock("Add Node");
-            mNodes.push_back(node);
-            mNodeCount++;
-            mNodeLock.writeUnlock();
-            return true;
-        }
-        else
-        {
-            node->stop();
-            delete node;
-            return false;
-        }
+        mNodeLock.writeLock("Add Node");
+        mNodes.push_back(node);
+        mNodeCount++;
+        mNodeLock.writeUnlock();
+        return true;
     }
 
     unsigned int Daemon::querySeed(const char *pName)
@@ -538,10 +529,9 @@ namespace BitCoin
         unsigned int nodesWithLatestBlock = 0, nodesWithoutLatestBlock= 0;
 
         mNodeLock.readLock();
+
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
-        mNodeLock.readUnlock();
-
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
             if((*node)->isOpen())
             {
@@ -568,7 +558,7 @@ namespace BitCoin
             }
 
         // Drop some nodes that don't have relevant information
-        if(nodesWithLatestBlock < nodesWithoutLatestBlock)
+        if(nodesWithLatestBlock < nodesWithoutLatestBlock && !mChain.isInSync())
         {
             unsigned int nodesToDrop = nodesWithoutLatestBlock - nodesWithLatestBlock;
             for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
@@ -583,6 +573,8 @@ namespace BitCoin
                 }
         }
 
+        mNodeLock.readUnlock();
+
         // Drop all disconnected nodes
         mNodeLock.writeLock("Clean Nodes");
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
@@ -590,7 +582,6 @@ namespace BitCoin
             {
                 (*node)->collectStatistics(mStatistics);
                 mChain.releaseBlocksForNode((*node)->id());
-                (*node)->stop();
                 delete *node;
                 node = mNodes.erase(node);
                 mNodeCount--;
