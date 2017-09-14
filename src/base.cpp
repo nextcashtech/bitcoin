@@ -192,6 +192,11 @@ namespace BitCoin
         return ArcMist::Digest::crc32((const uint8_t *)mData, mSize) & 0xffff;
     }
 
+    uint8_t Hash::lookup8() const
+    {
+        return ArcMist::Digest::crc32((const uint8_t *)mData, mSize) & 0xff;
+    }
+
     // Set hash to highest possible value that is valid for a header hash proof of work
     void Hash::setDifficulty(uint32_t pBits)
     {

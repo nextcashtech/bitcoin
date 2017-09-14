@@ -36,17 +36,19 @@ namespace BitCoin
     {
     public:
 
-        Node(ArcMist::Network::Connection *pConnection, Chain &pChain, bool pIsSeed = false);
+        Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIsSeed = false);
         ~Node();
 
         static void run();
 
         unsigned int id() { return mID; }
-        bool isOpen() { return mConnection != NULL && mConnection->isOpen(); }
-        void close() { if(mConnection != NULL) mConnection->close(); }
+        bool isOpen();
+        void close();
 
         void process(Chain &pChain);
         void clear();
+
+        void stop();
 
         // Time that the node connected
         uint32_t connectedTime() { return mConnectedTime; }
@@ -91,11 +93,12 @@ namespace BitCoin
         ArcMist::String mName;
         ArcMist::Thread *mThread;
         IPAddress mAddress;
+        Chain *mChain;
+        ArcMist::Mutex mConnectionMutex;
         ArcMist::Network::Connection *mConnection;
         ArcMist::Buffer mReceiveBuffer;
-        Chain &mChain;
         Statistics mStatistics;
-        bool mStop;
+        bool mStop, mStopped;
         bool mIsSeed;
 
         Message::VersionData *mVersionData;
@@ -106,11 +109,12 @@ namespace BitCoin
         uint64_t mMinimumFeeRate;
 
         // List of pending block headers this node is known to have
-        ArcMist::Mutex mBlockHashMutex;
         void addBlockHash(Chain &pChain, Hash &pHash);
         void removeBlockHash(Hash &pHash);
         void refreshInventoryHeight(Chain &pChain);
-        std::list<BlockHashInfo *> mBlockHashes[0x10000];
+
+        ArcMist::Mutex mInventoryMutex;
+        std::list<BlockHashInfo *> mInventory[0x100];
         unsigned int mBlockHashCount, mInventoryHeight;
         Hash mHighestInventoryHash;
         uint32_t mLastInventoryRequest;

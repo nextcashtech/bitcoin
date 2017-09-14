@@ -35,7 +35,7 @@ namespace BitCoin
         Daemon::sInstance = 0;
     }
 
-    Daemon::Daemon() : mNodeMutex("Nodes")
+    Daemon::Daemon() : mNodeLock("Nodes")
     {
         mRunning = false;
         mStopping = false;
@@ -198,22 +198,25 @@ namespace BitCoin
         previousSigTermHandler= NULL;
         previousSigIntHandler = NULL;
 
+        // Tell the chain to stop processing
+        mChain.stop();
+
         // Wait for connections to finish
         if(mConnectionThread != NULL)
             delete mConnectionThread;
         mConnectionThread = NULL;
 
+        // Delete nodes
+        mNodeLock.writeLock("Destroy");
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            delete *node;
+        mNodes.clear();
+        mNodeLock.writeUnlock();
+
         // Wait for manager to finish
         if(mManagerThread != NULL)
             delete mManagerThread;
         mManagerThread = NULL;
-
-        // Delete nodes
-        mNodeMutex.lock();
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
-            delete *node;
-        mNodes.clear();
-        mNodeMutex.unlock();
 
         saveStatistics();
         mChain.savePending();
@@ -227,10 +230,10 @@ namespace BitCoin
 
     void Daemon::collectStatistics()
     {
-        mNodeMutex.lock();
+        mNodeLock.readLock();
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
             (*node)->collectStatistics(mStatistics);
-        mNodeMutex.unlock();
+        mNodeLock.readUnlock();
     }
 
     void Daemon::saveStatistics()
@@ -255,7 +258,7 @@ namespace BitCoin
         unsigned int count = 0;
         unsigned int downloading = 0;
         unsigned int inventory = 0;
-        mNodeMutex.lock();
+        mNodeLock.readLock();
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
         {
             count++;
@@ -264,7 +267,7 @@ namespace BitCoin
             if((*node)->waitingForBlocks())
                 downloading++;
         }
-        mNodeMutex.unlock();
+        mNodeLock.readUnlock();
 
         collectStatistics();
 
@@ -285,14 +288,10 @@ namespace BitCoin
     {
         mChain.prioritizePending();
 
-        mNodeMutex.lock();
-        std::vector<Node *> nodes = mNodes; // Copy list of nodes
-        std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
-
         int pendingCount = mChain.pendingCount();
         bool reduceOnly = mChain.pendingSize() > mMaxPendingSize;
         Hash nextBlock = mChain.nextBlockNeeded(reduceOnly);
-        uint64_t time = getTime();
+        unsigned int availableToRequestBlocks = 0;
 
         if(reduceOnly)
         {
@@ -300,14 +299,15 @@ namespace BitCoin
               "Max pending block memory usage : %d", mChain.pendingSize());
         }
 
-        // Loop through nodes
-        unsigned int availableToRequestBlocks = 0;
+        mNodeLock.readLock();
+        std::vector<Node *> nodes = mNodes; // Copy list of nodes
+        std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
         {
             (*node)->requestInventory(mChain);
 
             if((mChain.blockHeight() == 0 || (*node)->hasBlock(mChain.lastPendingBlockHash())) &&
-              time - mLastHeaderRequest > 60)
+              getTime() - mLastHeaderRequest > 60)
             {
                 if((*node)->requestHeaders(mChain, mChain.lastPendingBlockHash()))
                     mLastHeaderRequest = getTime();
@@ -326,7 +326,7 @@ namespace BitCoin
                     blocksToRequest -= 32;
         }
 
-        mNodeMutex.unlock();
+        mNodeLock.readUnlock();
     }
 
     void Daemon::processManager()
@@ -392,18 +392,37 @@ namespace BitCoin
 
     bool Daemon::addNode(ArcMist::Network::Connection *pConnection, bool pIsSeed)
     {
-        ++mStatistics.outgoingConnections;
-        Node *node = new Node(pConnection, mChain, pIsSeed);
+        Node *node;
+        try
+        {
+            node = new Node(pConnection, &mChain, pIsSeed);
+        }
+        catch(std::bad_alloc &pBadAlloc)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Bad allocation while allocating new node : %s", pBadAlloc.what());
+            delete pConnection;
+            return false;
+        }
+        catch(...)
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Bad allocation while allocating new node : unknown");
+            delete pConnection;
+            return false;
+        }
+
         if(node->isOpen())
         {
-            mNodeMutex.lock();
+            mNodeLock.writeLock("Add Node");
             mNodes.push_back(node);
             mNodeCount++;
-            mNodeMutex.unlock();
+            mNodeLock.writeUnlock();
             return true;
         }
         else
         {
+            node->stop();
             delete node;
             return false;
         }
@@ -430,7 +449,10 @@ namespace BitCoin
             if(!connection->isOpen())
                 delete connection;
             else if(addNode(connection, true))
+            {
+                ++mStatistics.outgoingConnections;
                 result++;
+            }
         }
 
         return result;
@@ -452,14 +474,14 @@ namespace BitCoin
         {
             // Skip nodes already connected
             found = false;
-            mNodeMutex.lock();
+            mNodeLock.readLock();
             for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
                 if((*node)->address() == (*peer)->address)
                 {
                     found = true;
                     break;
                 }
-            mNodeMutex.unlock();
+            mNodeLock.readUnlock();
             if(found)
                 continue;
 
@@ -467,7 +489,10 @@ namespace BitCoin
             if(!connection->isOpen())
                 delete connection;
             else if(addNode(connection))
-                    count++;
+            {
+                ++mStatistics.outgoingConnections;
+                count++;
+            }
 
             if(mStopping || count >= pCount / 2) // Limit good to half
                 break;
@@ -480,14 +505,14 @@ namespace BitCoin
         {
             // Skip nodes already connected
             found = false;
-            mNodeMutex.lock();
+            mNodeLock.readLock();
             for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
                 if((*node)->address() == (*peer)->address)
                 {
                     found = true;
                     break;
                 }
-            mNodeMutex.unlock();
+            mNodeLock.readUnlock();
             if(found)
                 continue;
 
@@ -495,7 +520,10 @@ namespace BitCoin
             if(!connection->isOpen())
                 delete connection;
             else if(addNode(connection))
-                    count++;
+            {
+                ++mStatistics.outgoingConnections;
+                count++;
+            }
 
             if(mStopping || count >= pCount)
                 break;
@@ -509,10 +537,10 @@ namespace BitCoin
         uint64_t time = getTime();
         unsigned int nodesWithLatestBlock = 0, nodesWithoutLatestBlock= 0;
 
-        mNodeMutex.lock();
+        mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
-        mNodeMutex.unlock();
+        mNodeLock.readUnlock();
 
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
             if((*node)->isOpen())
@@ -556,19 +584,20 @@ namespace BitCoin
         }
 
         // Drop all disconnected nodes
-        mNodeMutex.lock();
+        mNodeLock.writeLock("Clean Nodes");
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
             if(!(*node)->isOpen())
             {
                 (*node)->collectStatistics(mStatistics);
                 mChain.releaseBlocksForNode((*node)->id());
+                (*node)->stop();
                 delete *node;
                 node = mNodes.erase(node);
                 mNodeCount--;
             }
             else
                 ++node;
-        mNodeMutex.unlock();
+        mNodeLock.writeUnlock();
     }
 
     void Daemon::processConnections()
@@ -599,8 +628,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            newConnection = listener.accept();
-            if(newConnection != NULL)
+            while((newConnection = listener.accept()) != NULL)
             {
                 ++daemon.mStatistics.incomingConnections;
                 if(daemon.mNodeCount < info.maxConnections)

@@ -180,6 +180,9 @@ namespace BitCoin
         //   If pRebuildUnspent then it rebuilds unspent transactions
         bool validate(UnspentPool &pUnspentPool, bool pRebuildUnspent);
 
+        // Set flag to stop processing
+        void stop() { mStop = true; }
+
         static bool test();
 
     private:
@@ -187,13 +190,14 @@ namespace BitCoin
         BlockSet mBlockLookup[0x10000];
 
         // Block headers for blocks not yet on chain
-        ArcMist::Mutex mPendingMutex;
+        ArcMist::ReadersLock mPendingLock;
         std::list<PendingData *> mPending;
         Hash mLastPendingHash;
         unsigned int mPendingSize, mPendingBlocks;
 
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;
+        bool mStop;
         bool processBlock(Block *pBlock, UnspentPool &pUnspentPool);
         //TODO Remove orphaned blocks //bool removeBlock(const Hash &pHash);
 

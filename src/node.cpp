@@ -14,8 +14,8 @@ namespace BitCoin
 {
     unsigned int Node::mNextID = 256;
 
-    Node::Node(ArcMist::Network::Connection *pConnection, Chain &pChain, bool pIsSeed) : mID(mNextID++), mChain(pChain),
-      mBlockHashMutex("Node Block Header Hash"), mBlockRequestMutex("Node Block Request")
+    Node::Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIsSeed) : mID(mNextID++),
+      mConnectionMutex("Node Connection"), mInventoryMutex("Node Inventory"), mBlockRequestMutex("Node Block Request")
     {
         mConnected = false;
         mVersionSent = false;
@@ -39,24 +39,31 @@ namespace BitCoin
         mMessagesReceived = 0;
         mConnectedTime = getTime();
         mStop = false;
+        mStopped = false;
         mIsSeed = pIsSeed;
         mThread = NULL;
+
+        mChain = pChain;
 
         ArcMist::Buffer name;
         name.writeFormatted("Node [%d]", mID);
         mName = name.readString(name.length());
 
         // Verify connection
+        mConnectionMutex.lock();
         mConnection = pConnection;
         mAddress = *mConnection;
         if(!mConnection->isOpen())
         {
+            mConnectionMutex.unlock();
+            mStopped = true;
             if(!mIsSeed)
                 Info::instance().addPeerFail(mAddress);
             return;
         }
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Connected");
         mConnected = true;
+        mConnectionMutex.unlock();
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Connected");
 
         // Start thread
         mThread = new ArcMist::Thread(mName, run, this);
@@ -67,25 +74,44 @@ namespace BitCoin
         if(mConnected)
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Disconnecting");
 
-        if(mConnection != NULL)
-            mConnection->close();
+        close();
         mStop = true;
         if(mThread != NULL)
             delete mThread;
         clearInventory();
+        mConnectionMutex.lock();
         if(mConnection != NULL)
             delete mConnection;
+        mConnectionMutex.unlock();
         if(mVersionData != NULL)
             delete mVersionData;
     }
 
+    bool Node::isOpen()
+    {
+        mConnectionMutex.lock();
+        bool result = mConnection != NULL && mConnection->isOpen();
+        mConnectionMutex.unlock();
+        return result;
+    }
+
+    void Node::close()
+    {
+        mConnectionMutex.lock();
+        if(mConnection != NULL)
+            mConnection->close();
+        mConnectionMutex.unlock();
+    }
+
     void Node::clear()
     {
+        mConnectionMutex.lock();
         if(mConnection != NULL)
         {
             delete mConnection;
             mConnection = NULL;
         }
+        mConnectionMutex.unlock();
         mVersionSent = false;
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
@@ -109,11 +135,20 @@ namespace BitCoin
         clearInventory();
     }
 
+    void Node::stop()
+    {
+        mStop = true;
+        while(!mStopped)
+            ArcMist::Thread::sleep(100);
+    }
+
     void Node::collectStatistics(Statistics &pCollection)
     {
+        mConnectionMutex.lock();
         mStatistics.bytesReceived += mConnection->bytesReceived();
         mStatistics.bytesSent += mConnection->bytesSent();
         mConnection->resetByteCounts();
+        mConnectionMutex.unlock();
         pCollection += mStatistics;
         mStatistics.clear();
     }
@@ -130,10 +165,10 @@ namespace BitCoin
     // Update inventory height for any hashes that we didn't know the height of at the time we received them
     void Node::refreshInventoryHeight(Chain &pChain)
     {
-        mBlockHashMutex.lock();
+        mInventoryMutex.lock();
         unsigned int previousInventoryHeight = mInventoryHeight;
-        std::list<BlockHashInfo *> *set = mBlockHashes;
-        for(unsigned int i=0;i<0x10000;i++)
+        std::list<BlockHashInfo *> *end = mInventory + 0x100;
+        for(std::list<BlockHashInfo *> *set=mInventory;set!=end;++set)
         {
             for(std::list<BlockHashInfo *>::iterator hash=set->begin();hash!=set->end();++hash)
             {
@@ -145,19 +180,18 @@ namespace BitCoin
                     mInventoryHeight = (*hash)->height;
                 }
             }
-            set++;
         }
         if(previousInventoryHeight != mInventoryHeight)
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
               "Inventory height changed from %d to %d", previousInventoryHeight, mInventoryHeight);
-        mBlockHashMutex.unlock();
+        mInventoryMutex.unlock();
     }
 
     bool Node::hasInventory()
     {
-        mBlockHashMutex.lock();
+        mInventoryMutex.lock();
         bool result = mInventoryHeight > 0;
-        mBlockHashMutex.unlock();
+        mInventoryMutex.unlock();
         return result;
     }
 
@@ -166,46 +200,44 @@ namespace BitCoin
         if(pHash.isEmpty())
             return false;
 
-        mBlockHashMutex.lock();
-        std::list<BlockHashInfo *> &hashes = mBlockHashes[pHash.lookup()];
+        mInventoryMutex.lock();
+        std::list<BlockHashInfo *> &hashes = mInventory[pHash.lookup8()];
         for(std::list<BlockHashInfo *>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
             if((*hash)->hash == pHash)
             {
-                mBlockHashMutex.unlock();
+                mInventoryMutex.unlock();
                 return true;
             }
-        mBlockHashMutex.unlock();
+        mInventoryMutex.unlock();
         return false;
     }
 
     void Node::clearInventory()
     {
-        mBlockHashMutex.lock();
-        std::list<BlockHashInfo *> *set = mBlockHashes;
-        for(unsigned int i=0;i<0x10000;i++)
+        mInventoryMutex.lock();
+        std::list<BlockHashInfo *> *end = mInventory + 0x100;
+        for(std::list<BlockHashInfo *> *set=mInventory;set!=end;++set)
         {
             for(std::list<BlockHashInfo *>::iterator hash=set->begin();hash!=set->end();++hash)
                 delete *hash;
             set->clear();
-            set++;
         }
         mBlockHashCount = 0;
         mHighestInventoryHash.clear();
         mInventoryHeight = 0;
-        mBlockHashMutex.unlock();
+        mInventoryMutex.unlock();
     }
 
     void Node::addBlockHash(Chain &pChain, Hash &pHash)
     {
-        mBlockHashMutex.lock();
-        unsigned int lookup = pHash.lookup();
-        std::list<BlockHashInfo *> &hashes = mBlockHashes[lookup];
+        mInventoryMutex.lock();
+        std::list<BlockHashInfo *> &hashes = mInventory[pHash.lookup8()];
         for(std::list<BlockHashInfo *>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
             if((*hash)->hash == pHash)
             {
                 if((*hash)->height == 0xffffffff)
                     (*hash)->height = pChain.height((*hash)->hash);
-                mBlockHashMutex.unlock();
+                mInventoryMutex.unlock();
                 return; // Already added
             }
 
@@ -217,23 +249,23 @@ namespace BitCoin
             mInventoryHeight = height;
         }
         hashes.push_back(new BlockHashInfo(pHash, height));
-        mBlockHashMutex.unlock();
+        mInventoryMutex.unlock();
     }
 
     void Node::removeBlockHash(Hash &pHash)
     {
-        mBlockHashMutex.lock();
-        std::list<BlockHashInfo *> &hashes = mBlockHashes[pHash.lookup()];
+        mInventoryMutex.lock();
+        std::list<BlockHashInfo *> &hashes = mInventory[pHash.lookup8()];
         for(std::list<BlockHashInfo *>::iterator hash=hashes.begin();hash!=hashes.end();++hash)
             if((*hash)->hash == pHash)
             {
                 delete *hash;
                 hashes.erase(hash);
                 mBlockHashCount--;
-                mBlockHashMutex.unlock();
+                mInventoryMutex.unlock();
                 break;
             }
-        mBlockHashMutex.unlock();
+        mInventoryMutex.unlock();
     }
 
     bool Node::versionSupported(int32_t pVersion)
@@ -244,18 +276,23 @@ namespace BitCoin
 
     bool Node::sendMessage(Message::Data *pData)
     {
-        if(mConnection == NULL)
+        mConnectionMutex.lock();
+        if(mConnection == NULL || !mConnection->isOpen())
+        {
+            mConnectionMutex.unlock();
             return false;
+        }
 
         ArcMist::Buffer send;
         Message::writeFull(pData, &send);
         bool success = mConnection->send(&send);
+        mConnectionMutex.unlock();
         if(success)
             ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Sent <%s>", Message::nameFor(pData->type));
         else
         {
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Failed to send <%s>", Message::nameFor(pData->type));
-            mConnection->close(); // Disconnect
+            close(); // Disconnect
         }
         return success;
     }
@@ -269,8 +306,7 @@ namespace BitCoin
         {
             // No response from previous inventory request
             ArcMist::Log::add(ArcMist::Log::WARNING, mName, "Did not send inventory. Dropping");
-            if(mConnection != NULL)
-                mConnection->close();
+            close();
             return false;
         }
 
@@ -396,9 +432,6 @@ namespace BitCoin
 
     bool Node::sendVersion(Chain &pChain)
     {
-        if(mConnection == NULL)
-            return false;
-
         Info &info = Info::instance();
         // Apparently if relay is off most of main net won't send blocks or headers
         Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip, info.port,
@@ -424,26 +457,36 @@ namespace BitCoin
             return;
         }
 
-        node->sendVersion(node->mChain);
+        node->sendVersion(*node->mChain);
 
         while(!node->mStop)
         {
-            node->process(node->mChain);
+            node->process(*node->mChain);
 
             if(node->mStop)
                 break;
 
             ArcMist::Thread::sleep(500);
         }
+
+        node->mStopped = true;
     }
 
     void Node::process(Chain &pChain)
     {
+        mConnectionMutex.lock();
         if(mConnection == NULL)
+        {
+            mConnectionMutex.unlock();
             return;
+        }
 
         if(!mConnection->isOpen() || !mConnection->receive(&mReceiveBuffer))
+        {
+            mConnectionMutex.unlock();
             return;
+        }
+        mConnectionMutex.unlock();
 
         // Check for a complete message
         Message::Data *message = Message::readFull(&mReceiveBuffer);
@@ -456,7 +499,7 @@ namespace BitCoin
             if(mMessagesReceived == 0 && time - mConnectedTime > 60)
             {
                 ArcMist::Log::add(ArcMist::Log::WARNING, mName, "No valid messages within 60 seconds of connecting");
-                mConnection->close();
+                close();
                 if(!mIsSeed)
                     Info::instance().addPeerFail(mAddress);
                 return;
@@ -480,7 +523,7 @@ namespace BitCoin
         {
             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "First message not a version or verack message : <%s>",
               Message::nameFor(message->type));
-            mConnection->close();
+            close();
             if(!mIsSeed)
                 Info::instance().addPeerFail(mAddress);
             delete message;
@@ -605,9 +648,7 @@ namespace BitCoin
                     info.updatePeer(peer->address, NULL, peer->services);
 
                 // Disconnect from seed node because it has done its job
-                if(mIsSeed && mConnection != NULL)
-                    mConnection->close();
-
+                close();
                 break;
             }
             case Message::ALERT:

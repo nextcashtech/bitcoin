@@ -76,7 +76,7 @@ namespace BitCoin
         unsigned int querySeed(const char *pName);
 
         // Nodes
-        ArcMist::Mutex mNodeMutex;
+        ArcMist::ReadersLock mNodeLock;
         std::vector<Node *> mNodes;
         unsigned int mNodeCount;
 

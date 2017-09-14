@@ -306,6 +306,7 @@ namespace BitCoin
         }
 
         uint16_t lookup() const;
+        uint8_t lookup8() const;
 
         void zeroize()
         {
