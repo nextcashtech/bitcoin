@@ -65,7 +65,8 @@ namespace BitCoin
         }
         mConnected = true;
         mConnectionMutex.unlock();
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Connected (socket %d)", mSocketID);
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Connected %s : %d (socket %d)",
+          mConnection->ipv6Address(), mConnection->port(), mSocketID);
 
         // Start thread
         mThread = new ArcMist::Thread(mName, run, this);
