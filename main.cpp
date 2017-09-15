@@ -221,9 +221,10 @@ int main(int pArgumentCount, char **pArguments)
         return 1;
     }
 
+    ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "Log file : %s", logFilePath.text());
+
     if(!noDaemon)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "Log file : %s", logFilePath.text());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "PID file : %s", pidFilePath.text());
 
         // Check if already running
@@ -264,8 +265,7 @@ int main(int pArgumentCount, char **pArguments)
     BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
 
     // Set up daemon to log to a file
-    if(!noDaemon)
-        ArcMist::Log::setOutputFile(logFilePath);
+    ArcMist::Log::setOutputFile(logFilePath);
 
     // Write pid to file
     if(!noDaemon)
