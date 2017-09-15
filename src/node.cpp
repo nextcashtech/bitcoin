@@ -546,9 +546,9 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Received <%s>", Message::nameFor(message->type));
         mLastReceiveTime = getTime();
 
-        if(mMessagesReceived == 0 && message->type != Message::VERSION && message->type != Message::VERACK)
+        if(mMessagesReceived < 2 && message->type != Message::VERSION && message->type != Message::VERACK)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "First message not a version or verack message : <%s>",
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "First 2 messages not a version and verack : <%s>",
               Message::nameFor(message->type));
             close();
             if(!mIsSeed)
@@ -637,7 +637,7 @@ namespace BitCoin
             case Message::REJECT:
             {
                 Message::RejectData *rejectData = (Message::RejectData *)message;
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "[%d] Reject %s [%02x] - %s",
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "Reject %s [%02x] - %s",
                   rejectData->command.text(), rejectData->code, rejectData->reason.text());
 
                 // TODO Determine if closing node is necessary
@@ -766,7 +766,7 @@ namespace BitCoin
                     mLastBlockReceiveTime = getTime();
                     ++mBlocksReceivedCount;
                     ((Message::BlockData *)message)->block = NULL; // Memory has been handed off
-                    if(!mIsSeed)
+                    if(!mIsSeed && mVersionData != NULL)
                         Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
                 }
                 break;
@@ -866,7 +866,7 @@ namespace BitCoin
                         ++header;
                 }
 
-                if(addedCount > 0 && !mIsSeed)
+                if(addedCount > 0 && !mIsSeed && mVersionData != NULL)
                     Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
 
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Added %d pending headers", addedCount);
