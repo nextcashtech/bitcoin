@@ -558,20 +558,20 @@ namespace BitCoin
             }
 
         // Drop some nodes that don't have relevant information
-        if(nodesWithLatestBlock < nodesWithoutLatestBlock && !mChain.isInSync())
-        {
-            unsigned int nodesToDrop = nodesWithoutLatestBlock - nodesWithLatestBlock;
-            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-                if((*node)->lastInventoryRequest() != 0 && getTime() - (*node)->lastInventoryRequest() > 360 &&
-                  !(*node)->hasBlock(mChain.lastPendingBlockHash()))
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                      "Dropping node [%d] because it doesn't have fresh inventory", (*node)->id());
-                    (*node)->close();
-                    if(--nodesToDrop == 0)
-                        break;
-                }
-        }
+        // if(nodesWithLatestBlock < nodesWithoutLatestBlock && !mChain.isInSync())
+        // {
+            // unsigned int nodesToDrop = nodesWithoutLatestBlock - nodesWithLatestBlock;
+            // for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+                // if((*node)->lastInventoryRequest() != 0 && getTime() - (*node)->lastInventoryRequest() > 600 &&
+                  // !(*node)->hasBlock(mChain.lastPendingBlockHash()))
+                // {
+                    // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                      // "Dropping node [%d] because it doesn't have fresh inventory", (*node)->id());
+                    // (*node)->close();
+                    // if(--nodesToDrop == 0)
+                        // break;
+                // }
+        // }
 
         mNodeLock.readUnlock();
 

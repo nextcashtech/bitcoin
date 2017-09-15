@@ -28,7 +28,7 @@ namespace BitCoin
         void clear();
 
         // Print human readable version to log
-        void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
+        void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG, bool pIncludeTransactions = true);
 
         // Hash
         Hash hash;

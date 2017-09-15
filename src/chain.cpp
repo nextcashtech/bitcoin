@@ -1142,7 +1142,8 @@ namespace BitCoin
                             if(block.process(pUnspentPool, height, 0))
                             {
                                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                                  "Processed block %08d", height);
+                                  "Processed block %08d (%d trans) (%d bytes) : %s", height, block.transactionCount,
+                                  block.size(), block.hash.hex().text());
                                 pUnspentPool.commit(height++);
                             }
                             else
@@ -1668,7 +1669,7 @@ namespace BitCoin
             // }
         // }
 
-        // newBlock.print();
+        // newBlock.print(ArcMist::Log::INFO, false);
 
         // Info::instance().setPath("/var/bitcoin/testnet");
         // Test of get headers and printing

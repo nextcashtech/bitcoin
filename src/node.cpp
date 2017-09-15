@@ -303,7 +303,7 @@ namespace BitCoin
         if(!isOpen())
             return false;
 
-        if(mLastInventoryRequest != 0 && getTime() - mLastInventoryRequest < 180) // Recently requested
+        if(mLastInventoryRequest != 0 && getTime() - mLastInventoryRequest < 60) // Recently requested
             return false;
 
         if(mLastInventoryRequest != 0 && mBlockHashCount == 0)
@@ -546,7 +546,8 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Received <%s>", Message::nameFor(message->type));
         mLastReceiveTime = getTime();
 
-        if(mMessagesReceived < 2 && message->type != Message::VERSION && message->type != Message::VERACK)
+        if(mMessagesReceived < 2 && message->type != Message::VERSION && message->type != Message::VERACK &&
+          message->type != Message::REJECT)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "First 2 messages not a version and verack : <%s>",
               Message::nameFor(message->type));
@@ -637,8 +638,15 @@ namespace BitCoin
             case Message::REJECT:
             {
                 Message::RejectData *rejectData = (Message::RejectData *)message;
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "Reject %s [%02x] - %s",
-                  rejectData->command.text(), rejectData->code, rejectData->reason.text());
+                if(rejectData->command == "version")
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Closing for version reject [%02x] - %s",
+                      rejectData->code, rejectData->reason.text());
+                    close();
+                }
+                else
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "Reject %s [%02x] - %s",
+                      rejectData->command.text(), rejectData->code, rejectData->reason.text());
 
                 // TODO Determine if closing node is necessary
                 break;

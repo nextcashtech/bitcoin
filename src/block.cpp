@@ -19,7 +19,6 @@ namespace BitCoin
 
     bool Block::hasProofOfWork()
     {
-        //TODO Validate that targetBits is correct for the chain and height
         Hash target;
         target.setDifficulty(targetBits);
         return hash <= target;
@@ -187,7 +186,7 @@ namespace BitCoin
         mSize = 0;
     }
 
-    void Block::print(ArcMist::Log::Level pLevel)
+    void Block::print(ArcMist::Log::Level pLevel, bool pIncludeTransactions)
     {
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Hash          : %s", hash.hex().text());
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Version       : %d", version);
@@ -199,6 +198,9 @@ namespace BitCoin
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Total Fees    : %f", bitcoins(mFees));
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Size (bytes)  : %d", mSize);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "%d Transactions", transactionCount);
+
+        if(!pIncludeTransactions)
+            return;
 
         unsigned int index = 0;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
@@ -387,15 +389,18 @@ namespace BitCoin
         // Validate and process transactions
         bool isCoinBase = true;
         mFees = 0;
-        //unsigned int transactionOffset = 1;
+        unsigned int transactionOffset = 0;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Processing transaction %d", transactionOffset++);
             if(!(*transaction)->process(pUnspentPool, pBlockHeight, isCoinBase, version, pBlockVersionFlags))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",transactionOffset);
                 return false;
+            }
             if(!isCoinBase)
                 mFees += (*transaction)->fee();
             isCoinBase = false;
+            ++transactionOffset;
         }
 
         // Check that coinbase output amount - fees is correct for block height
