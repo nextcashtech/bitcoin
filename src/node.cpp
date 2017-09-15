@@ -468,7 +468,7 @@ namespace BitCoin
 
     void Node::run()
     {
-        Node *node = (Node *)ArcMist::Thread::currentParameter();
+        Node *node = (Node *)ArcMist::Thread::getParameter();
         if(node == NULL)
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_NODE_LOG_NAME, "Thread parameter is null. Stopping");
