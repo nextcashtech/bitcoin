@@ -1,3 +1,10 @@
+/**************************************************************************
+ * Copyright 2017 ArcMist, LLC                                            *
+ * Contributors :                                                         *
+ *   Curtis Ellis <curtis@arcmist.com>                                    *
+ * Distributed under the MIT software license, see the accompanying       *
+ * file license.txt or http://www.opensource.org/licenses/mit-license.php *
+ **************************************************************************/
 #ifndef BITCOIN_INTERPRETER_HPP
 #define BITCOIN_INTERPRETER_HPP
 
@@ -157,7 +164,7 @@ namespace BitCoin
 
         // Write to a script to push the following size of data to the stack
         static void writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput);
-        
+
         static bool arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue);
         static void arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue);
 

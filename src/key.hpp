@@ -1,3 +1,10 @@
+/**************************************************************************
+ * Copyright 2017 ArcMist, LLC                                            *
+ * Contributors :                                                         *
+ *   Curtis Ellis <curtis@arcmist.com>                                    *
+ * Distributed under the MIT software license, see the accompanying       *
+ * file license.txt or http://www.opensource.org/licenses/mit-license.php *
+ **************************************************************************/
 #ifndef BITCOIN_KEY_HPP
 #define BITCOIN_KEY_HPP
 
@@ -91,7 +98,7 @@ namespace BitCoin
             mContext = pContext;
             pData.writeRaw(mData);
         }
-        
+
         KeyContext *context() const { return mContext; }
 
         bool operator == (PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) == 0; }
@@ -120,11 +127,11 @@ namespace BitCoin
     class Signature
     {
     public:
-    
+
         enum HashType { INVALID = 0x00, ALL = 0x01, NONE = 0x02, SINGLE = 0x03, ANYONECANPAY = 0x80 };
 
         Signature(KeyContext *pContext) { mContext = pContext; std::memset(mData, 0, 64); }
-        
+
         KeyContext *context() const { return mContext; }
 
         void set(void *pData) { std::memcpy(mData, pData, 64); }
@@ -146,7 +153,7 @@ namespace BitCoin
         }
 
     private:
-    
+
         void generateOutput();
 
         KeyContext *mContext;
@@ -159,7 +166,7 @@ namespace BitCoin
     public:
 
         PrivateKey(KeyContext *pContext);
-        
+
         KeyContext *context() const { return mContext; }
 
         bool generate();
@@ -173,7 +180,7 @@ namespace BitCoin
         {
             if(pStream->remaining() < 32)
                 return false;
-            pStream->read(mData, 32); 
+            pStream->read(mData, 32);
             return true;
         }
 

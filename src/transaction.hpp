@@ -1,3 +1,10 @@
+/**************************************************************************
+ * Copyright 2017 ArcMist, LLC                                            *
+ * Contributors :                                                         *
+ *   Curtis Ellis <curtis@arcmist.com>                                    *
+ * Distributed under the MIT software license, see the accompanying       *
+ * file license.txt or http://www.opensource.org/licenses/mit-license.php *
+ **************************************************************************/
 #ifndef BITCOIN_TRANSACTION_HPP
 #define BITCOIN_TRANSACTION_HPP
 
@@ -63,7 +70,7 @@ namespace BitCoin
 
         // Print human readable version to log
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
-        
+
         bool writeSignatureData(ArcMist::OutputStream *pStream, ArcMist::Buffer *pSubScript, bool pZeroSequence);
 
         Outpoint outpoint;
@@ -117,10 +124,10 @@ namespace BitCoin
         // P2PKH only
         bool addP2PKHInput(Unspent *pUnspent, PrivateKey &pPrivateKey, PublicKey &pPublicKey);
         bool addP2PKHOutput(Hash pPublicKeyHash, uint64_t pAmount);
-        
+
         // P2SH only
         bool addP2SHInput(Unspent *pUnspent, ArcMist::Buffer &pRedeemScript);
-        
+
         void clear();
 
         // Print human readable version to log

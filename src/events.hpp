@@ -1,3 +1,10 @@
+/**************************************************************************
+ * Copyright 2017 ArcMist, LLC                                            *
+ * Contributors :                                                         *
+ *   Curtis Ellis <curtis@arcmist.com>                                    *
+ * Distributed under the MIT software license, see the accompanying       *
+ * file license.txt or http://www.opensource.org/licenses/mit-license.php *
+ **************************************************************************/
 #ifndef BITCOIN_EVENTS_HPP
 #define BITCOIN_EVENTS_HPP
 
@@ -49,7 +56,7 @@ namespace BitCoin
 
         // Return the time of the last occurence of a specific event type
         uint64_t lastOccurence(Event::Type pType);
-        
+
         // Returns true if the seconds since the specified event type occurred is larger than the specified seconds
         bool elapsedSince(Event::Type pType, unsigned int pSeconds);
 
@@ -59,7 +66,7 @@ namespace BitCoin
         ~Events();
 
         ArcMist::Mutex mMutex;
-        
+
         std::list<Event> mEvents;
 
         uint64_t mInfoSavedLastTime;
