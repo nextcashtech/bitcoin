@@ -44,7 +44,7 @@ namespace BitCoin
 
         OP_VERIFY              = 0x69, // Marks transaction as invalid if top stack value is not true.
         OP_RETURN              = 0x6a, // Marks transaction as invalid
-        
+
         OP_EQUAL               = 0x87, // Returns 1 if the inputs are exactly equal, 0 otherwise
         OP_EQUALVERIFY         = 0x88, // Same as OP_EQUAL, but runs OP_VERIFY afterward.
 
@@ -55,7 +55,7 @@ namespace BitCoin
         OP_SHA256              = 0xa8, // in  hash  The input is hashed using SHA-256.
         OP_HASH160             = 0xa9, // The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
         OP_HASH256             = 0xaa, // The input is hashed two times with SHA-256.
-        
+
 
         // Signatures
         OP_CODESEPARATOR       = 0xab, // All of the signature checking words will only match signatures to the data after the most recently-executed OP_CODESEPARATOR.
@@ -301,7 +301,7 @@ namespace BitCoin
         //   from the stack and check that they match
         pOutput->writeByte(OP_EQUAL);
     }
-    
+
     void ScriptInterpreter::writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput)
     {
         if(pSize <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
@@ -1234,7 +1234,7 @@ namespace BitCoin
 
                     if(!ifStackTrue())
                         break;
-                    
+
                     if(!checkStackSize(2))
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
@@ -1284,7 +1284,7 @@ namespace BitCoin
 
                     if(!ifStackTrue())
                         break;
-                    
+
                     if(!checkStackSize(1))
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1316,7 +1316,7 @@ namespace BitCoin
 
                     if(!ifStackTrue())
                         break;
-                    
+
                     if(!checkStackSize(1))
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1348,7 +1348,7 @@ namespace BitCoin
 
                     if(!ifStackTrue())
                         break;
-                    
+
                     if(!checkStackSize(1))
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1379,7 +1379,7 @@ namespace BitCoin
 
                     if(!ifStackTrue())
                         break;
-                    
+
                     if(!checkStackSize(1))
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
@@ -1410,7 +1410,7 @@ namespace BitCoin
 
                     if(!ifStackTrue())
                         break;
-                    
+
                     if(!checkStackSize(1))
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1432,14 +1432,6 @@ namespace BitCoin
                 }
 
                 case OP_CODESEPARATOR: // All of the signature checking words will only match signatures to the data after the most recently-executed OP_CODESEPARATOR.
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid op code for signature script : OP_CODESEPARATOR");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
                     sigStartOffset = pScript.readOffset();
@@ -1448,20 +1440,12 @@ namespace BitCoin
                 case OP_CHECKSIG:
                 case OP_CHECKSIGVERIFY: // Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
                 {
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid op code for signature script : OP_CHECKSIG or OP_CHECKSIGVERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
                     /* The entire transaction's outputs, inputs, and script (from the most recently-executed OP_CODESEPARATOR
                      *   to the end) are hashed. The signature used by OP_CHECKSIG must be a valid signature for this hash and
                      *   public key. If it is, 1 is returned, 0 otherwise. */
                     if(!ifStackTrue())
                         break;
-                    
+
                     if(!checkStackSize(2))
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1512,14 +1496,6 @@ namespace BitCoin
                 case OP_CHECKMULTISIG:
                 case OP_CHECKMULTISIGVERIFY:
                 {
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid op code for signature script : OP_CHECKMULTISIG or OP_CHECKMULTISIGVERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
                     /* Compares the first signature against each public key until it finds an ECDSA match. Starting with the
                      *   subsequent public key, it compares the second signature against each remaining public key until it
                      *   finds an ECDSA match. The process is repeated until all signatures have been checked or not enough
@@ -1612,7 +1588,7 @@ namespace BitCoin
                             break;
                         }
                     }
-                    
+
                     // Destroy public keys and signatures
                     for(unsigned int i=0;i<signatureCount;i++)
                         delete signatures[i];
@@ -2524,7 +2500,7 @@ namespace BitCoin
                         mValid = false;
                         return false;
                     }
-                    
+
                     pushAlt(top());
                     pop(false);
                     break;
@@ -3010,7 +2986,7 @@ namespace BitCoin
 
         return mValid;
     }
-    
+
     bool ScriptInterpreter::test()
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,

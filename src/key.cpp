@@ -285,7 +285,7 @@ namespace BitCoin
             {
                 ArcMist::String hex;
                 hex.writeHex(input, pLength);
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                   "Adjusting parse length %d to match total length in signature %d + 2 (header byte and length byte) : %s",
                   totalLength, input[offset], hex.text());
                 totalLength = input[offset] + 2;
@@ -327,7 +327,7 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
               "Removing extra leading zero byte in R value from signature (%d bytes) : %s", pLength, hex.text());
 
             // Adjust lengths
@@ -345,7 +345,7 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
               "Adding required leading zero byte in R value to signature (%d bytes) : %s", pLength, hex.text());
 
             // Adjust lengths
@@ -387,7 +387,7 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
               "Removing extra leading zero byte in S value to signature (%d bytes) : %s", pLength, hex.text());
 
             // Adjust lengths
@@ -405,7 +405,7 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
               "Adding required leading zero byte in S value from signature (%d bytes) : %s", pLength, hex.text());
 
             // Adjust lengths

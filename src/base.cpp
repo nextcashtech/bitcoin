@@ -346,11 +346,11 @@ namespace BitCoin
 
     unsigned int compactIntegerSize(uint64_t pValue)
     {
-        if(pValue < 0xFD)
+        if(pValue < 0xfd)
             return 1;
-        else if(pValue < 0xFFFF)
+        else if(pValue < 0xffff)
             return 3;
-        else if(pValue < 0xFFFFFFFF)
+        else if(pValue < 0xffffffff)
             return 5;
         else
             return 9;
@@ -360,21 +360,21 @@ namespace BitCoin
     {
         unsigned int result = 0;
 
-        if(pValue < 0xFD)
+        if(pValue < 0xfd)
             result += pStream->writeByte(pValue);
-        else if(pValue < 0xFFFF)
+        else if(pValue < 0xffff)
         {
-            result += pStream->writeByte(0xFD);
+            result += pStream->writeByte(0xfd);
             result += pStream->writeUnsignedShort(pValue);
         }
-        else if(pValue < 0xFFFFFFFF)
+        else if(pValue < 0xffffffff)
         {
-            result += pStream->writeByte(0xFE);
+            result += pStream->writeByte(0xfe);
             result += pStream->writeUnsignedInt(pValue);
         }
         else
         {
-            result += pStream->writeByte(0xFF);
+            result += pStream->writeByte(0xff);
             result += pStream->writeUnsignedLong(pValue);
         }
 
@@ -384,28 +384,28 @@ namespace BitCoin
     uint64_t readCompactInteger(ArcMist::InputStream *pStream)
     {
         if(pStream->remaining() < 1)
-            return 0xFFFFFFFF;
+            return 0xffffffff;
 
         uint8_t firstByte = pStream->readByte();
 
-        if(firstByte < 0xFD)
+        if(firstByte < 0xfd)
             return firstByte;
-        else if(firstByte == 0xFD)
+        else if(firstByte == 0xfd)
         {
             if(pStream->remaining() < 2)
-                return 0xFFFFFFFF;
+                return 0xffffffff;
             return pStream->readUnsignedShort();
         }
-        else if(firstByte == 0xFD)
+        else if(firstByte == 0xfe)
         {
             if(pStream->remaining() < 4)
-                return 0xFFFFFFFF;
+                return 0xffffffff;
             return pStream->readUnsignedInt();
         }
         else
         {
             if(pStream->remaining() < 8)
-                return 0xFFFFFFFF;
+                return 0xffffffff;
             return pStream->readUnsignedLong();
         }
     }

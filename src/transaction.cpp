@@ -416,7 +416,7 @@ namespace BitCoin
         if(pStream->remaining() < 8)
             return false;
 
-        amount = pStream->readUnsignedLong();
+        amount = pStream->readLong();
 
         uint64_t bytes = readCompactInteger(pStream);
         if(pStream->remaining() < bytes)
