@@ -20,94 +20,31 @@
 
 namespace BitCoin
 {
-    class KeyContext
+    class Key
     {
     public:
+        static secp256k1_context *context();
+        static void destroyContext();
+        static secp256k1_context *sContext;
 
-        KeyContext();
-        ~KeyContext();
-
-        secp256k1_context *context;
-
-    };
-
-    class CompressedPublicKey
-    {
-    public:
-
-        CompressedPublicKey() { std::memset(mData, 0, 33); }
-
-        bool operator == (CompressedPublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 33) == 0; }
-        bool operator != (CompressedPublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 33) != 0; }
-
-        void set(void *pData) { std::memcpy(mData, pData, 33); }
-        ArcMist::String hex() const;
-
-        void write(ArcMist::OutputStream *pStream) const { pStream->write(mData, 33); }
-        bool read(ArcMist::InputStream *pStream)
-        {
-            if(pStream->remaining() < 33)
-                return false;
-
-            pStream->read(mData, 33);
-            return true;
-        }
-
-    private:
-
-        uint8_t mData[33];
-
-    };
-
-    class PublicKeyData
-    {
-    public:
-
-        PublicKeyData() { std::memset(mData, 0, 64); }
-
-        bool operator == (PublicKeyData &pRight) const { return std::memcmp(mData, pRight.mData, 64) == 0; }
-        bool operator != (PublicKeyData &pRight) const { return std::memcmp(mData, pRight.mData, 64) != 0; }
-
-        void set(void *pData) { std::memcpy(mData, pData, 64); }
-        ArcMist::String hex() const;
-
-        void write(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
-        void writeRaw(void *pData) const { std::memcpy(pData, mData, 64); }
-        bool read(ArcMist::InputStream *pStream)
-        {
-            if(pStream->remaining() < 64)
-                return false;
-
-            pStream->read(mData, 64);
-            return true;
-        }
-
-    private:
-
-        uint8_t mData[64];
-
+        static bool test();
     };
 
     class PublicKey
     {
     public:
 
-        PublicKey(KeyContext *pContext) { mContext = pContext; std::memset(mData, 0, 64); }
-        PublicKey(KeyContext *pContext, PublicKeyData &pData)
+        PublicKey()
         {
-            mContext = pContext;
-            pData.writeRaw(mData);
+            mContext = Key::context();
+            std::memset(mData, 0, 64);
         }
-
-        KeyContext *context() const { return mContext; }
 
         bool operator == (PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) == 0; }
         bool operator != (PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) != 0; }
 
         void set(void *pData) { std::memcpy(mData, pData, 64); }
         ArcMist::String hex() const;
-
-        bool compress(CompressedPublicKey &pResult) const;
 
         void write(ArcMist::OutputStream *pStream, bool pCompressed, bool pScriptFormat) const;
         bool read(ArcMist::InputStream *pStream);
@@ -118,7 +55,7 @@ namespace BitCoin
 
     private:
 
-        KeyContext *mContext;
+        secp256k1_context *mContext;
         uint8_t mData[64];
         Hash mHash;
 
@@ -130,9 +67,11 @@ namespace BitCoin
 
         enum HashType { INVALID = 0x00, ALL = 0x01, NONE = 0x02, SINGLE = 0x03, ANYONECANPAY = 0x80 };
 
-        Signature(KeyContext *pContext) { mContext = pContext; std::memset(mData, 0, 64); }
-
-        KeyContext *context() const { return mContext; }
+        Signature()
+        {
+            mContext = Key::context();
+            std::memset(mData, 0, 64);
+        }
 
         void set(void *pData) { std::memcpy(mData, pData, 64); }
         ArcMist::String hex() const;
@@ -156,7 +95,7 @@ namespace BitCoin
 
         void generateOutput();
 
-        KeyContext *mContext;
+        secp256k1_context *mContext;
         uint8_t mData[64];
 
     };
@@ -165,9 +104,7 @@ namespace BitCoin
     {
     public:
 
-        PrivateKey(KeyContext *pContext);
-
-        KeyContext *context() const { return mContext; }
+        PrivateKey();
 
         bool generate();
         bool generatePublicKey(PublicKey &pPublicKey) const;
@@ -186,16 +123,10 @@ namespace BitCoin
 
     private:
 
-        KeyContext *mContext;
+        secp256k1_context *mContext;
         uint8_t mData[32];
 
     };
-
-    namespace Key
-    {
-        bool test();
-    }
-
 }
 
 #endif

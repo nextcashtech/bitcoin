@@ -13,7 +13,7 @@
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
 #include "key.hpp"
-#include "unspent.hpp"
+#include "transaction_output.hpp"
 
 #include <vector>
 
@@ -113,7 +113,13 @@ namespace BitCoin
     {
     public:
 
-        Transaction() { version = 1; mFee = 0; lockTime = 0xffffffff; mSize = 0; }
+        Transaction()
+        {
+            version = 1;
+            mFee = 0;
+            lockTime = 0xffffffff;
+            mSize = 0;
+        }
         ~Transaction();
 
         void write(ArcMist::OutputStream *pStream);
@@ -122,11 +128,11 @@ namespace BitCoin
         bool read(ArcMist::InputStream *pStream, bool pCalculateHash = true);
 
         // P2PKH only
-        bool addP2PKHInput(Unspent *pUnspent, PrivateKey &pPrivateKey, PublicKey &pPublicKey);
+        bool addP2PKHInput(TransactionOutput *pOutput, PrivateKey &pPrivateKey, PublicKey &pPublicKey);
         bool addP2PKHOutput(Hash pPublicKeyHash, uint64_t pAmount);
 
         // P2SH only
-        bool addP2SHInput(Unspent *pUnspent, ArcMist::Buffer &pRedeemScript);
+        bool addP2SHInput(TransactionOutput *pOutput, ArcMist::Buffer &pRedeemScript);
 
         void clear();
 
@@ -149,7 +155,7 @@ namespace BitCoin
         uint64_t fee() const { return mFee; }
 
         void calculateHash();
-        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, bool pCoinBase,
+        bool process(TransactionOutputPool &pPool, uint64_t pBlockHeight, bool pCoinBase,
           int32_t pBlockVersion, int32_t pBlockVersionFlags);
 
         bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
@@ -162,7 +168,6 @@ namespace BitCoin
 
         int64_t mFee;
         unsigned int mSize;
-        std::vector<Unspent *> mUnspents;
 
         Transaction(const Transaction &pCopy);
         Transaction &operator = (const Transaction &pRight);

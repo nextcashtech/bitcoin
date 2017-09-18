@@ -7,6 +7,10 @@
  **************************************************************************/
 #include "interpreter.hpp"
 
+#ifdef PROFILER_ON
+#include "arcmist/dev/profiler.hpp"
+#endif
+
 #include "arcmist/crypto/digest.hpp"
 #include "key.hpp"
 
@@ -235,7 +239,7 @@ namespace BitCoin
                                                       Signature::HashType pType,
                                                       ArcMist::OutputStream *pOutput)
     {
-        Signature signature(pPrivateKey.context());
+        Signature signature;
 
         // Write appropriate data to a SHA256_SHA256 digest
         ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
@@ -810,7 +814,7 @@ namespace BitCoin
       ArcMist::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset)
     {
         // Read the signature from the stack item
-        Signature signature(pPublicKey.context());
+        Signature signature;
         pSignature->setReadOffset(0);
         if(!signature.read(pSignature, pSignature->length()-1, pECDSA_DER_SigsOnly))
         {
@@ -1033,6 +1037,9 @@ namespace BitCoin
 
     bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript, bool pECDSA_DER_SigsOnly)
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Interpreter Process");
+#endif
         unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;
         uint64_t count;
@@ -1080,8 +1087,11 @@ namespace BitCoin
                     return false;
                 }
 
+#ifdef PROFILER_ON
+                ArcMist::Profiler profiler("Interpreter Push");
+#endif
                 // Push opCode value bytes onto stack from input
-                push()->writeStream(&pScript, opCode);
+                push()->copyBuffer(pScript, opCode);
                 continue;
             }
 
@@ -1281,6 +1291,9 @@ namespace BitCoin
                 }
                 case OP_RIPEMD160:
                 {
+#ifdef PROFILER_ON
+                    ArcMist::Profiler profiler("Interpreter RipeMD160");
+#endif
                     if(pIsSignatureScript)
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1313,6 +1326,9 @@ namespace BitCoin
                 }
                 case OP_SHA1:
                 {
+#ifdef PROFILER_ON
+                    ArcMist::Profiler profiler("Interpreter SHA1");
+#endif
                     if(pIsSignatureScript)
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1345,6 +1361,9 @@ namespace BitCoin
                 }
                 case OP_SHA256:
                 {
+#ifdef PROFILER_ON
+                    ArcMist::Profiler profiler("Interpreter SHA256");
+#endif
                     if(pIsSignatureScript)
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1377,6 +1396,9 @@ namespace BitCoin
                 }
                 case OP_HASH160: // The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
                 {
+#ifdef PROFILER_ON
+                    ArcMist::Profiler profiler("Interpreter Hash160");
+#endif
                     if(pIsSignatureScript)
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_HASH160");
@@ -1407,6 +1429,9 @@ namespace BitCoin
                 }
                 case OP_HASH256: // The input is hashed two times with SHA-256.
                 {
+#ifdef PROFILER_ON
+                    ArcMist::Profiler profiler("Interpreter Hash256");
+#endif
                     if(pIsSignatureScript)
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1447,6 +1472,9 @@ namespace BitCoin
                 case OP_CHECKSIG:
                 case OP_CHECKSIGVERIFY: // Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
                 {
+#ifdef PROFILER_ON
+                    ArcMist::Profiler profiler("Interpreter CheckSig");
+#endif
                     /* The entire transaction's outputs, inputs, and script (from the most recently-executed OP_CODESEPARATOR
                      *   to the end) are hashed. The signature used by OP_CHECKSIG must be a valid signature for this hash and
                      *   public key. If it is, 1 is returned, 0 otherwise. */
@@ -1461,10 +1489,8 @@ namespace BitCoin
                         return false;
                     }
 
-                    KeyContext keyContext;
-
                     // Pop the public key
-                    PublicKey publicKey(&keyContext);
+                    PublicKey publicKey;
                     top()->setReadOffset(0);
                     if(!publicKey.read(top()))
                     {
@@ -1503,6 +1529,9 @@ namespace BitCoin
                 case OP_CHECKMULTISIG:
                 case OP_CHECKMULTISIGVERIFY:
                 {
+#ifdef PROFILER_ON
+                    ArcMist::Profiler profiler("Interpreter CheckMultiSig");
+#endif
                     /* Compares the first signature against each public key until it finds an ECDSA match. Starting with the
                      *   subsequent public key, it compares the second signature against each remaining public key until it
                      *   finds an ECDSA match. The process is repeated until all signatures have been checked or not enough
@@ -1526,8 +1555,6 @@ namespace BitCoin
                         return false;
                     }
 
-                    KeyContext keyContext;
-
                     // Pop count of public keys
                     unsigned int publicKeyCount = popInteger();
                     if(!checkStackSize(publicKeyCount))
@@ -1542,7 +1569,7 @@ namespace BitCoin
                     PublicKey *publicKeys[publicKeyCount];
                     for(unsigned int i=0;i<publicKeyCount;i++)
                     {
-                        publicKeys[i] = new PublicKey(&keyContext);
+                        publicKeys[i] = new PublicKey();
                         top()->setReadOffset(0);
                         if(!publicKeys[i]->read(top()))
                         {
@@ -1689,6 +1716,7 @@ namespace BitCoin
                     break;
                 }
                 case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
+                {
                     if(!ifStackTrue())
                         break;
                     count = pScript.readByte();
@@ -1699,9 +1727,14 @@ namespace BitCoin
                         mValid = false;
                         return false;
                     }
-                    push()->writeStream(&pScript, count);
+#ifdef PROFILER_ON
+                    ArcMist::Profiler profiler("Interpreter Push");
+#endif
+                    push()->copyBuffer(pScript, count);
                     break;
+                }
                 case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
+                {
                     if(!ifStackTrue())
                         break;
                     count = pScript.readUnsignedShort();
@@ -1712,9 +1745,14 @@ namespace BitCoin
                         mValid = false;
                         return false;
                     }
-                    push()->writeStream(&pScript, count);
+#ifdef PROFILER_ON
+                    ArcMist::Profiler profiler("Interpreter Push");
+#endif
+                    push()->copyBuffer(pScript, count);
                     break;
+                }
                 case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
+                {
                     if(!ifStackTrue())
                         break;
                     count = pScript.readUnsignedInt();
@@ -1725,9 +1763,12 @@ namespace BitCoin
                         mValid = false;
                         return false;
                     }
-                    push()->writeStream(&pScript, count);
+#ifdef PROFILER_ON
+                    ArcMist::Profiler profiler("Interpreter Push");
+#endif
+                    push()->copyBuffer(pScript, count);
                     break;
-
+                }
                 case OP_1NEGATE: // The number -1 is pushed
                     if(!ifStackTrue())
                         break;

@@ -5,8 +5,8 @@
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
-#ifndef BITCOIN_UNSPENT_HPP
-#define BITCOIN_UNSPENT_HPP
+#ifndef BITCOIN_TRANSACTION_OUTPUT_HPP
+#define BITCOIN_TRANSACTION_OUTPUT_HPP
 
 #include "arcmist/base/mutex.hpp"
 #include "arcmist/base/log.hpp"
@@ -19,26 +19,26 @@
 
 namespace BitCoin
 {
-    // Unspent transaction output (UTXO)
-    class Unspent
+    // Transaction output (TXO)
+    class TransactionOutput
     {
     public:
 
-        Unspent() : transactionID(32) { amount = 0; index = 0xffffffff; }
-        Unspent(Unspent &pValue);
-        Unspent &operator = (Unspent &pRight);
+        TransactionOutput() : transactionID(32) { amount = 0; index = 0xffffffff; }
+        TransactionOutput(TransactionOutput &pValue);
+        TransactionOutput &operator = (TransactionOutput &pRight);
 
         uint64_t amount; // Quantity of Satoshis
         ArcMist::Buffer script; // Public key script needed to spend
         Hash transactionID; // Hash of transaction that created this unspent
         uint32_t index; // Index of output in transaction that created this unspent
         Hash hash; // Hash of public key or redeem script used in this unspent script
-        unsigned int height;
+        unsigned int height; // Height of block that contained this transaction output
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
-        bool operator == (const Unspent &pRight) const
+        bool operator == (const TransactionOutput &pRight) const
         {
             return transactionID == pRight.transactionID && index == pRight.index;
         }
@@ -49,21 +49,21 @@ namespace BitCoin
     };
 
     // Hash table of subset of unspent transaction outputs
-    class UnspentSet
+    class TransactionOutputSet
     {
     public:
 
         static constexpr const char *START_STRING = "AMUNSP01";
 
-        UnspentSet() {}
-        ~UnspentSet();
+        TransactionOutputSet() {}
+        ~TransactionOutputSet();
 
         unsigned int size() const { return mPool.size(); }
 
-        Unspent *find(const Hash &pTransactionID, uint32_t pIndex);
+        TransactionOutput *find(const Hash &pTransactionID, uint32_t pIndex);
 
-        void add(Unspent *pUnspent);
-        void remove(Unspent *pUnspent);
+        void add(TransactionOutput *pTransactionOutput);
+        void remove(TransactionOutput *pTransactionOutput);
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
@@ -72,40 +72,46 @@ namespace BitCoin
 
         // This will remove items from pOther as it finds matches
         // Returns true if they match
-        bool compare(UnspentSet &pOther, const char *pName, const char *pOtherName);
+        bool compare(TransactionOutputSet &pOther, const char *pName, const char *pOtherName);
 
     private:
 
-        std::list<Unspent *> mPool;
+        std::list<TransactionOutput *> mPool;
 
     };
 
     // Container for all unspent transaction outputs
-    class UnspentPool
+    class TransactionOutputPool
     {
     public:
 
-        UnspentPool();
-        ~UnspentPool();
+        TransactionOutputPool();
+        ~TransactionOutputPool();
 
         bool isValid() const { return mValid; }
 
-        // Find an existing unspent transaction output
-        Unspent *find(const Hash &pTransactionID, uint32_t pIndex);
+        // Activate/deactivate test mode. When on "outpoint" transactions will be pulled from the spent pool
+        void setTestMode(bool pOn) { mTest = pOn; }
 
-        // Add a new unspent transaction output
-        void add(Unspent &pUnspent);
+        // Find an unspent transaction output
+        TransactionOutput *findUnspent(const Hash &pTransactionID, uint32_t pIndex);
+
+        // Add a new transaction output
+        void add(TransactionOutput *pTransactionOutput);
 
         // Remove an unspent transaction output (use pointer returned from find())
-        void spend(Unspent *pUnspent);
+        void spend(TransactionOutput *pTransactionOutput);
         bool spend(const Hash &pTransactionID, uint32_t pIndex)
         {
-            Unspent *unspent = find(pTransactionID, pIndex);
+            TransactionOutput *unspent = findUnspent(pTransactionID, pIndex);
             if(unspent == NULL)
                 return false;
             spend(unspent);
             return true;
         }
+
+        // Find a spent transaction output
+        TransactionOutput *findSpent(const Hash &pTransactionID, uint32_t pIndex);
 
         // Commit pending adds and spends
         bool commit(unsigned int pBlockID);
@@ -119,7 +125,7 @@ namespace BitCoin
         unsigned int count()
         {
             mMutex.lock();
-            unsigned int result = mUnspentCount + mPendingAdd.size() - mPendingSpend.size();
+            unsigned int result = mTransactionOutputCount + mPendingAdd.size() - mPendingSpend.size();
             mMutex.unlock();
             return result;
         }
@@ -127,29 +133,29 @@ namespace BitCoin
         // Reverse all of the changes made by the most recent block
         //TODO void reverseLastBlock();
 
-        // Load from file system
+        // Load from/Save to file system
         bool load();
-
-        // Save to file system
         bool save();
-
-        void clear();
 
         // This will remove items from pOther as it finds matches
         // Returns true if they match
-        bool compare(UnspentPool &pOther, const char *pName, const char *pOtherName);
+        bool compare(TransactionOutputPool &pOther, const char *pName, const char *pOtherName);
 
     private:
 
-        const UnspentPool &operator = (const UnspentPool &pRight);
+        TransactionOutputPool(const TransactionOutputPool &pCopy);
+        const TransactionOutputPool &operator = (const TransactionOutputPool &pRight);
 
         ArcMist::Mutex mMutex;
-        UnspentSet mSets[0x10000];
-        std::list<Unspent *> mPendingAdd, mPendingSpend;
+        TransactionOutputSet mUnspent[0x10000];
+        std::list<TransactionOutput *> mPendingAdd, mPendingSpend;
+        TransactionOutputSet mSpent[0x10000];
+        std::list<TransactionOutput *> mSpentToDelete;
         bool mModified;
         bool mValid;
-        unsigned int mUnspentCount;
+        unsigned int mTransactionOutputCount;
         unsigned int mBlockHeight;
+        bool mTest;
 
     };
 }

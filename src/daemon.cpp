@@ -11,7 +11,6 @@
 #include "arcmist/io/network.hpp"
 #include "info.hpp"
 #include "block.hpp"
-#include "events.hpp"
 #include "block.hpp"
 #include "chain.hpp"
 
@@ -56,7 +55,7 @@ namespace BitCoin
         mLastNodeAdd = 0;
         mLastRequestCheck = 0;
         mLastInfoSave = 0;
-        mLastUnspentSave = 0;
+        mLastTransactionOutputsSave = 0;
         mLastClean = 0;
         mLastHeaderRequest = 0;
         mNodeCount = 0;
@@ -105,7 +104,7 @@ namespace BitCoin
             if(mStopRequested)
                 stop();
             else
-                ArcMist::Thread::sleep(100);
+                ArcMist::Thread::sleep(1000);
         }
     }
 
@@ -137,22 +136,22 @@ namespace BitCoin
         Info::instance(); // Load data
         mLastInfoSave = getTime();
 
-        if(!mUnspentPool.load())
+        if(!mPool.load())
             return false;
 
-        if(!mChain.load(mUnspentPool, false))
+        if(!mChain.load(mPool, false))
             return false;
 
         mChain.loadPending();
 
-        if(!mChain.updateUnspent(mUnspentPool))
+        if(!mChain.updateTransactionOutputs(mPool))
         {
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
-              "Unspent height %d doesn't match chain height %d", mUnspentPool.blockHeight(),
+              "Unspent transaction outputs height %d doesn't match chain height %d", mPool.blockHeight(),
               mChain.blockHeight());
             return false;
         }
-        mLastUnspentSave = getTime();
+        mLastTransactionOutputsSave = getTime();
 
         mConnectionThread = new ArcMist::Thread("Connection", processConnections);
         if(mConnectionThread == NULL)
@@ -206,7 +205,7 @@ namespace BitCoin
         previousSigIntHandler = NULL;
 
         // Tell the chain to stop processing
-        mChain.stop();
+        mChain.requestStop();
 
         // Wait for connections to finish
         if(mConnectionThread != NULL)
@@ -227,7 +226,7 @@ namespace BitCoin
 
         saveStatistics();
         mChain.savePending();
-        mUnspentPool.save();
+        mPool.save();
         Info::destroy();
 
         mRunning = false;
@@ -282,7 +281,7 @@ namespace BitCoin
         unsigned int totalPending = mChain.pendingCount();
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks, %d UTXOs", mChain.blockHeight(), mUnspentPool.count());
+          "Block Chain : %d blocks, %d UTXOs", mChain.blockHeight(), mPool.count());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Pending : %d blocks, %d headers (%d bytes)", blocks, totalPending - blocks, mChain.pendingSize());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
@@ -352,7 +351,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            daemon.mChain.process(daemon.mUnspentPool);
+            daemon.mChain.process(daemon.mPool);
 
             if(daemon.mStopping)
                 break;
@@ -375,10 +374,10 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - daemon.mLastUnspentSave > 300)
+            if(getTime() - daemon.mLastTransactionOutputsSave > 300)
             {
-                daemon.mLastUnspentSave = getTime();
-                daemon.mUnspentPool.save();
+                daemon.mLastTransactionOutputsSave = getTime();
+                daemon.mPool.save();
             }
 
             if(daemon.mStopping)

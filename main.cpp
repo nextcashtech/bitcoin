@@ -13,6 +13,7 @@
 #include "arcmist/io/network.hpp"
 #include "arcmist/base/endian.hpp"
 #include "info.hpp"
+#include "transaction_output.hpp"
 #include "chain.hpp"
 #include "daemon.hpp"
 
@@ -127,49 +128,44 @@ int main(int pArgumentCount, char **pArguments)
         BitCoin::Hash hash;
         BitCoin::Block block;
 
-        if(printBlock.length() == 32)
+        if(printBlock.length() == 64)
         {
             ArcMist::Buffer buffer;
-            buffer.writeString(printBlock.text(), printBlock.length());
+            buffer.writeHex(printBlock.text());
             hash.read(&buffer, 32);
+
+            BitCoin::TransactionOutputPool pool;
+            chain.load(pool, false);
+
+            if(!chain.getBlock(hash, block))
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, MAIN_LOG_NAME, "Failed to read block");
+                return 1;
+            }
         }
         else
         {
             unsigned int height = std::stol(printBlock.text());
-            if(!chain.getBlockHash(height, hash))
+            if(!chain.getBlock(height, block))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, MAIN_LOG_NAME,
-                  "Failed to find hash at height %d", height);
+                  "Failed to find block at height %d", height);
                 return 1;
             }
-
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
-              "Found hash at height %d : %s", height, hash.hex().text());
         }
 
-        BitCoin::UnspentPool unspentPool;
-        chain.load(unspentPool, false);
-
-        if(chain.getBlock(hash, block))
-        {
-            block.print(ArcMist::Log::INFO);
-            return 0;
-        }
-        else
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, MAIN_LOG_NAME, "Failed to read block");
-            return 1;
-        }
+        block.print(ArcMist::Log::INFO, false);
+        return 0;
     }
 
     // These have to be static or they overflows the stack
     static BitCoin::Chain chain;
-    static BitCoin::UnspentPool unspentPool;
+    static BitCoin::TransactionOutputPool pool;
 
     if(listblocks)
     {
         ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
-        if(chain.load(unspentPool, true))
+        if(chain.load(pool, true))
             return 0;
         else
             return 1;
@@ -178,16 +174,16 @@ int main(int pArgumentCount, char **pArguments)
     if(validate || rebuild)
     {
         ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
-        if(!chain.validate(unspentPool, rebuild))
+        if(!chain.validate(pool, rebuild))
             return 1;
 
         if(validate)
         {
-            // Compare unspentPool with those loaded from files
-            BitCoin::UnspentPool savedUnspentPool;
-            if(!savedUnspentPool.load())
+            // Compare pool transaction outputs with those loaded from files
+            BitCoin::TransactionOutputPool savedPool;
+            if(!savedPool.load())
                 return 1;
-            unspentPool.compare(savedUnspentPool, "Calculated", "Saved");
+            pool.compare(savedPool, "Calculated", "Saved");
         }
 
         return 0;

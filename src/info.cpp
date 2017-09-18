@@ -12,7 +12,6 @@
 #include "arcmist/io/network.hpp"
 #include "arcmist/base/log.hpp"
 #include "arcmist/crypto/digest.hpp"
-#include "events.hpp"
 
 #include <cstdlib>
 #include <cstring>
@@ -90,7 +89,6 @@ namespace BitCoin
     {
         writeDataFile();
         writePeersFile();
-        Events::instance().post(Event::INFO_SAVED);
     }
 
     void Info::applyValue(ArcMist::Buffer &pName, ArcMist::Buffer &pValue)

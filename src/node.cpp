@@ -10,7 +10,6 @@
 #include "arcmist/base/log.hpp"
 #include "info.hpp"
 #include "message.hpp"
-#include "events.hpp"
 #include "block.hpp"
 #include "chain.hpp"
 
@@ -422,7 +421,6 @@ namespace BitCoin
         {
             mBlocksRequestedCount += sentCount;
             mLastBlockRequest = getTime();
-            Events::instance().post(Event::BLOCK_REQUESTED);
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Requested %d blocks starting at (%d) : %s",
               sentCount, pChain.height(startHash), startHash.hex().text());
         }
@@ -766,7 +764,6 @@ namespace BitCoin
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
                   "Received block %s", ((Message::BlockData *)message)->block->hash.hex().text());
-                Events::instance().post(Event::BLOCK_RECEIVE_FINISHED);
                 ++mStatistics.blocksReceived;
                 mBlockRequestMutex.lock();
                 for(HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)

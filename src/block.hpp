@@ -13,6 +13,7 @@
 #include "arcmist/io/file_stream.hpp"
 #include "base.hpp"
 #include "transaction.hpp"
+#include "transaction_output.hpp"
 
 
 namespace BitCoin
@@ -58,7 +59,7 @@ namespace BitCoin
 
         void calculateHash();
         void calculateMerkleHash(Hash &pMerkleHash);
-        bool process(UnspentPool &pUnspentPool, uint64_t pBlockHeight, int32_t pBlockVersionFlags);
+        bool process(TransactionOutputPool &pPool, uint64_t pBlockHeight, int32_t pBlockVersionFlags);
 
         // Amount of Satoshis generated for mining a block at this height
         static uint64_t coinBaseAmount(uint64_t pBlockHeight);

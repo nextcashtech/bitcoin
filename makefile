@@ -1,6 +1,6 @@
 
 COMPILER=g++
-COMPILE_FLAGS=-I./include -I../ArcMist/include -I../secp256k1/include -std=c++11 -Wall 
+COMPILE_FLAGS=-I./include -I../ArcMist/include -I../secp256k1/include -std=c++11 -Wall
 LIBRARY_PATHS=-L../ArcMist -L../secp256k1/.libs
 LIBRARIES=-larcmist -lsecp256k1
 DEBUG_LIBRARIES=-larcmist.debug -lsecp256k1

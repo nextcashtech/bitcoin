@@ -312,8 +312,8 @@ namespace BitCoin
             return true;
         }
 
-        uint16_t lookup() const;
-        uint8_t lookup8() const;
+        uint16_t lookup() const; // Used to split into 65,536 piles
+        uint8_t lookup8() const; // Used to split into 256 piles
 
         void zeroize()
         {

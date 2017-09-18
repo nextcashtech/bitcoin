@@ -190,18 +190,18 @@ namespace BitCoin
 
     uint16_t Hash::lookup() const
     {
-        //unsigned int result = 0;
-        //for(unsigned int i=0;i<mSize;i++)
-        //{
-        //    result = (result << 8) + mData[i];
-        //    result /= 200;
-        //}
-        return ArcMist::Digest::crc32((const uint8_t *)mData, mSize) & 0xffff;
+        if(mSize < 2)
+            return 0;
+        else
+            return (mData[0] << 8) + mData[1];
     }
 
     uint8_t Hash::lookup8() const
     {
-        return ArcMist::Digest::crc32((const uint8_t *)mData, mSize) & 0xff;
+        if(mSize < 1)
+            return 0;
+        else
+            return mData[0];
     }
 
     // Set hash to highest possible value that is valid for a header hash proof of work

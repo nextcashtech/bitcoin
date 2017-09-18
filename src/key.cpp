@@ -7,6 +7,10 @@
  **************************************************************************/
 #include "key.hpp"
 
+#ifdef PROFILER_ON
+#include "arcmist/dev/profiler.hpp"
+#endif
+
 #include "arcmist/base/log.hpp"
 #include "arcmist/base/math.hpp"
 #include "arcmist/io/buffer.hpp"
@@ -18,19 +22,28 @@
 
 namespace BitCoin
 {
-    KeyContext::KeyContext()
+    secp256k1_context *Key::sContext = NULL;
+
+    secp256k1_context *Key::context()
     {
-        context = secp256k1_context_create(SECP256K1_CONTEXT_VERIFY | SECP256K1_CONTEXT_SIGN);
+        if(sContext == NULL)
+        {
+            sContext = secp256k1_context_create(SECP256K1_CONTEXT_VERIFY | SECP256K1_CONTEXT_SIGN);
+            std::atexit(destroyContext);
+        }
+
+        return sContext;
     }
 
-    KeyContext::~KeyContext()
+    void Key::destroyContext()
     {
-        secp256k1_context_destroy(context);
+        secp256k1_context_destroy(sContext);
+        sContext = NULL;
     }
 
-    PrivateKey::PrivateKey(KeyContext *pContext)
+    PrivateKey::PrivateKey()
     {
-        mContext = pContext;
+        mContext = Key::context();
         std::memset(mData, 0, 32);
     }
 
@@ -45,7 +58,7 @@ namespace BitCoin
             std::memcpy(mData + i, &random, 4);
         }
 
-        valid = secp256k1_ec_seckey_verify(mContext->context, mData);
+        valid = secp256k1_ec_seckey_verify(mContext, mData);
 
         if(!valid)
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to generate private key");
@@ -63,7 +76,7 @@ namespace BitCoin
     bool PrivateKey::generatePublicKey(PublicKey &pPublicKey) const
     {
         secp256k1_pubkey pubkey;
-        if(!secp256k1_ec_pubkey_create(mContext->context, &pubkey, mData))
+        if(!secp256k1_ec_pubkey_create(mContext, &pubkey, mData))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to generate public key");
             return false;
@@ -81,8 +94,11 @@ namespace BitCoin
             return false;
         }
 
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Private Key Sign");
+#endif
         secp256k1_ecdsa_signature signature;
-        if(!secp256k1_ecdsa_sign(mContext->context, &signature, pHash.value(), mData,
+        if(!secp256k1_ecdsa_sign(mContext, &signature, pHash.value(), mData,
           secp256k1_nonce_function_default, NULL))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to sign hash");
@@ -101,11 +117,14 @@ namespace BitCoin
             return false;
         }
 
-        if(secp256k1_ecdsa_verify(mContext->context, (const secp256k1_ecdsa_signature *)mData,
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Signature Verify");
+#endif
+        if(secp256k1_ecdsa_verify(mContext, (const secp256k1_ecdsa_signature *)mData,
           pHash.value(), (const secp256k1_pubkey *)pPublicKey.value()))
             return true;
 
-        if(!secp256k1_ecdsa_signature_normalize(mContext->context, (secp256k1_ecdsa_signature *)mData,
+        if(!secp256k1_ecdsa_signature_normalize(mContext, (secp256k1_ecdsa_signature *)mData,
           (const secp256k1_ecdsa_signature *)mData))
         {
             ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME, "Signature already normalized");
@@ -113,7 +132,7 @@ namespace BitCoin
         }
 
         // Try it again with the normalized signature
-        if(secp256k1_ecdsa_verify(mContext->context, (const secp256k1_ecdsa_signature *)mData,
+        if(secp256k1_ecdsa_verify(mContext, (const secp256k1_ecdsa_signature *)mData,
           pHash.value(), (const secp256k1_pubkey *)pPublicKey.value()))
             return true;
 
@@ -134,27 +153,13 @@ namespace BitCoin
         return result;
     }
 
-    bool PublicKey::compress(CompressedPublicKey &pResult) const
-    {
-        size_t length = 33;
-        uint8_t data[length];
-        if(!secp256k1_ec_pubkey_serialize(mContext->context, data, &length, (const secp256k1_pubkey *)mData, SECP256K1_EC_COMPRESSED))
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to compress public key");
-            return false;
-        }
-
-        pResult.set(data);
-        return true;
-    }
-
     void PublicKey::write(ArcMist::OutputStream *pStream, bool pCompressed, bool pScriptFormat) const
     {
         if(pCompressed)
         {
             size_t compressedLength = 33;
             uint8_t compressedData[compressedLength];
-            if(!secp256k1_ec_pubkey_serialize(mContext->context, compressedData, &compressedLength, (const secp256k1_pubkey *)mData, SECP256K1_EC_COMPRESSED))
+            if(!secp256k1_ec_pubkey_serialize(mContext, compressedData, &compressedLength, (const secp256k1_pubkey *)mData, SECP256K1_EC_COMPRESSED))
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to write compressed public key");
             else
             {
@@ -167,7 +172,7 @@ namespace BitCoin
         {
             size_t length = 65;
             uint8_t data[length];
-            if(!secp256k1_ec_pubkey_serialize(mContext->context, data, &length, (const secp256k1_pubkey *)mData, 0))
+            if(!secp256k1_ec_pubkey_serialize(mContext, data, &length, (const secp256k1_pubkey *)mData, 0))
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to write public key");
             else
             {
@@ -202,7 +207,10 @@ namespace BitCoin
             pStream->read(data + 1, 64); // Uncompressed
         }
 
-        if(!secp256k1_ec_pubkey_parse(mContext->context, (secp256k1_pubkey *)mData, data, length))
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Public Key Read");
+#endif
+        if(!secp256k1_ec_pubkey_parse(mContext, (secp256k1_pubkey *)mData, data, length))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to read public key");
             return false;
@@ -223,18 +231,11 @@ namespace BitCoin
         return mHash;
     }
 
-    void PublicKeyData::write(ArcMist::OutputStream *pStream, bool pScriptFormat) const
-    {
-        if(pScriptFormat)
-            ScriptInterpreter::writePushDataSize(64, pStream);
-        pStream->write(mData, 64);
-    }
-
     void Signature::write(ArcMist::OutputStream *pStream, bool pScriptFormat, HashType pHashType) const
     {
         size_t length = 73;
         uint8_t output[length];
-        if(!secp256k1_ecdsa_signature_serialize_der(mContext->context, output, &length, (secp256k1_ecdsa_signature*)mData))
+        if(!secp256k1_ecdsa_signature_serialize_der(mContext, output, &length, (secp256k1_ecdsa_signature*)mData))
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to write signature");
         if(pScriptFormat)
             ScriptInterpreter::writePushDataSize(length + 1, pStream);
@@ -256,7 +257,7 @@ namespace BitCoin
                 return false;
             }
 
-            if(!secp256k1_ecdsa_signature_parse_compact(mContext->context, (secp256k1_ecdsa_signature*)mData, input))
+            if(!secp256k1_ecdsa_signature_parse_compact(mContext, (secp256k1_ecdsa_signature*)mData, input))
             {
                 ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME, "Failed to parse compact signature (64 bytes)");
                 return false;
@@ -271,6 +272,9 @@ namespace BitCoin
             return false;
         }
 
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Signature Read");
+#endif
         // Hack badly formatted DER signatures
         unsigned int totalLength = pLength;
         uint8_t offset = 0;
@@ -292,9 +296,9 @@ namespace BitCoin
             {
                 ArcMist::String hex;
                 hex.writeHex(input, pLength);
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "Adjusting parse length %d to match total length in signature %d + 2 (header byte and length byte) : %s",
-                  totalLength, input[offset], hex.text());
+                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                  // "Adjusting parse length %d to match total length in signature %d + 2 (header byte and length byte) : %s",
+                  // totalLength, input[offset], hex.text());
                 totalLength = input[offset] + 2;
             }
             else
@@ -334,8 +338,8 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Removing extra leading zero byte in R value from signature (%d bytes) : %s", pLength, hex.text());
+            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              // "Removing extra leading zero byte in R value from signature (%d bytes) : %s", pLength, hex.text());
 
             // Adjust lengths
             input[offset-1]--;
@@ -352,8 +356,8 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Adding required leading zero byte in R value to signature (%d bytes) : %s", pLength, hex.text());
+            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              // "Adding required leading zero byte in R value to signature (%d bytes) : %s", pLength, hex.text());
 
             // Adjust lengths
             input[offset-1]++;
@@ -394,8 +398,8 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Removing extra leading zero byte in S value to signature (%d bytes) : %s", pLength, hex.text());
+            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              // "Removing extra leading zero byte in S value to signature (%d bytes) : %s", pLength, hex.text());
 
             // Adjust lengths
             input[offset-1]--;
@@ -412,8 +416,8 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Adding required leading zero byte in S value from signature (%d bytes) : %s", pLength, hex.text());
+            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              // "Adding required leading zero byte in S value from signature (%d bytes) : %s", pLength, hex.text());
 
             // Adjust lengths
             input[offset-1]++;
@@ -429,7 +433,7 @@ namespace BitCoin
 
         offset += subLength;
 
-        if(secp256k1_ecdsa_signature_parse_der(mContext->context, (secp256k1_ecdsa_signature*)mData, input, totalLength))
+        if(secp256k1_ecdsa_signature_parse_der(mContext, (secp256k1_ecdsa_signature*)mData, input, totalLength))
             return true;
 
         ArcMist::String hex;
@@ -439,123 +443,100 @@ namespace BitCoin
         return false;
     }
 
-    ArcMist::String CompressedPublicKey::hex() const
+    bool Key::test()
     {
-        ArcMist::String result;
-        result.writeHex(mData, 33);
-        return result;
-    }
+        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "------------- Starting Key Tests -------------");
 
-    namespace Key
-    {
-        bool test()
+        bool success = true;
+        PrivateKey privateKey;
+        PublicKey publicKey;
+
+        /***********************************************************************************************
+         * Private Key Generate
+         ***********************************************************************************************/
+        if(privateKey.generate())
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Private Key Generate : %s", privateKey.hex().text());
+        else
         {
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "------------- Starting Key Tests -------------");
-
-            bool success = true;
-            KeyContext context;
-            PrivateKey privateKey(&context);
-            PublicKey publicKey(&context);
-            CompressedPublicKey compressedPublicKey;
-
-            /***********************************************************************************************
-             * Private Key Generate
-             ***********************************************************************************************/
-            if(privateKey.generate())
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Private Key Generate : %s", privateKey.hex().text());
-            else
-            {
-                success = false;
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Private Key Generate : %s", privateKey.hex().text());
-            }
-
-            /***********************************************************************************************
-             * Public Key Generate
-             ***********************************************************************************************/
-            if(privateKey.generatePublicKey(publicKey))
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Public Key Generate : %s", publicKey.hex().text());
-            else
-            {
-                success = false;
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Public Key Generate : %s", publicKey.hex().text());
-            }
-
-            /***********************************************************************************************
-             * Compress Public Key
-             ***********************************************************************************************/
-            if(publicKey.compress(compressedPublicKey))
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Compress Public Key : %s", compressedPublicKey.hex().text());
-            else
-            {
-                success = false;
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Compress Public Key : %s", compressedPublicKey.hex().text());
-            }
-
-            /***********************************************************************************************
-             * Read Public Key
-             ***********************************************************************************************/
-            ArcMist::Buffer buffer;
-            PublicKey readPublicKey(&context);
-            publicKey.write(&buffer, true, false);
-
-            if(readPublicKey.read(&buffer))
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Read Public Key : %s", readPublicKey.hex().text());
-            else
-            {
-                success = false;
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Read Public Key : %s", readPublicKey.hex().text());
-            }
-
-            /***********************************************************************************************
-             * Read Public Key Compare
-             ***********************************************************************************************/
-            if(readPublicKey == publicKey)
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Read Public Key Compare : %s", readPublicKey.hex().text());
-            else
-            {
-                success = false;
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Read Public Key Compare : %s", readPublicKey.hex().text());
-            }
-
-            /***********************************************************************************************
-             * Sign Hash
-             ***********************************************************************************************/
-            Hash hash(32);
-            Signature signature(&context);
-            hash.randomize(); // Generate random hash
-
-            if(privateKey.sign(hash, signature))
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Sign Hash : %s", signature.hex().text());
-            else
-            {
-                success = false;
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Sign Hash : %s", signature.hex().text());
-            }
-
-            /***********************************************************************************************
-             * Verify signature
-             ***********************************************************************************************/
-            if(signature.verify(publicKey, hash))
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Verify Signature");
-            else
-            {
-                success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Verify Signature");
-            }
-
-            /***********************************************************************************************
-             * Verify Signature Incorrect
-             ***********************************************************************************************/
-            hash.zeroize();
-            if(!signature.verify(publicKey, hash))
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Verify Sign Incorrect");
-            else
-            {
-                success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Verify Sign Incorrect");
-            }
-
-            return success;
+            success = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Private Key Generate : %s", privateKey.hex().text());
         }
+
+        /***********************************************************************************************
+         * Public Key Generate
+         ***********************************************************************************************/
+        if(privateKey.generatePublicKey(publicKey))
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Public Key Generate : %s", publicKey.hex().text());
+        else
+        {
+            success = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Public Key Generate : %s", publicKey.hex().text());
+        }
+
+        /***********************************************************************************************
+         * Read Public Key
+         ***********************************************************************************************/
+        ArcMist::Buffer buffer;
+        PublicKey readPublicKey;
+        publicKey.write(&buffer, true, false);
+
+        if(readPublicKey.read(&buffer))
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Read Public Key : %s", readPublicKey.hex().text());
+        else
+        {
+            success = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Read Public Key : %s", readPublicKey.hex().text());
+        }
+
+        /***********************************************************************************************
+         * Read Public Key Compare
+         ***********************************************************************************************/
+        if(readPublicKey == publicKey)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Read Public Key Compare : %s", readPublicKey.hex().text());
+        else
+        {
+            success = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Read Public Key Compare : %s", readPublicKey.hex().text());
+        }
+
+        /***********************************************************************************************
+         * Sign Hash
+         ***********************************************************************************************/
+        Hash hash(32);
+        Signature signature;
+        hash.randomize(); // Generate random hash
+
+        if(privateKey.sign(hash, signature))
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Sign Hash : %s", signature.hex().text());
+        else
+        {
+            success = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Sign Hash : %s", signature.hex().text());
+        }
+
+        /***********************************************************************************************
+         * Verify signature
+         ***********************************************************************************************/
+        if(signature.verify(publicKey, hash))
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Verify Signature");
+        else
+        {
+            success = false;
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Verify Signature");
+        }
+
+        /***********************************************************************************************
+         * Verify Signature Incorrect
+         ***********************************************************************************************/
+        hash.zeroize();
+        if(!signature.verify(publicKey, hash))
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Verify Sign Incorrect");
+        else
+        {
+            success = false;
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Verify Sign Incorrect");
+        }
+
+        return success;
     }
 }

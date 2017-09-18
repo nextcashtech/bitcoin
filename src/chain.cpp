@@ -7,6 +7,10 @@
  **************************************************************************/
 #include "chain.hpp"
 
+#ifdef PROFILER_ON
+#include "arcmist/dev/profiler.hpp"
+#endif
+
 #include "arcmist/base/log.hpp"
 #include "arcmist/base/thread.hpp"
 #include "arcmist/io/file_stream.hpp"
@@ -708,7 +712,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Chain::processBlock(Block *pBlock, UnspentPool &pUnspentPool)
+    bool Chain::processBlock(Block *pBlock, TransactionOutputPool &pPool)
     {
         mProcessMutex.lock();
 
@@ -737,21 +741,21 @@ namespace BitCoin
         }
 
         // Process block
-        if(!pBlock->process(pUnspentPool, mNextBlockHeight, mBlockVersionFlags))
+        if(!pBlock->process(pPool, mNextBlockHeight, mBlockVersionFlags))
         {
             revertTargetBits();
-            pUnspentPool.revert();
+            pPool.revert();
             mProcessMutex.unlock();
             return false;
         }
 
         // Commit and save changes to unspent pool
-        if(!pUnspentPool.commit(mNextBlockHeight))
+        if(!pPool.commit(mNextBlockHeight))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to commit unspent transaction pool");
             revertTargetBits();
-            pUnspentPool.revert();
+            pPool.revert();
             mProcessMutex.unlock();
             return false;
         }
@@ -829,7 +833,7 @@ namespace BitCoin
         return success;
     }
 
-    void Chain::process(UnspentPool &pUnspentPool)
+    void Chain::process(TransactionOutputPool &pPool)
     {
         while(!mStop)
         {
@@ -848,7 +852,7 @@ namespace BitCoin
                 return;
 
             // Check this front block and add it to the chain
-            if(processBlock(nextPending->block, pUnspentPool))
+            if(processBlock(nextPending->block, pPool))
             {
                 mPendingLock.writeLock("Process");
 
@@ -1088,9 +1092,9 @@ namespace BitCoin
         return result;
     }
 
-    bool Chain::updateUnspent(UnspentPool &pUnspentPool)
+    bool Chain::updateTransactionOutputs(TransactionOutputPool &pPool)
     {
-        unsigned int height = pUnspentPool.blockHeight();
+        unsigned int height = pPool.blockHeight();
         if(height == blockHeight())
             return true;
 
@@ -1112,8 +1116,9 @@ namespace BitCoin
         BlockFile *blockFile = NULL;
         Block block;
         unsigned int blockOffset;
+        uint32_t lastSave = getTime();
 
-        while(true)
+        while(!mStop)
         {
             lockBlockFile(fileID);
             filePathName = blockFileName(fileID);
@@ -1146,16 +1151,23 @@ namespace BitCoin
                         startHash.clear();
                         if(blockFile->readBlock(blockOffset, block, true))
                         {
-                            if(block.process(pUnspentPool, height, 0))
+                            if(block.process(pPool, height, 0))
                             {
-                                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                                   "Processed block %08d (%d trans) (%d bytes) : %s", height, block.transactionCount,
                                   block.size(), block.hash.hex().text());
-                                pUnspentPool.commit(height++);
+                                pPool.commit(height++);
+                                if(getTime() - lastSave > 600)
+                                {
+                                    // Save transaction output pool every 10 minutes
+                                    pPool.save();
+                                    lastSave = getTime();
+                                }
                             }
                             else
                             {
-                                pUnspentPool.revert();
+                                pPool.revert();
+                                pPool.save();
                                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                                   "Failed to process block %d from block file %08x : %s", blockOffset, fileID, (*hash)->hex().text());
                                 delete blockFile;
@@ -1173,6 +1185,9 @@ namespace BitCoin
                         }
                     }
                     blockOffset++;
+
+                    if(mStop)
+                        break;
                 }
 
                 delete blockFile;
@@ -1187,12 +1202,12 @@ namespace BitCoin
             fileID++;
         }
 
-        pUnspentPool.save();
-        return pUnspentPool.blockHeight() == blockHeight();
+        pPool.save();
+        return pPool.blockHeight() == blockHeight();
     }
 
     // Load block info from files
-    bool Chain::load(UnspentPool &pUnspentPool, bool pList)
+    bool Chain::load(TransactionOutputPool &pPool, bool pList)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Indexing block hashes");
 
@@ -1282,7 +1297,7 @@ namespace BitCoin
                 // Add genesis block
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Creating genesis block");
                 Block *genesis = Block::genesis();
-                bool success = processBlock(genesis, pUnspentPool);
+                bool success = processBlock(genesis, pPool);
                 delete genesis;
                 if(!success)
                     return false;
@@ -1297,7 +1312,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Chain::validate(UnspentPool &pUnspentPool, bool pRebuildUnspent)
+    bool Chain::validate(TransactionOutputPool &pPool, bool pRebuild)
     {
         BlockFile *blockFile;
         Hash previousHash(32), merkleHash;
@@ -1306,7 +1321,7 @@ namespace BitCoin
         bool useTestMinDifficulty;
         ArcMist::String filePathName;
 
-        for(unsigned int fileID=0;;fileID++)
+        for(unsigned int fileID=0;!mStop;fileID++)
         {
             filePathName = blockFileName(fileID);
             if(!ArcMist::fileExists(filePathName))
@@ -1368,21 +1383,21 @@ namespace BitCoin
                         }
                     }
 
-                    if(!block.process(pUnspentPool, height, mBlockVersionFlags))
+                    if(!block.process(pPool, height, mBlockVersionFlags))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                           "Block %010d failed to process", height);
                         return false;
                     }
 
-                    if(!pUnspentPool.commit(height))
+                    if(!pPool.commit(height))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                           "Block %010d unspent transaction outputs commit failed", height);
                         return false;
                     }
 
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                       "Block %010d is valid : %6d trans, %d bytes", height, block.transactions.size(), block.size());
                     //block.print();
 
@@ -1397,15 +1412,15 @@ namespace BitCoin
             unlockBlockFile(fileID);
         }
 
-        if(pRebuildUnspent)
+        if(pRebuild)
         {
-            pUnspentPool.save();
+            pPool.save();
             if(!saveTargetBits())
                 return false;
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Unspent transaction outputs :  %d", pUnspentPool.count());
+          "Unspent transaction outputs :  %d", pPool.count());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Validated block height of %d", height);
         return true;
     }
@@ -1576,7 +1591,7 @@ namespace BitCoin
         Block readBlock;
         ArcMist::FileInputStream readFile("tests/06128e87be8b1b4dea47a7247d5528d2702c96826c7a648497e773b800000000.pending_block");
         Info::instance().setPath("../bcc_test");
-        UnspentPool unspents;
+        TransactionOutputPool pool;
 
         if(!readBlock.read(&readFile, true))
         {
@@ -1639,7 +1654,7 @@ namespace BitCoin
             /***********************************************************************************************
              * Block read process
              ***********************************************************************************************/
-            if(readBlock.process(unspents, 1, 0))
+            if(readBlock.process(pool, 1, 0))
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed read block process");
             else
             {
@@ -1653,30 +1668,89 @@ namespace BitCoin
         /***********************************************************************************************
          * New Block
          ***********************************************************************************************/
-        // Requires unspents to be setup
+        // Requires pool to be setup
         // Info::instance().setPath("/var/bitcoin/mainnet");
-        // unspents.load();
+        // TransactionOutputPool pool;
+        // pool.load();
+        // pool.setTestMode(true);
 
-        // ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
-        // Block newBlock;
+        // //ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
+        // Chain chain;
+        // Block block;
 
-        // if(!newBlock.read(&file, true))
+        // //if(!block.read(&file, true))
+        // if(!chain.getBlock(181509, block))
         // {
-            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read New Block");
+            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read block");
             // success = false;
         // }
         // else
         // {
-            // if(newBlock.process(unspents, unspents.blockHeight(), 0))
-                // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed New Block test");
+            // if(block.process(pool, pool.blockHeight(), 0))
+                // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed block test");
             // else
             // {
-                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed New Block test");
+                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed block test");
                 // success = false;
             // }
         // }
 
-        // newBlock.print(ArcMist::Log::INFO, false);
+        // block.print(ArcMist::Log::INFO, false);
+
+
+// #ifdef PROFILER_ON
+        // ArcMist::FileOutputStream profilerFile("profiler.txt", true);
+        // ArcMist::ProfilerManager::write(&profilerFile);
+// #endif
+
+
+        // ArcMist::String filePathName = "/var/bitcoin/mainnet";
+        // filePathName.pathAppend("blocks");
+        // filePathName.pathAppend("target");
+        // ArcMist::FileOutputStream *file = new ArcMist::FileOutputStream(filePathName, true);
+        // file->setOutputEndian(ArcMist::Endian::LITTLE);
+        // if(file->isValid())
+        // {
+            // file->writeUnsignedInt(1336565313); // Block 179424
+            // file->writeUnsignedInt(0x1a09ae02);
+        // }
+        // else
+        // {
+            // delete file;
+            // return false;
+        // }
+        // delete file;
+        // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Wrote new target");
+
+        ArcMist::String filePathName = "/var/bitcoin/mainnet";
+        filePathName.pathAppend("spent");
+        filePathName.pathAppend("fff3");
+        ArcMist::FileInputStream file(filePathName);
+        TransactionOutputSet set;
+        TransactionOutput *newOutput, *matchingOutput;
+        int count = 0;
+
+        while(file.remaining())
+        {
+            newOutput = new TransactionOutput();
+            if(!newOutput->read(&file))
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read");
+                break;
+            }
+
+            matchingOutput = set.find(newOutput->transactionID, newOutput->index);
+
+            if(matchingOutput != NULL)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Output Duplicated : %d - %s",
+                  newOutput->index, newOutput->transactionID.hex().text());
+            }
+            else
+                set.add(newOutput);
+            count++;
+        }
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Found %d spent outputs", count);
 
         // Info::instance().setPath("/var/bitcoin/testnet");
         // Test of get headers and printing

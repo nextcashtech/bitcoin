@@ -12,6 +12,7 @@
 #include "arcmist/base/mutex.hpp"
 #include "base.hpp"
 #include "block.hpp"
+#include "transaction_output.hpp"
 
 #include <list>
 #include <vector>
@@ -174,21 +175,21 @@ namespace BitCoin
 
         // Update the unspent transaction pool for any blocks it is missing
         // Note : Doesn't use block version flags
-        bool updateUnspent(UnspentPool &pUnspentPool);
+        bool updateTransactionOutputs(TransactionOutputPool &pPool);
 
         // Load block data from file system
         //   If pList is true then all the block hashes will be output
-        bool load(UnspentPool &pUnspentPool, bool pList);
+        bool load(TransactionOutputPool &pPool, bool pList);
 
         // Process pending headers and blocks
-        void process(UnspentPool &pUnspentPool);
+        void process(TransactionOutputPool &pPool);
 
         // Validate the local block chain. Print output to log
         //   If pRebuildUnspent then it rebuilds unspent transactions
-        bool validate(UnspentPool &pUnspentPool, bool pRebuildUnspent);
+        bool validate(TransactionOutputPool &pPool, bool pRebuild);
 
         // Set flag to stop processing
-        void stop() { mStop = true; }
+        void requestStop() { mStop = true; }
 
         static bool test();
 
@@ -205,7 +206,7 @@ namespace BitCoin
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;
         bool mStop;
-        bool processBlock(Block *pBlock, UnspentPool &pUnspentPool);
+        bool processBlock(Block *pBlock, TransactionOutputPool &pPool);
         //TODO Remove orphaned blocks //bool removeBlock(const Hash &pHash);
 
         Hash mLastBlockHash; // Hash of last/top block on chain

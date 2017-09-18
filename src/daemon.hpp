@@ -13,6 +13,7 @@
 #include "arcmist/base/mutex.hpp"
 #include "base.hpp"
 #include "node.hpp"
+#include "transaction_output.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -37,7 +38,7 @@ namespace BitCoin
         bool isRunning() { return mRunning; }
         bool stopping() { return mStopping; }
 
-        void requestStop() { mStopRequested = true; }
+        void requestStop() { mStopRequested = true; mChain.requestStop(); }
 
         // Signals
         static void handleSigTermChild(int pValue);
@@ -51,7 +52,7 @@ namespace BitCoin
         ~Daemon();
 
         Chain mChain;
-        UnspentPool mUnspentPool;
+        TransactionOutputPool mPool;
 
         void stop();
         bool mRunning, mStopping, mStopRequested;
@@ -65,7 +66,7 @@ namespace BitCoin
         uint32_t mLastRequestCheck;
         uint32_t mLastHeaderRequest;
         uint32_t mLastInfoSave;
-        uint32_t mLastUnspentSave;
+        uint32_t mLastTransactionOutputsSave;
         uint32_t mLastClean;
         uint32_t mStatReport;
         unsigned int mMaxPendingSize; // Maximum pending memory usage
