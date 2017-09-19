@@ -1722,9 +1722,11 @@ namespace BitCoin
         // delete file;
         // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Wrote new target");
 
-        // ArcMist::String filePathName = "/var/bitcoin/mainnet";
-        // filePathName.pathAppend("spent");
-        // filePathName.pathAppend("fff3");
+        // Convert transaction output pools
+        // ArcMist::String filePath = "/var/bitcoin/mainnet";
+        // filePath.pathAppend("spent");
+
+        // ArcMist::String filePathName;
         // ArcMist::FileInputStream file(filePathName);
         // TransactionOutputSet set;
         // TransactionOutput *newOutput, *matchingOutput;

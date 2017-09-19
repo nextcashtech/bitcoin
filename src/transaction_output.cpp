@@ -29,7 +29,6 @@ namespace BitCoin
         script.writeStream(&pValue.script, pValue.script.length());
         transactionID = pValue.transactionID;
         index = pValue.index;
-        hash = pValue.hash;
         height = pValue.height;
     }
 
@@ -40,7 +39,6 @@ namespace BitCoin
         script.writeStream(&pRight.script, pRight.script.length());
         transactionID = pRight.transactionID;
         index = pRight.index;
-        hash = pRight.hash;
         height = pRight.height;
         return *this;
     }
@@ -66,18 +64,15 @@ namespace BitCoin
         // Index
         pStream->writeUnsignedInt(index);
 
-        // Hash Size
-        writeCompactInteger(pStream, hash.size());
-
-        // Hash
-        hash.write(pStream);
-
         // Height
         pStream->writeUnsignedInt(height);
     }
 
     bool TransactionOutput::read(ArcMist::InputStream *pStream)
     {
+        // Not in this format
+        spendHeight = 0;
+
         if(pStream->remaining() < 5)
             return false;
 
@@ -103,26 +98,65 @@ namespace BitCoin
         if(!transactionID.read(pStream, size))
             return false;
 
-        if(pStream->remaining() < 4)
+        if(pStream->remaining() < 8)
             return false;
 
         // Index
         index = pStream->readUnsignedInt();
 
-        // Hash Size
-        size = readCompactInteger(pStream);
+        // Height
+        height = pStream->readUnsignedInt();
+
+        return true;
+    }
+
+    void TransactionOutput::writeSpent(ArcMist::OutputStream *pStream)
+    {
+        // Transaction ID Size
+        writeCompactInteger(pStream, transactionID.size());
+
+        // Transaction ID
+        transactionID.write(pStream);
+
+        // Index
+        pStream->writeUnsignedInt(index);
+
+        // Height
+        pStream->writeUnsignedInt(height);
+
+        // Spend Height
+        pStream->writeUnsignedInt(spendHeight);
+    }
+
+    bool TransactionOutput::readSpent(ArcMist::InputStream *pStream)
+    {
+        // Not in this format
+        amount = 0;
+        script.clear();
+
+        if(pStream->remaining() < 13)
+            return false;
+
+        // Transaction ID Size
+        uint64_t size = readCompactInteger(pStream);
         if(pStream->remaining() < size)
             return false;
 
-        // Hash
-        if(!hash.read(pStream, size))
+        // Transaction ID
+        if(!transactionID.read(pStream, size))
             return false;
 
-        if(pStream->remaining() < 4)
+        if(pStream->remaining() < 12)
             return false;
+
+        // Index
+        index = pStream->readUnsignedInt();
 
         // Height
         height = pStream->readUnsignedInt();
+
+        // Spend Height
+        spendHeight = pStream->readUnsignedInt();
 
         return true;
     }
@@ -136,7 +170,6 @@ namespace BitCoin
         script.setReadOffset(0);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_OUTPUT_LOG_NAME, "Transaction ID : %s", transactionID.hex().text());
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_OUTPUT_LOG_NAME, "Index          : %x", index);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_OUTPUT_LOG_NAME, "Hash           : %s", hash.hex().text());
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_OUTPUT_LOG_NAME, "Height         : %d", height);
     }
 
@@ -177,26 +210,10 @@ namespace BitCoin
             (*iter)->write(pStream);
     }
 
-    bool TransactionOutputSet::read(ArcMist::InputStream *pStream)
+    void TransactionOutputSet::writeSpent(ArcMist::OutputStream *pStream)
     {
-        ArcMist::String startString = pStream->readString(8);
-        if(startString != START_STRING)
-            return false;
-        if(pStream->remaining() < 4)
-            return false;
-        unsigned int count = pStream->readUnsignedInt();
-        TransactionOutput *newTransactionOutput;
-        for(unsigned int i=0;i<count;i++)
-        {
-            newTransactionOutput = new TransactionOutput();
-            if(!newTransactionOutput->read(pStream))
-            {
-                delete newTransactionOutput;
-                return false;
-            }
-            mPool.push_back(newTransactionOutput);
-        }
-        return true;
+        for(std::list<TransactionOutput *>::iterator iter=mPool.begin();iter!=mPool.end();++iter)
+            (*iter)->writeSpent(pStream);
     }
 
     bool TransactionOutputSet::compare(TransactionOutputSet &pOther, const char *pName, const char *pOtherName)
@@ -246,7 +263,7 @@ namespace BitCoin
     {
         mValid = true;
         mModified = false;
-        mBlockHeight = 0;
+        mNextBlockHeight = 0;
     }
 
     TransactionOutputPool::~TransactionOutputPool()
@@ -317,6 +334,8 @@ namespace BitCoin
         if(!mValid)
             return;
 
+        pTransactionOutput->spendHeight = mNextBlockHeight;
+
         mMutex.lock();
         mPendingSpend.push_back(pTransactionOutput);
         mMutex.unlock();
@@ -333,10 +352,10 @@ namespace BitCoin
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Transaction Outputs Commit");
 #endif
-        if(pBlockHeight != mBlockHeight)
+        if(pBlockHeight != mNextBlockHeight)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_OUTPUT_LOG_NAME,
-              "Can't commit non matching block height %d. Should be %d", pBlockHeight, mBlockHeight);
+              "Can't commit non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight);
             return false;
         }
 
@@ -359,7 +378,7 @@ namespace BitCoin
         }
         mPendingSpend.clear();
 
-        mBlockHeight++;
+        mNextBlockHeight++;
         mModified = true;
         mMutex.unlock();
         return true;
@@ -404,7 +423,7 @@ namespace BitCoin
             }
 
             // Read height from file
-            mBlockHeight = file->readUnsignedInt();
+            mNextBlockHeight = file->readUnsignedInt();
 
             mMutex.lock();
             while(file->remaining() > 0)
@@ -426,7 +445,7 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_TRANSACTION_OUTPUT_LOG_NAME,
-          "Loaded %d unspent transaction outputs at block height %d", mTransactionOutputCount, mBlockHeight);
+          "Loaded %d unspent transaction outputs at block height %d", mTransactionOutputCount, mNextBlockHeight);
 
         return mValid;
     }
@@ -462,7 +481,7 @@ namespace BitCoin
         }
 
         // Write height to file
-        file->writeUnsignedInt(mBlockHeight);
+        file->writeUnsignedInt(mNextBlockHeight);
 
         mMutex.lock();
 
@@ -483,12 +502,12 @@ namespace BitCoin
 
         // Append all the spent sets to the files
         set = mSpent;
-        //uint32_t reverseID;
+        uint16_t bigID;
         for(unsigned int fileID=0x0000;fileID<0x10000;fileID++)
         {
             filePathName = filePath;
-            //reverseID = ArcMist::Endian::convert(fileID, ArcMist::Endian::BIG);
-            fileName.writeHex(&fileID, 2);
+            bigID = ArcMist::Endian::convert(fileID, ArcMist::Endian::BIG);
+            fileName.writeHex(&bigID, 2);
             filePathName.pathAppend(fileName);
             file = new ArcMist::FileOutputStream(filePathName, false, true); // Append to file
             if(!file->isValid())
@@ -501,7 +520,7 @@ namespace BitCoin
             else
             {
                 file->setOutputEndian(ArcMist::Endian::LITTLE);
-                set->write(file);
+                set->writeSpent(file);
                 set->clear(); // Clear so they don't get appended again
             }
             delete file;
@@ -531,7 +550,9 @@ namespace BitCoin
         ArcMist::String filePathName = Info::instance().path();
         ArcMist::String fileName;
         filePathName.pathAppend("spent");
-        fileName.writeHex(&lookup, 2);
+        uint16_t bigID;
+        bigID = ArcMist::Endian::convert(lookup, ArcMist::Endian::BIG);
+        fileName.writeHex(&bigID, 2);
         filePathName.pathAppend(fileName);
         file = new ArcMist::FileInputStream(filePathName);
         file->setInputEndian(ArcMist::Endian::LITTLE);
@@ -542,7 +563,7 @@ namespace BitCoin
         result = new TransactionOutput;
         while(file->remaining())
         {
-            if(result->read(file) && result->transactionID == pTransactionID && result->index == pIndex)
+            if(result->readSpent(file) && result->transactionID == pTransactionID && result->index == pIndex)
             {
                 delete file;
                 mSpentToDelete.push_back(result);
@@ -550,6 +571,7 @@ namespace BitCoin
             }
         }
 
+        delete file;
         delete result;
         return NULL;
     }

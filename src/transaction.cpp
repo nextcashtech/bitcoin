@@ -307,7 +307,6 @@ namespace BitCoin
             transactionOutput->transactionID = hash;
             transactionOutput->index = index;
             transactionOutput->height = pBlockHeight;
-            ScriptInterpreter::parseOutputScript(transactionOutput->script, transactionOutput->hash);
             pPool.add(transactionOutput);
 
             if(!pCoinBase && (*output)->amount > 0 && (*output)->amount > mFee)
@@ -780,7 +779,6 @@ namespace BitCoin
         output->transactionID.setSize(32);
         output->transactionID.randomize();
         output->index = 0;
-        output->hash = publicKey1.hash();
 
         // Create Transaction
         Transaction transaction;
@@ -940,7 +938,6 @@ namespace BitCoin
         output->transactionID.setSize(32);
         output->transactionID.randomize();
         output->index = 0;
-        output->hash = publicKey1.hash();
 
         // Create signature script
         transaction.inputs[0]->script.clear();

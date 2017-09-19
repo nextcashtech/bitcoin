@@ -32,11 +32,14 @@ namespace BitCoin
         ArcMist::Buffer script; // Public key script needed to spend
         Hash transactionID; // Hash of transaction that created this unspent
         uint32_t index; // Index of output in transaction that created this unspent
-        Hash hash; // Hash of public key or redeem script used in this unspent script
         unsigned int height; // Height of block that contained this transaction output
+        unsigned int spendHeight; // Height of block that spent this transaction output
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
+
+        void writeSpent(ArcMist::OutputStream *pStream);
+        bool readSpent(ArcMist::InputStream *pStream);
 
         bool operator == (const TransactionOutput &pRight) const
         {
@@ -66,7 +69,7 @@ namespace BitCoin
         void remove(TransactionOutput *pTransactionOutput);
 
         void write(ArcMist::OutputStream *pStream);
-        bool read(ArcMist::InputStream *pStream);
+        void writeSpent(ArcMist::OutputStream *pStream);
 
         void clear();
 
@@ -119,7 +122,7 @@ namespace BitCoin
         void revert();
 
         // Height of last block
-        unsigned int blockHeight() { return mBlockHeight - 1; }
+        unsigned int blockHeight() { return mNextBlockHeight - 1; }
 
         // Number of unspent transaction outputs
         unsigned int count() { return mTransactionOutputCount + mPendingAdd.size() - mPendingSpend.size(); }
@@ -148,7 +151,7 @@ namespace BitCoin
         bool mModified;
         bool mValid;
         unsigned int mTransactionOutputCount;
-        unsigned int mBlockHeight;
+        unsigned int mNextBlockHeight;
         bool mTest;
 
     };

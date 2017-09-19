@@ -297,7 +297,7 @@ namespace BitCoin
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Pending : %d blocks, %d headers (%d bytes)", pendingBlocks, pendingCount - pendingBlocks, pendingSize);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Nodes : $d/%d outgoing/incoming (%d downloading)", mOutgoingNodes, mIncomingNodes, downloading);
+          "Nodes : %d/%d outgoing/incoming (%d downloading)", mOutgoingNodes, mIncomingNodes, downloading);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Network : %d bytes received, %d bytes sent", mStatistics.bytesReceived, mStatistics.bytesSent);
     }
