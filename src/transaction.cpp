@@ -775,7 +775,9 @@ namespace BitCoin
         TransactionOutput *output = new TransactionOutput();
 
         output->amount = 51000;
-        ScriptInterpreter::writeP2PKHPublicKeyScript(publicKey1.hash(), &output->script);
+        Hash publicKey1Hash;
+        publicKey1.getHash(publicKey1Hash);
+        ScriptInterpreter::writeP2PKHPublicKeyScript(publicKey1Hash, &output->script);
         output->transactionID.setSize(32);
         output->transactionID.randomize();
         output->index = 0;
@@ -798,7 +800,9 @@ namespace BitCoin
          * Process Valid P2PKH Transaction
          ***********************************************************************************************/
         // Create public key script to pay the third public key
-        ScriptInterpreter::writeP2PKHPublicKeyScript(publicKey2.hash(), &transaction.outputs[0]->script);
+        Hash publicKey2Hash;
+        publicKey2.getHash(publicKey2Hash);
+        ScriptInterpreter::writeP2PKHPublicKeyScript(publicKey2Hash, &transaction.outputs[0]->script);
 
         // Create signature script
         ScriptInterpreter::writeP2PKHSignatureScript(privateKey1, publicKey1, transaction, 0, output->script,

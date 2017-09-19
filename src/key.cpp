@@ -61,7 +61,7 @@ namespace BitCoin
         valid = secp256k1_ec_seckey_verify(mContext, mData);
 
         if(!valid)
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to generate private key");
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to generate private key");
 
         return valid;
     }
@@ -78,7 +78,7 @@ namespace BitCoin
         secp256k1_pubkey pubkey;
         if(!secp256k1_ec_pubkey_create(mContext, &pubkey, mData))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to generate public key");
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to generate public key");
             return false;
         }
 
@@ -90,7 +90,7 @@ namespace BitCoin
     {
         if(pHash.size() != 32)
         {
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME, "Wrong size hash to verify");
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Wrong size hash to verify");
             return false;
         }
 
@@ -101,7 +101,7 @@ namespace BitCoin
         if(!secp256k1_ecdsa_sign(mContext, &signature, pHash.value(), mData,
           secp256k1_nonce_function_default, NULL))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to sign hash");
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to sign hash");
             return false;
         }
 
@@ -111,9 +111,15 @@ namespace BitCoin
 
     bool Signature::verify(PublicKey &pPublicKey, Hash &pHash) const
     {
+        if(!pPublicKey.isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Invalid public key. Can't verify.");
+            return false;
+        }
+
         if(pHash.size() != 32)
         {
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME, "Wrong size hash to verify");
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Wrong size hash to verify");
             return false;
         }
 
@@ -160,7 +166,7 @@ namespace BitCoin
             size_t compressedLength = 33;
             uint8_t compressedData[compressedLength];
             if(!secp256k1_ec_pubkey_serialize(mContext, compressedData, &compressedLength, (const secp256k1_pubkey *)mData, SECP256K1_EC_COMPRESSED))
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to write compressed public key");
+                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to write compressed public key");
             else
             {
                 if(pScriptFormat)
@@ -173,7 +179,7 @@ namespace BitCoin
             size_t length = 65;
             uint8_t data[length];
             if(!secp256k1_ec_pubkey_serialize(mContext, data, &length, (const secp256k1_pubkey *)mData, 0))
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to write public key");
+                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to write public key");
             else
             {
                 if(pScriptFormat)
@@ -185,50 +191,59 @@ namespace BitCoin
 
     bool PublicKey::read(ArcMist::InputStream *pStream)
     {
-        size_t length = 65;
-        uint8_t data[length];
+        size_t length;
+        uint8_t *data;
+        mValid = false;
 
         if(pStream->remaining() < 1)
             return false;
 
         // Check first byte to determine length
-        data[0] = pStream->readByte();
-        if(data[0] == 0x02 || data[0] == 0x03)
-        {
+        uint8_t type = pStream->readByte();
+        if(type == 0x02 || type == 0x03) // Compressed
             length = 33;
-            if(pStream->remaining() < length - 1)
-                return false;
-            pStream->read(data + 1, 32); // Compressed
-        }
-        else
+        else if(type == 0x04) // Uncompressed
+            length = 65;
+        else // Unknown
         {
-            if(pStream->remaining() < length - 1)
-                return false;
-            pStream->read(data + 1, 64); // Uncompressed
+            length = pStream->remaining() + 1;
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Public key type unknown. type %02x size %d", type, length);
         }
+
+        if(pStream->remaining() < length - 1)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Failed to read public key. type %02x size %d", type, pStream->remaining() + 1);
+            return false;
+        }
+
+        data = new uint8_t[length];
+        data[0] = type;
+        pStream->read(data + 1, length - 1);
 
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Public Key Read");
 #endif
-        if(!secp256k1_ec_pubkey_parse(mContext, (secp256k1_pubkey *)mData, data, length))
+        if(secp256k1_ec_pubkey_parse(mContext, (secp256k1_pubkey *)mData, data, length))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to read public key");
-            return false;
+            mValid = true;
+            delete[] data;
+            return true;
         }
 
-        return true;
+        std::memset(mData, 0, 64);
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to read public key");
+        delete[] data;
+        return false;
     }
 
-    const Hash &PublicKey::hash()
+    void PublicKey::getHash(Hash &pHash)
     {
-        if(mHash.size() != 0)
-            return mHash;
-
         // Calculate hash
         ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
         write(&digest, true, false); // Compressed
-        digest.getResult(&mHash);
-        return mHash;
+        digest.getResult(&pHash);
     }
 
     void Signature::write(ArcMist::OutputStream *pStream, bool pScriptFormat, HashType pHashType) const
@@ -236,7 +251,7 @@ namespace BitCoin
         size_t length = 73;
         uint8_t output[length];
         if(!secp256k1_ecdsa_signature_serialize_der(mContext, output, &length, (secp256k1_ecdsa_signature*)mData))
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed to write signature");
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to write signature");
         if(pScriptFormat)
             ScriptInterpreter::writePushDataSize(length + 1, pStream);
         pStream->write(output, length);
@@ -252,14 +267,14 @@ namespace BitCoin
         {
             if(pECDSA_DER_SigsOnly)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                   "BIP-0066 requires ECDSA DER signatures only. Signature length %d", pLength);
                 return false;
             }
 
             if(!secp256k1_ecdsa_signature_parse_compact(mContext, (secp256k1_ecdsa_signature*)mData, input))
             {
-                ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME, "Failed to parse compact signature (64 bytes)");
+                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to parse compact signature (64 bytes)");
                 return false;
             }
             else
@@ -267,7 +282,7 @@ namespace BitCoin
         }
         else if(pLength < 64)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
               "Failed to parse signature. Too short : %d bytes", pLength);
             return false;
         }
@@ -283,7 +298,7 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
               "Invalid compound header byte in signature (%d bytes) : %s", pLength, hex.text());
             return false;
         }
@@ -305,7 +320,7 @@ namespace BitCoin
             {
                 ArcMist::String hex;
                 hex.writeHex(input, pLength);
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                   "Invalid total length byte in signature (%d bytes) : %s", pLength, hex.text());
                 return false;
             }
@@ -318,7 +333,7 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
               "Invalid R integer header byte in signature (%d bytes) : %s", pLength, hex.text());
             return false;
         }
@@ -329,7 +344,7 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
               "R integer length byte too high in signature (%d bytes) : %s", pLength, hex.text());
             return false;
         }
@@ -378,7 +393,7 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
               "Invalid S integer header byte in signature (%d bytes) : %s", pLength, hex.text());
             return false;
         }
@@ -389,7 +404,7 @@ namespace BitCoin
         {
             ArcMist::String hex;
             hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
               "S integer length byte too high in signature (%d bytes) : %s", pLength, hex.text());
             return false;
         }
@@ -438,7 +453,7 @@ namespace BitCoin
 
         ArcMist::String hex;
         hex.writeHex(input, pLength);
-        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
           "Failed to parse signature (%d bytes) : %s", pLength, hex.text());
         return false;
     }

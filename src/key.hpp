@@ -38,18 +38,20 @@ namespace BitCoin
         {
             mContext = Key::context();
             std::memset(mData, 0, 64);
+            mValid = false;
         }
 
         bool operator == (PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) == 0; }
         bool operator != (PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) != 0; }
 
-        void set(void *pData) { std::memcpy(mData, pData, 64); }
+        void set(void *pData) { std::memcpy(mData, pData, 64); mValid = true; }
         ArcMist::String hex() const;
 
         void write(ArcMist::OutputStream *pStream, bool pCompressed, bool pScriptFormat) const;
         bool read(ArcMist::InputStream *pStream);
 
-        const Hash &hash();
+        bool isValid() { return mValid; }
+        void getHash(Hash &pHash);
 
         const uint8_t *value() const { return mData; }
 
@@ -57,7 +59,7 @@ namespace BitCoin
 
         secp256k1_context *mContext;
         uint8_t mData[64];
-        Hash mHash;
+        bool mValid;
 
     };
 

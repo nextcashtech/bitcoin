@@ -1492,12 +1492,7 @@ namespace BitCoin
                     // Pop the public key
                     PublicKey publicKey;
                     top()->setReadOffset(0);
-                    if(!publicKey.read(top()))
-                    {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read public key");
-                        mValid = false;
-                        return false;
-                    }
+                    publicKey.read(top());
                     pop();
 
                     // Check the signature (at the top of the stack) with the public key we just popped from the stack
@@ -1571,12 +1566,7 @@ namespace BitCoin
                     {
                         publicKeys[i] = new PublicKey();
                         top()->setReadOffset(0);
-                        if(!publicKeys[i]->read(top()))
-                        {
-                            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Failed to read public key");
-                            mValid = false;
-                            return false;
-                        }
+                        publicKeys[i]->read(top());
                         pop();
                     }
 
