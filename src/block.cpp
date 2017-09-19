@@ -477,14 +477,14 @@ namespace BitCoin
         return result;
     }
 
-    BlockFile::BlockFile(unsigned int pID, const char *pFilePathName) : mLastHash(32)
+    BlockFile::BlockFile(unsigned int pID, const char *pFilePathName, bool pValidate)
     {
         mValid = true;
         mFilePathName = pFilePathName;
         mInputFile = NULL;
         mID = pID;
-        mCount = 0;
         mModified = false;
+        mCount = 0xffffffff;
 
         if(!openFile())
         {
@@ -506,40 +506,27 @@ namespace BitCoin
         // Read CRC
         unsigned int crc = mInputFile->readUnsignedInt();
 
-        // Calculate CRC
-        ArcMist::Digest digest(ArcMist::Digest::CRC32);
-        digest.setOutputEndian(ArcMist::Endian::LITTLE);
-        digest.writeStream(mInputFile, mInputFile->remaining());
-
-        // Get Calculated CRC
-        ArcMist::Buffer crcBuffer;
-        crcBuffer.setEndian(ArcMist::Endian::LITTLE);
-        digest.getResult(&crcBuffer);
-        unsigned int calculatedCRC = crcBuffer.readUnsignedInt();
-
-        // Check CRC
-        if(crc != calculatedCRC)
+        if(pValidate)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
-              "Block file has invalid CRC : %08x != %08x", crc, calculatedCRC);
-            mValid = false;
-            return;
-        }
+            // Calculate CRC
+            ArcMist::Digest digest(ArcMist::Digest::CRC32);
+            digest.setOutputEndian(ArcMist::Endian::LITTLE);
+            digest.writeStream(mInputFile, mInputFile->remaining());
 
-        // Pull last hash
-        Hash nextHash(32);
-        mInputFile->setReadOffset(HASHES_OFFSET);
-        for(unsigned int i=0;i<MAX_BLOCKS;i++)
-        {
-            if(!nextHash.read(mInputFile, 32))
+            // Get Calculated CRC
+            ArcMist::Buffer crcBuffer;
+            crcBuffer.setEndian(ArcMist::Endian::LITTLE);
+            digest.getResult(&crcBuffer);
+            unsigned int calculatedCRC = crcBuffer.readUnsignedInt();
+
+            // Check CRC
+            if(crc != calculatedCRC)
             {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
+                  "Block file has invalid CRC : %08x != %08x", crc, calculatedCRC);
                 mValid = false;
                 return;
             }
-            if(mInputFile->readUnsignedInt() == 0)
-                break;
-            mLastHash = nextHash;
-            mCount++;
         }
     }
 
@@ -614,9 +601,48 @@ namespace BitCoin
         }
     }
 
+    void BlockFile::getLastCount()
+    {
+        if(mCount != 0xffffffff)
+            return;
+
+        if(!openFile())
+        {
+            mValid = false;
+            mCount = 0;
+            return;
+        }
+
+        // Go to the last data offset in the header
+        mInputFile->setReadOffset(HASHES_OFFSET + ((MAX_BLOCKS - 1) * HEADER_ITEM_SIZE) + 32);
+
+        // Check each data offset until it is a valid
+        for(mCount=MAX_BLOCKS;mCount>0;--mCount)
+        {
+            if(mInputFile->readUnsignedInt() != 0)
+            {
+                // Back up to hash for this data offset
+                mInputFile->setReadOffset(mInputFile->readOffset() - HEADER_ITEM_SIZE);
+                if(!mLastHash.read(mInputFile, 32))
+                {
+                    mLastHash.clear();
+                    mValid = false;
+                }
+                break;
+            }
+            else // Back up to previous data offset
+                mInputFile->setReadOffset(mInputFile->readOffset() - HEADER_ITEM_SIZE - 4);
+        }
+    }
+
     bool BlockFile::addBlock(Block &pBlock)
     {
-        if(!mValid || mCount == MAX_BLOCKS)
+        if(!mValid)
+            return false;
+
+        unsigned int count = blockCount();
+
+        if(count == MAX_BLOCKS)
             return false;
 
         if(mInputFile != NULL)
@@ -632,7 +658,7 @@ namespace BitCoin
         }
 
         // Write hash and offset to file
-        outputFile->setWriteOffset(HASHES_OFFSET + (mCount * HEADER_ITEM_SIZE));
+        outputFile->setWriteOffset(HASHES_OFFSET + (count * HEADER_ITEM_SIZE));
         pBlock.hash.write(outputFile);
         outputFile->writeUnsignedInt(outputFile->length());
 
@@ -642,7 +668,6 @@ namespace BitCoin
         delete outputFile;
 
         mLastHash = pBlock.hash;
-        mCount++;
         mModified = true;
         return true;
     }

@@ -117,14 +117,14 @@ namespace BitCoin
         // Create a new block file. BlockFile objects will be invalid if the block file doesn't already exist
         static BlockFile *create(unsigned int pID, const char *pFilePathName);
 
-        BlockFile(unsigned int pID, const char *pFilePathName);
+        BlockFile(unsigned int pID, const char *pFilePathName, bool pValidate = true);
         ~BlockFile() { updateCRC(); if(mInputFile != NULL) delete mInputFile; }
 
         unsigned int id() const { return mID; }
         bool isValid() const { return mValid; }
-        bool isFull() const { return mCount == MAX_BLOCKS; }
-        unsigned int blockCount() const { return mCount; }
-        const Hash &lastHash() const { return mLastHash; }
+        bool isFull() { return blockCount() == MAX_BLOCKS; }
+        unsigned int blockCount() { getLastCount(); return mCount; }
+        const Hash &lastHash() { getLastCount(); return mLastHash; }
 
         // Add a block to the file
         bool addBlock(Block &pBlock);
@@ -160,9 +160,11 @@ namespace BitCoin
         ArcMist::FileInputStream *mInputFile;
         ArcMist::String mFilePathName;
         bool mValid;
-        Hash mLastHash;
-        unsigned int mCount;
         bool mModified;
+
+        void getLastCount();
+        unsigned int mCount;
+        Hash mLastHash;
 
         BlockFile(BlockFile &pCopy);
         BlockFile &operator = (BlockFile &pRight);

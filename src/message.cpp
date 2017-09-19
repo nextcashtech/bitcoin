@@ -257,25 +257,6 @@ namespace BitCoin
             // Command Name (12 bytes padded with nulls)
             ArcMist::String command = pInput->readString(12);
 
-            // Check for valid command
-            // unsigned int commandLength = command.length();
-            // if(commandLength == 0 || commandLength > 12)
-            // {
-                // pInput->flush();
-                // return NULL;
-            // }
-
-            // char commandChar;
-            // for(unsigned int i=0;i<commandLength;i++)
-            // {
-                // commandChar = command[i];
-                // if(!ArcMist::isLetter(commandChar) && !ArcMist::isInt(commandChar) && commandChar != 0)
-                // {
-                    // pInput->flush();
-                    // return NULL;
-                // }
-            // }
-
             // Payload Size (4 bytes)
             uint32_t payloadSize = pInput->readUnsignedInt();
 
@@ -286,11 +267,22 @@ namespace BitCoin
             // Check if payload is complete
             if(payloadSize > pInput->remaining())
             {
-                // Allocate enough memory in this buffer for the full message
-                pInput->setSize(pInput->readOffset() + payloadSize);
-                //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME, "Payload not fully received : %d / %d",
-                //  pInput->remaining(), payloadSize);
+                // if(strcmp(command, "block") == 0 && pInput->remaining() >= 80)
+                // {
+                    // Block block;
+                    // block.read(pInput, false);
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
+                      // "Block not fully received %d / %d : %s", pInput->remaining(), payloadSize, block.hash.hex().text());
+                // }
+                // else
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
+                      // "Payload not fully received <%s> : %d / %d", command, pInput->remaining(), payloadSize);
+
+                // Set read offset back to beginning of message
                 pInput->setReadOffset(startReadOffset);
+
+                // Allocate enough memory in this buffer for the full message
+                pInput->setSize(payloadSize + 24); // 24 for message header
                 return NULL;
             }
 

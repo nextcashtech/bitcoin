@@ -29,8 +29,11 @@ namespace BitCoin
 
         static Daemon &instance();
         static void destroy();
-        static void processConnections();
-        static void processManager();
+
+        // Threads
+        static void handleConnections();
+        static void manage();
+        static void process();
 
         void run(ArcMist::String &pSeed, bool pInDaemonMode = true);
 
@@ -60,6 +63,7 @@ namespace BitCoin
         // Threads
         ArcMist::Thread *mConnectionThread;
         ArcMist::Thread *mManagerThread;
+        ArcMist::Thread *mProcessThread;
 
         // Timers
         uint32_t mLastNodeAdd;
@@ -94,7 +98,7 @@ namespace BitCoin
 
         Node *nodeWithInventory();
         Node *nodeWithBlock(const Hash &pHash);
-        void processRequests();
+        void sendRequests();
 
         Statistics mStatistics;
         void collectStatistics();

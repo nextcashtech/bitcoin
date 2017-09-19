@@ -1235,7 +1235,7 @@ namespace BitCoin
             filePathName = blockFileName(fileID);
             if(ArcMist::fileExists(filePathName))
             {
-                blockFile = new BlockFile(fileID, filePathName);
+                blockFile = new BlockFile(fileID, filePathName, false);
                 if(!blockFile->isValid())
                 {
                     delete blockFile;
@@ -1666,7 +1666,7 @@ namespace BitCoin
         delete genesis;
 
         /***********************************************************************************************
-         * New Block
+         * Test Block
          ***********************************************************************************************/
         // Requires pool to be setup
         // Info::instance().setPath("/var/bitcoin/mainnet");
@@ -1674,6 +1674,7 @@ namespace BitCoin
         // pool.load();
         // pool.setTestMode(true);
 
+// #ifdef PROFILER_ON
         // //ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
         // Chain chain;
         // Block block;
@@ -1681,7 +1682,7 @@ namespace BitCoin
         // //if(!block.read(&file, true))
         // if(!chain.getBlock(181509, block))
         // {
-            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read block");
+            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read test block");
             // success = false;
         // }
         // else
@@ -1698,7 +1699,6 @@ namespace BitCoin
         // block.print(ArcMist::Log::INFO, false);
 
 
-// #ifdef PROFILER_ON
         // ArcMist::FileOutputStream profilerFile("profiler.txt", true);
         // ArcMist::ProfilerManager::write(&profilerFile);
 // #endif
@@ -1722,35 +1722,35 @@ namespace BitCoin
         // delete file;
         // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Wrote new target");
 
-        ArcMist::String filePathName = "/var/bitcoin/mainnet";
-        filePathName.pathAppend("spent");
-        filePathName.pathAppend("fff3");
-        ArcMist::FileInputStream file(filePathName);
-        TransactionOutputSet set;
-        TransactionOutput *newOutput, *matchingOutput;
-        int count = 0;
+        // ArcMist::String filePathName = "/var/bitcoin/mainnet";
+        // filePathName.pathAppend("spent");
+        // filePathName.pathAppend("fff3");
+        // ArcMist::FileInputStream file(filePathName);
+        // TransactionOutputSet set;
+        // TransactionOutput *newOutput, *matchingOutput;
+        // int count = 0;
 
-        while(file.remaining())
-        {
-            newOutput = new TransactionOutput();
-            if(!newOutput->read(&file))
-            {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read");
-                break;
-            }
+        // while(file.remaining())
+        // {
+            // newOutput = new TransactionOutput();
+            // if(!newOutput->read(&file))
+            // {
+                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read");
+                // break;
+            // }
 
-            matchingOutput = set.find(newOutput->transactionID, newOutput->index);
+            // matchingOutput = set.find(newOutput->transactionID, newOutput->index);
 
-            if(matchingOutput != NULL)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Output Duplicated : %d - %s",
-                  newOutput->index, newOutput->transactionID.hex().text());
-            }
-            else
-                set.add(newOutput);
-            count++;
-        }
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Found %d spent outputs", count);
+            // if(matchingOutput != NULL)
+            // {
+                // ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Output Duplicated : %d - %s",
+                  // newOutput->index, newOutput->transactionID.hex().text());
+            // }
+            // else
+                // set.add(newOutput);
+            // count++;
+        // }
+        // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Found %d spent outputs", count);
 
         // Info::instance().setPath("/var/bitcoin/testnet");
         // Test of get headers and printing

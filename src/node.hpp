@@ -53,7 +53,6 @@ namespace BitCoin
         void close();
 
         void process(Chain &pChain);
-        void clear();
 
         void stop();
 
@@ -62,14 +61,10 @@ namespace BitCoin
         // Last time a message was received from this peer
         uint32_t lastReceiveTime() { return mLastReceiveTime; }
 
+        unsigned int blockHeight() { if(mVersionData == NULL) return 0; else return mVersionData->startBlockHeight; }
+
         // True if the node is not responding to block hash/header/full requests
         bool notResponding() const;
-
-        bool hasInventory(); // Block inventories have been received
-        uint32_t lastInventoryRequest() const { return mLastInventoryRequest; }
-        void clearInventory(); // Clear block inventory information
-        bool requestInventory(Chain &pChain); // Request an inventory of block hashes
-        bool hasBlock(const Hash &pHash); // Block inventory received for specified hash
 
         bool requestHeaders(Chain &pChain, const Hash &pStartingHash);
         bool waitingForHeaders() { return !mHeaderRequested.isEmpty() && getTime() - mLastHeaderRequest < 300; }
@@ -116,17 +111,6 @@ namespace BitCoin
         uint32_t mLastPingTime;
         uint64_t mPingNonce;
         uint64_t mMinimumFeeRate;
-
-        // List of pending block headers this node is known to have
-        void addBlockHash(Chain &pChain, Hash &pHash);
-        void removeBlockHash(Hash &pHash);
-        void refreshInventoryHeight(Chain &pChain);
-
-        ArcMist::Mutex mInventoryMutex;
-        std::list<BlockHashInfo *> mInventory[0x100];
-        unsigned int mBlockHashCount, mInventoryHeight;
-        Hash mHighestInventoryHash;
-        uint32_t mLastInventoryRequest;
 
         Hash mHeaderRequested;
         uint32_t mLastHeaderRequest;

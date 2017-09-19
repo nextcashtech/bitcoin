@@ -483,11 +483,11 @@ namespace BitCoin
 
         // Append all the spent sets to the files
         set = mSpent;
-        uint32_t reverseID;
+        //uint32_t reverseID;
         for(unsigned int fileID=0x0000;fileID<0x10000;fileID++)
         {
             filePathName = filePath;
-            reverseID = ArcMist::Endian::convert(fileID, ArcMist::Endian::BIG);
+            //reverseID = ArcMist::Endian::convert(fileID, ArcMist::Endian::BIG);
             fileName.writeHex(&fileID, 2);
             filePathName.pathAppend(fileName);
             file = new ArcMist::FileOutputStream(filePathName, false, true); // Append to file
