@@ -122,13 +122,7 @@ namespace BitCoin
         unsigned int blockHeight() { return mBlockHeight - 1; }
 
         // Number of unspent transaction outputs
-        unsigned int count()
-        {
-            mMutex.lock();
-            unsigned int result = mTransactionOutputCount + mPendingAdd.size() - mPendingSpend.size();
-            mMutex.unlock();
-            return result;
-        }
+        unsigned int count() { return mTransactionOutputCount + mPendingAdd.size() - mPendingSpend.size(); }
 
         // Reverse all of the changes made by the most recent block
         //TODO void reverseLastBlock();

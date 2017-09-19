@@ -91,9 +91,9 @@ namespace BitCoin
         // Nodes
         ArcMist::ReadersLock mNodeLock;
         std::vector<Node *> mNodes;
-        unsigned int mNodeCount;
+        unsigned int mNodeCount, mIncomingNodes, mOutgoingNodes;
 
-        bool addNode(ArcMist::Network::Connection *pConnection, bool pIsSeed = false);
+        bool addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed = false);
         unsigned int pickNodes(unsigned int pCount);
         void cleanNodes();
 

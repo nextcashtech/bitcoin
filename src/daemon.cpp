@@ -60,6 +60,8 @@ namespace BitCoin
         mLastClean = 0;
         mLastHeaderRequest = 0;
         mNodeCount = 0;
+        mIncomingNodes = 0;
+        mOutgoingNodes = 0;
         mStatReport = 0;
     }
 
@@ -272,15 +274,11 @@ namespace BitCoin
 
     void Daemon::printStatistics()
     {
-        unsigned int count = 0;
         unsigned int downloading = 0;
         mNodeLock.readLock();
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
-        {
-            count++;
             if((*node)->waitingForBlocks())
                 downloading++;
-        }
         mNodeLock.readUnlock();
 
         collectStatistics();
@@ -299,7 +297,7 @@ namespace BitCoin
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Pending : %d blocks, %d headers (%d bytes)", pendingBlocks, pendingCount - pendingBlocks, pendingSize);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Nodes : %d (%d downloading)", count, downloading);
+          "Nodes : $d/%d outgoing/incoming (%d downloading)", mOutgoingNodes, mIncomingNodes, downloading);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Network : %d bytes received, %d bytes sent", mStatistics.bytesReceived, mStatistics.bytesSent);
     }
@@ -374,15 +372,6 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - daemon.mLastTransactionOutputsSave > 600)
-            {
-                daemon.mLastTransactionOutputsSave = getTime();
-                daemon.mPool.save();
-            }
-
-            if(daemon.mStopping)
-                break;
-
             if(getTime() - daemon.mStatistics.startTime > 3600)
                 daemon.saveStatistics();
 
@@ -404,16 +393,25 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
+            if(getTime() - daemon.mLastTransactionOutputsSave > 1200)
+            {
+                daemon.mLastTransactionOutputsSave = getTime();
+                daemon.mPool.save();
+            }
+
+            if(daemon.mStopping)
+                break;
+
             ArcMist::Thread::sleep(500);
         }
     }
 
-    bool Daemon::addNode(ArcMist::Network::Connection *pConnection, bool pIsSeed)
+    bool Daemon::addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed)
     {
         Node *node;
         try
         {
-            node = new Node(pConnection, &mChain, pIsSeed);
+            node = new Node(pConnection, &mChain, pIncoming, pIsSeed);
         }
         catch(std::bad_alloc &pBadAlloc)
         {
@@ -433,6 +431,10 @@ namespace BitCoin
         mNodeLock.writeLock("Add Node");
         mNodes.push_back(node);
         mNodeCount++;
+        if(pIncoming)
+            ++mIncomingNodes;
+        else
+            ++mOutgoingNodes;
         mNodeLock.writeUnlock();
         return true;
     }
@@ -457,7 +459,7 @@ namespace BitCoin
             connection = new ArcMist::Network::Connection(*ip, networkPortString(), 5);
             if(!connection->isOpen())
                 delete connection;
-            else if(addNode(connection, true))
+            else if(addNode(connection, false, true))
             {
                 ++mStatistics.outgoingConnections;
                 result++;
@@ -496,7 +498,7 @@ namespace BitCoin
             connection = new ArcMist::Network::Connection(AF_INET6, (*peer)->address.ip, (*peer)->address.port, 5);
             if(!connection->isOpen())
                 delete connection;
-            else if(addNode(connection))
+            else if(addNode(connection, false))
             {
                 ++mStatistics.outgoingConnections;
                 count++;
@@ -527,7 +529,7 @@ namespace BitCoin
             connection = new ArcMist::Network::Connection(AF_INET6, (*peer)->address.ip, (*peer)->address.port, 5);
             if(!connection->isOpen())
                 delete connection;
-            else if(addNode(connection))
+            else if(addNode(connection, false))
             {
                 ++mStatistics.outgoingConnections;
                 count++;
@@ -577,6 +579,10 @@ namespace BitCoin
                 toDelete.push_back(*node);
                 node = mNodes.erase(node);
                 --mNodeCount;
+                if((*node)->isIncoming())
+                    --mIncomingNodes;
+                else
+                    --mOutgoingNodes;
             }
             else
                 ++node;
@@ -595,6 +601,7 @@ namespace BitCoin
         Daemon &daemon = Daemon::instance();
         ArcMist::Network::Listener listener(AF_INET6, networkPort(), 5, 1);
         ArcMist::Network::Connection *newConnection;
+        unsigned int maxOutgoing, maxIncoming;
 
         if(!listener.isValid())
         {
@@ -608,6 +615,12 @@ namespace BitCoin
 
         while(!daemon.mStopping)
         {
+            if(daemon.mChain.isInSync())
+                maxOutgoing = 8;
+            else
+                maxOutgoing = daemon.mInfo.maxConnections / 2;
+            maxIncoming = daemon.mInfo.maxConnections - maxOutgoing;
+
             if(getTime() - daemon.mLastClean > 10)
             {
                 daemon.mLastClean = getTime();
@@ -617,11 +630,11 @@ namespace BitCoin
             while(!daemon.mStopping && (newConnection = listener.accept()) != NULL)
             {
                 ++daemon.mStatistics.incomingConnections;
-                if(daemon.mNodeCount < daemon.mInfo.maxConnections)
+                if(daemon.mIncomingNodes < maxIncoming)
                 {
                     ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
                       "Adding node from incoming connection");
-                    daemon.addNode(newConnection);
+                    daemon.addNode(newConnection, true);
                 }
                 else
                 {
@@ -643,10 +656,9 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(daemon.mNodes.size() < (daemon.mInfo.maxConnections / 2) && getTime() - daemon.mLastNodeAdd > 60)
+            if(daemon.mOutgoingNodes < maxOutgoing && getTime() - daemon.mLastNodeAdd > 60)
             {
-                if(daemon.mInfo.maxConnections > daemon.mNodes.size())
-                    daemon.pickNodes((daemon.mInfo.maxConnections / 2) - daemon.mNodes.size());
+                daemon.pickNodes(maxOutgoing - daemon.mOutgoingNodes);
                 daemon.mLastNodeAdd = getTime();
             }
 

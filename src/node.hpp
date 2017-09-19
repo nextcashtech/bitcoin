@@ -43,7 +43,7 @@ namespace BitCoin
     {
     public:
 
-        Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIsSeed = false);
+        Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIncoming, bool pIsSeed = false);
         ~Node();
 
         static void run();
@@ -55,6 +55,8 @@ namespace BitCoin
         void process(Chain &pChain);
 
         void stop();
+
+        bool isIncoming() { return mIncoming; }
 
         // Time that the node connected
         uint32_t connectedTime() { return mConnectedTime; }
@@ -103,7 +105,7 @@ namespace BitCoin
         ArcMist::Buffer mReceiveBuffer;
         Statistics mStatistics;
         bool mStop, mStopped;
-        bool mIsSeed;
+        bool mIncoming, mIsSeed;
 
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;

@@ -20,9 +20,10 @@ namespace BitCoin
 {
     unsigned int Node::mNextID = 256;
 
-    Node::Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIsSeed) : mID(mNextID++),
+    Node::Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIncoming, bool pIsSeed) : mID(mNextID++),
       mConnectionMutex("Node Connection"), mBlockRequestMutex("Node Block Request")
     {
+        mIncoming = pIncoming;
         mConnected = false;
         mVersionSent = false;
         mVersionAcknowledged = false;
