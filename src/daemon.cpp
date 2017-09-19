@@ -41,8 +41,9 @@ namespace BitCoin
         Daemon::sInstance = 0;
     }
 
-    Daemon::Daemon() : mNodeLock("Nodes")
+    Daemon::Daemon() : mInfo(Info::instance()), mNodeLock("Nodes")
     {
+        mLastInfoSave = getTime();
         mRunning = false;
         mStopping = false;
         mStopRequested = false;
@@ -55,13 +56,11 @@ namespace BitCoin
         previousSigPipeHandler = NULL;
         mLastNodeAdd = 0;
         mLastRequestCheck = 0;
-        mLastInfoSave = 0;
         mLastTransactionOutputsSave = 0;
         mLastClean = 0;
         mLastHeaderRequest = 0;
         mNodeCount = 0;
         mStatReport = 0;
-        mMaxPendingSize = 104857600; // 100 MiB
     }
 
     Daemon::~Daemon()
@@ -132,10 +131,8 @@ namespace BitCoin
         previousSigIntHandler = signal(SIGINT, handleSigInt);
         previousSigPipeHandler = signal(SIGPIPE, handleSigPipe);
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Starting %s on %s", BITCOIN_USER_AGENT, networkName());
-
-        Info::instance(); // Load data
-        mLastInfoSave = getTime();
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Starting %s on %s", BITCOIN_USER_AGENT, networkName());
 
         if(!mPool.load())
             return false;
@@ -294,7 +291,7 @@ namespace BitCoin
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Block Chain : %d blocks, %d UTXOs", mChain.blockHeight(), mPool.count());
-        if(pendingSize > mMaxPendingSize || pendingBlocks > 512)
+        if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Pending (above threshold) : %d blocks, %d headers (%d bytes)", pendingBlocks,
               pendingCount - pendingBlocks, pendingSize);
@@ -314,7 +311,7 @@ namespace BitCoin
         unsigned int pendingCount = mChain.pendingCount();
         unsigned int pendingBlockCount = mChain.pendingBlockCount();
         unsigned int pendingSize = mChain.pendingSize();
-        bool reduceOnly = pendingSize > mMaxPendingSize || pendingBlockCount > 512;
+        bool reduceOnly = pendingSize > mInfo.pendingSizeThreshold || pendingBlockCount > mInfo.pendingBlocksThreshold;
         Hash nextBlock = mChain.nextBlockNeeded(reduceOnly);
         unsigned int availableToRequestBlocks = 0;
 
@@ -332,7 +329,7 @@ namespace BitCoin
         }
 
         // Request blocks
-        if((pendingBlockCount < 512 || reduceOnly) && pendingCount > pendingBlockCount && availableToRequestBlocks > 0)
+        if(pendingCount > pendingBlockCount && availableToRequestBlocks > 0)
         {
             int blocksToRequest = pendingCount - pendingBlockCount;
             for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end()&&blocksToRequest>0;++node)
@@ -347,7 +344,6 @@ namespace BitCoin
     void Daemon::manage()
     {
         Daemon &daemon = Daemon::instance();
-        Info &info = Info::instance();
 
         while(!daemon.mStopping)
         {
@@ -372,7 +368,7 @@ namespace BitCoin
             if(getTime() - daemon.mLastInfoSave > 600)
             {
                 daemon.mLastInfoSave = getTime();
-                info.save();
+                daemon.mInfo.save();
             }
 
             if(daemon.mStopping)
@@ -474,13 +470,12 @@ namespace BitCoin
     unsigned int Daemon::pickNodes(unsigned int pCount)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Picking %d peers", pCount);
-        Info &info = Info::instance();
         std::vector<Peer *> peers;
         unsigned int count = 0;
         bool found;
 
         // Try peers with good ratings first
-        info.randomizePeers(peers, 1);
+        mInfo.randomizePeers(peers, 1);
         ArcMist::Network::Connection *connection;
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers with good ratings", peers.size());
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
@@ -512,7 +507,7 @@ namespace BitCoin
         }
 
         peers.clear();
-        info.randomizePeers(peers, 0);
+        mInfo.randomizePeers(peers, 0);
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers", peers.size());
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
         {
@@ -566,7 +561,7 @@ namespace BitCoin
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                       "Dropping node [%d] because it is not responding to requests", (*node)->id());
-                    Info::instance().addPeerFail((*node)->address());
+                    mInfo.addPeerFail((*node)->address());
                     (*node)->close();
                 }
             }
@@ -598,7 +593,6 @@ namespace BitCoin
     void Daemon::handleConnections()
     {
         Daemon &daemon = Daemon::instance();
-        Info &info = Info::instance();
         ArcMist::Network::Listener listener(AF_INET6, networkPort(), 5, 1);
         ArcMist::Network::Connection *newConnection;
 
@@ -623,7 +617,7 @@ namespace BitCoin
             while(!daemon.mStopping && (newConnection = listener.accept()) != NULL)
             {
                 ++daemon.mStatistics.incomingConnections;
-                if(daemon.mNodeCount < info.maxConnections)
+                if(daemon.mNodeCount < daemon.mInfo.maxConnections)
                 {
                     ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
                       "Adding node from incoming connection");
@@ -649,10 +643,10 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(daemon.mNodes.size() < (info.maxConnections / 2) && getTime() - daemon.mLastNodeAdd > 60)
+            if(daemon.mNodes.size() < (daemon.mInfo.maxConnections / 2) && getTime() - daemon.mLastNodeAdd > 60)
             {
-                if(info.maxConnections > daemon.mNodes.size())
-                    daemon.pickNodes((info.maxConnections / 2) - daemon.mNodes.size());
+                if(daemon.mInfo.maxConnections > daemon.mNodes.size())
+                    daemon.pickNodes((daemon.mInfo.maxConnections / 2) - daemon.mNodes.size());
                 daemon.mLastNodeAdd = getTime();
             }
 

@@ -264,8 +264,6 @@ int main(int pArgumentCount, char **pArguments)
             return 1;
     }
 
-    BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
-
     // Set up daemon to log to a file
     ArcMist::Log::setOutputFile(logFilePath);
 
@@ -276,6 +274,8 @@ int main(int pArgumentCount, char **pArguments)
         pidStream.writeFormatted("%d", pid);
         pidStream.writeByte('\n');
     }
+
+    BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
 
     // "testnet-seed.bitcoin.jonasschnelli.ch"
     // seed.tbtc.petertodd.org

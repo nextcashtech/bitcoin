@@ -33,6 +33,8 @@ namespace BitCoin
         uint16_t port;
         bool fullMode;
         uint32_t maxConnections;
+        uint32_t pendingSizeThreshold;
+        uint32_t pendingBlocksThreshold;
         uint64_t minFee;
 
         // Return list of peers in random order
@@ -64,6 +66,10 @@ namespace BitCoin
 
         static ArcMist::String sPath;
         static Info *sInstance;
+
+    private:
+        Info(const Info &pCopy);
+        const Info &operator = (const Info &pRight);
     };
 }
 

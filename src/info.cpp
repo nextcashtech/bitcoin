@@ -56,6 +56,8 @@ namespace BitCoin
         maxConnections = 32;
         minFee = 1; // satoshis per KiB
         mPeersModified = false;
+        pendingSizeThreshold = 104857600; // 100 MiB
+        pendingBlocksThreshold = 512;
 
         if(sPath)
         {
@@ -130,6 +132,10 @@ namespace BitCoin
             ip = ArcMist::Network::parseIPv6(value);
         else if(std::strcmp(name, "port") == 0)
             port = std::stol(value, NULL, 0);
+        else if(std::strcmp(name, "pending_size") == 0)
+            pendingSizeThreshold = std::stol(value, NULL, 0);
+        else if(std::strcmp(name, "pending_blocks") == 0)
+            pendingBlocksThreshold = std::stol(value, NULL, 0);
 
         delete[] name;
         delete[] value;

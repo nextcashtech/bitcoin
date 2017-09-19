@@ -12,6 +12,7 @@
 #include "arcmist/base/thread.hpp"
 #include "arcmist/base/mutex.hpp"
 #include "base.hpp"
+#include "info.hpp"
 #include "node.hpp"
 #include "transaction_output.hpp"
 
@@ -55,6 +56,7 @@ namespace BitCoin
         ~Daemon();
 
         Chain mChain;
+        Info &mInfo;
         TransactionOutputPool mPool;
 
         void stop();
@@ -73,7 +75,6 @@ namespace BitCoin
         uint32_t mLastTransactionOutputsSave;
         uint32_t mLastClean;
         uint32_t mStatReport;
-        unsigned int mMaxPendingSize; // Maximum pending memory usage
 
         // Signals
         void (*previousSigTermChildHandler)(int);
