@@ -28,10 +28,10 @@ namespace BitCoin
         // Verify hash is lower than target difficulty specified by targetBits
         bool hasProofOfWork();
 
-        void write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount = true);
+        void write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount);
 
         // pCalculateHash will calculate the hash of the block data while it reads it
-        bool read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pCalculateHash = true);
+        bool read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount, bool pCalculateHash);
 
         void clear();
 

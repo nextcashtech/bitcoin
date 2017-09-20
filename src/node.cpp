@@ -8,6 +8,7 @@
 #include "node.hpp"
 
 #include "arcmist/base/log.hpp"
+#include "arcmist/crypto/digest.hpp"
 #include "info.hpp"
 #include "message.hpp"
 #include "block.hpp"
@@ -45,6 +46,7 @@ namespace BitCoin
         mStop = false;
         mStopped = false;
         mIsSeed = pIsSeed;
+        mSendBlocksCompact = false;
         mThread = NULL;
         mSocketID = -1;
 
@@ -63,14 +65,18 @@ namespace BitCoin
         {
             mConnectionMutex.unlock();
             mStopped = true;
-            if(!mIsSeed)
+            if(!mIsSeed && !mIncoming)
                 Info::instance().addPeerFail(mAddress);
             return;
         }
         mConnected = true;
         mConnectionMutex.unlock();
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Connected %s : %d (socket %d)",
-          mConnection->ipv6Address(), mConnection->port(), mSocketID);
+        if(mIncoming)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Incoming Connection %s : %d (socket %d)",
+              mConnection->ipv6Address(), mConnection->port(), mSocketID);
+        else
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Outgoing Connection %s : %d (socket %d)",
+              mConnection->ipv6Address(), mConnection->port(), mSocketID);
 
         // Start thread
         mThread = new ArcMist::Thread(mName, run, this);
@@ -82,7 +88,7 @@ namespace BitCoin
         if(mConnected)
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Disconnecting (socket %d)", mSocketID);
 
-        stop();
+        requestStop();
         if(mThread != NULL)
             delete mThread;
         mConnectionMutex.lock();
@@ -107,15 +113,14 @@ namespace BitCoin
         if(mConnection != NULL)
             mConnection->close();
         mConnectionMutex.unlock();
+        requestStop();
     }
 
-    void Node::stop()
+    void Node::requestStop()
     {
         if(mThread == NULL)
             return;
         mStop = true;
-        while(!mStopped)
-            ArcMist::Thread::sleep(100);
     }
 
     void Node::collectStatistics(Statistics &pCollection)
@@ -147,7 +152,7 @@ namespace BitCoin
             return false;
 
         ArcMist::Buffer send;
-        Message::writeFull(pData, &send);
+        mMessageInterpreter.write(pData, &send);
         mConnectionMutex.lock();
         bool success = mConnection->send(&send);
         mConnectionMutex.unlock();
@@ -249,6 +254,28 @@ namespace BitCoin
         return success;
     }
 
+    bool Node::announceBlock(const Hash &pHash)
+    {
+        if(mSendBlocksCompact)
+        {
+            //TODO  Send CompactBlockData
+            return false;
+        }
+        else
+        {
+            Message::InventoryData inventoryData;
+            inventoryData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::BLOCK, pHash));
+            return sendMessage(&inventoryData);
+        }
+    }
+
+    bool Node::announceTransaction(const Hash &pHash)
+    {
+        Message::InventoryData inventoryData;
+        inventoryData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION, pHash));
+        return sendMessage(&inventoryData);
+    }
+
     bool Node::sendVersion(Chain &pChain)
     {
         if(!isOpen())
@@ -322,7 +349,7 @@ namespace BitCoin
         mConnectionMutex.unlock();
 
         // Check for a complete message
-        Message::Data *message = Message::readFull(&mReceiveBuffer);
+        Message::Data *message = mMessageInterpreter.read(&mReceiveBuffer, mName);
         bool dontDeleteMessage = false;
 
         if(message == NULL)
@@ -613,6 +640,9 @@ namespace BitCoin
                     case Message::InventoryHash::FILTERED_BLOCK:
                         //TODO Implement GET_DATA filtered blocks (MERKLE_BLOCK)
                         break;
+                    case Message::InventoryHash::COMPACT_BLOCK:
+                        //TODO Implement GET_DATA compact blocks (COMPACT_BLOCK)
+                        break;
                     case Message::InventoryHash::UNKNOWN:
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Unknown inventory item type %d",
                           (*item)->type);
@@ -693,18 +723,26 @@ namespace BitCoin
 
                 for(Message::Inventory::iterator item=inventoryData->inventory.begin();item!=inventoryData->inventory.end();++item)
                 {
-                    if((*item)->type == Message::InventoryHash::BLOCK)
+                    switch((*item)->type)
                     {
+                    case Message::InventoryHash::BLOCK:
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Block Inventory : %s",
                           (*item)->hash.hex().text());
-
                         blockCount++;
-                    }
-                    else if((*item)->type == Message::InventoryHash::TRANSACTION)
-                    {
+                        break;
+                    case Message::InventoryHash::TRANSACTION:
                         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
                           "Transaction Inventory : %s", (*item)->hash.hex().text());
                         //TODO Transaction inventory messages
+                        break;
+                    case Message::InventoryHash::FILTERED_BLOCK:
+                        break;
+                    case Message::InventoryHash::COMPACT_BLOCK:
+                        break;
+                    default:
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,
+                          "Unknown Transaction Inventory Type : %02x", (*item)->type);
+                        break;
                     }
                 }
 
@@ -752,6 +790,9 @@ namespace BitCoin
                     case Message::InventoryHash::FILTERED_BLOCK:
                         //TODO Implement filtered blocks not found
                         break;
+                    case Message::InventoryHash::COMPACT_BLOCK:
+                        //TODO Implement compact blocks not found
+                        break;
                     case Message::InventoryHash::UNKNOWN:
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
                           "Unknown not found inventory item type %d", (*item)->type);
@@ -763,6 +804,43 @@ namespace BitCoin
             case Message::TRANSACTION:
                 // TODO Implement TRANSACTION
                 break;
+            case Message::SEND_COMPACT:
+            {
+                Message::SendCompactData *sendCompactData = (Message::SendCompactData *)message;
+
+                if(sendCompactData->encoding == 1)
+                {
+                    if(sendCompactData->sendCompact == 1)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Send Compact Activated");
+                        mSendBlocksCompact = true;
+                    }
+                    else if(sendCompactData->sendCompact == 0)
+                        mSendBlocksCompact = false;
+                }
+                else
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                      "Unknown Send Compact encoding %08x%08x", sendCompactData->encoding >> 32,
+                      sendCompactData->encoding & 0xffffffff);
+                }
+                break;
+            }
+            case Message::COMPACT_BLOCK:
+            {
+                //TODO Message::CompactBlockData *compactBlockData = (Message::CompactBlockData *)message;
+                break;
+            }
+            case Message::GET_BLOCK_TRANSACTIONS:
+            {
+                //TODO Message::GetBlockTransactionsData *getBlockTransactionsData = (Message::GetBlockTransactionsData *)message;
+                break;
+            }
+            case Message::BLOCK_TRANSACTIONS:
+            {
+                //TODO Message::BlockTransactionsData *blockTransactionsData = (Message::BlockTransactionsData *)message;
+                break;
+            }
 
             case Message::UNKNOWN:
                 break;

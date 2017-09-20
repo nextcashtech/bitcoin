@@ -74,6 +74,14 @@ namespace BitCoin
                     return "notfound";
                 case TRANSACTION:
                     return "tx";
+                case SEND_COMPACT:
+                    return "sendcmpct";
+                case COMPACT_BLOCK:
+                    return "cmpctblock";
+                case GET_BLOCK_TRANSACTIONS:
+                    return "getblocktxn";
+                case BLOCK_TRANSACTIONS:
+                    return "blocktxn";
                 default:
                 case UNKNOWN:
                     return "";
@@ -128,94 +136,19 @@ namespace BitCoin
                 return NOT_FOUND;
             else if(std::strcmp(pCommand, "tx") == 0)
                 return TRANSACTION;
+            else if(std::strcmp(pCommand, "sendcmpct") == 0)
+                return SEND_COMPACT;
+            else if(std::strcmp(pCommand, "cmpctblock") == 0)
+                return COMPACT_BLOCK;
+            else if(std::strcmp(pCommand, "getblocktxn") == 0)
+                return GET_BLOCK_TRANSACTIONS;
+            else if(std::strcmp(pCommand, "blocktxn") == 0)
+                return BLOCK_TRANSACTIONS;
             else
                 return UNKNOWN;
         }
 
-        void writeFull(Data *pData, ArcMist::Buffer *pOutput)
-        {
-            pOutput->setOutputEndian(ArcMist::Endian::LITTLE);
-
-            // Write header
-            // Start String (4 bytes)
-            pOutput->writeHex(networkStartString());
-
-            // Command Name (12 bytes padded with nulls)
-            const char *name = nameFor(pData->type);
-            pOutput->writeString(name);
-
-            // Pad with nulls
-            for(int i=std::strlen(name);i<12;i++)
-                pOutput->writeByte(0);
-
-            // Write payload to buffer
-            ArcMist::Buffer payload;
-            payload.setOutputEndian(ArcMist::Endian::LITTLE);
-            pData->write(&payload);
-
-            // Payload Size (4 bytes)
-            pOutput->writeUnsignedInt(payload.length());
-
-            // Check Sum (4 bytes) SHA256(SHA256(payload))
-            ArcMist::Buffer checkSum(32);
-            ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
-            digest.writeStream(&payload, payload.length());
-            digest.getResult(&checkSum);
-            pOutput->writeStream(&checkSum, 4);
-
-            // Write payload
-            payload.setReadOffset(0);
-            pOutput->writeStream(&payload, payload.length());
-        }
-
-        Type pendingType(ArcMist::Buffer *pInput)
-        {
-            unsigned int startReadOffset = pInput->readOffset();
-            pInput->setInputEndian(ArcMist::Endian::LITTLE);
-
-            // Start String
-            const uint8_t *startBytes = networkStartBytes();
-            unsigned int matchOffset = 0;
-            bool startStringFound = false;
-
-            // Search for start string
-            while(pInput->remaining())
-            {
-                if(pInput->readByte() == startBytes[matchOffset])
-                {
-                    matchOffset++;
-                    if(matchOffset == 4)
-                    {
-                        startStringFound = true;
-                        startReadOffset = pInput->readOffset() - 4;
-                        break;
-                    }
-                }
-                else
-                    matchOffset = 0;
-            }
-
-            if(!startStringFound)
-                return UNKNOWN;
-
-            if(pInput->remaining() < 12) // Header not received yet
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME, "Header command not fully received : %d / %d",
-                  pInput->remaining() + 4, 16); // Add 4 for start string that is already read
-                pInput->setReadOffset(startReadOffset);
-                return UNKNOWN;
-            }
-
-            // Command Name (12 bytes padded with nulls)
-            ArcMist::String command = pInput->readString(12);
-
-            // Set read offset back to the start of the message
-            pInput->setReadOffset(startReadOffset);
-
-            return typeFor(command);
-        }
-
-        Data *readFull(ArcMist::Buffer *pInput)
+        Data *Interpreter::read(ArcMist::Buffer *pInput, const char *pName)
         {
             unsigned int startReadOffset = pInput->readOffset();
             pInput->setInputEndian(ArcMist::Endian::LITTLE);
@@ -248,7 +181,7 @@ namespace BitCoin
             // Check if header is complete
             if(pInput->remaining() < 20)
             {
-                //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME, "Header not fully received : %d / %d",
+                //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Header not fully received : %d / %d",
                 //  pInput->remaining() + 4, 24); // Add 4 for start string that is already read
                 pInput->setReadOffset(startReadOffset);
                 return NULL;
@@ -267,15 +200,42 @@ namespace BitCoin
             // Check if payload is complete
             if(payloadSize > pInput->remaining())
             {
-                // if(strcmp(command, "block") == 0 && pInput->remaining() >= 80)
-                // {
-                    // Block block;
-                    // block.read(pInput, false);
-                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
-                      // "Block not fully received %d / %d : %s", pInput->remaining(), payloadSize, block.hash.hex().text());
-                // }
+                if(strcmp(command, "block") == 0 && pInput->remaining() >= 80)
+                {
+                    Block block;
+                    block.read(pInput, false, false, true);
+
+                    if(pendingBlockStartTime == 0)
+                    {
+                        // Starting new block
+                        pendingBlockStartTime = getTime();
+                        pendingBlockLastReportTime = getTime();
+                        pendingBlockHash = block.hash;
+                    }
+                    else if(pendingBlockHash == block.hash)
+                    {
+                        // Continuing block
+                        if(getTime() - pendingBlockLastReportTime > 60)
+                        {
+                            pendingBlockLastReportTime = getTime();
+                            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, pName,
+                              "Block in progress %d / %d : %s", pInput->remaining(), payloadSize, block.hash.hex().text());
+                        }
+                    }
+                    else
+                    {
+                        // New block started without finishing last block
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, pName,
+                          "Failed block download : %s", pendingBlockHash.hex().text());
+
+                        // Starting new block
+                        pendingBlockStartTime = getTime();
+                        pendingBlockLastReportTime = getTime();
+                        pendingBlockHash = block.hash;
+                    }
+                }
                 // else
-                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, pName,
                       // "Payload not fully received <%s> : %d / %d", command, pInput->remaining(), payloadSize);
 
                 // Set read offset back to beginning of message
@@ -298,9 +258,9 @@ namespace BitCoin
             checkSumData.read(checkSum, 4);
             if(std::memcmp(checkSum, receivedCheckSum, 4) != 0)
             {
-                ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME, "Invalid check sum. Discarding.");
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME, "Received check : %x", *((uint32_t *)receivedCheckSum));
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME, "Computed check : %x", *((uint32_t *)checkSum));
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, pName,
+                  "Invalid message check sum. rec %08x != comp %08x",
+                  *((uint32_t *)receivedCheckSum), *((uint32_t *)checkSum));
                 return NULL;
             }
 
@@ -352,6 +312,8 @@ namespace BitCoin
                     break;
                 case BLOCK:
                     result = new BlockData();
+                    pendingBlockStartTime = 0;
+                    pendingBlockHash.clear();
                     break;
                 case GET_DATA:
                     result = new GetDataData();
@@ -377,9 +339,21 @@ namespace BitCoin
                 case TRANSACTION:
                     result = new TransactionData();
                     break;
+                case SEND_COMPACT:
+                    result = new SendCompactData();
+                    break;
+                case COMPACT_BLOCK:
+                    result = new CompactBlockData();
+                    break;
+                case GET_BLOCK_TRANSACTIONS:
+                    result = new GetBlockTransactionsData();
+                    break;
+                case BLOCK_TRANSACTIONS:
+                    result = new BlockTransactionsData();
+                    break;
                 default:
                 case UNKNOWN:
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, pName,
                       "Unknown command name (%s). Discarding.", command.text());
                     result = NULL;
                     break;
@@ -393,6 +367,42 @@ namespace BitCoin
 
             pInput->flush();
             return result;
+        }
+
+        void Interpreter::write(Data *pData, ArcMist::Buffer *pOutput)
+        {
+            pOutput->setOutputEndian(ArcMist::Endian::LITTLE);
+
+            // Write header
+            // Start String (4 bytes)
+            pOutput->writeHex(networkStartString());
+
+            // Command Name (12 bytes padded with nulls)
+            const char *name = nameFor(pData->type);
+            pOutput->writeString(name);
+
+            // Pad with nulls
+            for(int i=std::strlen(name);i<12;i++)
+                pOutput->writeByte(0);
+
+            // Write payload to buffer
+            ArcMist::Buffer payload;
+            payload.setOutputEndian(ArcMist::Endian::LITTLE);
+            pData->write(&payload);
+
+            // Payload Size (4 bytes)
+            pOutput->writeUnsignedInt(payload.length());
+
+            // Check Sum (4 bytes) SHA256(SHA256(payload))
+            ArcMist::Buffer checkSum(32);
+            ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+            digest.writeStream(&payload, payload.length());
+            digest.getResult(&checkSum);
+            pOutput->writeStream(&checkSum, 4);
+
+            // Write payload
+            payload.setReadOffset(0);
+            pOutput->writeStream(&payload, payload.length());
         }
 
         void InventoryHash::write(ArcMist::OutputStream *pStream) const
@@ -859,7 +869,7 @@ namespace BitCoin
 
             // Headers
             for(uint64_t i=0;i<headers.size();i++)
-                headers[i]->write(pStream, false);
+                headers[i]->write(pStream, false, true);
         }
 
         bool HeadersData::read(ArcMist::InputStream *pStream, unsigned int pSize)
@@ -882,7 +892,7 @@ namespace BitCoin
             for(uint64_t i=0;i<count;i++)
             {
                 headers[i] = new Block();
-                if(!headers[i]->read(pStream, false))
+                if(!headers[i]->read(pStream, false, true, true))
                     return false;
             }
 
@@ -892,9 +902,10 @@ namespace BitCoin
         void MerkleBlockData::write(ArcMist::OutputStream *pStream)
         {
             // Block Header
-            blockHeader.write(pStream, false);
+            block.write(pStream, false, false);
 
             // Transaction Count (included in header)
+            writeCompactInteger(pStream, block.transactionCount);
 
             // Hash Count
             writeCompactInteger(pStream, hashes.size());
@@ -916,7 +927,7 @@ namespace BitCoin
             unsigned int startReadOffset = pStream->readOffset();
 
             // Block Header
-            if(!blockHeader.read(pStream, false))
+            if(!block.read(pStream, false, false, true))
                 return false;
 
             // Transaction Count (included in header)
@@ -949,11 +960,257 @@ namespace BitCoin
             return true;
         }
 
+        void PrefilledTransaction::write(ArcMist::OutputStream *pStream)
+        {
+            // Offset
+            writeCompactInteger(pStream, offset);
+
+            // Transaction
+            transaction->write(pStream);
+        }
+
+        bool PrefilledTransaction::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        {
+            // Offset
+            offset = readCompactInteger(pStream);
+
+            if(offset == 0xffffffff)
+                return false;
+
+            // Transaction
+            return transaction->read(pStream);
+        }
+
+        CompactBlockData::CompactBlockData() : Data(COMPACT_BLOCK)
+        {
+            block = NULL;
+        }
+
+        CompactBlockData::~CompactBlockData()
+        {
+            if(deleteBlock && block != NULL)
+                delete block;
+        }
+
+        bool CompactBlockData::updateShortIDs()
+        {
+            if(block == NULL)
+                return false;
+
+            ArcMist::Digest digest(ArcMist::Digest::SHA256);
+            Hash sha256;
+            Hash *shortID;
+            bool found;
+
+            // SHA256 of block header and nonce
+            block->write(&digest, false, false);
+            digest.writeUnsignedLong(nonce);
+            digest.getResult(&sha256);
+
+            for(std::vector<Transaction *>::iterator trans=block->transactions.begin();trans!=block->transactions.end();++trans)
+            {
+                // Check if in prefilled
+                found = false;
+                for(std::vector<PrefilledTransaction>::iterator prefilled=prefilledTransactionIDs.begin();prefilled!=prefilledTransactionIDs.end();++prefilled)
+                    if(prefilled->transaction == *trans)
+                    {
+                        found = true;
+                        break;
+                    }
+
+                if(found) // Don't put prefilled in short IDs
+                    continue;
+
+                // SipHash-2-4 of transaction ID and first two little endian 64 bit integers from header SHA256
+                // Drop 2 most significant bytes from SipHash-2-4 to get to 6 bytes
+                shortID = new Hash();
+                if(!(*trans)->hash.getShortID(*shortID, sha256))
+                {
+                    delete shortID;
+                    return false;
+                }
+
+                shortIDs.push_back(shortID);
+            }
+
+            return true;
+        }
+
+        void CompactBlockData::setBlock(Block *pBlock)
+        {
+            if(block != NULL)
+                delete block;
+
+            // Block
+            block = pBlock;
+
+            // Nonce
+            nonce = ArcMist::Math::randomLong();
+
+            // Short IDs
+            shortIDs.clear();
+
+            // Add Coinbase to prefilled automatically
+            prefilledTransactionIDs.push_back(PrefilledTransaction(0, pBlock->transactions.front()));
+
+            //TODO Add prefill transactions that we know the node doesn't have
+        }
+
+        bool CompactBlockData::fillBlock()
+        {
+            if(block == NULL)
+                return false;
+
+            // ArcMist::Digest digest(ArcMist::Digest::SHA256);
+            // Hash sha256;
+            // Hash shortID;
+            // bool found;
+
+            // // SHA256 of block header and nonce
+            // block->write(&digest, false, false);
+            // digest.writeUnsignedLong(nonce);
+            // digest.getResult(&sha256);
+
+            // for(HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
+            // {
+                // //TODO Search through mempool for transactions that compute a matching short ID
+                // // If not all are found request with a GetBlockTransactionsData message
+            // }
+
+            return false;
+        }
+
+        void CompactBlockData::write(ArcMist::OutputStream *pStream)
+        {
+            if(block == NULL)
+                return;
+
+            // Block header without transaction count
+            block->write(pStream, false, true);
+
+            // A nonce for use in short transaction ID calculations
+            pStream->writeUnsignedLong(nonce);
+
+            updateShortIDs();
+
+            // Number of short IDs
+            writeCompactInteger(pStream, shortIDs.size());
+
+            // Short IDs
+            for(HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
+                (*shortID)->write(pStream);
+
+            // Number of prefilled transactions
+            writeCompactInteger(pStream, prefilledTransactionIDs.size());
+
+            // Prefilled transactions
+            for(std::vector<PrefilledTransaction>::iterator trans=prefilledTransactionIDs.begin();trans!=prefilledTransactionIDs.end();++trans)
+                trans->write(pStream);
+        }
+
+        bool CompactBlockData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        {
+            unsigned int startOffset = pStream->readOffset();
+
+            if(block != NULL)
+                delete block;
+
+            block = new Block();
+
+            if(pSize < 90)
+                return false;
+
+            // Block header without transaction count
+            if(!block->read(pStream, false, false, true))
+                return false;
+
+            // A nonce for use in short transaction ID calculations
+            nonce = pStream->readUnsignedLong();
+
+            // Number of short IDs
+            uint64_t count = readCompactInteger(pStream);
+
+            if(count == 0xffffffff)
+                return false;
+
+            if(pSize - pStream->readOffset() - startOffset < count * 6)
+                return false;
+
+            shortIDs.resize(count);
+            unsigned int readCount = 0;
+            for(HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
+            {
+                *shortID = new Hash(6);
+
+                if(!(*shortID)->read(pStream))
+                {
+                    delete *shortID;
+                    shortIDs.erase(shortID);
+                    shortIDs.resize(readCount);
+                    break;
+                }
+                else
+                    ++readCount;
+            }
+
+            if(readCount != count)
+                return false;
+
+            if(count == 0xffffffff)
+                return false;
+
+            // Number of prefilled transactions
+            count = readCompactInteger(pStream);
+
+            // Prefilled transactions
+            prefilledTransactionIDs.resize(count);
+            readCount = 0;
+            for(std::vector<PrefilledTransaction>::iterator trans=prefilledTransactionIDs.begin();trans!=prefilledTransactionIDs.end();++trans)
+            {
+                if(!trans->read(pStream, pSize - pStream->readOffset() - startOffset))
+                {
+                    prefilledTransactionIDs.erase(trans);
+                    prefilledTransactionIDs.resize(readCount);
+                    break;
+                }
+                else
+                    ++readCount;
+            }
+
+            if(readCount != count)
+                return false;
+
+            return true;
+        }
+
+        void GetBlockTransactionsData::write(ArcMist::OutputStream *pStream)
+        {
+            //TODO
+        }
+
+        bool GetBlockTransactionsData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        {
+            //TODO
+            return false;
+        }
+
+        void BlockTransactionsData::write(ArcMist::OutputStream *pStream)
+        {
+            //TODO
+        }
+
+        bool BlockTransactionsData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        {
+            //TODO
+            return false;
+        }
+
         bool test()
         {
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "------------- Starting Message Tests -------------");
 
             bool result = true;
+            Interpreter interpreter;
 
             /***********************************************************************************************
              * VERSION
@@ -963,9 +1220,9 @@ namespace BitCoin
             VersionData versionSendData(rIP, 1333, tIP, 1333, false, 125, false);
             ArcMist::Buffer messageBuffer;
 
-            writeFull(&versionSendData, &messageBuffer);
+            interpreter.write(&versionSendData, &messageBuffer);
 
-            Data *messageReceiveData = readFull(&messageBuffer);
+            Data *messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1037,8 +1294,8 @@ namespace BitCoin
             Data versionAcknowledgeData(VERACK);
 
             messageBuffer.clear();
-            writeFull(&versionAcknowledgeData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&versionAcknowledgeData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1059,8 +1316,8 @@ namespace BitCoin
             PingData pingData;
 
             messageBuffer.clear();
-            writeFull(&pingData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&pingData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1081,8 +1338,8 @@ namespace BitCoin
             PongData pongData(pingData.nonce);
 
             messageBuffer.clear();
-            writeFull(&pongData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&pongData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1103,8 +1360,8 @@ namespace BitCoin
             RejectData rejectData("version", RejectData::PROTOCOL, "not cash", NULL);
 
             messageBuffer.clear();
-            writeFull(&rejectData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&rejectData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1145,8 +1402,8 @@ namespace BitCoin
             Data getAddressesData(GET_ADDRESSES);
 
             messageBuffer.clear();
-            writeFull(&getAddressesData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&getAddressesData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1186,8 +1443,8 @@ namespace BitCoin
             addressesData.addresses.push_back(peer);
 
             messageBuffer.clear();
-            writeFull(&addressesData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&addressesData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1231,8 +1488,8 @@ namespace BitCoin
             FeeFilterData feeFilterData(50);
 
             messageBuffer.clear();
-            writeFull(&feeFilterData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&feeFilterData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1267,8 +1524,8 @@ namespace BitCoin
             FilterAddData filterAddData;
 
             messageBuffer.clear();
-            writeFull(&filterAddData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&filterAddData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1304,8 +1561,8 @@ namespace BitCoin
             FilterLoadData filterLoadData;
 
             messageBuffer.clear();
-            writeFull(&filterLoadData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&filterLoadData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1341,8 +1598,8 @@ namespace BitCoin
             GetBlocksData getBlocksData;
 
             messageBuffer.clear();
-            writeFull(&getBlocksData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&getBlocksData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1388,8 +1645,8 @@ namespace BitCoin
             blockData.block = new Block();
 
             messageBuffer.clear();
-            writeFull(&blockData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&blockData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1446,8 +1703,8 @@ namespace BitCoin
             GetDataData getDataData;
 
             messageBuffer.clear();
-            writeFull(&getDataData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&getDataData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1488,8 +1745,8 @@ namespace BitCoin
             GetHeadersData getHeadersData;
 
             messageBuffer.clear();
-            writeFull(&getHeadersData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&getHeadersData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1534,8 +1791,8 @@ namespace BitCoin
             HeadersData headersData;
 
             messageBuffer.clear();
-            writeFull(&headersData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&headersData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1574,8 +1831,8 @@ namespace BitCoin
             InventoryData inventoryData;
 
             messageBuffer.clear();
-            writeFull(&inventoryData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&inventoryData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1616,8 +1873,8 @@ namespace BitCoin
             Data memPoolData(MEM_POOL);
 
             messageBuffer.clear();
-            writeFull(&memPoolData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&memPoolData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1638,8 +1895,8 @@ namespace BitCoin
             MerkleBlockData merkleBlockData;
 
             messageBuffer.clear();
-            writeFull(&merkleBlockData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&merkleBlockData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1684,8 +1941,8 @@ namespace BitCoin
             TransactionData transactionData;
 
             messageBuffer.clear();
-            writeFull(&transactionData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&transactionData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {
@@ -1721,8 +1978,8 @@ namespace BitCoin
             NotFoundData notFoundData;
 
             messageBuffer.clear();
-            writeFull(&notFoundData, &messageBuffer);
-            messageReceiveData = readFull(&messageBuffer);
+            interpreter.write(&notFoundData, &messageBuffer);
+            messageReceiveData = interpreter.read(&messageBuffer, "Test");
 
             if(messageReceiveData == NULL)
             {

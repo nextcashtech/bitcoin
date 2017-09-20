@@ -212,31 +212,43 @@ namespace BitCoin
         previousSigTermHandler= NULL;
         previousSigIntHandler = NULL;
 
-        // Tell the chain to stop processing
-        mChain.requestStop();
-
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping connection thread");
         // Wait for connections to finish
         if(mConnectionThread != NULL)
             delete mConnectionThread;
         mConnectionThread = NULL;
 
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping nodes");
+        mNodeLock.readLock();
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            (*node)->requestStop();
+        mNodeLock.readUnlock();
+
         // Delete nodes
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Deleting nodes");
         mNodeLock.writeLock("Destroy");
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
             delete *node;
         mNodes.clear();
         mNodeLock.writeUnlock();
 
+        // Tell the chain to stop processing
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping chain");
+        mChain.requestStop();
+
         // Wait for process thread to finish
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping process thread");
         if(mProcessThread != NULL)
             delete mProcessThread;
         mProcessThread = NULL;
 
         // Wait for manager to finish
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping manager thread");
         if(mManagerThread != NULL)
             delete mManagerThread;
         mManagerThread = NULL;
 
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Saving data");
         saveStatistics();
         mChain.savePending();
         mPool.save();
@@ -287,19 +299,24 @@ namespace BitCoin
         unsigned int pendingCount = mChain.pendingCount();
         unsigned int pendingSize = mChain.pendingSize();
 
+        ArcMist::String statStartTime;
+        statStartTime.writeFormattedTime(mStatistics.startTime);
+
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Block Chain : %d blocks, %d UTXOs", mChain.blockHeight(), mPool.count());
         if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Pending (above threshold) : %d blocks, %d headers (%d bytes)", pendingBlocks,
+              "Pending (above threshold) : %d/%d blocks/headers (%d bytes)", pendingBlocks,
               pendingCount - pendingBlocks, pendingSize);
         else
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Pending : %d blocks, %d headers (%d bytes)", pendingBlocks, pendingCount - pendingBlocks, pendingSize);
+              "Pending : %d/%d blocks/headers (%d bytes) since %s", pendingBlocks, pendingCount - pendingBlocks,
+              pendingSize);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Nodes : %d/%d outgoing/incoming (%d downloading)", mOutgoingNodes, mIncomingNodes, downloading);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Network : %d bytes received, %d bytes sent", mStatistics.bytesReceived, mStatistics.bytesSent);
+          "Network : %d/%d bytes received/sent (since %s)", mStatistics.bytesReceived, mStatistics.bytesSent,
+          statStartTime.text());
     }
 
     void Daemon::sendRequests()
@@ -330,6 +347,8 @@ namespace BitCoin
         if(pendingCount > pendingBlockCount && availableToRequestBlocks > 0)
         {
             int blocksToRequest = pendingCount - pendingBlockCount;
+            if(!reduceOnly && blocksToRequest + pendingBlockCount > mInfo.pendingBlocksThreshold)
+                blocksToRequest = mInfo.pendingBlocksThreshold - pendingBlockCount;
             for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end()&&blocksToRequest>0;++node)
                 if(!(*node)->waitingForBlocks() && (*node)->blockHeight() > mChain.blockHeight()
                   && (*node)->requestBlocks(mChain, 16, reduceOnly))

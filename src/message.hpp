@@ -35,7 +35,10 @@ namespace BitCoin
 
             // Data messages
             GET_BLOCKS, BLOCK, GET_DATA, GET_HEADERS, HEADERS, INVENTORY, MEM_POOL,
-            MERKLE_BLOCK, NOT_FOUND, TRANSACTION
+            MERKLE_BLOCK, NOT_FOUND, TRANSACTION,
+
+            // Version >= 70014 BIP-0152
+            SEND_COMPACT, COMPACT_BLOCK, GET_BLOCK_TRANSACTIONS, BLOCK_TRANSACTIONS
 
         };
 
@@ -46,7 +49,7 @@ namespace BitCoin
         {
         public:
 
-            enum Type { UNKNOWN=0x00, TRANSACTION=0x01, BLOCK=0x02, FILTERED_BLOCK=0x03 };
+            enum Type { UNKNOWN=0x00, TRANSACTION=0x01, BLOCK=0x02, FILTERED_BLOCK=0x03, COMPACT_BLOCK=0x04 };
 
             InventoryHash() : hash(32) { type = UNKNOWN; }
             InventoryHash(Type pType, const Hash &pHash) { type = pType; hash = pHash; }
@@ -80,14 +83,6 @@ namespace BitCoin
             Inventory &operator = (Inventory &pRight);
         };
 
-        class Data;
-
-        void writeFull(Data *pData, ArcMist::Buffer *pOutput);
-        Data *readFull(ArcMist::Buffer *pInput);
-
-        // Return type of partial message
-        Type pendingType(ArcMist::Buffer *pInput);
-
         class Data
         {
         public:
@@ -105,6 +100,20 @@ namespace BitCoin
             }
 
             Type type;
+
+        };
+
+        class Interpreter
+        {
+        public:
+
+            Interpreter() { pendingBlockStartTime = 0; pendingBlockLastReportTime = 0; }
+
+            Data *read(ArcMist::Buffer *pInput, const char *pName);
+            void write(Data *pData, ArcMist::Buffer *pOutput);
+
+            Hash pendingBlockHash;
+            uint32_t pendingBlockStartTime, pendingBlockLastReportTime;
 
         };
 
@@ -272,13 +281,13 @@ namespace BitCoin
             void write(ArcMist::OutputStream *pStream)
             {
                 if(block != NULL)
-                    block->write(pStream, true);
+                    block->write(pStream, true, true);
             }
             bool read(ArcMist::InputStream *pStream, unsigned int pSize)
             {
                 if(block == NULL)
                     block = new Block();
-                return block->read(pStream, true, true);
+                return block->read(pStream, true, true, true);
             }
 
             Block *block;
@@ -362,7 +371,7 @@ namespace BitCoin
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize);
 
-            Block blockHeader;
+            Block block;
             uint32_t transactionCount;
             std::vector<Hash> hashes;
             ArcMist::Buffer flags;
@@ -392,6 +401,98 @@ namespace BitCoin
             bool read(ArcMist::InputStream *pStream, unsigned int pSize) { return inventory.read(pStream, pSize); }
 
             Inventory inventory;
+
+        };
+
+        class SendCompactData : public Data
+        {
+        public:
+
+            SendCompactData() : Data(SEND_COMPACT) { }
+
+            void write(ArcMist::OutputStream *pStream)
+            {
+                pStream->writeByte(sendCompact);
+                pStream->writeUnsignedLong(encoding);
+            }
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize)
+            {
+                if(pSize != 9)
+                    return false;
+                sendCompact = pStream->readByte();
+                encoding = pStream->readUnsignedLong();
+                return true;
+            }
+
+            bool sendCompact;
+            uint64_t encoding;
+
+        };
+
+        class PrefilledTransaction
+        {
+        public:
+
+            PrefilledTransaction() { offset = 0; transaction = 0; }
+            PrefilledTransaction(unsigned int pOffset, Transaction *pTransaction)
+            {
+                offset = pOffset;
+                transaction = pTransaction;
+            }
+
+            unsigned int offset;
+            Transaction *transaction; // Reference to transaction contained in block
+
+            void write(ArcMist::OutputStream *pStream);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+        };
+
+        class CompactBlockData : public Data
+        {
+        public:
+
+            CompactBlockData();
+            ~CompactBlockData();
+
+            // Sets block to be sent in message
+            void setBlock(Block *pBlock); // Does not delete block given this way
+
+            // Decodes transaction IDs and puts transactions in the block
+            bool fillBlock();
+
+            bool updateShortIDs();
+
+            void write(ArcMist::OutputStream *pStream);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+
+            Block *block;
+            uint64_t nonce;
+            HashList shortIDs;
+            std::vector<PrefilledTransaction> prefilledTransactionIDs;
+
+            bool deleteBlock;
+
+        };
+
+        class GetBlockTransactionsData : public Data
+        {
+        public:
+
+            GetBlockTransactionsData() : Data(GET_BLOCK_TRANSACTIONS) {}
+
+            void write(ArcMist::OutputStream *pStream);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+
+        };
+
+        class BlockTransactionsData : public Data
+        {
+        public:
+
+            BlockTransactionsData() : Data(BLOCK_TRANSACTIONS) {}
+
+            void write(ArcMist::OutputStream *pStream);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
 
         };
 

@@ -315,6 +315,9 @@ namespace BitCoin
         uint16_t lookup() const; // Used to split into 65,536 piles
         uint8_t lookup8() const; // Used to split into 256 piles
 
+        // Calculate the SipHash-2-4 "Short ID" and put it in pHash
+        bool getShortID(Hash &pHash, const Hash &pHeaderHash);
+
         void zeroize()
         {
             if(mSize > 0)

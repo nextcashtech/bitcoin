@@ -54,7 +54,7 @@ namespace BitCoin
 
         void process(Chain &pChain);
 
-        void stop();
+        void requestStop();
 
         bool isIncoming() { return mIncoming; }
 
@@ -74,6 +74,13 @@ namespace BitCoin
         bool requestBlocks(Chain &pChain, unsigned int pCount, bool pReduceOnly);
         bool waitingForBlocks() { return mBlocksRequested.size() > 0; }
 
+        // Send notification of a new block on the chain
+        bool announceBlock(const Hash &pHash);
+
+        // Send notification of a new transaction in the mempool
+        //TODO Make this send periodically with a list. Filter list to remove transaction inventory received from node
+        bool announceTransaction(const Hash &pHash);
+
         uint32_t lastBlockRequestTime() { return mLastBlockRequest; }
         uint32_t lastBlockReceiveTime() { return mLastBlockReceiveTime; }
         unsigned int blocksRequestedCount() const { return mBlocksRequestedCount; }
@@ -89,6 +96,8 @@ namespace BitCoin
         int mSocketID;
 
         bool versionSupported(int32_t pVersion);
+
+        Message::Interpreter mMessageInterpreter;
 
         bool sendMessage(Message::Data *pData);
         bool sendVersion(Chain &pChain);
@@ -106,6 +115,7 @@ namespace BitCoin
         Statistics mStatistics;
         bool mStop, mStopped;
         bool mIncoming, mIsSeed;
+        bool mSendBlocksCompact;
 
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;

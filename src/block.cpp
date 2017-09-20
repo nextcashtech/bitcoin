@@ -77,7 +77,7 @@ namespace BitCoin
         mSize = pStream->writeOffset() - startOffset;
     }
 
-    bool Block::read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pCalculateHash)
+    bool Block::read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount, bool pCalculateHash)
     {
         unsigned int startOffset = pStream->readOffset();
         mSize = 0;
@@ -91,7 +91,8 @@ namespace BitCoin
         }
         hash.clear();
 
-        if(pStream->remaining() < 81)
+        if((pIncludeTransactionCount && pStream->remaining() < 81) ||
+          (!pIncludeTransactionCount && pStream->remaining() < 80))
         {
             if(digest != NULL)
                 delete digest;
@@ -137,6 +138,12 @@ namespace BitCoin
         {
             delete digest;
             digest = NULL;
+        }
+
+        if(!pIncludeTransactionCount)
+        {
+            transactionCount = 0;
+            return true;
         }
 
         // Transaction Count (Zero when header only)
@@ -664,7 +671,7 @@ namespace BitCoin
 
         // Write block data at end of file
         outputFile->setWriteOffset(outputFile->length());
-        pBlock.write(outputFile, true);
+        pBlock.write(outputFile, true, true);
         delete outputFile;
 
         mLastHash = pBlock.hash;
@@ -779,7 +786,7 @@ namespace BitCoin
             // Go to file offset of block data
             mInputFile->setReadOffset(fileOffset);
             newBlockHeader = new Block();
-            if(!newBlockHeader->read(mInputFile, false))
+            if(!newBlockHeader->read(mInputFile, false, false, true))
             {
                 delete newBlockHeader;
                 return false;
@@ -829,7 +836,7 @@ namespace BitCoin
             return false;
 
         mInputFile->setReadOffset(offset);
-        bool success = pBlock.read(mInputFile, pIncludeTransactions);
+        bool success = pBlock.read(mInputFile, pIncludeTransactions, pIncludeTransactions, true);
         return success;
     }
 
@@ -859,7 +866,7 @@ namespace BitCoin
             {
                 // Read block
                 mInputFile->setReadOffset(fileOffset);
-                bool success = pBlock.read(mInputFile, pIncludeTransactions);
+                bool success = pBlock.read(mInputFile, pIncludeTransactions, pIncludeTransactions, true);
                 return success;
             }
         }

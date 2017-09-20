@@ -570,7 +570,7 @@ namespace BitCoin
         while(file.remaining())
         {
             newBlock = new Block();
-            if(!newBlock->read(&file, true))
+            if(!newBlock->read(&file, true, true, true))
             {
                 delete newBlock;
                 success = false;
@@ -877,7 +877,7 @@ namespace BitCoin
                 ArcMist::String filePathName = Info::instance().path();
                 filePathName.pathAppend(nextPending->block->hash.hex() + ".invalid");
                 ArcMist::FileOutputStream file(filePathName, true);
-                nextPending->block->write(&file, true);
+                nextPending->block->write(&file, true, true);
 
                 // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Clearing all pending blocks/headers");
 
@@ -1488,8 +1488,8 @@ namespace BitCoin
         checkHash.read(&checkData);
         Block readGenesisBlock;
         ArcMist::Buffer blockBuffer;
-        genesis->write(&blockBuffer, true);
-        readGenesisBlock.read(&blockBuffer, true);
+        genesis->write(&blockBuffer, true, true);
+        readGenesisBlock.read(&blockBuffer, true, true, true);
 
         if(readGenesisBlock.hash == checkHash)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed genesis block read hash");
@@ -1505,7 +1505,7 @@ namespace BitCoin
          * Genesis block raw
          ***********************************************************************************************/
         ArcMist::Buffer data;
-        genesis->write(&data, true);
+        genesis->write(&data, true, true);
 
         checkData.clear();
         if(network() == TESTNET)
@@ -1593,7 +1593,7 @@ namespace BitCoin
         Info::instance().setPath("../bcc_test");
         TransactionOutputPool pool;
 
-        if(!readBlock.read(&readFile, true))
+        if(!readBlock.read(&readFile, true, true, true))
         {
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read block");
             success = false;
@@ -1670,17 +1670,17 @@ namespace BitCoin
          ***********************************************************************************************/
         // Requires pool to be setup
         // Info::instance().setPath("/var/bitcoin/mainnet");
-        // TransactionOutputPool pool;
+        // //TransactionOutputPool pool;
         // pool.load();
-        // pool.setTestMode(true);
+        // // pool.setTestMode(true);
 
-// #ifdef PROFILER_ON
-        // //ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
-        // Chain chain;
+// // #ifdef PROFILER_ON
+        // ArcMist::FileInputStream file("30b078a68d9788c7206ee6f20e674872c2e6e0989f7002e53b03000000000000.invalid");
+        // // Chain chain;
         // Block block;
 
-        // //if(!block.read(&file, true))
-        // if(!chain.getBlock(181509, block))
+        // if(!block.read(&file, true, true, true))
+        // // if(!chain.getBlock(181509, block))
         // {
             // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read test block");
             // success = false;

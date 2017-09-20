@@ -204,6 +204,33 @@ namespace BitCoin
             return mData[0];
     }
 
+    bool Hash::getShortID(Hash &pHash, const Hash &pHeaderHash)
+    {
+        pHash.clear();
+
+        if(mSize != 32 || pHeaderHash.size() != 32)
+            return false;
+
+        // Use first two little endian 64 bit integers from header hash as keys
+        uint64_t key0 = 0;
+        uint64_t key1 = 0;
+        unsigned int i;
+        uint8_t *byte = pHeaderHash.mData;
+        for(i=0;i<8;++i)
+            key0 |= (uint64_t)*byte++ << (i * 8);
+        for(i=0;i<8;++i)
+            key1 |= (uint64_t)*byte++ << (i * 8);
+
+        uint64_t sipHash24Value = ArcMist::Digest::sipHash24(mData, 32, key0, key1);
+
+        // Put 6 least significant bytes of sipHash24Value into result
+        pHash.setSize(6);
+        for(i=0;i<6;++i)
+            pHash.mData[i] = (sipHash24Value >> (i * 8)) & 0xff;
+
+        return true;
+    }
+
     // Set hash to highest possible value that is valid for a header hash proof of work
     void Hash::setDifficulty(uint32_t pBits)
     {
