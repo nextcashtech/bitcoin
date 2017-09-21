@@ -1077,9 +1077,6 @@ namespace BitCoin
 
             if(opCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
             {
-                if(!ifStackTrue())
-                    continue;
-
                 if(opCode > pScript.remaining())
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
@@ -1092,7 +1089,10 @@ namespace BitCoin
                 ArcMist::Profiler profiler("Interpreter Push");
 #endif
                 // Push opCode value bytes onto stack from input
-                push()->copyBuffer(pScript, opCode);
+                if(!ifStackTrue())
+                    pScript.setReadOffset(pScript.readOffset() + opCode);
+                else
+                    push()->copyBuffer(pScript, opCode);
                 continue;
             }
 
@@ -1102,13 +1102,6 @@ namespace BitCoin
                     break;
 
                 case OP_IF: // If the top stack value is not OP_FALSE the statements are executed. The top stack value is removed
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_IF");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!checkStackSize(1))
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IF");
@@ -1131,13 +1124,6 @@ namespace BitCoin
                         mIfStack.push_back(true);
                     break;
                 case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_NOTIF");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!checkStackSize(1))
                     {
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NOTIF");
@@ -1160,13 +1146,6 @@ namespace BitCoin
                         mIfStack.push_back(true);
                     break;
                 case OP_ELSE: // If the preceding OP_IF or OP_NOTIF or OP_ELSE was not executed then these statements are and if the preceding OP_IF or OP_NOTIF or OP_ELSE was executed then these statements are not.
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_ELSE");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(mIfStack.size() > 0)
                     {
                         // if(mIfStack.back())
@@ -1185,13 +1164,6 @@ namespace BitCoin
                     }
                     break;
                 case OP_ENDIF: // Ends an if/else block. All blocks must end, or the transaction is invalid. An OP_ENDIF without OP_IF earlier is also invalid.
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_ENDIF");
-                        mValid = false;
-                        return false;
-                    }
-
                     //ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "OP_ENDIF");
                     if(mIfStack.size() > 0)
                         mIfStack.pop_back();
@@ -1228,13 +1200,6 @@ namespace BitCoin
                     }
                     break;
                 case OP_RETURN: // Marks transaction as invalid
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_RETURN");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
                     ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
@@ -1708,8 +1673,6 @@ namespace BitCoin
                 }
                 case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
                 {
-                    if(!ifStackTrue())
-                        break;
                     count = pScript.readByte();
                     if(count > pScript.remaining())
                     {
@@ -1721,13 +1684,14 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     ArcMist::Profiler profiler("Interpreter Push");
 #endif
-                    push()->copyBuffer(pScript, count);
+                    if(!ifStackTrue())
+                        pScript.setReadOffset(pScript.readOffset() + count);
+                    else
+                        push()->copyBuffer(pScript, count);
                     break;
                 }
                 case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
                 {
-                    if(!ifStackTrue())
-                        break;
                     count = pScript.readUnsignedShort();
                     if(count > pScript.remaining())
                     {
@@ -1739,13 +1703,14 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     ArcMist::Profiler profiler("Interpreter Push");
 #endif
-                    push()->copyBuffer(pScript, count);
+                    if(!ifStackTrue())
+                        pScript.setReadOffset(pScript.readOffset() + count);
+                    else
+                        push()->copyBuffer(pScript, count);
                     break;
                 }
                 case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
                 {
-                    if(!ifStackTrue())
-                        break;
                     count = pScript.readUnsignedInt();
                     if(count > pScript.remaining())
                     {
@@ -1757,7 +1722,10 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     ArcMist::Profiler profiler("Interpreter Push");
 #endif
-                    push()->copyBuffer(pScript, count);
+                    if(!ifStackTrue())
+                        pScript.setReadOffset(pScript.readOffset() + count);
+                    else
+                        push()->copyBuffer(pScript, count);
                     break;
                 }
                 case OP_1NEGATE: // The number -1 is pushed
