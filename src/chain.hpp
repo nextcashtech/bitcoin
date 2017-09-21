@@ -22,7 +22,6 @@
 namespace BitCoin
 {
     class BlockList;
-    class BlockFile;
 
     class BlockInfo
     {
@@ -221,6 +220,7 @@ namespace BitCoin
 
         ArcMist::Mutex mBlockFileMutex;
         std::vector<unsigned int> mLockedBlockFileIDs;
+        BlockFile *mLastBlockFile;
         unsigned int mLastFileID;
 
         // Target

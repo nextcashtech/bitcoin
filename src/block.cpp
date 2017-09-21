@@ -495,6 +495,8 @@ namespace BitCoin
 
         if(!openFile())
         {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to open block file : %s", pFilePathName);
             mValid = false;
             return;
         }
@@ -675,6 +677,7 @@ namespace BitCoin
         delete outputFile;
 
         mLastHash = pBlock.hash;
+        ++mCount;
         mModified = true;
         return true;
     }
@@ -735,7 +738,6 @@ namespace BitCoin
     bool BlockFile::readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash,
       const Hash &pStoppingHash, unsigned int pCount)
     {
-        pBlockHeaders.clear();
         if(!openFile())
         {
             mValid = false;
@@ -791,8 +793,8 @@ namespace BitCoin
                 delete newBlockHeader;
                 return false;
             }
-            pBlockHeaders.push_back(newBlockHeader);
 
+            pBlockHeaders.push_back(newBlockHeader);
             if(newBlockHeader->hash == pStoppingHash)
                 break;
 

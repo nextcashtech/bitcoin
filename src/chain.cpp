@@ -34,6 +34,7 @@ namespace BitCoin
         mTargetBits = 0;
         mLastTargetTime = 0;
         mLastBlockTime = 0;
+        mLastBlockFile = NULL;
     }
 
     Chain::~Chain()
@@ -42,6 +43,8 @@ namespace BitCoin
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             delete *pending;
         mPendingLock.writeUnlock();
+        if(mLastBlockFile != NULL)
+            delete mLastBlockFile;
     }
 
     bool Chain::revertTargetBits()
@@ -761,7 +764,6 @@ namespace BitCoin
         }
 
         // Add the block to the chain
-        BlockFile *blockFile = NULL;
         bool success = true;
         if(mLastFileID == 0xffffffff)
         {
@@ -771,37 +773,47 @@ namespace BitCoin
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Creating first block file %08d", mLastFileID, mLastFileID + 1);
             lockBlockFile(mLastFileID);
-            blockFile = BlockFile::create(mLastFileID, filePathName);
-            if(blockFile == NULL) // Failed to create file
+            mLastBlockFile = BlockFile::create(mLastFileID, filePathName);
+            if(mLastBlockFile == NULL) // Failed to create file
                 success = false;
         }
         else
         {
             // Check if last block file is full
             lockBlockFile(mLastFileID);
-            blockFile = new BlockFile(mLastFileID, blockFileName(mLastFileID));
+            if(mLastBlockFile == NULL)
+                mLastBlockFile = new BlockFile(mLastFileID, blockFileName(mLastFileID));
 
-            if(blockFile->isFull())
+            if(!mLastBlockFile->isValid())
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                  "Block file %08d is invalid", mLastFileID);
+
+                success = false;
+                unlockBlockFile(mLastFileID);
+                delete mLastBlockFile;
+            }
+            else if(mLastBlockFile->isFull())
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   "Block file %08d is full. Starting new block file %08d", mLastFileID, mLastFileID + 1);
 
                 unlockBlockFile(mLastFileID);
-                delete blockFile;
+                delete mLastBlockFile;
 
                 // Create next file
                 mLastFileID++;
                 lockBlockFile(mLastFileID);
                 ArcMist::String filePathName = blockFileName(mLastFileID);
-                BlockFile::create(mLastFileID, filePathName);
-                blockFile = new BlockFile(mLastFileID, filePathName);
+                mLastBlockFile = BlockFile::create(mLastFileID, filePathName);
+                if(mLastBlockFile == NULL) // Failed to create file
+                    success = false;
             }
         }
 
         if(success)
         {
-            success = blockFile->addBlock(*pBlock);
-            delete blockFile;
+            success = mLastBlockFile->addBlock(*pBlock);
             unlockBlockFile(mLastFileID);
         }
 
@@ -843,13 +855,19 @@ namespace BitCoin
             {
                 // No pending blocks or headers
                 mPendingLock.readUnlock();
+                if(mLastBlockFile != NULL)
+                    mLastBlockFile->updateCRC();
                 return;
             }
 
             PendingData *nextPending = mPending.front();
             mPendingLock.readUnlock();
             if(!nextPending->isFull()) // Next pending block is not full yet
+            {
+                if(mLastBlockFile != NULL)
+                    mLastBlockFile->updateCRC();
                 return;
+            }
 
             // Check this front block and add it to the chain
             if(processBlock(nextPending->block, pPool))
@@ -872,6 +890,12 @@ namespace BitCoin
             else
             {
                 //TODO Add hash to blacklist. So it isn't downloaded again.
+
+                if(mLastBlockFile != NULL)
+                {
+                    delete mLastBlockFile;
+                    mLastBlockFile = NULL;
+                }
 
                 // Save the block to a file
                 ArcMist::String filePathName = Info::instance().path();
@@ -927,16 +951,21 @@ namespace BitCoin
         while(pHashes.size() < pCount)
         {
             lockBlockFile(fileID);
-            blockFile = new BlockFile(fileID, blockFileName(fileID));
+            if(fileID == mLastFileID && mLastBlockFile != NULL)
+                blockFile = mLastBlockFile;
+            else
+                blockFile = new BlockFile(fileID, blockFileName(fileID));
 
             if(!blockFile->readBlockHashes(fileList))
             {
-                delete blockFile;
+                if(blockFile != mLastBlockFile)
+                    delete blockFile;
                 unlockBlockFile(fileID);
                 break;
             }
 
-            delete blockFile;
+            if(blockFile != mLastBlockFile)
+                delete blockFile;
             unlockBlockFile(fileID);
 
             for(HashList::iterator i=fileList.begin();i!=fileList.end();)
@@ -953,7 +982,8 @@ namespace BitCoin
 
             if(pHashes.size() >= pCount)
                 break;
-            fileID++;
+            if(++fileID > mLastFileID)
+                break;
         }
 
         return pHashes.size() > 0;
@@ -973,13 +1003,17 @@ namespace BitCoin
         for(unsigned int fileID=mLastFileID-1;;fileID--)
         {
             lockBlockFile(fileID);
-            blockFile = new BlockFile(fileID, blockFileName(fileID));
+            if(fileID == mLastFileID && mLastBlockFile != NULL)
+                blockFile = mLastBlockFile;
+            else
+                blockFile = new BlockFile(fileID, blockFileName(fileID));
 
             hash = blockFile->lastHash();
             if(!hash.isEmpty())
                 pHashes.push_back(new Hash(hash));
 
-            delete blockFile;
+            if(blockFile != mLastBlockFile)
+                delete blockFile;
             unlockBlockFile(fileID);
 
             if(pHashes.size() >= pCount || fileID == 0)
@@ -1001,23 +1035,29 @@ namespace BitCoin
         while(pBlockHeaders.size() < pCount)
         {
             lockBlockFile(fileID);
-            blockFile = new BlockFile(fileID, blockFileName(fileID));
+            if(fileID == mLastFileID && mLastBlockFile != NULL)
+                blockFile = mLastBlockFile;
+            else
+                blockFile = new BlockFile(fileID, blockFileName(fileID));
 
-            if(!blockFile->readBlockHeaders(pBlockHeaders, hash, pStoppingHash, pCount))
+            if(!blockFile->isValid() || !blockFile->readBlockHeaders(pBlockHeaders, hash, pStoppingHash, pCount))
             {
-                delete blockFile;
+                if(blockFile != mLastBlockFile)
+                    delete blockFile;
                 unlockBlockFile(fileID);
                 break;
             }
 
-            delete blockFile;
+            if(blockFile != mLastBlockFile)
+                delete blockFile;
             unlockBlockFile(fileID);
 
             if(pBlockHeaders.size() > 0 && pBlockHeaders.back()->hash == pStoppingHash)
                 break;
 
             hash.clear();
-            fileID++;
+            if(++fileID > mLastFileID)
+                break;
         }
 
         return pBlockHeaders.size() > 0;
@@ -1028,12 +1068,21 @@ namespace BitCoin
         unsigned int fileID = pHeight / 100;
         unsigned int offset = pHeight - (fileID * 100);
 
+        if(fileID > mLastFileID)
+            return false;
+
+        BlockFile *blockFile;
+
         lockBlockFile(fileID);
-        BlockFile *blockFile = new BlockFile(fileID, blockFileName(fileID));
+        if(fileID == mLastFileID && mLastBlockFile != NULL)
+            blockFile = mLastBlockFile;
+        else
+            blockFile = new BlockFile(fileID, blockFileName(fileID));
 
         bool success = blockFile->isValid() && blockFile->readHash(offset, pHash);
 
-        delete blockFile;
+        if(blockFile != mLastBlockFile)
+            delete blockFile;
         unlockBlockFile(fileID);
         return success;
     }
@@ -1043,12 +1092,21 @@ namespace BitCoin
         unsigned int fileID = pHeight / 100;
         unsigned int offset = pHeight - (fileID * 100);
 
+        if(fileID > mLastFileID)
+            return false;
+
+        BlockFile *blockFile;
+
         lockBlockFile(fileID);
-        BlockFile *blockFile = new BlockFile(fileID, blockFileName(fileID));
+        if(fileID == mLastFileID && mLastBlockFile != NULL)
+            blockFile = mLastBlockFile;
+        else
+            blockFile = new BlockFile(fileID, blockFileName(fileID));
 
         bool success = blockFile->isValid() && blockFile->readBlock(offset, pBlock, true);
 
-        delete blockFile;
+        if(blockFile != mLastBlockFile)
+            delete blockFile;
         unlockBlockFile(fileID);
         return success;
     }
@@ -1058,13 +1116,18 @@ namespace BitCoin
         unsigned int fileID = blockFileID(pHash);
         if(fileID == 0xffffffff)
             return false; // hash not found
+        BlockFile *blockFile;
 
         lockBlockFile(fileID);
-        BlockFile *blockFile = new BlockFile(fileID, blockFileName(fileID));
+        if(fileID == mLastFileID && mLastBlockFile != NULL)
+            blockFile = mLastBlockFile;
+        else
+            blockFile = new BlockFile(fileID, blockFileName(fileID));
 
         bool success = blockFile->isValid() && blockFile->readBlock(pHash, pBlock, true);
 
-        delete blockFile;
+        if(blockFile != mLastBlockFile)
+            delete blockFile;
         unlockBlockFile(fileID);
         return success;
     }
@@ -1103,12 +1166,12 @@ namespace BitCoin
         Hash startHash;
         if(!getBlockHash(height, startHash))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to get next block to update unspent");
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to get next block to update unspent transaction outputs");
             return false;
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Updating unspent transactions from block height %d to %d", height, blockHeight());
+          "Updating unspent transaction outputs from block height %d to %d", height, blockHeight());
 
         ArcMist::String filePathName;
         unsigned int fileID = blockFileID(startHash);
@@ -1670,17 +1733,17 @@ namespace BitCoin
          ***********************************************************************************************/
         // Requires pool to be setup
         // Info::instance().setPath("/var/bitcoin/mainnet");
-        // //TransactionOutputPool pool;
+        // // //TransactionOutputPool pool;
         // pool.load();
-        // // pool.setTestMode(true);
+        // // // pool.setTestMode(true);
 
-// // #ifdef PROFILER_ON
-        // ArcMist::FileInputStream file("30b078a68d9788c7206ee6f20e674872c2e6e0989f7002e53b03000000000000.invalid");
-        // // Chain chain;
+// // // #ifdef PROFILER_ON
+        // ArcMist::FileInputStream file("e5c6ed72e84a6ee99f54ea7b33cc9dab47770b219a380a264200000000000000.invalid");
+        // // // Chain chain;
         // Block block;
 
         // if(!block.read(&file, true, true, true))
-        // // if(!chain.getBlock(181509, block))
+        // // // if(!chain.getBlock(181509, block))
         // {
             // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read test block");
             // success = false;

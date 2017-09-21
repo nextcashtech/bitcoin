@@ -660,23 +660,14 @@ namespace BitCoin
             case Message::GET_HEADERS:
             {
                 Message::GetHeadersData *getHeadersData = (Message::GetHeadersData *)message;
-                BlockList blockList;
+                Message::HeadersData headersData;
 
                 for(std::vector<Hash>::iterator hash=getHeadersData->blockHeaderHashes.begin();hash!=getHeadersData->blockHeaderHashes.end();++hash)
-                    if(pChain.getBlockHeaders(blockList, *hash, getHeadersData->stopHeaderHash, 2000))
+                    if(pChain.getBlockHeaders(headersData.headers, *hash, getHeadersData->stopHeaderHash, 2000))
                         break; // match found
 
-                if(blockList.size() > 0)
+                if(headersData.headers.size() > 0)
                 {
-                    Message::HeadersData headersData;
-                    // Load up the message
-                    for(BlockList::iterator block=blockList.begin();block!=blockList.end();++block)
-                    {
-                        headersData.headers.push_back(*block);
-                        if((*block)->hash == getHeadersData->stopHeaderHash)
-                            break;
-                    }
-
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
                       "Sending %d block headers", headersData.headers.size());
                     if(sendMessage(&headersData))
@@ -713,7 +704,6 @@ namespace BitCoin
                     Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
 
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Added %d pending headers", addedCount);
-
                 break;
             }
             case Message::INVENTORY:

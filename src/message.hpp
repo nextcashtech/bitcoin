@@ -333,18 +333,12 @@ namespace BitCoin
         {
         public:
 
-            HeadersData() : Data(HEADERS) { }
-            ~HeadersData()
-            {
-                for(std::vector<Block *>::iterator i=headers.begin();i!=headers.end();++i)
-                    if(*i != NULL)
-                        delete *i;
-            }
+            HeadersData() : Data(HEADERS) {}
 
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize);
 
-            std::vector<Block *> headers;
+            BlockList headers;
 
         };
 
