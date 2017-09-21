@@ -496,7 +496,10 @@ namespace BitCoin
 
         switch(hashType)
         {
+        default:
         case Signature::INVALID:
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+              "Unsupported signature hash type : 0x%02x", pHashType);
         case Signature::ALL:
         {
             // if(anyoneCanPay)
@@ -608,10 +611,6 @@ namespace BitCoin
 
             break;
         }
-        default:
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
-              "Unsupported signature hash type : %x", hashType);
-            return false;
         }
 
         // Lock Time
