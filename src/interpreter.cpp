@@ -817,10 +817,7 @@ namespace BitCoin
         Signature signature;
         pSignature->setReadOffset(0);
         if(!signature.read(pSignature, pSignature->length()-1, pECDSA_DER_SigsOnly))
-        {
-            mValid = false;
             return false;
-        }
 
         // Read the hash type from the stack item
         Signature::HashType hashType = static_cast<Signature::HashType>(pSignature->readByte());
