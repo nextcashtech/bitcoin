@@ -1729,39 +1729,34 @@ namespace BitCoin
         delete genesis;
 
         /***********************************************************************************************
-         * Test Block
+         * Pending Block
          ***********************************************************************************************/
         // Requires pool to be setup
         // Info::instance().setPath("/var/bitcoin/mainnet");
-        // // //TransactionOutputPool pool;
         // pool.load();
-        // // // pool.setTestMode(true);
 
-// // // #ifdef PROFILER_ON
-        // ArcMist::FileInputStream file("e5c6ed72e84a6ee99f54ea7b33cc9dab47770b219a380a264200000000000000.invalid");
-        // // // Chain chain;
+        // ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
         // Block block;
 
         // if(!block.read(&file, true, true, true))
-        // // // if(!chain.getBlock(181509, block))
         // {
-            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read test block");
+            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read pending block");
             // success = false;
         // }
         // else
         // {
             // if(block.process(pool, pool.blockHeight(), 0))
-                // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed block test");
+                // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed pending block");
             // else
             // {
-                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed block test");
+                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed pending block");
                 // success = false;
             // }
         // }
 
         // block.print(ArcMist::Log::INFO, false);
 
-
+// // #ifdef PROFILER_ON
         // ArcMist::FileOutputStream profilerFile("profiler.txt", true);
         // ArcMist::ProfilerManager::write(&profilerFile);
 // #endif

@@ -1198,6 +1198,8 @@ namespace BitCoin
                         mVerified = false;
                         return true;
                     }
+                    else
+                        pop();
                     break;
                 case OP_RETURN: // Marks transaction as invalid
                     if(!ifStackTrue())
