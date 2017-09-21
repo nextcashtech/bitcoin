@@ -293,6 +293,13 @@ namespace BitCoin
             }
         }
 
+        void setByte(unsigned int pOffset, uint8_t pValue)
+        {
+            if(pOffset >= mSize)
+                return;
+            mData[pOffset] = pValue;
+        }
+
         // Difficulty checks
         void setDifficulty(uint32_t pBits);
         bool operator <= (const Hash &pRight);

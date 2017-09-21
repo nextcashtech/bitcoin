@@ -830,12 +830,13 @@ namespace BitCoin
         unsigned int previousReadOffset = pCurrentOutputScript.readOffset();
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
         digest.setOutputEndian(ArcMist::Endian::LITTLE);
-        mTransaction->writeSignatureData(&digest, mInputOffset, pCurrentOutputScript, hashType);
-        pCurrentOutputScript.setReadOffset(previousReadOffset);
-
-        // Get digest result
         Hash signatureHash(32);
-        digest.getResult(&signatureHash);
+        if(mTransaction->writeSignatureData(&digest, mInputOffset, pCurrentOutputScript, hashType))
+            digest.getResult(&signatureHash); // Get digest result
+        else
+            signatureHash.setByte(0, 1); // Use signature hash of 1 (probably sig hash single with not enough outputs)
+
+        pCurrentOutputScript.setReadOffset(previousReadOffset);
 
         // Push a true or false depending on if the signature is valid
         return signature.verify(pPublicKey, signatureHash);

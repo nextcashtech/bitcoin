@@ -585,7 +585,7 @@ namespace BitCoin
                     (*input)->writeSignatureData(pStream, NULL, true);
             }
 
-            // Output Count
+            // Output Count (number of inputs)
             writeCompactInteger(pStream, pInputOffset + 1);
 
             // Outputs
@@ -604,11 +604,7 @@ namespace BitCoin
                     ++output;
                 }
                 else
-                {
-                    // Write blank output
-                    pStream->writeLong(0);
-                    writeCompactInteger(pStream, 0);
-                }
+                    return false; // Invalid number of outputs
 
             break;
         }
