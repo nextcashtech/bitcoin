@@ -53,7 +53,10 @@ namespace BitCoin
         mChain = pChain;
 
         ArcMist::Buffer name;
-        name.writeFormatted("Node [%d]", mID);
+        if(mIncoming)
+            name.writeFormatted("Node i[%d]", mID);
+        else
+            name.writeFormatted("Node o[%d]", mID);
         mName = name.readString(name.length());
 
         // Verify connection
@@ -626,11 +629,17 @@ namespace BitCoin
                     {
                         if(pChain.getBlock((*item)->hash, block))
                         {
+                            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending block at height %d : %s",
+                              pChain.height((*item)->hash), (*item)->hash.hex().text());
                             if(!sendBlock(block))
                                 fail = true;
                         }
                         else
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Block not found : %s",
+                              (*item)->hash.hex().text());
                             notFoundData.inventory.push_back(new Message::InventoryHash(**item));
+                        }
                         break;
                     }
                     case Message::InventoryHash::TRANSACTION:
@@ -669,7 +678,8 @@ namespace BitCoin
                 if(headersData.headers.size() > 0)
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
-                      "Sending %d block headers", headersData.headers.size());
+                      "Sending %d block headers starting at height %d : %s", headersData.headers.size(),
+                      pChain.height(headersData.headers.front()->hash), headersData.headers.front()->hash.hex().text());
                     if(sendMessage(&headersData))
                         mStatistics.headersSent += headersData.headers.size();
                 }

@@ -335,8 +335,11 @@ namespace BitCoin
         std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
         {
-            if(!mChain.isInSync() && getTime() - mLastHeaderRequest > 60 && pendingCount < 4000 &&
-              (*node)->requestHeaders(mChain, mChain.lastPendingBlockHash()))
+            if((*node)->isIncoming())
+                continue;
+
+            if(!mChain.isInSync() && getTime() - mLastHeaderRequest > 60 &&
+              pendingCount < 4000 && (*node)->requestHeaders(mChain, mChain.lastPendingBlockHash()))
                 mLastHeaderRequest = getTime();
 
             if(!(*node)->waitingForBlocks() && (*node)->blockHeight() > mChain.blockHeight())
@@ -350,7 +353,7 @@ namespace BitCoin
             if(!reduceOnly && blocksToRequest + pendingBlockCount > mInfo.pendingBlocksThreshold)
                 blocksToRequest = mInfo.pendingBlocksThreshold - pendingBlockCount;
             for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end()&&blocksToRequest>0;++node)
-                if(!(*node)->waitingForBlocks() && (*node)->blockHeight() > mChain.blockHeight()
+                if(!(*node)->isIncoming() && !(*node)->waitingForBlocks() && (*node)->blockHeight() > mChain.blockHeight()
                   && (*node)->requestBlocks(mChain, 16, reduceOnly))
                     blocksToRequest -= 16;
         }
