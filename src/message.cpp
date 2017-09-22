@@ -324,7 +324,7 @@ namespace BitCoin
                 case BLOCK:
                     result = new BlockData();
                     pendingBlockStartTime = 0;
-                    pendingBlockUpdateTime = getTime();
+                    pendingBlockUpdateTime = 0;
                     pendingBlockHash.clear();
                     break;
                 case GET_DATA:

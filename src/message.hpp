@@ -107,7 +107,7 @@ namespace BitCoin
         {
         public:
 
-            Interpreter() { pendingBlockStartTime = 0; pendingBlockLastReportTime = 0; }
+            Interpreter() { pendingBlockStartTime = 0; pendingBlockLastReportTime = 0; pendingBlockUpdateTime = 0; }
 
             Data *read(ArcMist::Buffer *pInput, const char *pName);
             void write(Data *pData, ArcMist::Buffer *pOutput);

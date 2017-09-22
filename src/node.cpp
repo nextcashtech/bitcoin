@@ -153,11 +153,11 @@ namespace BitCoin
         {
             uint32_t time = getTime();
 
-            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 60)
+            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 30)
             {
-                if(mMessageInterpreter.pendingBlockUpdateTime == 0) // Haven't started receiving blocks 60 seconds after requesting
+                if(mMessageInterpreter.pendingBlockUpdateTime == 0) // Haven't started receiving blocks 30 seconds after requesting
                 {
-                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No block for 60 seconds");
+                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No block for 30 seconds");
                     Info::instance().addPeerFail(mAddress);
                     close();
                     return;
@@ -733,7 +733,7 @@ namespace BitCoin
                         //TODO Implement GET_DATA compact blocks (COMPACT_BLOCK)
                         break;
                     case Message::InventoryHash::UNKNOWN:
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Unknown inventory item type %d",
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Unknown inventory item type %02x",
                           (*item)->type);
                         break;
                     }
