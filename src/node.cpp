@@ -49,12 +49,10 @@ namespace BitCoin
 
         mChain = pChain;
 
-        ArcMist::Buffer name;
         if(mIsIncoming)
-            name.writeFormatted("Node i[%d]", mID);
+            mName.writeFormatted("Node i[%d]", mID);
         else
-            name.writeFormatted("Node o[%d]", mID);
-        mName = name.readString(name.length());
+            mName.writeFormatted("Node o[%d]", mID);
 
         // Verify connection
         mConnectionMutex.lock();
