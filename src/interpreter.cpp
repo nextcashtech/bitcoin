@@ -1062,13 +1062,13 @@ namespace BitCoin
 
             opCode = pScript.readByte();
 
-            if(opCode == 0x00)
+            if(opCode == OP_0) // or OP_FALSE
             {
                 if(!ifStackTrue())
                     continue;
 
                 // Push an empty value onto the stack (OP_0, OP_FALSE)
-                push()->writeByte(0);
+                push();
                 continue;
             }
 
