@@ -356,10 +356,10 @@ namespace BitCoin
             if(reduceOnly)
                 blocksToRequest = mChain.highestFullPendingHeight() - mChain.blockHeight() - pendingBlockCount;
             else
-                blocksToRequest = mInfo.pendingBlocksThreshold + 16 - pendingBlockCount - blocksRequestedCount;
+                blocksToRequest = mInfo.pendingBlocksThreshold + MAX_BLOCK_REQUEST - pendingBlockCount - blocksRequestedCount;
             for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end()&&blocksToRequest>0;++node)
-                if((*node)->requestBlocks(mChain, 16, reduceOnly))
-                    blocksToRequest -= 16;
+                if((*node)->requestBlocks(mChain, MAX_BLOCK_REQUEST, reduceOnly))
+                    blocksToRequest -= MAX_BLOCK_REQUEST;
         }
 
         mNodeLock.readUnlock();
@@ -616,6 +616,8 @@ namespace BitCoin
                 maxOutgoing = 8;
             else
                 maxOutgoing = daemon.mInfo.maxConnections / 2;
+            if(maxOutgoing > daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST)
+                maxOutgoing = daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST;
             maxIncoming = daemon.mInfo.maxConnections - maxOutgoing;
 
             if(getTime() - lastCleanTime > 10)
