@@ -35,6 +35,7 @@ namespace BitCoin
         mLastTargetTime = 0;
         mLastBlockTime = 0;
         mLastBlockFile = NULL;
+        mLastFullPendingOffset = 0;
     }
 
     Chain::~Chain()
@@ -435,75 +436,6 @@ namespace BitCoin
         return result;
     }
 
-    void Chain::markBlockRequested(const Hash &pHash, unsigned int pNodeID)
-    {
-        mPendingLock.readLock();
-        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
-            if((*pending)->block->hash == pHash)
-            {
-                (*pending)->requestedTime = getTime();
-                (*pending)->requestingNode = pNodeID;
-                break;
-            }
-        mPendingLock.readUnlock();
-    }
-
-    void Chain::markBlockNotRequested(const Hash &pHash)
-    {
-        mPendingLock.readLock();
-        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
-            if((*pending)->block->hash == pHash)
-            {
-                (*pending)->requestedTime = 0;
-                break;
-            }
-        mPendingLock.readUnlock();
-    }
-
-    void Chain::releaseBlocksForNode(unsigned int pNodeID)
-    {
-        mPendingLock.readLock();
-        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
-            if((*pending)->requestingNode == pNodeID)
-                (*pending)->requestedTime = 0;
-        mPendingLock.readUnlock();
-    }
-
-    unsigned int PendingData::timeout()
-    {
-        int tempPriority = priority;
-        unsigned int result = 360;
-
-        while(tempPriority > 0)
-        {
-            result /= 2;
-            tempPriority--;
-        }
-
-        return result;
-    }
-
-    void Chain::prioritizePending()
-    {
-        unsigned int fullCount = 0;
-        mPendingLock.readLock();
-        for(std::list<PendingData *>::reverse_iterator pending=mPending.rbegin();pending!=mPending.rend();++pending)
-        {
-            if((*pending)->isFull())
-                fullCount++;
-            else
-            {
-                if(fullCount > 1024)
-                    (*pending)->priority = 4;
-                else if(fullCount > 512)
-                    (*pending)->priority = 3;
-                else if(fullCount > 256)
-                    (*pending)->priority = 2;
-            }
-        }
-        mPendingLock.readUnlock();
-    }
-
     bool Chain::savePending()
     {
         mPendingLock.readLock();
@@ -568,6 +500,7 @@ namespace BitCoin
         mPending.clear();
         mPendingSize = 0;
         mPendingBlocks = 0;
+        unsigned int offset = 0;
 
         // Read pending blocks/headers from file
         while(file.remaining())
@@ -583,6 +516,9 @@ namespace BitCoin
             if(newBlock->transactionCount > 0)
                 mPendingBlocks++;
             mPending.push_back(new PendingData(newBlock));
+            if(mPending.back()->isFull())
+                mLastFullPendingOffset = offset;
+            ++offset;
         }
 
         if(success)
@@ -602,6 +538,7 @@ namespace BitCoin
             mPending.clear();
             mPendingSize = 0;
             mPendingBlocks = 0;
+            mLastFullPendingOffset = 0;
         }
 
         mPendingLock.writeUnlock();
@@ -610,66 +547,88 @@ namespace BitCoin
         return success;
     }
 
-    Hash Chain::nextBlockNeeded(bool pReduceOnly)
+    void Chain::updateBlockProgress(const Hash &pHash, unsigned int pNodeID, uint32_t pTime)
     {
-        Hash result;
-        uint64_t time = getTime();
-        bool fullFoundAfter = false;
         mPendingLock.readLock();
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
-        {
-            if((*pending)->isFull())
+            if((*pending)->block->hash == pHash)
             {
-                if(!result.isEmpty())
-                {
-                    fullFoundAfter = true;
-                    break;
-                }
-                else
-                    continue;
+                (*pending)->updateTime = pTime;
+                (*pending)->requestingNode = pNodeID;
+                break;
             }
+        mPendingLock.readUnlock();
+    }
 
-            if(time - (*pending)->requestedTime > (*pending)->timeout())
+    void Chain::releaseBlocksForNode(unsigned int pNodeID)
+    {
+        mPendingLock.readLock();
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+            if(!(*pending)->isFull() && (*pending)->requestingNode == pNodeID)
             {
-                if(pReduceOnly)
-                {
-                    if(result.isEmpty())
-                        result = (*pending)->block->hash;
-                }
-                else
-                {
-                    result = (*pending)->block->hash;
+                (*pending)->requestingNode = 0;
+                (*pending)->requestedTime = 0;
+            }
+        mPendingLock.readUnlock();
+    }
+
+    bool Chain::getBlocksNeeded(HashList &pHashes, unsigned int pCount, bool pReduceOnly, unsigned int pNodeID)
+    {
+        pHashes.clear();
+
+        mPendingLock.readLock();
+        unsigned int offset = 0;
+        for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+        {
+            // If "reduce only" don't request blocks unless there is a full pending block after them
+            if(pReduceOnly && offset >= mLastFullPendingOffset)
+                break;
+            ++offset;
+
+            if(!(*pending)->isFull() && (*pending)->requestingNode == 0)
+            {
+                pHashes.push_back(new Hash((*pending)->block->hash));
+                (*pending)->requestingNode = pNodeID;
+                (*pending)->requestedTime = getTime();
+
+                if(pHashes.size() >= pCount)
                     break;
-                }
             }
         }
         mPendingLock.readUnlock();
-        if(pReduceOnly && !fullFoundAfter)
-            // Don't return hashes that don't have full blocks after them because we are trying to reduce pending memory usage
-            result.clear();
-        return result;
+
+        return pHashes.size() > 0;
     }
 
     bool Chain::addPendingBlock(Block *pBlock)
     {
         bool success = false;
         bool found = false;
+        unsigned int offset = 0;
 
         mPendingLock.readLock();
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+        {
             if((*pending)->block->hash == pBlock->hash)
             {
                 found = true;
-                if(!(*pending)->isFull())
+                if((*pending)->isFull())
+                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
+                      "Block already received from [%d]: %s", (*pending)->requestingNode, pBlock->hash.hex().text());
+                else
                 {
                     mPendingSize -= (*pending)->block->size();
                     (*pending)->replace(pBlock);
                     mPendingSize += pBlock->size();
                     mPendingBlocks++;
+                    if(offset > mLastFullPendingOffset)
+                        mLastFullPendingOffset = offset;
                     success = true;
                 }
                 break;
             }
+            ++offset;
+        }
         mPendingLock.readUnlock();
 
         if(success)
@@ -694,6 +653,7 @@ namespace BitCoin
                 }
 
                 // Add to pending list
+                mLastFullPendingOffset = mPending.size();
                 mPending.push_back(new PendingData(pBlock));
                 mLastPendingHash = pBlock->hash;
                 mPendingSize += pBlock->size();
@@ -884,6 +844,8 @@ namespace BitCoin
                 mPending.erase(mPending.begin());
                 if(mPending.size() == 0)
                     mLastPendingHash.clear();
+                if(mLastFullPendingOffset > 0)
+                    --mLastFullPendingOffset;
 
                 mPendingLock.writeUnlock();
             }
@@ -911,6 +873,7 @@ namespace BitCoin
                     // delete *pending;
                 // mPending.clear();
                 // mLastPendingHash.clear();
+                // mLastFullPendingOffset = 0;
                 // mPendingSize = 0;
                 // mPendingBlocks = 0;
                 // mPendingLock.readUnlock();
@@ -1125,6 +1088,27 @@ namespace BitCoin
             blockFile = new BlockFile(fileID, blockFileName(fileID));
 
         bool success = blockFile->isValid() && blockFile->readBlock(pHash, pBlock, true);
+
+        if(blockFile != mLastBlockFile)
+            delete blockFile;
+        unlockBlockFile(fileID);
+        return success;
+    }
+
+    bool Chain::getHeader(const Hash &pHash, Block &pBlockHeader)
+    {
+        unsigned int fileID = blockFileID(pHash);
+        if(fileID == 0xffffffff)
+            return false; // hash not found
+        BlockFile *blockFile;
+
+        lockBlockFile(fileID);
+        if(fileID == mLastFileID && mLastBlockFile != NULL)
+            blockFile = mLastBlockFile;
+        else
+            blockFile = new BlockFile(fileID, blockFileName(fileID));
+
+        bool success = blockFile->isValid() && blockFile->readBlock(pHash, pBlockHeader, false);
 
         if(blockFile != mLastBlockFile)
             delete blockFile;

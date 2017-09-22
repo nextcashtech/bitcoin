@@ -68,13 +68,7 @@ namespace BitCoin
         ArcMist::Thread *mProcessThread;
 
         // Timers
-        uint32_t mLastNodeAdd;
-        uint32_t mLastRequestCheck;
-        uint32_t mLastHeaderRequest;
-        uint32_t mLastInfoSave;
-        uint32_t mLastTransactionOutputsSave;
-        uint32_t mLastClean;
-        uint32_t mStatReport;
+        uint32_t mLastHeaderRequestTime;
 
         // Signals
         void (*previousSigTermChildHandler)(int);

@@ -200,7 +200,7 @@ namespace BitCoin
             // Check if payload is complete
             if(payloadSize > pInput->remaining())
             {
-                if(strcmp(command, "block") == 0 && pInput->remaining() >= 80)
+                if(strcmp(command, "block") == 0 && pInput->remaining() > 80)
                 {
                     Block block;
                     block.read(pInput, false, false, true);
@@ -209,17 +209,26 @@ namespace BitCoin
                     {
                         // Starting new block
                         pendingBlockStartTime = getTime();
-                        pendingBlockLastReportTime = getTime();
+                        pendingBlockLastReportTime = pendingBlockStartTime;
                         pendingBlockHash = block.hash;
+                        lastPendingBlockSize = pInput->remaining();
+                        pendingBlockUpdateTime = pendingBlockStartTime;
                     }
                     else if(pendingBlockHash == block.hash)
                     {
+                        if(pInput->remaining() != lastPendingBlockSize)
+                        {
+                            lastPendingBlockSize = pInput->remaining();
+                            pendingBlockUpdateTime = getTime();
+                        }
+
                         // Continuing block
-                        if(getTime() - pendingBlockLastReportTime > 60)
+                        if(getTime() - pendingBlockLastReportTime >= 30)
                         {
                             pendingBlockLastReportTime = getTime();
                             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, pName,
-                              "Block in progress %d / %d : %s", pInput->remaining(), payloadSize, block.hash.hex().text());
+                              "Block downloading %d / %d (%d secs) : %s", pInput->remaining(), payloadSize,
+                              pendingBlockUpdateTime - pendingBlockStartTime, block.hash.hex().text());
                         }
                     }
                     else
@@ -230,8 +239,10 @@ namespace BitCoin
 
                         // Starting new block
                         pendingBlockStartTime = getTime();
-                        pendingBlockLastReportTime = getTime();
+                        pendingBlockLastReportTime = pendingBlockStartTime;
                         pendingBlockHash = block.hash;
+                        lastPendingBlockSize = pInput->remaining();
+                        pendingBlockUpdateTime = pendingBlockStartTime;
                     }
                 }
                 // else
@@ -313,6 +324,7 @@ namespace BitCoin
                 case BLOCK:
                     result = new BlockData();
                     pendingBlockStartTime = 0;
+                    pendingBlockUpdateTime = getTime();
                     pendingBlockHash.clear();
                     break;
                 case GET_DATA:

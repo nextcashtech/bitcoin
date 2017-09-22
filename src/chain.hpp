@@ -80,7 +80,7 @@ namespace BitCoin
         {
             block = pBlock;
             requestedTime = 0;
-            priority = 1;
+            updateTime = 0;
             requestingNode = 0;
         }
         ~PendingData()
@@ -99,11 +99,9 @@ namespace BitCoin
         // Return true if this is a full block and not just a header
         bool isFull() { return block->transactionCount > 0; }
 
-        unsigned int timeout();
-
         Block *block;
-        uint64_t requestedTime;
-        unsigned int priority;
+        uint32_t requestedTime;
+        uint32_t updateTime;
         unsigned int requestingNode;
 
     private:
@@ -122,6 +120,7 @@ namespace BitCoin
         const Hash &lastBlockHash() const { return mLastBlockHash; }
         unsigned int pendingBlockHeight() const { return mNextBlockHeight - 1 + mPending.size(); }
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
+        unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
 
         // Chain is up to date with most chains
         bool isInSync() { return false; }
@@ -137,19 +136,16 @@ namespace BitCoin
         unsigned int pendingBlockCount();
         // Bytes used by pending blocks
         unsigned int pendingSize();
-        // Update priorities on pending data
-        void prioritizePending();
         // Add block header to queue to be requested and downloaded
         bool addPendingHeader(Block *pBlock);
         // Save pending data to the file system
         bool savePending();
         // Load pending data from the file system
         bool loadPending();
-        // Returns the hash of the next block needed
-        Hash nextBlockNeeded(bool pReduceOnly);
-        // Mark a block as requested
-        void markBlockRequested(const Hash &pHash, unsigned int pNodeID);
-        void markBlockNotRequested(const Hash &pHash);
+        // Builds a list of blocks that need to be requested and marks them as requested by the node specified
+        bool getBlocksNeeded(HashList &pHashes, unsigned int pCount, bool pReduceOnly, unsigned int pNodeID);
+        // Mark that download progress has increased for this block
+        void updateBlockProgress(const Hash &pHash, unsigned int pNodeID, uint32_t pTime);
         // Release all blocks requested by a specified node so they will be requested again
         void releaseBlocksForNode(unsigned int pNodeID);
 
@@ -171,6 +167,7 @@ namespace BitCoin
         // Get the block or height for a specific hash
         unsigned int height(const Hash &pHash); // Returns 0xffffffff when hash is not found
         bool getBlock(const Hash &pHash, Block &pBlock);
+        bool getHeader(const Hash &pHash, Block &pBlockHeader);
 
         // Update the unspent transaction pool for any blocks it is missing
         // Note : Doesn't use block version flags
@@ -200,7 +197,7 @@ namespace BitCoin
         ArcMist::ReadersLock mPendingLock;
         std::list<PendingData *> mPending;
         Hash mLastPendingHash;
-        unsigned int mPendingSize, mPendingBlocks;
+        unsigned int mPendingSize, mPendingBlocks, mLastFullPendingOffset;
 
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;

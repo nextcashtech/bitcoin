@@ -56,7 +56,7 @@ namespace BitCoin
 
         void requestStop();
 
-        bool isIncoming() { return mIncoming; }
+        bool isIncoming() const { return mIsIncoming; }
 
         // Time that the node connected
         uint32_t connectedTime() { return mConnectedTime; }
@@ -65,26 +65,21 @@ namespace BitCoin
 
         unsigned int blockHeight() { if(mVersionData == NULL) return 0; else return mVersionData->startBlockHeight; }
 
-        // True if the node is not responding to block hash/header/full requests
-        bool notResponding() const;
+        // Check if node should be closed
+        void check(Chain &pChain);
 
+        bool waitingForRequests() { return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty(); }
         bool requestHeaders(Chain &pChain, const Hash &pStartingHash);
-        bool waitingForHeaders() { return !mHeaderRequested.isEmpty() && getTime() - mLastHeaderRequest < 300; }
-
         bool requestBlocks(Chain &pChain, unsigned int pCount, bool pReduceOnly);
-        bool waitingForBlocks() { return mBlocksRequested.size() > 0; }
+        unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
+        void releaseBlockRequests();
 
         // Send notification of a new block on the chain
-        bool announceBlock(const Hash &pHash);
+        bool announceBlock(const Hash &pHash, Chain &pChain);
 
         // Send notification of a new transaction in the mempool
         //TODO Make this send periodically with a list. Filter list to remove transaction inventory received from node
         bool announceTransaction(const Hash &pHash);
-
-        uint32_t lastBlockRequestTime() { return mLastBlockRequest; }
-        uint32_t lastBlockReceiveTime() { return mLastBlockReceiveTime; }
-        unsigned int blocksRequestedCount() const { return mBlocksRequestedCount; }
-        unsigned int blocksReceivedCount() const { return mBlocksReceivedCount; }
 
         const IPAddress &address() { return mAddress; }
 
@@ -114,7 +109,7 @@ namespace BitCoin
         ArcMist::Buffer mReceiveBuffer;
         Statistics mStatistics;
         bool mStop, mStopped;
-        bool mIncoming, mIsSeed;
+        bool mIsIncoming, mIsSeed;
         bool mSendBlocksCompact;
 
         Message::VersionData *mVersionData;
@@ -125,20 +120,20 @@ namespace BitCoin
         uint64_t mMinimumFeeRate;
 
         Hash mHeaderRequested;
-        uint32_t mLastHeaderRequest;
+        uint32_t mHeaderRequestTime;
 
         ArcMist::Mutex mBlockRequestMutex;
         HashList mBlocksRequested;
-        uint32_t mLastBlockRequest;
-        uint32_t mLastBlockReceiveTime;
-        unsigned int mBlocksRequestedCount;
-        unsigned int mBlocksReceivedCount;
+        uint32_t mBlockRequestTime;
 
         bool mConnected;
         uint32_t mConnectedTime;
         unsigned int mMessagesReceived;
 
         static unsigned int mNextID;
+
+        Node(const Node &pCopy);
+        const Node &operator = (const Node &pRight);
 
     };
 }

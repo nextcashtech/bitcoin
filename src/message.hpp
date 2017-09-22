@@ -113,7 +113,8 @@ namespace BitCoin
             void write(Data *pData, ArcMist::Buffer *pOutput);
 
             Hash pendingBlockHash;
-            uint32_t pendingBlockStartTime, pendingBlockLastReportTime;
+            uint32_t pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
+            unsigned int lastPendingBlockSize;
 
         };
 
@@ -133,15 +134,15 @@ namespace BitCoin
             uint64_t services;
             int64_t time;
             uint64_t receivingServices;
-            char receivingIPv6[16];
+            uint8_t receivingIPv6[16];
             uint16_t receivingPort;
             uint64_t transmittingServices; // Same as services
-            char transmittingIPv6[16];
+            uint8_t transmittingIPv6[16];
             uint16_t transmittingPort;
             uint64_t nonce;
             ArcMist::String userAgent;
             int32_t startBlockHeight;
-            uint8_t relay;
+            uint8_t relay; // Announce new transactions
         };
 
         class PingData : public Data
