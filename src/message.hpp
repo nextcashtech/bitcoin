@@ -30,15 +30,25 @@ namespace BitCoin
             UNKNOWN,
 
             // Control messages
-            VERSION, VERACK, PING, PONG, REJECT, GET_ADDRESSES, ADDRESSES, ALERT,
-            FEE_FILTER, FILTER_ADD, FILTER_CLEAR, FILTER_LOAD, SEND_HEADERS,
+            VERSION, VERACK, PING, PONG, GET_ADDRESSES, ADDRESSES, ALERT,
+            FEE_FILTER, SEND_HEADERS,
 
             // Data messages
-            GET_BLOCKS, BLOCK, GET_DATA, GET_HEADERS, HEADERS, INVENTORY, MEM_POOL,
-            MERKLE_BLOCK, NOT_FOUND, TRANSACTION,
+            GET_BLOCKS, BLOCK, GET_DATA, GET_HEADERS, HEADERS, INVENTORY,
+            MERKLE_BLOCK, TRANSACTION,
 
-            // Version >= 70014 BIP-0152
-            SEND_COMPACT, COMPACT_BLOCK, GET_BLOCK_TRANSACTIONS, BLOCK_TRANSACTIONS
+            // Version >= 60002
+            MEM_POOL, // BIP-0035 Respond with inventory of all transactions in mempool
+
+            // Version >= 70001
+            FILTER_ADD, FILTER_CLEAR, FILTER_LOAD, //BIP-0037
+            NOT_FOUND,
+
+            // Version >= 70002
+            REJECT, // BIP-0061
+
+            // Version >= 70014
+            SEND_COMPACT, COMPACT_BLOCK, GET_BLOCK_TRANSACTIONS, BLOCK_TRANSACTIONS // BIP-0152
 
         };
 
@@ -90,7 +100,7 @@ namespace BitCoin
             Data(Type pType) { type = pType; }
             virtual ~Data() {}
             virtual void write(ArcMist::OutputStream *pStream) {}
-            virtual bool read(ArcMist::InputStream *pStream, unsigned int pSize)
+            virtual bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
             {
                 if(pStream->remaining() < pSize)
                     return false;
@@ -107,10 +117,12 @@ namespace BitCoin
         {
         public:
 
-            Interpreter() { pendingBlockStartTime = 0; pendingBlockLastReportTime = 0; pendingBlockUpdateTime = 0; }
+            Interpreter() { version = 0; pendingBlockStartTime = 0; pendingBlockLastReportTime = 0; pendingBlockUpdateTime = 0; }
 
             Data *read(ArcMist::Buffer *pInput, const char *pName);
             void write(Data *pData, ArcMist::Buffer *pOutput);
+
+            int32_t version;
 
             Hash pendingBlockHash;
             uint32_t pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
@@ -122,13 +134,16 @@ namespace BitCoin
         {
         public:
 
+            static const unsigned int FULL_NODE_BIT = 0x01;
+            static const unsigned int FILTER_NODE_BIT = 0x02;
+
             VersionData() : Data(VERSION) { }
             VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort,
                         const uint8_t *pTransmittingIP, uint16_t pTransmittingPort,
                         bool pFullNode, uint32_t pStartBlockHeight, bool pRelay);
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             int32_t version;
             uint64_t services;
@@ -152,7 +167,7 @@ namespace BitCoin
             PingData() : Data(PING) { nonce = ArcMist::Math::randomLong(); }
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             uint64_t nonce;
         };
@@ -165,11 +180,12 @@ namespace BitCoin
             PongData(uint64_t pNonce) : Data(PONG) { nonce = pNonce; }
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             uint64_t nonce;
         };
 
+        // BIP-0061
         class RejectData : public Data
         {
         public:
@@ -198,7 +214,7 @@ namespace BitCoin
             }
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             ArcMist::String command;
             uint8_t code;
@@ -213,7 +229,7 @@ namespace BitCoin
             AddressesData() : Data(ADDRESSES) { }
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             std::vector<Peer> addresses;
         };
@@ -226,7 +242,7 @@ namespace BitCoin
             FeeFilterData() : Data(FEE_FILTER) { minimumFeeRate = 0; }
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             uint64_t minimumFeeRate; // Satoshis per KiB
         };
@@ -238,7 +254,7 @@ namespace BitCoin
             FilterAddData() : Data(FILTER_ADD) { }
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             //TODO Filter Add data
         };
@@ -250,7 +266,7 @@ namespace BitCoin
             FilterLoadData() : Data(FILTER_LOAD) { }
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             //TODO Filter Load data
         };
@@ -263,7 +279,7 @@ namespace BitCoin
             GetBlocksData() : Data(GET_BLOCKS), stopHeaderHash(32) { version = PROTOCOL_VERSION; }
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             uint32_t version;
             std::vector<Hash> blockHeaderHashes; // In reverse order (Highest block first)
@@ -284,7 +300,7 @@ namespace BitCoin
                 if(block != NULL)
                     block->write(pStream, true, true);
             }
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize)
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
             {
                 if(block == NULL)
                     block = new Block();
@@ -302,7 +318,8 @@ namespace BitCoin
             GetDataData() : Data(GET_DATA) { }
 
             void write(ArcMist::OutputStream *pStream) { inventory.write(pStream); }
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize) { return inventory.read(pStream, pSize); }
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+              { return inventory.read(pStream, pSize); }
 
             Inventory inventory;
 
@@ -316,7 +333,7 @@ namespace BitCoin
             GetHeadersData() : Data(GET_HEADERS), stopHeaderHash(32) { version = PROTOCOL_VERSION; }
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             uint32_t version;
 
@@ -337,7 +354,7 @@ namespace BitCoin
             HeadersData() : Data(HEADERS) {}
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             BlockList headers;
 
@@ -350,7 +367,8 @@ namespace BitCoin
             InventoryData() : Data(INVENTORY) { }
 
             void write(ArcMist::OutputStream *pStream) { inventory.write(pStream); }
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize) { return inventory.read(pStream, pSize); }
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+              { return inventory.read(pStream, pSize); }
 
             Inventory inventory;
 
@@ -364,7 +382,7 @@ namespace BitCoin
             MerkleBlockData() : Data(MERKLE_BLOCK) { transactionCount = 0; }
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             Block block;
             uint32_t transactionCount;
@@ -380,7 +398,8 @@ namespace BitCoin
             TransactionData() : Data(TRANSACTION) { }
 
             void write(ArcMist::OutputStream *pStream) { transaction.write(pStream); }
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize) { return transaction.read(pStream); }
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+              { return transaction.read(pStream); }
 
             Transaction transaction;
 
@@ -393,7 +412,8 @@ namespace BitCoin
             NotFoundData() : Data(NOT_FOUND) { }
 
             void write(ArcMist::OutputStream *pStream) { inventory.write(pStream); }
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize) { return inventory.read(pStream, pSize); }
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+              { return inventory.read(pStream, pSize); }
 
             Inventory inventory;
 
@@ -410,7 +430,7 @@ namespace BitCoin
                 pStream->writeByte(sendCompact);
                 pStream->writeUnsignedLong(encoding);
             }
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize)
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
             {
                 if(pSize != 9)
                     return false;
@@ -458,7 +478,7 @@ namespace BitCoin
             bool updateShortIDs();
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             Block *block;
             uint64_t nonce;
@@ -476,7 +496,7 @@ namespace BitCoin
             GetBlockTransactionsData() : Data(GET_BLOCK_TRANSACTIONS) {}
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
         };
 
@@ -487,7 +507,7 @@ namespace BitCoin
             BlockTransactionsData() : Data(BLOCK_TRANSACTIONS) {}
 
             void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream, unsigned int pSize);
+            bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
         };
 

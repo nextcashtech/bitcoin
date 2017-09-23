@@ -41,10 +41,11 @@ namespace BitCoin
         void setInputOffset(unsigned int pOffset) { mInputOffset = pOffset; }
 
         // Process script
-        bool process(ArcMist::Buffer &pScript, bool pIsSignatureScript, bool pECDSA_DER_SigsOnly = false);
+        bool process(ArcMist::Buffer &pScript, bool pIsSignatureScript, uint32_t pSequence,
+          int32_t pBlockVersion, const SoftForks &pSoftForks);
 
         // Parse and check a signature
-        bool checkSignature(PublicKey &pPublicKey, ArcMist::Buffer *pSignature, bool pECDSA_DER_SigsOnly,
+        bool checkSignature(PublicKey &pPublicKey, ArcMist::Buffer *pSignature, bool pStrictECDSA_DER_Sigs,
           ArcMist::Buffer &pSubScript, unsigned int pSignatureStartOffset);
 
         // No issues processing script
@@ -105,15 +106,7 @@ namespace BitCoin
         // For debugging
         void printStack(const char *pText);
 
-        int64_t readFirstStackNumber()
-        {
-            if(!checkStackSize(1))
-                return 0;
-
-            int64_t value = 0;
-            arithmeticRead(mStack.front(), value);
-            return value;
-        }
+        int64_t readFirstPushOpValue(ArcMist::Buffer &pScript);
 
         enum ScriptType
         {

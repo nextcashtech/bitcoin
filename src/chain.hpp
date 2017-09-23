@@ -11,6 +11,7 @@
 #include "arcmist/base/string.hpp"
 #include "arcmist/base/mutex.hpp"
 #include "base.hpp"
+#include "soft_forks.hpp"
 #include "block.hpp"
 #include "transaction_output.hpp"
 
@@ -21,8 +22,6 @@
 
 namespace BitCoin
 {
-    class BlockList;
-
     class BlockInfo
     {
     public:
@@ -121,6 +120,9 @@ namespace BitCoin
         unsigned int pendingBlockHeight() const { return mNextBlockHeight - 1 + mPending.size(); }
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
+
+        // Soft fork information
+        const SoftForks &softForks() const { return mSoftForks; }
 
         // Chain is up to date with most chains
         bool isInSync() { return false; }
@@ -240,17 +242,15 @@ namespace BitCoin
         bool saveTargetBits();
         bool loadTargetBits();
 
-        // Last 2016 block's versions
-        std::list<uint32_t> mBlockVersions;
-        void addBlockVersion(uint32_t pVersion)
+        // Last BLOCK_STATS_SIZE block's statistics
+        SoftForks mSoftForks;
+        std::list<BlockStats> mBlockStats;
+        void addBlockStats(uint32_t pVersion, uint32_t pTime)
         {
-            mBlockVersions.push_back(pVersion);
-            if(mBlockVersions.size() > 2016)
-                mBlockVersions.erase(mBlockVersions.begin());
+            mBlockStats.push_back(BlockStats(pVersion, pTime));
+            if(mBlockStats.size() > RETARGET_PERIOD)
+                mBlockStats.erase(mBlockStats.begin());
         }
-        uint32_t mBlockVersionFlags;
-        void updateBlockVersionFlags();
-        void updateTimeFlags();
 
         static Chain *sInstance;
 

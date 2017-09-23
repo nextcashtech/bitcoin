@@ -12,6 +12,7 @@
 #include "arcmist/io/stream.hpp"
 #include "arcmist/io/file_stream.hpp"
 #include "base.hpp"
+#include "soft_forks.hpp"
 #include "transaction.hpp"
 #include "transaction_output.hpp"
 
@@ -59,7 +60,7 @@ namespace BitCoin
 
         void calculateHash();
         void calculateMerkleHash(Hash &pMerkleHash);
-        bool process(TransactionOutputPool &pPool, uint64_t pBlockHeight, int32_t pBlockVersionFlags);
+        bool process(TransactionOutputPool &pPool, uint64_t pBlockHeight, const SoftForks &pSoftForks);
 
         // Amount of Satoshis generated for mining a block at this height
         static uint64_t coinBaseAmount(uint64_t pBlockHeight);
@@ -137,7 +138,9 @@ namespace BitCoin
 
         // Read list of block hashes from this file. If pStartingHash is empty then start with first block
         bool readBlockHashes(HashList &pHashes);
-        bool readVersions(std::list<uint32_t> &pVersions);
+
+        // Append block stats from this file to the list specified
+        bool readStats(std::list<BlockStats> &pStats);
 
         // Read list of block headers from this file. If pStartingHash is empty then start with first block
         bool readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash,

@@ -258,14 +258,14 @@ namespace BitCoin
         pStream->writeByte(pHashType);
     }
 
-    bool Signature::read(ArcMist::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly)
+    bool Signature::read(ArcMist::InputStream *pStream, unsigned int pLength, bool pStrictECDSA_DER_Sigs)
     {
         uint8_t input[pLength+2];
         pStream->read(input, pLength);
 
         if(pLength == 64)
         {
-            if(pECDSA_DER_SigsOnly)
+            if(pStrictECDSA_DER_Sigs)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                   "BIP-0066 requires ECDSA DER signatures only. Signature length %d", pLength);
@@ -292,161 +292,165 @@ namespace BitCoin
 #endif
         // Hack badly formatted DER signatures
         unsigned int totalLength = pLength;
-        uint8_t offset = 0;
-        uint8_t subLength;
-        if(input[offset++] != 0x30) // Compound header byte
-        {
-            ArcMist::String hex;
-            hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Invalid compound header byte in signature (%d bytes) : %s", pLength, hex.text());
-            return false;
-        }
 
-        // Full length
-        unsigned int fullLengthOffset = offset;
-        if(input[offset] != totalLength - 2)
+        if(!pStrictECDSA_DER_Sigs)
         {
-            if(input[offset] < totalLength - 2)
-            {
-                ArcMist::String hex;
-                hex.writeHex(input, pLength);
-                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-                  // "Adjusting parse length %d to match total length in signature %d + 2 (header byte and length byte) : %s",
-                  // totalLength, input[offset], hex.text());
-                totalLength = input[offset] + 2;
-            }
-            else
+            uint8_t offset = 0;
+            uint8_t subLength;
+            if(input[offset++] != 0x30) // Compound header byte
             {
                 ArcMist::String hex;
                 hex.writeHex(input, pLength);
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "Invalid total length byte in signature (%d bytes) : %s", pLength, hex.text());
+                  "Invalid compound header byte in signature (%d bytes) : %s", pLength, hex.text());
                 return false;
             }
+
+            // Full length
+            unsigned int fullLengthOffset = offset;
+            if(input[offset] != totalLength - 2)
+            {
+                if(input[offset] < totalLength - 2)
+                {
+                    ArcMist::String hex;
+                    hex.writeHex(input, pLength);
+                    // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                      // "Adjusting parse length %d to match total length in signature %d + 2 (header byte and length byte) : %s",
+                      // totalLength, input[offset], hex.text());
+                    totalLength = input[offset] + 2;
+                }
+                else
+                {
+                    ArcMist::String hex;
+                    hex.writeHex(input, pLength);
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                      "Invalid total length byte in signature (%d bytes) : %s", pLength, hex.text());
+                    return false;
+                }
+            }
+
+            ++offset;
+
+            // Integer header byte
+            if(input[offset++] != 0x02)
+            {
+                ArcMist::String hex;
+                hex.writeHex(input, pLength);
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  "Invalid R integer header byte in signature (%d bytes) : %s", pLength, hex.text());
+                return false;
+            }
+
+            // R length
+            subLength = input[offset++];
+            if(subLength + offset > totalLength)
+            {
+                ArcMist::String hex;
+                hex.writeHex(input, pLength);
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  "R integer length byte too high in signature (%d bytes) : %s", pLength, hex.text());
+                return false;
+            }
+
+            while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
+            {
+                ArcMist::String hex;
+                hex.writeHex(input, pLength);
+                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                  // "Removing extra leading zero byte in R value from signature (%d bytes) : %s", pLength, hex.text());
+
+                // Adjust lengths
+                input[offset-1]--;
+                input[fullLengthOffset]--;
+
+                // Extra padding. Remove this
+                std::memmove(input + offset, input + offset + 1, totalLength - offset - 1);
+
+                --totalLength;
+                --subLength;
+            }
+
+            if(input[offset] & 0x80)
+            {
+                ArcMist::String hex;
+                hex.writeHex(input, pLength);
+                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                  // "Adding required leading zero byte in R value to signature (%d bytes) : %s", pLength, hex.text());
+
+                // Adjust lengths
+                input[offset-1]++;
+                input[fullLengthOffset]++;
+
+                // Add a zero byte
+                std::memmove(input + offset + 1, input + offset, totalLength - offset);
+                input[offset] = 0x00;
+
+                ++totalLength;
+                ++subLength;
+            }
+
+            offset += subLength;
+
+            // Integer header byte
+            if(input[offset++] != 0x02)
+            {
+                ArcMist::String hex;
+                hex.writeHex(input, pLength);
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  "Invalid S integer header byte in signature (%d bytes) : %s", pLength, hex.text());
+                return false;
+            }
+
+            // S length
+            subLength = input[offset++];
+            if(subLength + offset > totalLength)
+            {
+                ArcMist::String hex;
+                hex.writeHex(input, pLength);
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  "S integer length byte too high in signature (%d bytes) : %s", pLength, hex.text());
+                return false;
+            }
+
+            while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
+            {
+                ArcMist::String hex;
+                hex.writeHex(input, pLength);
+                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                  // "Removing extra leading zero byte in S value to signature (%d bytes) : %s", pLength, hex.text());
+
+                // Adjust lengths
+                input[offset-1]--;
+                input[fullLengthOffset]--;
+
+                // Extra padding. Remove this
+                std::memmove(input + offset, input + offset + 1, totalLength - offset - 1);
+
+                --totalLength;
+                --subLength;
+            }
+
+            if(input[offset] & 0x80)
+            {
+                ArcMist::String hex;
+                hex.writeHex(input, pLength);
+                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                  // "Adding required leading zero byte in S value from signature (%d bytes) : %s", pLength, hex.text());
+
+                // Adjust lengths
+                input[offset-1]++;
+                input[fullLengthOffset]++;
+
+                // Add a zero byte
+                std::memmove(input + offset + 1, input + offset, totalLength - offset);
+                input[offset] = 0x00;
+
+                ++totalLength;
+                ++subLength;
+            }
+
+            offset += subLength;
         }
-
-        ++offset;
-
-        // Integer header byte
-        if(input[offset++] != 0x02)
-        {
-            ArcMist::String hex;
-            hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Invalid R integer header byte in signature (%d bytes) : %s", pLength, hex.text());
-            return false;
-        }
-
-        // R length
-        subLength = input[offset++];
-        if(subLength + offset > totalLength)
-        {
-            ArcMist::String hex;
-            hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "R integer length byte too high in signature (%d bytes) : %s", pLength, hex.text());
-            return false;
-        }
-
-        while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
-        {
-            ArcMist::String hex;
-            hex.writeHex(input, pLength);
-            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-              // "Removing extra leading zero byte in R value from signature (%d bytes) : %s", pLength, hex.text());
-
-            // Adjust lengths
-            input[offset-1]--;
-            input[fullLengthOffset]--;
-
-            // Extra padding. Remove this
-            std::memmove(input + offset, input + offset + 1, totalLength - offset - 1);
-
-            --totalLength;
-            --subLength;
-        }
-
-        if(input[offset] & 0x80)
-        {
-            ArcMist::String hex;
-            hex.writeHex(input, pLength);
-            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-              // "Adding required leading zero byte in R value to signature (%d bytes) : %s", pLength, hex.text());
-
-            // Adjust lengths
-            input[offset-1]++;
-            input[fullLengthOffset]++;
-
-            // Add a zero byte
-            std::memmove(input + offset + 1, input + offset, totalLength - offset);
-            input[offset] = 0x00;
-
-            ++totalLength;
-            ++subLength;
-        }
-
-        offset += subLength;
-
-        // Integer header byte
-        if(input[offset++] != 0x02)
-        {
-            ArcMist::String hex;
-            hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Invalid S integer header byte in signature (%d bytes) : %s", pLength, hex.text());
-            return false;
-        }
-
-        // S length
-        subLength = input[offset++];
-        if(subLength + offset > totalLength)
-        {
-            ArcMist::String hex;
-            hex.writeHex(input, pLength);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "S integer length byte too high in signature (%d bytes) : %s", pLength, hex.text());
-            return false;
-        }
-
-        while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
-        {
-            ArcMist::String hex;
-            hex.writeHex(input, pLength);
-            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-              // "Removing extra leading zero byte in S value to signature (%d bytes) : %s", pLength, hex.text());
-
-            // Adjust lengths
-            input[offset-1]--;
-            input[fullLengthOffset]--;
-
-            // Extra padding. Remove this
-            std::memmove(input + offset, input + offset + 1, totalLength - offset - 1);
-
-            --totalLength;
-            --subLength;
-        }
-
-        if(input[offset] & 0x80)
-        {
-            ArcMist::String hex;
-            hex.writeHex(input, pLength);
-            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-              // "Adding required leading zero byte in S value from signature (%d bytes) : %s", pLength, hex.text());
-
-            // Adjust lengths
-            input[offset-1]++;
-            input[fullLengthOffset]++;
-
-            // Add a zero byte
-            std::memmove(input + offset + 1, input + offset, totalLength - offset);
-            input[offset] = 0x00;
-
-            ++totalLength;
-            ++subLength;
-        }
-
-        offset += subLength;
 
         if(secp256k1_ecdsa_signature_parse_der(mContext, (secp256k1_ecdsa_signature*)mData, input, totalLength))
             return true;

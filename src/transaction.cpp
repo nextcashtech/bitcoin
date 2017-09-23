@@ -153,11 +153,24 @@ namespace BitCoin
     }
 
     bool Transaction::process(TransactionOutputPool &pPool, uint64_t pBlockHeight, bool pCoinBase,
-      int32_t pBlockVersion, int32_t pBlockVersionFlags)
+      int32_t pBlockVersion, const SoftForks &pSoftForks)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Transaction Process");
+
 #endif
+        if(inputs.size() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
+            return false;
+        }
+
+        if(outputs.size() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
+            return false;
+        }
+
         ScriptInterpreter interpreter;
         TransactionOutput *transactionOutput = NULL;
 
@@ -177,26 +190,19 @@ namespace BitCoin
                 }
 
                 // BIP-0034
-                if((pBlockVersion == 2 && pBlockVersionFlags & BLOCK_VERSION_2_ACTIVE) || pBlockVersion > 2)
+                if(pBlockVersion >= 2 && pSoftForks.activeVersion() >= 2)
                 {
                     interpreter.clear();
                     interpreter.setTransaction(this);
                     interpreter.setInputOffset(index);
 
-                    // Process signature script
+                    // Read block height
                     (*input)->script.setReadOffset(0);
-                    if(!interpreter.process((*input)->script, true, pBlockVersion >= 3))
-                    {
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Input %d signature script failed", index+1);
-                        return false;
-                    }
-
-                    uint64_t blockHeight = interpreter.readFirstStackNumber();
-                    if(blockHeight != pBlockHeight)
+                    int64_t blockHeight = interpreter.readFirstPushOpValue((*input)->script);
+                    if(blockHeight < 0 || (uint64_t)blockHeight != pBlockHeight)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Version 2 block with non matching block height after 224,412 : actual %d, specified %d",
+                          "Version 2 block with non matching block height : actual %d, specified %d",
                           pBlockHeight, blockHeight);
                         return false;
                     }
@@ -225,7 +231,7 @@ namespace BitCoin
                 //(*input)->script.setReadOffset(0);
                 //ScriptInterpreter::printScript((*input)->script, ArcMist::Log::DEBUG);
                 (*input)->script.setReadOffset(0);
-                if(!interpreter.process((*input)->script, true, pBlockVersion >= 3))
+                if(!interpreter.process((*input)->script, true, (*input)->sequence, pBlockVersion, pSoftForks))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d signature script failed : ", index+1);
@@ -240,7 +246,7 @@ namespace BitCoin
                     //transactionOutput->script.setReadOffset(0);
                     //ScriptInterpreter::printScript(transactionOutput->script, ArcMist::Log::DEBUG);
                     transactionOutput->script.setReadOffset(0);
-                    if(!interpreter.process(transactionOutput->script, false, pBlockVersion >= 3))
+                    if(!interpreter.process(transactionOutput->script, false, (*input)->sequence, pBlockVersion, pSoftForks))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d unspent transaction output script failed : ", index+1);
@@ -807,12 +813,13 @@ namespace BitCoin
 
         // Process the script
         ScriptInterpreter interpreter;
+        SoftForks softForks;
 
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
         interpreter.setInputOffset(0);
-        if(!interpreter.process(transaction.inputs[0]->script, true))
+        if(!interpreter.process(transaction.inputs[0]->script, true, transaction.inputs[0]->sequence, 4, softForks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -820,7 +827,7 @@ namespace BitCoin
         else
         {
             output->script.setReadOffset(0);
-            if(!interpreter.process(output->script, false))
+            if(!interpreter.process(output->script, false, transaction.inputs[0]->sequence, 4, softForks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
@@ -852,7 +859,7 @@ namespace BitCoin
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
-        if(!interpreter.process(transaction.inputs[0]->script, true))
+        if(!interpreter.process(transaction.inputs[0]->script, true, transaction.inputs[0]->sequence, 4, softForks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -860,7 +867,7 @@ namespace BitCoin
         else
         {
             output->script.setReadOffset(0);
-            if(!interpreter.process(output->script, false))
+            if(!interpreter.process(output->script, false, transaction.inputs[0]->sequence, 4, softForks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
@@ -892,7 +899,7 @@ namespace BitCoin
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
-        if(!interpreter.process(transaction.inputs[0]->script, true))
+        if(!interpreter.process(transaction.inputs[0]->script, true, transaction.inputs[0]->sequence, 4, softForks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -900,7 +907,7 @@ namespace BitCoin
         else
         {
             output->script.setReadOffset(0);
-            if(!interpreter.process(output->script, false))
+            if(!interpreter.process(output->script, false, transaction.inputs[0]->sequence, 4, softForks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
@@ -948,7 +955,7 @@ namespace BitCoin
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
-        if(!interpreter.process(transaction.inputs[0]->script, true))
+        if(!interpreter.process(transaction.inputs[0]->script, true, transaction.inputs[0]->sequence, 4, softForks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -956,7 +963,7 @@ namespace BitCoin
         else
         {
             output->script.setReadOffset(0);
-            if(!interpreter.process(output->script, false))
+            if(!interpreter.process(output->script, false, transaction.inputs[0]->sequence, 4, softForks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;

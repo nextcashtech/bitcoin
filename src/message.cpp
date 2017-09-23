@@ -371,7 +371,7 @@ namespace BitCoin
                     break;
             }
 
-            if(result != NULL && !result->read(pInput, payloadSize))
+            if(result != NULL && !result->read(pInput, payloadSize, version))
             {
                 delete result;
                 result = NULL;
@@ -483,10 +483,12 @@ namespace BitCoin
                                  bool pFullNode, uint32_t pStartBlockHeight, bool pRelay) : Data(VERSION)
         {
             version = PROTOCOL_VERSION;
+            services = 0x00;
+
             if(pFullNode)
-                services = 0x01;
-            else
-                services = 0x00;
+                services |= FULL_NODE_BIT;
+
+            //services |= FILTER_NODE_BIT; //TODO BIP-0111 Add 0x02 (1 << 2) bit to services to support filter messages
 
             time = getTime();
 
@@ -560,7 +562,7 @@ namespace BitCoin
             pStream->writeByte(relay);
         }
 
-        bool VersionData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool VersionData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             unsigned int startReadOffset = pStream->readOffset();
 
@@ -631,7 +633,7 @@ namespace BitCoin
             pStream->writeUnsignedLong(nonce);
         }
 
-        bool PingData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool PingData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 4)
                 return false;
@@ -647,8 +649,15 @@ namespace BitCoin
             pStream->writeUnsignedLong(nonce);
         }
 
-        bool PongData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool PongData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
+            // No nonce before version 60000
+            if(pVersion <= 60000)
+            {
+                nonce = 0;
+                return true;
+            }
+
             if(pSize < 4)
                 return false;
 
@@ -679,7 +688,7 @@ namespace BitCoin
             pStream->writeStream(&extra, extra.length());
         }
 
-        bool RejectData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool RejectData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 1)
                 return false;
@@ -720,7 +729,7 @@ namespace BitCoin
                 address->write(pStream);
         }
 
-        bool AddressesData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool AddressesData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 1)
                 return false;
@@ -748,7 +757,7 @@ namespace BitCoin
             pStream->writeUnsignedLong(minimumFeeRate);
         }
 
-        bool FeeFilterData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool FeeFilterData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 8)
                 return false;
@@ -762,7 +771,7 @@ namespace BitCoin
         {
         }
 
-        bool FilterAddData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool FilterAddData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             //if(pSize < 1)
             //    return false;
@@ -774,7 +783,7 @@ namespace BitCoin
         {
         }
 
-        bool FilterLoadData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool FilterLoadData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             //if(pSize < 1)
             //    return false;
@@ -800,7 +809,7 @@ namespace BitCoin
             stopHeaderHash.write(pStream);
         }
 
-        bool GetBlocksData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool GetBlocksData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 5)
                 return false;
@@ -846,7 +855,7 @@ namespace BitCoin
             stopHeaderHash.write(pStream);
         }
 
-        bool GetHeadersData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool GetHeadersData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 5)
                 return false;
@@ -884,7 +893,7 @@ namespace BitCoin
                 headers[i]->write(pStream, false, true);
         }
 
-        bool HeadersData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool HeadersData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 1)
                 return false;
@@ -934,7 +943,7 @@ namespace BitCoin
             pStream->writeStream(&flags, flags.length());
         }
 
-        bool MerkleBlockData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool MerkleBlockData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             unsigned int startReadOffset = pStream->readOffset();
 
@@ -1120,7 +1129,7 @@ namespace BitCoin
                 trans->write(pStream);
         }
 
-        bool CompactBlockData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool CompactBlockData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             unsigned int startOffset = pStream->readOffset();
 
@@ -1200,7 +1209,7 @@ namespace BitCoin
             //TODO
         }
 
-        bool GetBlockTransactionsData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool GetBlockTransactionsData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             //TODO
             return false;
@@ -1211,7 +1220,7 @@ namespace BitCoin
             //TODO
         }
 
-        bool BlockTransactionsData::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool BlockTransactionsData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             //TODO
             return false;

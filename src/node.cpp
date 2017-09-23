@@ -30,14 +30,15 @@ namespace BitCoin
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
         mSendHeaders = false;
-        mPingNonce = 0;
         mMinimumFeeRate = 0;
         mVersionData = NULL;
         mID = mNextID++;
         mHeaderRequestTime = 0;
         mBlockRequestTime = 0;
         mLastReceiveTime = getTime();
+        mLastPingNonce = 0;
         mLastPingTime = 0;
+        mPingRoundTripTime = 0xffffffff;
         mMessagesReceived = 0;
         mConnectedTime = getTime();
         mStop = false;
@@ -198,12 +199,6 @@ namespace BitCoin
         }
     }
 
-    bool Node::versionSupported(int32_t pVersion)
-    {
-        // TODO Check version protocol
-        return true;
-    }
-
     bool Node::sendMessage(Message::Data *pData)
     {
         if(!isOpen())
@@ -362,6 +357,15 @@ namespace BitCoin
         return success;
     }
 
+    bool Node::sendPing()
+    {
+        Message::PingData pingData;
+        bool success = sendMessage(&pingData);
+        mLastPingNonce = pingData.nonce;
+        mLastPingTime = getTime();
+        return success;
+    }
+
     bool Node::sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason)
     {
         if(!isOpen())
@@ -437,13 +441,8 @@ namespace BitCoin
                 return;
             }
 
-            if(time - mLastReceiveTime > 600 && // 10 minutes
-              time - mLastPingTime > 60)
-            {
-                Message::PingData pingData;
-                sendMessage(&pingData);
-                mLastPingTime = getTime();
-            }
+            if(time - mLastReceiveTime > 600) // 10 minutes
+                sendPing();
 
             if(!mMessageInterpreter.pendingBlockHash.isEmpty() && mMessageInterpreter.pendingBlockUpdateTime != 0)
                 pChain.updateBlockProgress(mMessageInterpreter.pendingBlockHash, mID, mMessageInterpreter.pendingBlockUpdateTime);
@@ -487,41 +486,46 @@ namespace BitCoin
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Version : %s (%d), %d blocks, relay off",
                       mVersionData->userAgent.text(), mVersionData->version, mVersionData->startBlockHeight);
 
-                if(!versionSupported(mVersionData->version))
-                    sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL, "");
+                mMessageInterpreter.version = mVersionData->version;
 
-                //TODO Reject recent sent version nonces
-
-                // Send version acknowledge
-                Message::Data versionAcknowledgeMessage(Message::VERACK);
-                sendMessage(&versionAcknowledgeMessage);
-                mVersionAcknowledgeSent = true;
-
-                if(mIsSeed)
+                // Require full node bit for outgoing nodes
+                if(!mIsIncoming && !mIsSeed && !(mVersionData->transmittingServices & Message::VersionData::FULL_NODE_BIT))
                 {
-                    // Request addresses from the seed
-                    Message::Data getAddresses(Message::GET_ADDRESSES);
-                    sendMessage(&getAddresses);
+                    sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
+                      "Full node bit required in protocol version");
+                    close();
                 }
-
-                if(!mIsIncoming && (mVersionData->startBlockHeight < 0 ||
+                else if(!mIsIncoming && !mIsSeed && !pChain.isInSync() && (mVersionData->startBlockHeight < 0 ||
                   (unsigned int)mVersionData->startBlockHeight < pChain.blockHeight()))
                 {
                     ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Low block height");
                     Info::instance().addPeerFail(mAddress);
                     close();
                 }
-                else if(mVersionData->relay && mVersionAcknowledged) // Update peer
+                else
                 {
-                    std::memcpy(mAddress.ip, mVersionData->transmittingIPv6, 16);
-                    mAddress.port = mVersionData->transmittingPort;
-                    if(!mIsSeed)
-                        Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
-                }
+                    if(mVersionData->relay && mVersionAcknowledged) // Update peer
+                    {
+                        std::memcpy(mAddress.ip, mVersionData->transmittingIPv6, 16);
+                        mAddress.port = mVersionData->transmittingPort;
+                        if(!mIsSeed)
+                            Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
+                    }
 
-                // Send "send headers" message
-                //Message::Data sendHeadersData(Message::SEND_HEADERS);
-                //sendMessage(&sendHeadersData);
+                    // Send version acknowledge
+                    Message::Data versionAcknowledgeMessage(Message::VERACK);
+                    sendMessage(&versionAcknowledgeMessage);
+                    mVersionAcknowledgeSent = true;
+
+                    if(mIsSeed)
+                    {
+                        // Request addresses from the seed
+                        Message::Data getAddresses(Message::GET_ADDRESSES);
+                        sendMessage(&getAddresses);
+                    }
+                    else if(!mIsIncoming)
+                        sendPing();
+                }
 
                 break;
             }
@@ -545,8 +549,14 @@ namespace BitCoin
                 break;
             }
             case Message::PONG:
-                if(mPingNonce != ((Message::PongData *)message)->nonce)
-                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Pong nonce doesn't match sent Ping");
+                if(((Message::PongData *)message)->nonce != 0 && mLastPingNonce != ((Message::PongData *)message)->nonce)
+                    ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Pong nonce doesn't match sent Ping");
+                else
+                {
+                    mPingRoundTripTime = getTime() - mLastPingTime;
+                    mLastPingTime = 0;
+                    mLastPingNonce = 0;
+                }
                 break;
 
             case Message::REJECT:
@@ -725,15 +735,21 @@ namespace BitCoin
                     case Message::InventoryHash::TRANSACTION:
                         //TODO Implement GET_DATA transactions (TRANSACTION)
                         // For mempool and relay set
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Requested Transaction (Not implemented) : %s",
+                          (*item)->hash.hex().text());
                         break;
                     case Message::InventoryHash::FILTERED_BLOCK:
                         //TODO Implement GET_DATA filtered blocks (MERKLE_BLOCK)
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Requested Merkle Block (Not implemented) : %s",
+                          (*item)->hash.hex().text());
                         break;
                     case Message::InventoryHash::COMPACT_BLOCK:
                         //TODO Implement GET_DATA compact blocks (COMPACT_BLOCK)
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Requested Compact Block (Not implemented) : %s",
+                          (*item)->hash.hex().text());
                         break;
                     case Message::InventoryHash::UNKNOWN:
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Unknown inventory item type %02x",
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Unknown request inventory type %02x",
                           (*item)->type);
                         break;
                     }
@@ -833,6 +849,7 @@ namespace BitCoin
             }
             case Message::MEM_POOL:
                 // TODO Implement MEM_POOL
+                // Send Inventory message with all transactions in the mempool
                 break;
 
             case Message::MERKLE_BLOCK:

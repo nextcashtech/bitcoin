@@ -12,6 +12,7 @@
 #include "arcmist/io/stream.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
+#include "soft_forks.hpp"
 #include "key.hpp"
 #include "transaction_output.hpp"
 
@@ -113,6 +114,9 @@ namespace BitCoin
     {
     public:
 
+        // Value below which lock times are considered block heights instead of timestamps
+        static const uint32_t LOCKTIME_THRESHOLD = 500000000;
+
         Transaction()
         {
             version = 1;
@@ -156,7 +160,7 @@ namespace BitCoin
 
         void calculateHash();
         bool process(TransactionOutputPool &pPool, uint64_t pBlockHeight, bool pCoinBase,
-          int32_t pBlockVersion, int32_t pBlockVersionFlags);
+          int32_t pBlockVersion, const SoftForks &pSoftForks);
 
         bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
           ArcMist::Buffer &pOutputScript, Signature::HashType pHashType);

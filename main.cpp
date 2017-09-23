@@ -127,15 +127,15 @@ int main(int pArgumentCount, char **pArguments)
         BitCoin::Chain chain;
         BitCoin::Hash hash;
         BitCoin::Block block;
+        BitCoin::TransactionOutputPool pool;
+
+        chain.load(pool, false);
 
         if(printBlock.length() == 64)
         {
             ArcMist::Buffer buffer;
             buffer.writeHex(printBlock.text());
             hash.read(&buffer, 32);
-
-            BitCoin::TransactionOutputPool pool;
-            chain.load(pool, false);
 
             if(!chain.getBlock(hash, block))
             {
@@ -154,7 +154,7 @@ int main(int pArgumentCount, char **pArguments)
             }
         }
 
-        block.print(ArcMist::Log::INFO, false);
+        block.print(ArcMist::Log::INFO, true);
         return 0;
     }
 

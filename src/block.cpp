@@ -341,7 +341,7 @@ namespace BitCoin
         return result;
     }
 
-    bool Block::process(TransactionOutputPool &pPool, uint64_t pBlockHeight, int32_t pBlockVersionFlags)
+    bool Block::process(TransactionOutputPool &pPool, uint64_t pBlockHeight, const SoftForks &pSoftForks)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Processing block %08d", pBlockHeight);
 
@@ -351,44 +351,11 @@ namespace BitCoin
             return false;
         }
 
-
-
-        // // Version 1 - Reject version 1 blocks at block 227,930
-        // if(version == 1 && pHeight >= 227930)
-        // {
-            // ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-              // "Version 1 block after 227,930 : %d", pHeight);
-            // return false;
-        // }
-
-        // /* BIP34 Block version 2 - Requires block height in coinbase
-         // *   Reject version 2 blocks without block height at block 224,412
-         // *   Reject version 1 blocks at block 227,930
-         // * Implemented in transaction.cpp process function
-         // */
-
-        // /* BIP66 Version 3 - Requires ECDSA DER encoded signatures
-         // * Implemented in interpreter.cpp Signature::read function
-         // */
-
-        // //TODO Version 4 - Added support for OP_CHECKLOCKTIMEVERIFY operation code.
-
-
-
-
-
-        // BIP-0034
-        if(pBlockVersionFlags & REQUIRE_BLOCK_VERSION_2 && version < 2)
+        if(pSoftForks.requiredVersion() > version)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Version 2 required");
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Version %d required",
+              pSoftForks.requiredVersion());
             return false;
-        }
-
-        // BIP-0009
-        if((version & 0x00000007) == 4) // Deployments might be active (least significant bits == 001)
-        {
-            //TODO BIP-0009 Deployements
-
         }
 
         // Validate Merkle Hash
@@ -408,7 +375,7 @@ namespace BitCoin
         unsigned int transactionOffset = 0;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            if(!(*transaction)->process(pPool, pBlockHeight, isCoinBase, version, pBlockVersionFlags))
+            if(!(*transaction)->process(pPool, pBlockHeight, isCoinBase, version, pSoftForks))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",transactionOffset);
                 return false;
@@ -708,9 +675,9 @@ namespace BitCoin
         return true;
     }
 
-    bool BlockFile::readVersions(std::list<uint32_t> &pVersions)
+    // Append block stats from this file to the list specified
+    bool BlockFile::readStats(std::list<BlockStats> &pStats)
     {
-        pVersions.clear();
         if(!openFile())
         {
             mValid = false;
@@ -719,15 +686,28 @@ namespace BitCoin
 
         mInputFile->setReadOffset(HASHES_OFFSET + 32); // Set offset to offset of first data offset location in file
         unsigned int blockOffset, previousOffset;
+        uint32_t version;
+        uint32_t time;
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
+            // Read location of block in file from header
             blockOffset = mInputFile->readUnsignedInt();
             if(blockOffset == 0)
                 return true;
 
-            previousOffset = mInputFile->readOffset() + 32; // Add 32 to skip hash
+            // Save location of next block
+            previousOffset = mInputFile->readOffset() + 32; // Add 32 to skip header hash
+
+            // Go to location of block in file
             mInputFile->setReadOffset(blockOffset);
-            pVersions.push_back(mInputFile->readUnsignedInt());
+
+            // Read stats from file
+            version = mInputFile->readUnsignedInt();
+            mInputFile->setReadOffset(mInputFile->readOffset() + 64); // Skip previous and merkle hashes
+            time = mInputFile->readUnsignedInt();
+            pStats.push_back(BlockStats(version, time));
+
+            // Go back to header in file
             mInputFile->setReadOffset(previousOffset);
         }
 

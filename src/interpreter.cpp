@@ -755,6 +755,27 @@ namespace BitCoin
         ArcMist::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, result);
     }
 
+    int64_t ScriptInterpreter::readFirstPushOpValue(ArcMist::Buffer &pScript)
+    {
+        uint8_t opCode = pScript.readByte();
+        ArcMist::Buffer data;
+
+        if(opCode == 0x00)
+            return 0;
+        else if(opCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
+        {
+            if(opCode > pScript.remaining())
+                return 0;
+            data.writeStream(&pScript, opCode);
+        }
+        else
+            return 0;
+
+        int64_t value = 0;
+        arithmeticRead(&data, value);
+        return value;
+    }
+
     void ScriptInterpreter::removeCodeSeparators(ArcMist::Buffer &pInputScript, ArcMist::Buffer &pOutputScript)
     {
         uint8_t opCode;
@@ -810,13 +831,13 @@ namespace BitCoin
         }
     }
 
-    bool ScriptInterpreter::checkSignature(PublicKey &pPublicKey, ArcMist::Buffer *pSignature, bool pECDSA_DER_SigsOnly,
+    bool ScriptInterpreter::checkSignature(PublicKey &pPublicKey, ArcMist::Buffer *pSignature, bool pStrictECDSA_DER_Sigs,
       ArcMist::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset)
     {
         // Read the signature from the stack item
         Signature signature;
         pSignature->setReadOffset(0);
-        if(!signature.read(pSignature, pSignature->length()-1, pECDSA_DER_SigsOnly))
+        if(!signature.read(pSignature, pSignature->length()-1, pStrictECDSA_DER_Sigs))
             return false;
 
         // Read the hash type from the stack item
@@ -841,13 +862,13 @@ namespace BitCoin
 
     void ScriptInterpreter::printStack(const char *pText)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack : %s", pText);
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack : %s", pText);
 
         unsigned int index = 1;
         for(std::list<ArcMist::Buffer *>::reverse_iterator i = mStack.rbegin();i!=mStack.rend();++i,index++)
         {
             (*i)->setReadOffset(0);
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
               "    %d (%d bytes) : %s", index, (*i)->length(), (*i)->readHexString((*i)->length()).text());
         }
     }
@@ -985,8 +1006,6 @@ namespace BitCoin
             // All zeros
             if(negative) // was all 0xff
                 pBuffer->writeByte(0x80);
-            else
-                pBuffer->writeByte(0x00);
             return;
         }
 
@@ -1033,7 +1052,8 @@ namespace BitCoin
         //  pBuffer->readHexString(pBuffer->length()).text());
     }
 
-    bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript, bool pECDSA_DER_SigsOnly)
+    bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript, uint32_t pSequence,
+      int32_t pBlockVersion, const SoftForks &pSoftForks)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Interpreter Process");
@@ -1041,6 +1061,7 @@ namespace BitCoin
         unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;
         uint64_t count;
+        bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && pSoftForks.activeVersion() >= 3;
 
         while(pScript.remaining())
         {
@@ -1244,7 +1265,7 @@ namespace BitCoin
                     else
                     {
                         if(opCode == OP_EQUAL)
-                            push()->writeByte(0); // Push false
+                            push(); // Push false
                         else
                         {
                             mVerified = false;
@@ -1461,7 +1482,7 @@ namespace BitCoin
                     pop();
 
                     // Check the signature (at the top of the stack) with the public key we just popped from the stack
-                    if(checkSignature(publicKey, top(), pECDSA_DER_SigsOnly, pScript, sigStartOffset))
+                    if(checkSignature(publicKey, top(), strictECDSA_DER_Sigs, pScript, sigStartOffset))
                     {
                         pop();
                         if(opCode == OP_CHECKSIG)
@@ -1476,7 +1497,7 @@ namespace BitCoin
                         //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                         //  "Signature : %s", scriptSignature.hex().text());
                         if(opCode == OP_CHECKSIG)
-                            push()->writeByte(0); // Push false onto the stack
+                            push(); // Push false onto the stack
                         else
                         {
                             mVerified = false;
@@ -1565,7 +1586,7 @@ namespace BitCoin
                         signatureVerified = false;
                         while(publicKeyOffset < publicKeyCount)
                             if(checkSignature(*publicKeys[publicKeyOffset++], signatures[i],
-                              pECDSA_DER_SigsOnly, pScript, sigStartOffset))
+                              strictECDSA_DER_Sigs, pScript, sigStartOffset))
                             {
                                 signatureVerified = true;
                                 break;
@@ -1589,7 +1610,7 @@ namespace BitCoin
                         ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
                           "Multiple Signature check failed");
                         if(opCode == OP_CHECKMULTISIG)
-                            push()->writeByte(0); // Push false onto the stack
+                            push(); // Push false onto the stack
                         else
                         {
                             mVerified = false;
@@ -1611,7 +1632,8 @@ namespace BitCoin
                      *   nVersion >= 4. Furthermore, when 950 out of the 1000 blocks preceding a block do have
                      *   nVersion >= 4, nVersion < 4 blocks become invalid, and all further blocks enforce the
                      *   new rules.*/
-                    break;
+                    if(pBlockVersion < 4 || pSoftForks.activeVersion() < 4)
+                        break;
 
                     if(pIsSignatureScript)
                     {
@@ -1630,12 +1652,68 @@ namespace BitCoin
                     if(!ifStackTrue())
                         break;
 
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
-                      "Unsupported operation code : OP_CHECKLOCKTIMEVERIFY");
-                    mValid = false;
-                    return false;
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_CHECKLOCKTIMEVERIFY");
+                        mValid = false;
+                        return false;
+                    }
 
-                    //TODO execute OP_CHECKLOCKTIMEVERIFY
+                    int64_t value;
+                    if(!arithmeticRead(top(), value))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    if(value < 0)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_CHECKLOCKTIMEVERIFY top stack value can't be negative : %d", (int)value);
+                        mValid = false;
+                        return false;
+                    }
+
+                    if(pSequence == 0xffffffff)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_CHECKLOCKTIMEVERIFY input sequence not 0xffffffff : %08x", pSequence);
+                        mVerified = false;
+                        return true;
+                    }
+
+                    if(mTransaction == NULL)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_CHECKLOCKTIMEVERIFY Transaction not set");
+                        mVerified = false;
+                        return true;
+                    }
+
+                    // Check that the lock time and time in the stack are both the same type (block height or timestamp)
+                    if(((uint32_t)value < Transaction::LOCKTIME_THRESHOLD && mTransaction->lockTime > Transaction::LOCKTIME_THRESHOLD) ||
+                      ((uint32_t)value > Transaction::LOCKTIME_THRESHOLD && mTransaction->lockTime < Transaction::LOCKTIME_THRESHOLD))
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_CHECKLOCKTIMEVERIFY value and lock time are different \"types\" : value %d > lock time %d",
+                          (uint32_t)value, mTransaction->lockTime);
+                        mVerified = false;
+                        return true;
+                    }
+
+                    // Check that the lock time has passed
+                    if(mTransaction == NULL || (uint32_t)value > mTransaction->lockTime)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_CHECKLOCKTIMEVERIFY value greater than lock time : value %d > lock time %d", (uint32_t)value,
+                          mTransaction->lockTime);
+                        mVerified = false;
+                        return true;
+                    }
+
+                    // the lock-time type (height vs. timestamp) of the top stack item and the nLockTime field are not the same; or
+
                     break;
                 }
                 case OP_CHECKSEQUENCEVERIFY:
@@ -1940,11 +2018,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
+                    top()->clear();
                     if(value == 0)
                         top()->writeByte(1);
-                    else
-                        top()->writeByte(0);
                     break;
                 }
                 case OP_0NOTEQUAL: //    in    out    Returns 0 if the input is 0. 1 otherwise.
@@ -1967,10 +2043,8 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
-                    if(value == 0)
-                        top()->writeByte(0);
-                    else
+                    top()->clear();
+                    if(value != 0)
                         top()->writeByte(1);
                     break;
                 }
@@ -2089,11 +2163,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
+                    top()->clear();
                     if(a != 0 && b != 0)
                         top()->writeByte(1);
-                    else
-                        top()->writeByte(0);
                     break;
                 }
                 case OP_BOOLOR: //    a b   out    If a or b is not 0, the output is 1. Otherwise 0.
@@ -2124,11 +2196,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
+                    top()->clear();
                     if(a != 0 || b != 0)
                         top()->writeByte(1);
-                    else
-                        top()->writeByte(0);
                     break;
                 }
                 case OP_NUMEQUAL: //    a b   out    Returns 1 if the numbers are equal, 0 otherwise.
@@ -2159,11 +2229,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
+                    top()->clear();
                     if(a == b)
                         top()->writeByte(1);
-                    else
-                        top()->writeByte(0);
                     break;
                 }
                 case OP_NUMEQUALVERIFY: //    a b   Nothing / fail    Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
@@ -2193,13 +2261,10 @@ namespace BitCoin
                         mValid = false;
                         return false;
                     }
+                    pop();
 
-                    top()->setWriteOffset(0);
-                    if(a == b)
-                        top()->writeByte(1);
-                    else
+                    if(a != b)
                     {
-                        top()->writeByte(0);
                         mVerified = false;
                         return true;
                     }
@@ -2233,11 +2298,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
+                    top()->clear();
                     if(a != b)
                         top()->writeByte(1);
-                    else
-                        top()->writeByte(0);
                     break;
                 }
                 case OP_LESSTHAN: //    a b   out    Returns 1 if a is less than b, 0 otherwise.
@@ -2268,11 +2331,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
+                    top()->clear();
                     if(a < b)
                         top()->writeByte(1);
-                    else
-                        top()->writeByte(0);
                     break;
                 }
                 case OP_GREATERTHAN: //    a b   out    Returns 1 if a is greater than b, 0 otherwise.
@@ -2303,11 +2364,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
+                    top()->clear();
                     if(a > b)
                         top()->writeByte(1);
-                    else
-                        top()->writeByte(0);
                     break;
                 }
                 case OP_LESSTHANOREQUAL: //    a b   out    Returns 1 if a is less than or equal to b, 0 otherwise.
@@ -2338,11 +2397,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
+                    top()->clear();
                     if(a <= b)
                         top()->writeByte(1);
-                    else
-                        top()->writeByte(0);
                     break;
                 }
                 case OP_GREATERTHANOREQUAL: //    a b   out    Returns 1 if a is greater than or equal to b, 0 otherwise
@@ -2373,11 +2430,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
+                    top()->clear();
                     if(a >= b)
                         top()->writeByte(1);
-                    else
-                        top()->writeByte(0);
                     break;
                 }
                 case OP_MIN: //    a b   out    Returns the smaller of a and b.
@@ -2486,11 +2541,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    top()->setWriteOffset(0);
+                    top()->clear();
                     if(x >= min && x < max)
                         top()->writeByte(1);
-                    else
-                        top()->writeByte(0);
                     break;
                 }
 

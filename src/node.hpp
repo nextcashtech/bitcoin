@@ -90,12 +90,11 @@ namespace BitCoin
 
         int mSocketID;
 
-        bool versionSupported(int32_t pVersion);
-
         Message::Interpreter mMessageInterpreter;
 
         bool sendMessage(Message::Data *pData);
         bool sendVersion(Chain &pChain);
+        bool sendPing();
         bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
         bool sendBlock(Block &pBlock);
 
@@ -116,7 +115,8 @@ namespace BitCoin
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;
         uint32_t mLastReceiveTime;
         uint32_t mLastPingTime;
-        uint64_t mPingNonce;
+        uint64_t mLastPingNonce;
+        uint32_t mPingRoundTripTime;
         uint64_t mMinimumFeeRate;
 
         Hash mHeaderRequested;
