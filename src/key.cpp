@@ -28,7 +28,7 @@ namespace BitCoin
     {
         if(sContext == NULL)
         {
-            sContext = secp256k1_context_create(SECP256K1_CONTEXT_VERIFY | SECP256K1_CONTEXT_SIGN);
+            sContext = secp256k1_context_create(SECP256K1_CONTEXT_VERIFY);
             std::atexit(destroyContext);
         }
 
@@ -43,8 +43,14 @@ namespace BitCoin
 
     PrivateKey::PrivateKey()
     {
-        mContext = Key::context();
+        // Create context with sign ability
+        mContext = secp256k1_context_create(SECP256K1_CONTEXT_SIGN);
         std::memset(mData, 0, 32);
+    }
+
+    PrivateKey::~PrivateKey()
+    {
+        secp256k1_context_destroy(mContext);
     }
 
     bool PrivateKey::generate()

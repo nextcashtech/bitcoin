@@ -107,6 +107,7 @@ namespace BitCoin
     public:
 
         PrivateKey();
+        ~PrivateKey();
 
         bool generate();
         bool generatePublicKey(PublicKey &pPublicKey) const;
