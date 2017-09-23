@@ -45,7 +45,6 @@ namespace BitCoin
         mPendingLock.writeUnlock();
         if(mLastBlockFile != NULL)
             delete mLastBlockFile;
-        mSoftForks.save();
     }
 
     bool Chain::revertTargetBits()
@@ -1109,6 +1108,9 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
           "Updating unspent transaction outputs from block height %d to %d", height, blockHeight());
 
+        //TODO This soft fork data matches the block chain height and not the unspent height.
+        //  It needs to be "backed up" to the unspent height.
+
         ArcMist::String filePathName;
         unsigned int fileID = blockFileID(startHash);
         HashList hashes;
@@ -1205,6 +1207,14 @@ namespace BitCoin
         return pPool.blockHeight() == blockHeight();
     }
 
+    bool Chain::save()
+    {
+        bool success = mSoftForks.save();
+        if(!savePending())
+            success = false;
+        return success;
+    }
+
     // Load block info from files
     bool Chain::load(TransactionOutputPool &pPool, bool pList)
     {
@@ -1277,46 +1287,99 @@ namespace BitCoin
             }
         }
 
-        if(!loadTargetBits())
+        if(success)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Indexed %d block hashes", mNextBlockHeight);
+
+        if(success && !loadTargetBits())
             success = false;
 
-        // Load block statistics
-        mBlockStats.clear();
-        if(mLastFileID > (RETARGET_PERIOD / BlockFile::MAX_BLOCKS) + 1)
-            fileID = mLastFileID - (RETARGET_PERIOD / BlockFile::MAX_BLOCKS) - 1;
-        else
-            fileID = 0;
-        for(;fileID<=mLastFileID;fileID++)
+        success = success && mSoftForks.load();
+
+        if(success && mSoftForks.height() != mNextBlockHeight - 1)
         {
-            lockBlockFile(fileID);
-            filePathName = blockFileName(fileID);
-            blockFile = new BlockFile(fileID, filePathName);
-            if(!blockFile->readStats(mBlockStats))
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Refreshing soft forks (height %d)", mSoftForks.height(), mNextBlockHeight - 1);
+
+            mSoftForks.reset();
+            mBlockStats.clear();
+            unsigned int softForkHeight = 0;
+            std::list<BlockStats> tempBlockStats;
+            for(fileID=0;fileID<=mLastFileID&&!mStop;fileID++)
             {
+                tempBlockStats.clear();
+                lockBlockFile(fileID);
+                filePathName = blockFileName(fileID);
+                blockFile = new BlockFile(fileID, filePathName);
+                if(!blockFile->readStats(tempBlockStats))
+                {
+                    delete blockFile;
+                    unlockBlockFile(fileID);
+                    success = false;
+                    break;
+                }
+
                 delete blockFile;
                 unlockBlockFile(fileID);
-                success = false;
-                break;
+
+                for(std::list<BlockStats>::iterator blockStat=tempBlockStats.begin();blockStat!=tempBlockStats.end();++blockStat)
+                {
+                    mBlockStats.push_back(*blockStat);
+                    while(mBlockStats.size() > RETARGET_PERIOD)
+                        mBlockStats.erase(mBlockStats.begin());
+                    mSoftForks.process(mBlockStats, softForkHeight);
+                    ++softForkHeight;
+                }
             }
 
-            delete blockFile;
-            unlockBlockFile(fileID);
+            if(mStop)
+                success = false;
+
+            if(success)
+                mSoftForks.save();
         }
 
-        // Reduce down to proper size
-        while(mBlockStats.size() > RETARGET_PERIOD)
-            mBlockStats.erase(mBlockStats.begin());
+        if(success)
+        {
+            // Load block statistics
+            mBlockStats.clear();
+            if(mLastFileID > (RETARGET_PERIOD / BlockFile::MAX_BLOCKS) + 1)
+                fileID = mLastFileID - (RETARGET_PERIOD / BlockFile::MAX_BLOCKS) - 1;
+            else
+                fileID = 0;
+            for(;fileID<=mLastFileID&&!mStop;fileID++)
+            {
+                lockBlockFile(fileID);
+                filePathName = blockFileName(fileID);
+                blockFile = new BlockFile(fileID, filePathName);
+                if(!blockFile->readStats(mBlockStats))
+                {
+                    delete blockFile;
+                    unlockBlockFile(fileID);
+                    success = false;
+                    break;
+                }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Loaded last %d block statistics", mBlockStats.size());
+                delete blockFile;
+                unlockBlockFile(fileID);
+            }
+
+            if(mStop)
+                success = false;
+
+            // Reduce down to proper size
+            while(mBlockStats.size() > RETARGET_PERIOD)
+                mBlockStats.erase(mBlockStats.begin());
+
+            if(success)
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  "Loaded last %d block statistics", mBlockStats.size());
+        }
 
         mProcessMutex.unlock();
 
         if(success)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Indexed %d block hashes", mNextBlockHeight);
-
             if(mNextBlockHeight == 0)
             {
                 // Add genesis block
@@ -1330,11 +1393,9 @@ namespace BitCoin
 
             if(lastBlock != NULL)
                 mLastBlockHash = *lastBlock;
-
-            success = success && mSoftForks.load();
         }
 
-        return success;
+        return success && loadPending();
     }
 
     bool Chain::validate(TransactionOutputPool &pPool, bool pRebuild)

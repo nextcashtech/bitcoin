@@ -150,6 +150,23 @@ namespace BitCoin
 
     void Node::check(Chain &pChain)
     {
+        if(!isOpen())
+            return;
+
+        if(mIsSeed && getTime() - mConnectedTime > 60)
+        {
+            ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Seed connected for too long");
+            close();
+            return;
+        }
+
+        if(!mIsIncoming && mPingRoundTripTime == 0xffffffff && getTime() - mConnectedTime > 60)
+        {
+            ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No pong within 60 seconds of connection");
+            close();
+            return;
+        }
+
         if(!mIsIncoming && !pChain.isInSync())
         {
             uint32_t time = getTime();
@@ -281,6 +298,13 @@ namespace BitCoin
         return success;
     }
 
+    bool Node::requestPeers()
+    {
+        ArcMist::Log::add(ArcMist::Log::INFO, mName, "Sending peer request");
+        Message::Data getAddresses(Message::GET_ADDRESSES);
+        return sendMessage(&getAddresses);
+    }
+
     bool Node::sendBlock(Block &pBlock)
     {
         if(!isOpen())
@@ -371,6 +395,7 @@ namespace BitCoin
         if(!isOpen())
             return false;
 
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "Sending reject : %s", pReason);
         Message::RejectData rejectMessage(pCommand, pCode, pReason, NULL);
         return sendMessage(&rejectMessage);
     }
@@ -486,6 +511,8 @@ namespace BitCoin
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Version : %s (%d), %d blocks, relay off",
                       mVersionData->userAgent.text(), mVersionData->version, mVersionData->startBlockHeight);
 
+                std::memcpy(mAddress.ip, mVersionData->transmittingIPv6, 16);
+                mAddress.port = mVersionData->transmittingPort;
                 mMessageInterpreter.version = mVersionData->version;
 
                 // Require full node bit for outgoing nodes
@@ -504,13 +531,8 @@ namespace BitCoin
                 }
                 else
                 {
-                    if(mVersionData->relay && mVersionAcknowledged) // Update peer
-                    {
-                        std::memcpy(mAddress.ip, mVersionData->transmittingIPv6, 16);
-                        mAddress.port = mVersionData->transmittingPort;
-                        if(!mIsSeed)
-                            Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
-                    }
+                    if(mVersionData->relay && mVersionAcknowledged && !mIsSeed) // Update peer
+                        Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
 
                     // Send version acknowledge
                     Message::Data versionAcknowledgeMessage(Message::VERACK);
@@ -518,11 +540,7 @@ namespace BitCoin
                     mVersionAcknowledgeSent = true;
 
                     if(mIsSeed)
-                    {
-                        // Request addresses from the seed
-                        Message::Data getAddresses(Message::GET_ADDRESSES);
-                        sendMessage(&getAddresses);
-                    }
+                        requestPeers(); // Request addresses from the seed
                     else if(!mIsIncoming)
                         sendPing();
                 }
@@ -533,13 +551,8 @@ namespace BitCoin
                 mVersionAcknowledged = true;
 
                 // Update peer
-                if(mVersionData != NULL && mVersionData->relay)
-                {
-                    if(mAddress.port == 0)
-                        mAddress.port = mVersionData->transmittingPort;
-                    if(!mIsSeed)
-                        Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
-                }
+                if(mVersionData != NULL && mVersionData->relay && !mIsSeed)
+                    Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
                 break;
 
             case Message::PING:
@@ -587,27 +600,42 @@ namespace BitCoin
                 unsigned int count = peers.size();
                 if(count > 1000) // Maximum of 1000
                     count = 1000;
+                if(count == 0)
+                {
+                    ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "No peer addresses available to send");
+                    break;
+                }
 
                 // Add peers to message
                 addressData.addresses.resize(count);
                 std::vector<Peer *>::iterator peer = peers.begin();
-                for(std::vector<Peer>::iterator toSend=addressData.addresses.begin();toSend!=addressData.addresses.end();++toSend)
-                    *toSend = (**peer++);
+                for(std::vector<Message::Address>::iterator toSend=addressData.addresses.begin();toSend!=addressData.addresses.end();++toSend)
+                    *toSend = **peer++;
 
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending %d peer addresses",
+                  addressData.addresses.size());
                 sendMessage(&addressData);
                 break;
             }
             case Message::ADDRESSES:
             {
                 Message::AddressesData *addressesData = (Message::AddressesData *)message;
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Received %d peer addresses",
+                  addressesData->addresses.size());
+                IPAddress ip;
 
                 Info &info = Info::instance();
-                for(unsigned int i=0;i<addressesData->addresses.size();i++)
-                for(std::vector<Peer>::iterator peer=addressesData->addresses.begin();peer!=addressesData->addresses.end();++peer)
-                    info.updatePeer(peer->address, NULL, peer->services);
+                for(std::vector<Message::Address>::iterator address=addressesData->addresses.begin();address!=addressesData->addresses.end();++address)
+                {
+                    ip.set(address->ip, address->port);
+                    info.updatePeer(ip, NULL, address->services);
+                }
 
-                // Disconnect from seed node because it has done its job
-                close();
+                if(mIsSeed)
+                {
+                    ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Closing seed because it gave addresses");
+                    close(); // Disconnect from seed node because it has done its job
+                }
                 break;
             }
             case Message::ALERT:

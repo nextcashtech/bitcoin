@@ -48,7 +48,7 @@ namespace BitCoin
         Info::sInstance = 0;
     }
 
-    Info::Info() : mPeerMutex("Peer")
+    Info::Info() : mPeerLock("Peer")
     {
         ip = 0;
         port = 8333;
@@ -81,10 +81,10 @@ namespace BitCoin
         if(ip != 0)
             delete[] ip;
 
-        mPeerMutex.lock();
+        mPeerLock.writeLock("Destroy");
         for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
             delete *i;
-        mPeerMutex.unlock();
+        mPeerLock.writeUnlock();
     }
 
     void Info::save()
@@ -197,11 +197,11 @@ namespace BitCoin
         ArcMist::FileOutputStream file(dataFilePath, true);
         file.setOutputEndian(ArcMist::Endian::LITTLE);
 
-        mPeerMutex.lock();
+        mPeerLock.readLock();
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Writing peers file with %d peers", mPeers.size());
         for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
             (*i)->write(&file);
-        mPeerMutex.unlock();
+        mPeerLock.readUnlock();
 
         mPeersModified = false;
     }
@@ -216,12 +216,12 @@ namespace BitCoin
         ArcMist::FileInputStream file(dataFilePath);
         file.setInputEndian(ArcMist::Endian::LITTLE);
 
-        mPeerMutex.lock();
+        mPeerLock.writeLock("Load");
         for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
             delete (*i);
         mPeers.clear();
-        Peer *newPeer;
 
+        Peer *newPeer;
         while(file.remaining())
         {
             newPeer = new Peer();
@@ -230,18 +230,18 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Read peers file with %d peers", mPeers.size());
-        mPeerMutex.unlock();
+        mPeerLock.writeUnlock();
     }
 
     void Info::randomizePeers(std::vector<Peer *> &pPeers, int pMinimumRating)
     {
         pPeers.clear();
 
-        mPeerMutex.lock();
+        mPeerLock.readLock();
         for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
             if((*peer)->rating >= pMinimumRating)
                 pPeers.push_back(*peer);
-        mPeerMutex.unlock();
+        mPeerLock.readUnlock();
 
         // Sort Randomly
         std::random_shuffle(pPeers.begin(), pPeers.end());
@@ -252,23 +252,32 @@ namespace BitCoin
         if(!pAddress.isValid())
             return;
 
-        mPeerMutex.lock();
+        bool remove = false;
+        mPeerLock.readLock();
         for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
-        {
             if((*peer)->address.matches(pAddress))
             {
                 // Update
                 (*peer)->rating--;
-                if((*peer)->rating < -5)
-                {
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Removed peer");
-                    mPeers.erase(peer);
-                }
+                if((*peer)->rating < 0)
+                    remove = true;
                 mPeersModified = true;
                 break;
             }
+        mPeerLock.readUnlock();
+
+        if(remove)
+        {
+            mPeerLock.writeLock("Remove");
+            for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
+                if((*peer)->address.matches(pAddress))
+                {
+                    mPeers.erase(peer);
+                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Removed peer");
+                    break;
+                }
+            mPeerLock.writeUnlock();
         }
-        mPeerMutex.unlock();
     }
 
     void Info::updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices)
@@ -276,7 +285,7 @@ namespace BitCoin
         if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) || pServices == 0)
             return;
 
-        mPeerMutex.lock();
+        mPeerLock.readLock();
         for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
         {
             if((*peer)->address.matches(pAddress))
@@ -288,23 +297,25 @@ namespace BitCoin
                 (*peer)->address = pAddress;
                 (*peer)->rating++;
                 mPeersModified = true;
-                mPeerMutex.unlock();
+                mPeerLock.readUnlock();
                 return;
             }
         }
+        mPeerLock.readUnlock();
 
+        mPeerLock.writeLock("Add");
         // Add new
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Adding new peer");
         Peer *newPeer = new Peer;
         newPeer->userAgent = pUserAgent;
-        if(pUserAgent == NULL)
-            newPeer->rating = -5;
+        if(pUserAgent != NULL)
+            newPeer->rating = 1;
         newPeer->updateTime();
         newPeer->address = pAddress;
         newPeer->services = pServices;
         mPeers.push_front(newPeer);
         mPeersModified = true;
-        mPeerMutex.unlock();
+        mPeerLock.writeUnlock();
     }
 
     bool Info::test()

@@ -373,6 +373,8 @@ namespace BitCoin
 
             if(result != NULL && !result->read(pInput, payloadSize, version))
             {
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
+                  "Failed to read <%s> message", command.text());
                 delete result;
                 result = NULL;
             }
@@ -719,13 +721,33 @@ namespace BitCoin
             return true;
         }
 
+        void Address::write(ArcMist::OutputStream *pStream) const
+        {
+            pStream->writeUnsignedInt(time);
+            pStream->writeUnsignedLong(services);
+            pStream->write(ip, 16);
+            pStream->writeUnsignedShort(ArcMist::Endian::convert(port, ArcMist::Endian::BIG));
+        }
+
+        bool Address::read(ArcMist::InputStream *pStream)
+        {
+            if(pStream->remaining() < 30)
+                return false;
+
+            time = pStream->readUnsignedInt();
+            services = pStream->readUnsignedLong();
+            pStream->read(ip, 16);
+            port = ArcMist::Endian::convert(pStream->readUnsignedShort(), ArcMist::Endian::BIG);
+            return true;
+        }
+
         void AddressesData::write(ArcMist::OutputStream *pStream)
         {
             // Address Count
             writeCompactInteger(pStream, addresses.size());
 
             // Addresses
-            for(std::vector<Peer>::iterator address=addresses.begin();address!=addresses.end();++address)
+            for(std::vector<Address>::iterator address=addresses.begin();address!=addresses.end();++address)
                 address->write(pStream);
         }
 
@@ -744,7 +766,7 @@ namespace BitCoin
             // Addresses
             addresses.clear();
             addresses.resize(count);
-            for(std::vector<Peer>::iterator address=addresses.begin();address!=addresses.end();++address)
+            for(std::vector<Address>::iterator address=addresses.begin();address!=addresses.end();++address)
                 if(!address->read(pStream))
                     return false;
 
@@ -1443,25 +1465,25 @@ namespace BitCoin
              * ADDRESSES
              ***********************************************************************************************/
             AddressesData addressesData;
-            Peer peer;
+            Address address;
 
-            peer.time = 123;
-            peer.services = 0x01;
-            peer.address.ip[15] = 0x80;
-            peer.address.port = 321;
-            addressesData.addresses.push_back(peer);
+            address.time = 123;
+            address.services = 0x01;
+            address.ip[15] = 0x80;
+            address.port = 321;
+            addressesData.addresses.push_back(address);
 
-            peer.time = 1234;
-            peer.services = 0x02;
-            peer.address.ip[15] = 0x88;
-            peer.address.port = 4321;
-            addressesData.addresses.push_back(peer);
+            address.time = 1234;
+            address.services = 0x02;
+            address.ip[15] = 0x88;
+            address.port = 4321;
+            addressesData.addresses.push_back(address);
 
-            peer.time = 12345;
-            peer.services = 0x03;
-            peer.address.ip[15] = 0xF0;
-            peer.address.port = 54321;
-            addressesData.addresses.push_back(peer);
+            address.time = 12345;
+            address.services = 0x03;
+            address.ip[15] = 0xF0;
+            address.port = 54321;
+            addressesData.addresses.push_back(address);
 
             messageBuffer.clear();
             interpreter.write(&addressesData, &messageBuffer);
@@ -1491,7 +1513,10 @@ namespace BitCoin
                 if(addressesData.addresses[0].services != addressesReceiveData->addresses[0].services)
                     addressesDataMatches = false;
 
-                if(addressesData.addresses[0].address != addressesReceiveData->addresses[0].address)
+                if(std::memcmp(addressesData.addresses[0].ip, addressesReceiveData->addresses[0].ip, 16) != 0)
+                    addressesDataMatches = false;
+
+                if(addressesData.addresses[0].port != addressesReceiveData->addresses[0].port)
                     addressesDataMatches = false;
 
                 if(addressesDataMatches)

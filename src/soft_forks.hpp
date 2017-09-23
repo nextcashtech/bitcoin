@@ -33,6 +33,13 @@ namespace BitCoin
     class SoftFork
     {
     public:
+        enum ID
+        {
+            BIP0068, // Relative lock-time using consensus-enforced sequence numbers
+            BIP0112, // CHECKSEQUENCEVERIFY
+            BIP0113, // Median time-past as endpoint for lock-time calculations
+        };
+
         enum State
         {
             UNDEFINED, // Unknown soft fork ID
@@ -57,6 +64,13 @@ namespace BitCoin
 
         void revert() { state = previousState; }
 
+        // Reset to initial state
+        void reset()
+        {
+            state = DEFINED;
+            lockedHeight = 0xffffffff;
+        }
+
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
@@ -78,6 +92,8 @@ namespace BitCoin
         SoftForks();
         ~SoftForks();
 
+        unsigned int height() const { return mHeight; }
+
         int32_t activeVersion() const { return mActiveVersion; }
         int32_t requiredVersion() const { return mRequiredVersion; }
 
@@ -87,11 +103,19 @@ namespace BitCoin
 
         void revert(unsigned int pBlockHeight);
 
+        // Reset all soft forks to initial state
+        void reset();
+
         // Load from/Save to file system
         bool load(const char *pFileName = "soft_forks");
         bool save(const char *pFileName = "soft_forks");
 
     private:
+
+        void add(SoftFork *pSoftFork);
+
+        unsigned int mHeight;
+        unsigned int mPreviousHeight;
 
         std::vector<SoftFork *> mSoftForks;
 
@@ -102,6 +126,7 @@ namespace BitCoin
         int32_t mPreviousRequiredVersion;
 
         unsigned int mThreshHold;
+        bool mModified;
 
     };
 }

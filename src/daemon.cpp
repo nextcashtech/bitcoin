@@ -57,6 +57,7 @@ namespace BitCoin
         mNodeCount = 0;
         mIncomingNodes = 0;
         mOutgoingNodes = 0;
+        mLastPeerCount = 0;
     }
 
     Daemon::~Daemon()
@@ -135,8 +136,6 @@ namespace BitCoin
 
         if(!mChain.load(mPool, false))
             return false;
-
-        mChain.loadPending();
 
         if(!mChain.updateTransactionOutputs(mPool))
         {
@@ -241,7 +240,7 @@ namespace BitCoin
 
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Saving data");
         saveStatistics();
-        mChain.savePending();
+        mChain.save();
         mPool.save();
         Info::destroy();
 
@@ -329,7 +328,7 @@ namespace BitCoin
         std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
         {
-            if((*node)->isIncoming())
+            if((*node)->isIncoming() || !(*node)->isReady())
                 continue;
 
             blocksRequestedCount += (*node)->blocksRequestedCount();
@@ -365,12 +364,24 @@ namespace BitCoin
         mNodeLock.readUnlock();
     }
 
+    void Daemon::sendPeerRequest()
+    {
+        mNodeLock.readLock();
+        std::vector<Node *> nodes = mNodes; // Copy list of nodes
+        std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
+        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+            if(!(*node)->isIncoming() && (*node)->requestPeers())
+                break;
+        mNodeLock.readUnlock();
+    }
+
     void Daemon::manage()
     {
         Daemon &daemon = Daemon::instance();
         uint32_t lastStatReportTime = getTime();
         uint32_t lastRequestCheckTime = lastStatReportTime;
         uint32_t lastInfoSaveTime = lastStatReportTime;
+        uint32_t lastPeerRequestTime = 0;
 
         while(!daemon.mStopping)
         {
@@ -406,6 +417,12 @@ namespace BitCoin
 
             if(daemon.mStopping)
                 break;
+
+            if(daemon.mLastPeerCount < 1000 && getTime() - lastPeerRequestTime > 60)
+            {
+                lastPeerRequestTime = getTime();
+                daemon.sendPeerRequest();
+            }
 
             ArcMist::Thread::sleep(500);
         }
@@ -510,7 +527,7 @@ namespace BitCoin
         bool found;
 
         // Try peers with good ratings first
-        mInfo.randomizePeers(peers, 1);
+        mInfo.randomizePeers(peers, 2);
         ArcMist::Network::Connection *connection;
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers with good ratings", peers.size());
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
@@ -541,6 +558,7 @@ namespace BitCoin
         peers.clear();
         mInfo.randomizePeers(peers, 0);
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers", peers.size());
+        mLastPeerCount = peers.size();
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
         {
             // Skip nodes already connected

@@ -222,6 +222,52 @@ namespace BitCoin
             ArcMist::Buffer extra;
         };
 
+        class Address
+        {
+        public:
+
+            Address()
+            {
+                time = 0;
+                services = 0;
+                std::memset(ip, 0, 16);
+                port = 0;
+            }
+            Address(const Address &pCopy)
+            {
+                time = pCopy.time;
+                services = pCopy.services;
+                std::memcpy(ip, pCopy.ip, 16);
+                port = pCopy.port;
+            }
+
+            void write(ArcMist::OutputStream *pStream) const;
+            bool read(ArcMist::InputStream *pStream);
+
+            Address &operator = (const Address &pRight)
+            {
+                time = pRight.time;
+                services = pRight.services;
+                std::memcpy(ip, pRight.ip, 16);
+                port = pRight.port;
+                return *this;
+            }
+
+            Address &operator = (const Peer &pRight)
+            {
+                time = pRight.time;
+                services = pRight.services;
+                std::memcpy(ip, pRight.address.ip, 16);
+                port = pRight.address.port;
+                return *this;
+            }
+
+            uint32_t time;
+            uint64_t services;
+            uint8_t ip[16];
+            uint16_t port;
+        };
+
         class AddressesData : public Data
         {
         public:
@@ -231,7 +277,7 @@ namespace BitCoin
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
-            std::vector<Peer> addresses;
+            std::vector<Address> addresses;
         };
 
         class FeeFilterData : public Data

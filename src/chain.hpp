@@ -140,10 +140,6 @@ namespace BitCoin
         unsigned int pendingSize();
         // Add block header to queue to be requested and downloaded
         bool addPendingHeader(Block *pBlock);
-        // Save pending data to the file system
-        bool savePending();
-        // Load pending data from the file system
-        bool loadPending();
         // Builds a list of blocks that need to be requested and marks them as requested by the node specified
         bool getBlocksNeeded(HashList &pHashes, unsigned int pCount, bool pReduceOnly, unsigned int pNodeID);
         // Mark that download progress has increased for this block
@@ -172,12 +168,12 @@ namespace BitCoin
         bool getHeader(const Hash &pHash, Block &pBlockHeader);
 
         // Update the unspent transaction pool for any blocks it is missing
-        // Note : Doesn't use block version flags
         bool updateTransactionOutputs(TransactionOutputPool &pPool);
 
         // Load block data from file system
         //   If pList is true then all the block hashes will be output
         bool load(TransactionOutputPool &pPool, bool pList);
+        bool save();
 
         // Process pending headers and blocks
         void process(TransactionOutputPool &pPool);
@@ -201,9 +197,15 @@ namespace BitCoin
         Hash mLastPendingHash;
         unsigned int mPendingSize, mPendingBlocks, mLastFullPendingOffset;
 
+        // Save pending data to the file system
+        bool savePending();
+        // Load pending data from the file system
+        bool loadPending();
+
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;
         bool mStop;
+
         bool processBlock(Block *pBlock, TransactionOutputPool &pPool);
         //TODO Remove orphaned blocks //bool removeBlock(const Hash &pHash);
 

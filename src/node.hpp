@@ -57,6 +57,7 @@ namespace BitCoin
         void requestStop();
 
         bool isIncoming() const { return mIsIncoming; }
+        bool isReady() const { return mPingRoundTripTime != 0xffffffff; }
 
         // Time that the node connected
         uint32_t connectedTime() { return mConnectedTime; }
@@ -73,6 +74,8 @@ namespace BitCoin
         bool requestBlocks(Chain &pChain, unsigned int pCount, bool pReduceOnly);
         unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
         void releaseBlockRequests();
+
+        bool requestPeers();
 
         // Send notification of a new block on the chain
         bool announceBlock(const Hash &pHash, Chain &pChain);

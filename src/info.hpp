@@ -61,7 +61,7 @@ namespace BitCoin
 
         // Peers
         bool mPeersModified;
-        ArcMist::Mutex mPeerMutex;
+        ArcMist::ReadersLock mPeerLock;
         std::list<Peer *> mPeers;
 
         static ArcMist::String sPath;

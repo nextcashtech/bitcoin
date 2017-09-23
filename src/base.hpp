@@ -59,6 +59,11 @@ namespace BitCoin
             std::memcpy(ip, pCopy.ip, 16);
             port = pCopy.port;
         }
+        IPAddress(uint8_t *pIP, uint16_t pPort)
+        {
+            std::memcpy(ip, pIP, 16);
+            port = pPort;
+        }
 
         void write(ArcMist::OutputStream *pStream) const;
         bool read(ArcMist::InputStream *pStream);
@@ -96,6 +101,12 @@ namespace BitCoin
             port = pRight.port;
             std::memcpy(ip, pRight.ip, 16);
             return *this;
+        }
+
+        void set(uint8_t *pIP, uint16_t pPort)
+        {
+            std::memcpy(ip, pIP, 16);
+            port = pPort;
         }
 
         uint8_t ip[16];
