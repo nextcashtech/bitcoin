@@ -449,6 +449,10 @@ namespace BitCoin
         }
         mConnectionMutex.unlock();
 
+        // Ping every 20 minutes
+        if(!mIsIncoming && mVersionData != NULL && mVersionAcknowledged && getTime() - mLastPingTime > 1200)
+            sendPing();
+
         // Check for a complete message
         Message::Data *message = mMessageInterpreter.read(&mReceiveBuffer, mName);
         bool dontDeleteMessage = false;
@@ -541,8 +545,6 @@ namespace BitCoin
 
                     if(mIsSeed)
                         requestPeers(); // Request addresses from the seed
-                    else if(!mIsIncoming)
-                        sendPing();
                 }
 
                 break;
@@ -567,7 +569,6 @@ namespace BitCoin
                 else
                 {
                     mPingRoundTripTime = getTime() - mLastPingTime;
-                    mLastPingTime = 0;
                     mLastPingNonce = 0;
                 }
                 break;

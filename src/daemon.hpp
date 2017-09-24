@@ -98,6 +98,7 @@ namespace BitCoin
         void sendRequests();
         void sendPeerRequest();
         unsigned int mLastPeerCount;
+        void improvePing(int pDropFactor);
 
         Statistics mStatistics;
         void collectStatistics();

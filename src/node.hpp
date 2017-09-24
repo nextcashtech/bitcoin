@@ -56,8 +56,11 @@ namespace BitCoin
 
         void requestStop();
 
+        const char *name() { return mName.text(); }
         bool isIncoming() const { return mIsIncoming; }
+        bool isSeed() const { return mIsSeed; }
         bool isReady() const { return mPingRoundTripTime != 0xffffffff; }
+        uint32_t pingTime() const { return mPingRoundTripTime; }
 
         // Time that the node connected
         uint32_t connectedTime() { return mConnectedTime; }

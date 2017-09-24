@@ -375,16 +375,71 @@ namespace BitCoin
         mNodeLock.readUnlock();
     }
 
+    void Daemon::improvePing(int pDropFactor)
+    {
+        mNodeLock.readLock();
+        std::vector<Node *> nodes = mNodes; // Copy list of nodes
+
+        // Remove incoming and seed nodes
+        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();)
+            if(!(*node)->isReady() || (*node)->isIncoming() || (*node)->isSeed())
+                node = nodes.erase(node);
+            else
+                ++node;
+
+        // Sort slowest ping to fastest ping
+        Node *highestNode;
+        std::vector<Node *> sortedNodes;
+        while(nodes.size() > 0)
+        {
+            highestNode = NULL;
+            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+                if(highestNode == NULL || highestNode->pingTime() < (*node)->pingTime())
+                    highestNode = *node;
+
+            sortedNodes.push_back(highestNode);
+
+            // Remove highestNode
+            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+                if(*node == highestNode)
+                {
+                    nodes.erase(node);
+                    break;
+                }
+        }
+
+        // Drop slowest
+        int dropCount = sortedNodes.size() / pDropFactor;
+        for(std::vector<Node *>::iterator node=sortedNodes.begin();node!=sortedNodes.end();++node)
+        {
+            if(dropCount-- > 0)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                  "Sorted Nodes : %s - %ds ping (dropping)", (*node)->name(), (*node)->pingTime());
+                (*node)->close();
+            }
+            else
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                  "Sorted Nodes : %s - %ds ping", (*node)->name(), (*node)->pingTime());
+        }
+
+        mNodeLock.readUnlock();
+    }
+
     void Daemon::manage()
     {
         Daemon &daemon = Daemon::instance();
-        uint32_t lastStatReportTime = getTime();
-        uint32_t lastRequestCheckTime = lastStatReportTime;
-        uint32_t lastInfoSaveTime = lastStatReportTime;
+        uint32_t startTime = getTime();
+        uint32_t lastStatReportTime = startTime;
+        uint32_t lastRequestCheckTime = startTime;
+        uint32_t lastInfoSaveTime = startTime;
         uint32_t lastPeerRequestTime = 0;
+        uint32_t lastPingImprovement = startTime;
+        uint32_t time;
 
         while(!daemon.mStopping)
         {
+            time = getTime();
             if(getTime() - lastStatReportTime > 60)
             {
                 lastStatReportTime = getTime();
@@ -394,35 +449,58 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - lastRequestCheckTime > 10)
+            time = getTime();
+            if(time - lastRequestCheckTime > 10)
             {
-                lastRequestCheckTime = getTime();
+                lastRequestCheckTime = time;
                 daemon.sendRequests();
             }
 
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - lastInfoSaveTime > 600)
+            time = getTime();
+            if(time - lastInfoSaveTime > 600)
             {
-                lastInfoSaveTime = getTime();
+                lastInfoSaveTime = time;
                 daemon.mInfo.save();
             }
 
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - daemon.mStatistics.startTime > 3600)
+            time = getTime();
+            if(time - daemon.mStatistics.startTime > 3600)
                 daemon.saveStatistics();
 
             if(daemon.mStopping)
                 break;
 
-            if(daemon.mLastPeerCount < 1000 && getTime() - lastPeerRequestTime > 60)
+            time = getTime();
+            if(daemon.mLastPeerCount < 1000 && time - lastPeerRequestTime > 60)
             {
-                lastPeerRequestTime = getTime();
+                lastPeerRequestTime = time;
                 daemon.sendPeerRequest();
             }
+
+            if(daemon.mStopping)
+                break;
+
+            // Every 5 minutes for the first hour, then hourly after that
+            time = getTime();
+            if(time - startTime < 3600 && time - lastPingImprovement > 300)
+            {
+                lastPingImprovement = time;
+                daemon.improvePing(2);
+            }
+            else if(time - lastPingImprovement > 3600)
+            {
+                lastPingImprovement = time;
+                daemon.improvePing(4);
+            }
+
+            if(daemon.mStopping)
+                break;
 
             ArcMist::Thread::sleep(500);
         }
