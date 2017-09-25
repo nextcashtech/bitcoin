@@ -837,7 +837,7 @@ namespace BitCoin
         // Read the signature from the stack item
         Signature signature;
         pSignature->setReadOffset(0);
-        if(!signature.read(pSignature, pSignature->length()-1, pStrictECDSA_DER_Sigs))
+        if(pSignature->length() == 0 || !signature.read(pSignature, pSignature->length()-1, pStrictECDSA_DER_Sigs))
             return false;
 
         // Read the hash type from the stack item
