@@ -9,8 +9,10 @@
 
 #include "arcmist/base/log.hpp"
 #include "arcmist/base/endian.hpp"
+#include "arcmist/base/thread.hpp"
 #include "arcmist/crypto/digest.hpp"
 #include "interpreter.hpp"
+#include "info.hpp"
 
 #define BITCOIN_BLOCK_LOG_NAME "BitCoin Block"
 
@@ -31,7 +33,8 @@ namespace BitCoin
         return hash <= target;
     }
 
-    void Block::write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount)
+    void Block::write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
+      bool pBlockFile)
     {
         unsigned int startOffset = pStream->writeOffset();
         mSize = 0;
@@ -72,12 +75,13 @@ namespace BitCoin
 
         // Transactions
         for(uint64_t i=0;i<transactions.size();i++)
-            transactions[i]->write(pStream);
+            transactions[i]->write(pStream, pBlockFile);
 
         mSize = pStream->writeOffset() - startOffset;
     }
 
-    bool Block::read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount, bool pCalculateHash)
+    bool Block::read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
+      bool pCalculateHash, bool pBlockFile)
     {
         unsigned int startOffset = pStream->readOffset();
         mSize = 0;
@@ -171,7 +175,7 @@ namespace BitCoin
             if(!fail)
             {
                 *transaction = new Transaction();
-                if(!(*transaction)->read(pStream))
+                if(!(*transaction)->read(pStream, true, pBlockFile))
                     fail = true;
             }
             else
@@ -341,7 +345,7 @@ namespace BitCoin
         return result;
     }
 
-    bool Block::process(TransactionOutputPool &pPool, uint64_t pBlockHeight, const SoftForks &pSoftForks)
+    bool Block::process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const SoftForks &pSoftForks)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Processing block %08d", pBlockHeight);
 
@@ -369,13 +373,16 @@ namespace BitCoin
             return false;
         }
 
+        // Add the transaction outputs from this block to the output pool
+        pOutputs.add(this->transactions, pBlockHeight);
+
         // Validate and process transactions
         bool isCoinBase = true;
         mFees = 0;
         unsigned int transactionOffset = 0;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            if(!(*transaction)->process(pPool, pBlockHeight, isCoinBase, version, pSoftForks))
+            if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version, pSoftForks))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",transactionOffset);
                 return false;
@@ -450,6 +457,10 @@ namespace BitCoin
 
         return result;
     }
+
+    ArcMist::Mutex BlockFile::mBlockFileMutex("Block File");
+    std::vector<unsigned int> BlockFile::mLockedBlockFileIDs;
+    ArcMist::String BlockFile::mBlockFilePath;
 
     BlockFile::BlockFile(unsigned int pID, const char *pFilePathName, bool pValidate)
     {
@@ -640,7 +651,7 @@ namespace BitCoin
 
         // Write block data at end of file
         outputFile->setWriteOffset(outputFile->length());
-        pBlock.write(outputFile, true, true);
+        pBlock.write(outputFile, true, true, true);
         delete outputFile;
 
         mLastHash = pBlock.hash;
@@ -818,7 +829,7 @@ namespace BitCoin
             return false;
 
         mInputFile->setReadOffset(offset);
-        bool success = pBlock.read(mInputFile, pIncludeTransactions, pIncludeTransactions, true);
+        bool success = pBlock.read(mInputFile, pIncludeTransactions, pIncludeTransactions, true, true);
         return success;
     }
 
@@ -848,12 +859,24 @@ namespace BitCoin
             {
                 // Read block
                 mInputFile->setReadOffset(fileOffset);
-                bool success = pBlock.read(mInputFile, pIncludeTransactions, pIncludeTransactions, true);
+                bool success = pBlock.read(mInputFile, pIncludeTransactions, pIncludeTransactions, true, true);
                 return success;
             }
         }
 
         return false;
+    }
+
+    bool BlockFile::readTransactionOutput(unsigned int pFileOffset, Output &pTransactionOutput)
+    {
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        mInputFile->setReadOffset(pFileOffset);
+        return pTransactionOutput.read(mInputFile);
     }
 
     unsigned int BlockFile::hashOffset(const Hash &pHash)
@@ -919,5 +942,84 @@ namespace BitCoin
 
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
           "Block file CRC updated : %08x", crc);
+    }
+
+    void BlockFile::lock(unsigned int pFileID)
+    {
+        bool found;
+        while(true)
+        {
+            found = false;
+            mBlockFileMutex.lock();
+            for(std::vector<unsigned int>::iterator i=mLockedBlockFileIDs.begin();i!=mLockedBlockFileIDs.end();++i)
+                if(*i == pFileID)
+                {
+                    found = true;
+                    break;
+                }
+            if(!found)
+            {
+                mLockedBlockFileIDs.push_back(pFileID);
+                mBlockFileMutex.unlock();
+                return;
+            }
+            mBlockFileMutex.unlock();
+            ArcMist::Thread::sleep(100);
+        }
+    }
+
+    void BlockFile::unlock(unsigned int pFileID)
+    {
+        mBlockFileMutex.lock();
+        for(std::vector<unsigned int>::iterator i=mLockedBlockFileIDs.begin();i!=mLockedBlockFileIDs.end();++i)
+            if(*i == pFileID)
+            {
+                mLockedBlockFileIDs.erase(i);
+                break;
+            }
+        mBlockFileMutex.unlock();
+    }
+
+    const ArcMist::String &BlockFile::path()
+    {
+        if(!mBlockFilePath)
+        {
+            // Build path
+            mBlockFilePath = Info::instance().path();
+            mBlockFilePath.pathAppend("blocks");
+        }
+        return mBlockFilePath;
+    }
+
+    ArcMist::String BlockFile::fileName(unsigned int pID)
+    {
+        // Build path
+        ArcMist::String result = path();
+
+        // Encode ID
+        ArcMist::String hexID;
+        uint32_t reverseID = ArcMist::Endian::convert(pID, ArcMist::Endian::BIG);
+        hexID.writeHex(&reverseID, 4);
+        result.pathAppend(hexID);
+
+        return result;
+    }
+
+    bool BlockFile::readOutput(TransactionReference *pReference, unsigned int pIndex, Output &pOutput)
+    {
+        if(pReference == NULL)
+            return false;
+
+        unsigned int fileID = pReference->blockHeight / MAX_BLOCKS;
+
+        lock(fileID);
+        BlockFile *blockFile = new BlockFile(fileID, fileName(fileID), false);
+
+        bool success = blockFile->isValid() && blockFile->readTransactionOutput(pReference->output(pIndex)->blockFileOffset, pOutput);
+
+        delete blockFile;
+        unlock(fileID);
+
+        return success;
     }
 }

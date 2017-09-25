@@ -131,19 +131,8 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Starting %s on %s", BITCOIN_USER_AGENT, networkName());
 
-        if(!mPool.load())
+        if(!mChain.load(false))
             return false;
-
-        if(!mChain.load(mPool, false))
-            return false;
-
-        if(!mChain.updateTransactionOutputs(mPool))
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
-              "Unspent transaction outputs height %d doesn't match chain height %d", mPool.blockHeight(),
-              mChain.blockHeight());
-            return false;
-        }
 
         mConnectionThread = new ArcMist::Thread("Connection", handleConnections);
         if(mConnectionThread == NULL)
@@ -241,7 +230,6 @@ namespace BitCoin
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Saving data");
         saveStatistics();
         mChain.save();
-        mPool.save();
         Info::destroy();
 
         mRunning = false;
@@ -293,12 +281,11 @@ namespace BitCoin
         unsigned int pendingCount = mChain.pendingCount();
         unsigned int pendingSize = mChain.pendingSize();
 
-
         ArcMist::String statStartTime;
         statStartTime.writeFormattedTime(mStatistics.startTime);
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks, %d UTXOs", mChain.blockHeight(), mPool.count());
+          "Block Chain : %d blocks, %d TXOs", mChain.blockHeight(), mChain.outputCount());
         if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Pending (above threshold) : %d/%d blocks/headers (%d bytes) (%d requested)", pendingBlocks,
@@ -509,19 +496,19 @@ namespace BitCoin
     void Daemon::process()
     {
         Daemon &daemon = Daemon::instance();
-        uint32_t lastTransactionOutputsSaveTime = getTime();
+        uint32_t lastOutputsSaveTime = getTime();
 
         while(!daemon.mStopping)
         {
-            daemon.mChain.process(daemon.mPool);
+            daemon.mChain.process();
 
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - lastTransactionOutputsSaveTime > 1200)
+            if(getTime() - lastOutputsSaveTime > 1200)
             {
-                lastTransactionOutputsSaveTime = getTime();
-                daemon.mPool.save();
+                lastOutputsSaveTime = getTime();
+                daemon.mChain.saveOutputs();
             }
 
             if(daemon.mStopping)

@@ -13,7 +13,7 @@
 #include "base.hpp"
 #include "soft_forks.hpp"
 #include "block.hpp"
-#include "transaction_output.hpp"
+#include "outputs.hpp"
 
 #include <list>
 #include <vector>
@@ -116,6 +116,7 @@ namespace BitCoin
         ~Chain();
 
         unsigned int blockHeight() const { return mNextBlockHeight - 1; }
+        unsigned int outputCount() const { return mOutputs.count(); }
         const Hash &lastBlockHash() const { return mLastBlockHash; }
         unsigned int pendingBlockHeight() const { return mNextBlockHeight - 1 + mPending.size(); }
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
@@ -167,20 +168,18 @@ namespace BitCoin
         bool getBlock(const Hash &pHash, Block &pBlock);
         bool getHeader(const Hash &pHash, Block &pBlockHeader);
 
-        // Update the unspent transaction pool for any blocks it is missing
-        bool updateTransactionOutputs(TransactionOutputPool &pPool);
-
         // Load block data from file system
         //   If pList is true then all the block hashes will be output
-        bool load(TransactionOutputPool &pPool, bool pList);
+        bool load(bool pList);
         bool save();
+        bool saveOutputs();
 
         // Process pending headers and blocks
-        void process(TransactionOutputPool &pPool);
+        void process();
 
         // Validate the local block chain. Print output to log
         //   If pRebuildUnspent then it rebuilds unspent transactions
-        bool validate(TransactionOutputPool &pPool, bool pRebuild);
+        bool validate(bool pRebuild);
 
         // Set flag to stop processing
         void requestStop() { mStop = true; }
@@ -189,6 +188,7 @@ namespace BitCoin
 
     private:
 
+        TransactionOutputPool mOutputs;
         BlockSet mBlockLookup[0x10000];
 
         // Block headers for blocks not yet on chain
@@ -202,25 +202,20 @@ namespace BitCoin
         // Load pending data from the file system
         bool loadPending();
 
+        // Update the unspent transaction pool for any blocks it is missing
+        bool updateOutputs();
+
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;
         bool mStop;
 
-        bool processBlock(Block *pBlock, TransactionOutputPool &pPool);
+        bool processBlock(Block *pBlock);
         //TODO Remove orphaned blocks //bool removeBlock(const Hash &pHash);
+
+        unsigned int blockFileID(const Hash &pHash);
 
         Hash mLastBlockHash; // Hash of last/top block on chain
         uint64_t mNextBlockHeight; // Number of next block that will be added to the chain
-
-        // Blocks
-        ArcMist::String blockFilePath();
-        ArcMist::String blockFileName(unsigned int pID);
-        unsigned int blockFileID(const Hash &pHash);
-        void lockBlockFile(unsigned int pFileID);
-        void unlockBlockFile(unsigned int pFileID);
-
-        ArcMist::Mutex mBlockFileMutex;
-        std::vector<unsigned int> mLockedBlockFileIDs;
         BlockFile *mLastBlockFile;
         unsigned int mLastFileID;
 

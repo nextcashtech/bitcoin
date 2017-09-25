@@ -13,7 +13,6 @@
 #include "arcmist/io/network.hpp"
 #include "arcmist/base/endian.hpp"
 #include "info.hpp"
-#include "transaction_output.hpp"
 #include "chain.hpp"
 #include "daemon.hpp"
 
@@ -127,9 +126,8 @@ int main(int pArgumentCount, char **pArguments)
         BitCoin::Chain chain;
         BitCoin::Hash hash;
         BitCoin::Block block;
-        BitCoin::TransactionOutputPool pool;
 
-        chain.load(pool, false);
+        chain.load(false);
 
         if(printBlock.length() == 64)
         {
@@ -160,12 +158,11 @@ int main(int pArgumentCount, char **pArguments)
 
     // These have to be static or they overflows the stack
     static BitCoin::Chain chain;
-    static BitCoin::TransactionOutputPool pool;
 
     if(listblocks)
     {
         ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
-        if(chain.load(pool, true))
+        if(chain.load(true))
             return 0;
         else
             return 1;
@@ -174,17 +171,17 @@ int main(int pArgumentCount, char **pArguments)
     if(validate || rebuild)
     {
         ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
-        if(!chain.validate(pool, rebuild))
+        if(!chain.validate(rebuild))
             return 1;
 
-        if(validate)
-        {
-            // Compare pool transaction outputs with those loaded from files
-            BitCoin::TransactionOutputPool savedPool;
-            if(!savedPool.load())
-                return 1;
-            pool.compare(savedPool, "Calculated", "Saved");
-        }
+        // if(validate)
+        // {
+            // // Compare pool transaction outputs with those loaded from files
+            // BitCoin::TransactionOutputPool savedPool;
+            // if(!savedPool.load())
+                // return 1;
+            // pool.compare(savedPool, "Calculated", "Saved");
+        // }
 
         return 0;
     }

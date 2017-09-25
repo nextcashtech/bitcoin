@@ -24,7 +24,7 @@
 namespace BitCoin
 {
     Chain::Chain() : mPendingLock("Chain Pending"),
-      mProcessMutex("Chain Process"), mBlockFileMutex("Block File")
+      mProcessMutex("Chain Process")
     {
         mNextBlockHeight = 0;
         mLastFileID = 0;
@@ -264,42 +264,6 @@ namespace BitCoin
         }
 
         return result;
-    }
-
-    void Chain::lockBlockFile(unsigned int pFileID)
-    {
-        bool found;
-        while(true)
-        {
-            found = false;
-            mBlockFileMutex.lock();
-            for(std::vector<unsigned int>::iterator i=mLockedBlockFileIDs.begin();i!=mLockedBlockFileIDs.end();++i)
-                if(*i == pFileID)
-                {
-                    found = true;
-                    break;
-                }
-            if(!found)
-            {
-                mLockedBlockFileIDs.push_back(pFileID);
-                mBlockFileMutex.unlock();
-                return;
-            }
-            mBlockFileMutex.unlock();
-            ArcMist::Thread::sleep(100);
-        }
-    }
-
-    void Chain::unlockBlockFile(unsigned int pFileID)
-    {
-        mBlockFileMutex.lock();
-        for(std::vector<unsigned int>::iterator i=mLockedBlockFileIDs.begin();i!=mLockedBlockFileIDs.end();++i)
-            if(*i == pFileID)
-            {
-                mLockedBlockFileIDs.erase(i);
-                break;
-            }
-        mBlockFileMutex.unlock();
     }
 
     unsigned int Chain::pendingCount()
@@ -622,7 +586,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Chain::processBlock(Block *pBlock, TransactionOutputPool &pPool)
+    bool Chain::processBlock(Block *pBlock)
     {
         mProcessMutex.lock();
 
@@ -652,22 +616,10 @@ namespace BitCoin
         mSoftForks.process(mBlockStats, mNextBlockHeight);
 
         // Process block
-        if(!pBlock->process(pPool, mNextBlockHeight, mSoftForks))
+        if(!pBlock->process(mOutputs, mNextBlockHeight, mSoftForks))
         {
             revertTargetBits();
-            pPool.revert();
-            mSoftForks.revert(mNextBlockHeight);
-            mProcessMutex.unlock();
-            return false;
-        }
-
-        // Commit and save changes to unspent pool
-        if(!pPool.commit(mNextBlockHeight))
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-              "Failed to commit unspent transaction pool");
-            revertTargetBits();
-            pPool.revert();
+            mOutputs.revert(mNextBlockHeight);
             mSoftForks.revert(mNextBlockHeight);
             mProcessMutex.unlock();
             return false;
@@ -679,10 +631,10 @@ namespace BitCoin
         {
             // Create first block file
             mLastFileID = 0;
-            ArcMist::String filePathName = blockFileName(mLastFileID);
+            ArcMist::String filePathName = BlockFile::fileName(mLastFileID);
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Creating first block file %08d", mLastFileID, mLastFileID + 1);
-            lockBlockFile(mLastFileID);
+            BlockFile::lock(mLastFileID);
             mLastBlockFile = BlockFile::create(mLastFileID, filePathName);
             if(mLastBlockFile == NULL) // Failed to create file
                 success = false;
@@ -690,9 +642,9 @@ namespace BitCoin
         else
         {
             // Check if last block file is full
-            lockBlockFile(mLastFileID);
+            BlockFile::lock(mLastFileID);
             if(mLastBlockFile == NULL)
-                mLastBlockFile = new BlockFile(mLastFileID, blockFileName(mLastFileID));
+                mLastBlockFile = new BlockFile(mLastFileID, BlockFile::fileName(mLastFileID));
 
             if(!mLastBlockFile->isValid())
             {
@@ -700,7 +652,7 @@ namespace BitCoin
                   "Block file %08d is invalid", mLastFileID);
 
                 success = false;
-                unlockBlockFile(mLastFileID);
+                BlockFile::unlock(mLastFileID);
                 delete mLastBlockFile;
             }
             else if(mLastBlockFile->isFull())
@@ -708,13 +660,13 @@ namespace BitCoin
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   "Block file %08d is full. Starting new block file %08d", mLastFileID, mLastFileID + 1);
 
-                unlockBlockFile(mLastFileID);
+                BlockFile::unlock(mLastFileID);
                 delete mLastBlockFile;
 
                 // Create next file
                 mLastFileID++;
-                lockBlockFile(mLastFileID);
-                ArcMist::String filePathName = blockFileName(mLastFileID);
+                BlockFile::lock(mLastFileID);
+                ArcMist::String filePathName = BlockFile::fileName(mLastFileID);
                 mLastBlockFile = BlockFile::create(mLastFileID, filePathName);
                 if(mLastBlockFile == NULL) // Failed to create file
                     success = false;
@@ -724,7 +676,19 @@ namespace BitCoin
         if(success)
         {
             success = mLastBlockFile->addBlock(*pBlock);
-            unlockBlockFile(mLastFileID);
+            BlockFile::unlock(mLastFileID);
+        }
+
+        // Commit and save changes to transaction output pool
+        if(success && !mOutputs.commit(pBlock->transactions, mNextBlockHeight))
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+              "Failed to commit transaction outputs to pool");
+            revertTargetBits();
+            mOutputs.revert(mNextBlockHeight);
+            mSoftForks.revert(mNextBlockHeight);
+            mProcessMutex.unlock();
+            return false;
         }
 
         if(success)
@@ -734,10 +698,10 @@ namespace BitCoin
             mBlockLookup[lookup].push_back(new BlockInfo(pBlock->hash, mLastFileID, mNextBlockHeight));
             mBlockLookup[lookup].unlock();
 
+            ++mNextBlockHeight;
+            mLastBlockHash = pBlock->hash;
             mLastTargetBits = pBlock->targetBits;
 
-            mNextBlockHeight++;
-            mLastBlockHash = pBlock->hash;
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Added block to chain at height %d (%d trans) (%d bytes) : %s", mNextBlockHeight - 1, pBlock->transactionCount,
               pBlock->size(), pBlock->hash.hex().text());
@@ -754,7 +718,7 @@ namespace BitCoin
         return success;
     }
 
-    void Chain::process(TransactionOutputPool &pPool)
+    void Chain::process()
     {
         while(!mStop)
         {
@@ -781,7 +745,7 @@ namespace BitCoin
             }
 
             // Check this front block and add it to the chain
-            if(processBlock(nextPending->block, pPool))
+            if(processBlock(nextPending->block))
             {
                 mPendingLock.writeLock("Process");
 
@@ -864,23 +828,23 @@ namespace BitCoin
 
         while(pHashes.size() < pCount)
         {
-            lockBlockFile(fileID);
+            BlockFile::lock(fileID);
             if(fileID == mLastFileID && mLastBlockFile != NULL)
                 blockFile = mLastBlockFile;
             else
-                blockFile = new BlockFile(fileID, blockFileName(fileID));
+                blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
 
             if(!blockFile->readBlockHashes(fileList))
             {
                 if(blockFile != mLastBlockFile)
                     delete blockFile;
-                unlockBlockFile(fileID);
+                BlockFile::unlock(fileID);
                 break;
             }
 
             if(blockFile != mLastBlockFile)
                 delete blockFile;
-            unlockBlockFile(fileID);
+            BlockFile::unlock(fileID);
 
             for(HashList::iterator i=fileList.begin();i!=fileList.end();)
                 if(started || **i == pStartingHash)
@@ -916,11 +880,11 @@ namespace BitCoin
 
         for(unsigned int fileID=mLastFileID-1;;fileID--)
         {
-            lockBlockFile(fileID);
+            BlockFile::lock(fileID);
             if(fileID == mLastFileID && mLastBlockFile != NULL)
                 blockFile = mLastBlockFile;
             else
-                blockFile = new BlockFile(fileID, blockFileName(fileID));
+                blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
 
             hash = blockFile->lastHash();
             if(!hash.isEmpty())
@@ -928,7 +892,7 @@ namespace BitCoin
 
             if(blockFile != mLastBlockFile)
                 delete blockFile;
-            unlockBlockFile(fileID);
+            BlockFile::unlock(fileID);
 
             if(pHashes.size() >= pCount || fileID == 0)
                 break;
@@ -948,23 +912,23 @@ namespace BitCoin
 
         while(pBlockHeaders.size() < pCount)
         {
-            lockBlockFile(fileID);
+            BlockFile::lock(fileID);
             if(fileID == mLastFileID && mLastBlockFile != NULL)
                 blockFile = mLastBlockFile;
             else
-                blockFile = new BlockFile(fileID, blockFileName(fileID));
+                blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
 
             if(!blockFile->isValid() || !blockFile->readBlockHeaders(pBlockHeaders, hash, pStoppingHash, pCount))
             {
                 if(blockFile != mLastBlockFile)
                     delete blockFile;
-                unlockBlockFile(fileID);
+                BlockFile::unlock(fileID);
                 break;
             }
 
             if(blockFile != mLastBlockFile)
                 delete blockFile;
-            unlockBlockFile(fileID);
+            BlockFile::unlock(fileID);
 
             if(pBlockHeaders.size() > 0 && pBlockHeaders.back()->hash == pStoppingHash)
                 break;
@@ -987,17 +951,17 @@ namespace BitCoin
 
         BlockFile *blockFile;
 
-        lockBlockFile(fileID);
+        BlockFile::lock(fileID);
         if(fileID == mLastFileID && mLastBlockFile != NULL)
             blockFile = mLastBlockFile;
         else
-            blockFile = new BlockFile(fileID, blockFileName(fileID));
+            blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
 
         bool success = blockFile->isValid() && blockFile->readHash(offset, pHash);
 
         if(blockFile != mLastBlockFile)
             delete blockFile;
-        unlockBlockFile(fileID);
+        BlockFile::unlock(fileID);
         return success;
     }
 
@@ -1011,17 +975,17 @@ namespace BitCoin
 
         BlockFile *blockFile;
 
-        lockBlockFile(fileID);
+        BlockFile::lock(fileID);
         if(fileID == mLastFileID && mLastBlockFile != NULL)
             blockFile = mLastBlockFile;
         else
-            blockFile = new BlockFile(fileID, blockFileName(fileID));
+            blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
 
         bool success = blockFile->isValid() && blockFile->readBlock(offset, pBlock, true);
 
         if(blockFile != mLastBlockFile)
             delete blockFile;
-        unlockBlockFile(fileID);
+        BlockFile::unlock(fileID);
         return success;
     }
 
@@ -1032,17 +996,17 @@ namespace BitCoin
             return false; // hash not found
         BlockFile *blockFile;
 
-        lockBlockFile(fileID);
+        BlockFile::lock(fileID);
         if(fileID == mLastFileID && mLastBlockFile != NULL)
             blockFile = mLastBlockFile;
         else
-            blockFile = new BlockFile(fileID, blockFileName(fileID));
+            blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
 
         bool success = blockFile->isValid() && blockFile->readBlock(pHash, pBlock, true);
 
         if(blockFile != mLastBlockFile)
             delete blockFile;
-        unlockBlockFile(fileID);
+        BlockFile::unlock(fileID);
         return success;
     }
 
@@ -1053,46 +1017,23 @@ namespace BitCoin
             return false; // hash not found
         BlockFile *blockFile;
 
-        lockBlockFile(fileID);
+        BlockFile::lock(fileID);
         if(fileID == mLastFileID && mLastBlockFile != NULL)
             blockFile = mLastBlockFile;
         else
-            blockFile = new BlockFile(fileID, blockFileName(fileID));
+            blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
 
         bool success = blockFile->isValid() && blockFile->readBlock(pHash, pBlockHeader, false);
 
         if(blockFile != mLastBlockFile)
             delete blockFile;
-        unlockBlockFile(fileID);
+        BlockFile::unlock(fileID);
         return success;
     }
 
-    ArcMist::String Chain::blockFilePath()
+    bool Chain::updateOutputs()
     {
-        // Build path
-        ArcMist::String result = Info::instance().path();
-        result.pathAppend("blocks");
-        return result;
-    }
-
-    ArcMist::String Chain::blockFileName(unsigned int pID)
-    {
-        // Build path
-        ArcMist::String result = Info::instance().path();
-        result.pathAppend("blocks");
-
-        // Encode ID
-        ArcMist::String hexID;
-        uint32_t reverseID = ArcMist::Endian::convert(pID, ArcMist::Endian::BIG);
-        hexID.writeHex(&reverseID, 4);
-        result.pathAppend(hexID);
-
-        return result;
-    }
-
-    bool Chain::updateTransactionOutputs(TransactionOutputPool &pPool)
-    {
-        unsigned int height = pPool.blockHeight();
+        unsigned int height = mOutputs.blockHeight();
         if(height == blockHeight())
             return true;
 
@@ -1118,20 +1059,21 @@ namespace BitCoin
         Block block;
         unsigned int blockOffset;
         uint32_t lastSave = getTime();
+        SoftForks emptySoftForks;
 
         while(!mStop)
         {
-            lockBlockFile(fileID);
-            filePathName = blockFileName(fileID);
+            filePathName = BlockFile::fileName(fileID);
             if(ArcMist::fileExists(filePathName))
             {
+                BlockFile::lock(fileID);
                 blockFile = new BlockFile(fileID, filePathName);
                 if(!blockFile->isValid())
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                       "Block file %s is invalid", filePathName.text());
                     delete blockFile;
-                    unlockBlockFile(fileID);
+                    BlockFile::unlock(fileID);
                     return false;
                 }
 
@@ -1140,9 +1082,10 @@ namespace BitCoin
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                       "Failed to read hashes from block file %s", filePathName.text());
                     delete blockFile;
-                    unlockBlockFile(fileID);
+                    BlockFile::unlock(fileID);
                     return false;
                 }
+                BlockFile::unlock(fileID);
 
                 blockOffset = 0;
                 for(HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
@@ -1150,29 +1093,30 @@ namespace BitCoin
                     if(startHash.isEmpty() || **hash == startHash)
                     {
                         startHash.clear();
+                        BlockFile::lock(fileID);
                         if(blockFile->readBlock(blockOffset, block, true))
                         {
-                            if(block.process(pPool, height, mSoftForks))
+                            BlockFile::unlock(fileID);
+                            if(block.process(mOutputs, height, emptySoftForks))
                             {
                                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                                   "Processed block %08d (%d trans) (%d bytes) : %s", height, block.transactionCount,
                                   block.size(), block.hash.hex().text());
-                                pPool.commit(height++);
-                                if(getTime() - lastSave > 600)
+                                mOutputs.commit(block.transactions, height++);
+                                if(getTime() - lastSave > 300)
                                 {
                                     // Save transaction output pool every 10 minutes
-                                    pPool.save();
+                                    mOutputs.save();
                                     lastSave = getTime();
                                 }
                             }
                             else
                             {
-                                pPool.revert();
-                                pPool.save();
+                                mOutputs.revert(height);
+                                mOutputs.save();
                                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-                                  "Failed to process block %d from block file %08x : %s", blockOffset, fileID, (*hash)->hex().text());
+                                  "Failed to process block at height %d. At offset %d in block file %08x : %s", height, blockOffset, fileID, (*hash)->hex().text());
                                 delete blockFile;
-                                unlockBlockFile(fileID);
                                 return false;
                             }
                         }
@@ -1181,7 +1125,7 @@ namespace BitCoin
                             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                               "Failed to read block %d from block file %08x : %s", blockOffset, fileID, (*hash)->hex().text());
                             delete blockFile;
-                            unlockBlockFile(fileID);
+                            BlockFile::unlock(fileID);
                             return false;
                         }
                     }
@@ -1192,31 +1136,34 @@ namespace BitCoin
                 }
 
                 delete blockFile;
-                unlockBlockFile(fileID);
             }
             else
-            {
-                unlockBlockFile(fileID);
                 break;
-            }
 
             fileID++;
         }
 
-        pPool.save();
-        return pPool.blockHeight() == blockHeight();
+        mOutputs.save();
+        return mOutputs.blockHeight() == blockHeight();
     }
 
     bool Chain::save()
     {
-        bool success = mSoftForks.save();
+        bool success = mOutputs.save();
+        if(!mSoftForks.save())
+            success = false;
         if(!savePending())
             success = false;
         return success;
     }
 
+    bool Chain::saveOutputs()
+    {
+        return mOutputs.save();
+    }
+
     // Load block info from files
-    bool Chain::load(TransactionOutputPool &pPool, bool pList)
+    bool Chain::load(bool pList)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Indexing block hashes");
 
@@ -1236,19 +1183,17 @@ namespace BitCoin
         mLastBlockHash.setSize(32);
         mLastBlockHash.zeroize();
 
-        ArcMist::createDirectory(blockFilePath());
-
         for(fileID=0;;fileID++)
         {
-            lockBlockFile(fileID);
-            filePathName = blockFileName(fileID);
+            BlockFile::lock(fileID);
+            filePathName = BlockFile::fileName(fileID);
             if(ArcMist::fileExists(filePathName))
             {
                 blockFile = new BlockFile(fileID, filePathName, false);
                 if(!blockFile->isValid())
                 {
                     delete blockFile;
-                    unlockBlockFile(fileID);
+                    BlockFile::unlock(fileID);
                     success = false;
                     break;
                 }
@@ -1257,12 +1202,12 @@ namespace BitCoin
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read hashes from block file %s", filePathName.text());
                     delete blockFile;
-                    unlockBlockFile(fileID);
+                    BlockFile::unlock(fileID);
                     success = false;
                     break;
                 }
                 delete blockFile;
-                unlockBlockFile(fileID);
+                BlockFile::unlock(fileID);
 
                 if(pList)
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Block file %s", filePathName.text());
@@ -1282,7 +1227,7 @@ namespace BitCoin
             }
             else
             {
-                unlockBlockFile(fileID);
+                BlockFile::unlock(fileID);
                 break;
             }
         }
@@ -1299,7 +1244,7 @@ namespace BitCoin
         if(success && mSoftForks.height() != mNextBlockHeight - 1)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Refreshing soft forks (height %d)", mSoftForks.height(), mNextBlockHeight - 1);
+              "Refreshing soft forks (height %d)", mSoftForks.height());
 
             mSoftForks.reset();
             mBlockStats.clear();
@@ -1308,19 +1253,19 @@ namespace BitCoin
             for(fileID=0;fileID<=mLastFileID&&!mStop;fileID++)
             {
                 tempBlockStats.clear();
-                lockBlockFile(fileID);
-                filePathName = blockFileName(fileID);
+                BlockFile::lock(fileID);
+                filePathName = BlockFile::fileName(fileID);
                 blockFile = new BlockFile(fileID, filePathName);
                 if(!blockFile->readStats(tempBlockStats))
                 {
                     delete blockFile;
-                    unlockBlockFile(fileID);
+                    BlockFile::unlock(fileID);
                     success = false;
                     break;
                 }
 
                 delete blockFile;
-                unlockBlockFile(fileID);
+                BlockFile::unlock(fileID);
 
                 for(std::list<BlockStats>::iterator blockStat=tempBlockStats.begin();blockStat!=tempBlockStats.end();++blockStat)
                 {
@@ -1349,19 +1294,19 @@ namespace BitCoin
                 fileID = 0;
             for(;fileID<=mLastFileID&&!mStop;fileID++)
             {
-                lockBlockFile(fileID);
-                filePathName = blockFileName(fileID);
+                BlockFile::lock(fileID);
+                filePathName = BlockFile::fileName(fileID);
                 blockFile = new BlockFile(fileID, filePathName);
                 if(!blockFile->readStats(mBlockStats))
                 {
                     delete blockFile;
-                    unlockBlockFile(fileID);
+                    BlockFile::unlock(fileID);
                     success = false;
                     break;
                 }
 
                 delete blockFile;
-                unlockBlockFile(fileID);
+                BlockFile::unlock(fileID);
             }
 
             if(mStop)
@@ -1378,6 +1323,10 @@ namespace BitCoin
 
         mProcessMutex.unlock();
 
+        success = success && mOutputs.load();
+
+        success = success && updateOutputs();
+
         if(success)
         {
             if(mNextBlockHeight == 0)
@@ -1385,7 +1334,7 @@ namespace BitCoin
                 // Add genesis block
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Creating genesis block");
                 Block *genesis = Block::genesis();
-                bool success = processBlock(genesis, pPool);
+                bool success = processBlock(genesis);
                 delete genesis;
                 if(!success)
                     return false;
@@ -1398,7 +1347,7 @@ namespace BitCoin
         return success && loadPending();
     }
 
-    bool Chain::validate(TransactionOutputPool &pPool, bool pRebuild)
+    bool Chain::validate(bool pRebuild)
     {
         BlockFile *blockFile;
         Hash previousHash(32), merkleHash;
@@ -1409,11 +1358,11 @@ namespace BitCoin
 
         for(unsigned int fileID=0;!mStop;fileID++)
         {
-            filePathName = blockFileName(fileID);
+            filePathName = BlockFile::fileName(fileID);
             if(!ArcMist::fileExists(filePathName))
                 break;
 
-            lockBlockFile(fileID);
+            BlockFile::lock(fileID);
             blockFile = new BlockFile(fileID, filePathName);
 
             if(!blockFile->isValid())
@@ -1471,14 +1420,14 @@ namespace BitCoin
                         }
                     }
 
-                    if(!block.process(pPool, height, mSoftForks))
+                    if(!block.process(mOutputs, height, mSoftForks))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                           "Block %010d failed to process", height);
                         return false;
                     }
 
-                    if(!pPool.commit(height))
+                    if(!mOutputs.commit(block.transactions, height))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                           "Block %010d unspent transaction outputs commit failed", height);
@@ -1497,12 +1446,12 @@ namespace BitCoin
             }
 
             delete blockFile;
-            unlockBlockFile(fileID);
+            BlockFile::unlock(fileID);
         }
 
         if(pRebuild)
         {
-            pPool.save();
+            mOutputs.save();
             if(!mSoftForks.save())
                 return false;
             if(!saveTargetBits())
@@ -1510,7 +1459,7 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Unspent transaction outputs :  %d", pPool.count());
+          "Unspent transaction outputs :  %d", mOutputs.count());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Validated block height of %d", height);
         return true;
     }
@@ -1737,8 +1686,8 @@ namespace BitCoin
             else
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed read block merkle hash");
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Block merkle hash   : %s", readBlock.merkleHash.hex().text());
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Correct merkle hash : %s", checkHash.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Block merkle hash      : %s", readBlock.merkleHash.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Calculated merkle hash : %s", checkHash.hex().text());
                 success = false;
             }
 

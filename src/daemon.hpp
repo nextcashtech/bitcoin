@@ -14,7 +14,6 @@
 #include "base.hpp"
 #include "info.hpp"
 #include "node.hpp"
-#include "transaction_output.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -59,7 +58,6 @@ namespace BitCoin
 
         Chain mChain;
         Info &mInfo;
-        TransactionOutputPool mPool;
 
         void stop();
         bool mRunning, mStopping, mStopRequested;

@@ -14,7 +14,7 @@
 #include "base.hpp"
 #include "soft_forks.hpp"
 #include "transaction.hpp"
-#include "transaction_output.hpp"
+#include "outputs.hpp"
 
 
 namespace BitCoin
@@ -29,10 +29,12 @@ namespace BitCoin
         // Verify hash is lower than target difficulty specified by targetBits
         bool hasProofOfWork();
 
-        void write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount);
+        void write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
+          bool pBlockFile = false);
 
         // pCalculateHash will calculate the hash of the block data while it reads it
-        bool read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount, bool pCalculateHash);
+        bool read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
+          bool pCalculateHash, bool pBlockFile = false);
 
         void clear();
 
@@ -60,12 +62,12 @@ namespace BitCoin
 
         void calculateHash();
         void calculateMerkleHash(Hash &pMerkleHash);
-        bool process(TransactionOutputPool &pPool, uint64_t pBlockHeight, const SoftForks &pSoftForks);
+        bool process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const SoftForks &pSoftForks);
 
         // Amount of Satoshis generated for mining a block at this height
         static uint64_t coinBaseAmount(uint64_t pBlockHeight);
 
-        // Generate the Genesis block for the chain
+        // Create the Genesis block
         static Block *genesis();
 
     private:
@@ -103,6 +105,16 @@ namespace BitCoin
     class BlockFile
     {
     public:
+
+        // Blocks
+        static const ArcMist::String &path();
+        static ArcMist::String fileName(unsigned int pID);
+        static void lock(unsigned int pFileID);
+        static void unlock(unsigned int pFileID);
+
+        // Get transaction output from block file
+        static bool readOutput(TransactionReference *pReference, unsigned int pIndex, Output &pOutput);
+
         /* File format
          *   Version = "AMBLKS01"
          *   CRC32 of data after CRC in file
@@ -149,6 +161,9 @@ namespace BitCoin
         // Read block for specified hash
         bool readBlock(const Hash &pHash, Block &pBlock, bool pIncludeTransactions);
 
+        // Read transaction output at specified offset in file
+        bool readTransactionOutput(unsigned int pFileOffset, Output &pTransactionOutput);
+
         // Give the offset of a specific hash into the file
         unsigned int hashOffset(const Hash &pHash);
 
@@ -168,6 +183,10 @@ namespace BitCoin
         void getLastCount();
         unsigned int mCount;
         Hash mLastHash;
+
+        static ArcMist::Mutex mBlockFileMutex;
+        static std::vector<unsigned int> mLockedBlockFileIDs;
+        static ArcMist::String mBlockFilePath;
 
         BlockFile(BlockFile &pCopy);
         BlockFile &operator = (BlockFile &pRight);
