@@ -1058,8 +1058,8 @@ namespace BitCoin
         BlockFile *blockFile = NULL;
         Block block;
         unsigned int blockOffset;
-        uint32_t lastSave = getTime();
         SoftForks emptySoftForks;
+        unsigned int spentOutputsThreshold = Info::instance().spentOutputsThreshold;
 
         while(!mStop)
         {
@@ -1097,18 +1097,15 @@ namespace BitCoin
                         if(blockFile->readBlock(blockOffset, block, true))
                         {
                             BlockFile::unlock(fileID);
-                            if(block.process(mOutputs, height, emptySoftForks))
+                            if(block.updateOutputs(mOutputs, height))
                             {
                                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                                   "Processed block %08d (%d trans) (%d bytes) : %s", height, block.transactionCount,
                                   block.size(), block.hash.hex().text());
                                 mOutputs.commit(block.transactions, height++);
-                                if(getTime() - lastSave > 300)
-                                {
-                                    // Save transaction output pool every 10 minutes
+                                // Save transaction output pool when the spent size gets over threshold
+                                if(mOutputs.spentSize() > spentOutputsThreshold)
                                     mOutputs.save();
-                                    lastSave = getTime();
-                                }
                             }
                             else
                             {
@@ -1129,7 +1126,8 @@ namespace BitCoin
                             return false;
                         }
                     }
-                    blockOffset++;
+
+                    ++blockOffset;
 
                     if(mStop)
                         break;
@@ -1287,12 +1285,15 @@ namespace BitCoin
         if(success)
         {
             // Load block statistics
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Loading last %d block statistics", RETARGET_PERIOD);
+
             mBlockStats.clear();
             if(mLastFileID > (RETARGET_PERIOD / BlockFile::MAX_BLOCKS) + 1)
                 fileID = mLastFileID - (RETARGET_PERIOD / BlockFile::MAX_BLOCKS) - 1;
             else
                 fileID = 0;
-            for(;fileID<=mLastFileID&&!mStop;fileID++)
+            for(;fileID<=mLastFileID&&!mStop;++fileID)
             {
                 BlockFile::lock(fileID);
                 filePathName = BlockFile::fileName(fileID);
@@ -1323,7 +1324,7 @@ namespace BitCoin
 
         mProcessMutex.unlock();
 
-        success = success && mOutputs.load();
+        success = success && mOutputs.load(mStop);
 
         success = success && updateOutputs();
 
@@ -1459,7 +1460,7 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Unspent transaction outputs :  %d", mOutputs.count());
+          "Unspent transactions/outputs : %d/%d", mOutputs.transactionCount(), mOutputs.outputCount());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Validated block height of %d", height);
         return true;
     }

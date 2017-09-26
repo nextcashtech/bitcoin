@@ -71,27 +71,18 @@ namespace BitCoin
 
     void TransactionOutputReference::write(ArcMist::OutputStream *pStream)
     {
-        // Block File Offset
-        pStream->writeUnsignedInt(blockFileOffset);
-
-        // Spent Block Height
         pStream->writeUnsignedInt(spentBlockHeight);
+        pStream->writeUnsignedInt(blockFileOffset);
     }
 
     bool TransactionOutputReference::read(ArcMist::InputStream *pStream)
     {
-        if(pStream->remaining() < 8)
+        if(pStream->remaining() < FILE_SIZE)
             return false;
 
-        // Not in file (set when read by TransactionReference)
-        index = 0;
-
-        // Block File Offset
-        blockFileOffset = pStream->readUnsignedInt();
-
-        // Spent Block Height
+        index = 0; // Not in file (set when read by TransactionReference)
         spentBlockHeight = pStream->readUnsignedInt();
-
+        blockFileOffset = pStream->readUnsignedInt();
         return true;
     }
 
@@ -104,96 +95,166 @@ namespace BitCoin
 
     void TransactionReference::write(ArcMist::OutputStream *pStream)
     {
-        fileOffset = pStream->writeOffset();
-
-        // Transaction Hash
+        fileOffset = pStream->writeOffset(); // Remember the offset in the file to make updates quicker
         id.write(pStream);
-
-        // Created Block Height
         pStream->writeUnsignedInt(blockHeight);
-
-        // Output count
-        pStream->writeUnsignedInt(mOutputs.size());
-
-        // Outputs
-        for(std::vector<TransactionOutputReference>::iterator output=mOutputs.begin();output!=mOutputs.end();++output)
+        pStream->writeUnsignedInt(mOutputCount);
+        TransactionOutputReference *output=mOutputs;
+        for(unsigned int index=0;index<mOutputCount;++index,++output)
             output->write(pStream);
     }
 
-    bool TransactionReference::read(ArcMist::InputStream *pStream)
+    bool TransactionReference::read(ArcMist::InputStream *pStream, unsigned int &pOutputCount,
+      unsigned int &pSpentOutputCount)
     {
-        if(pStream->remaining() < 48)
+        if(pStream->remaining() < SIZE + TransactionOutputReference::FILE_SIZE)
             return false;
 
-        // Transaction Hash
+        fileOffset = pStream->readOffset(); // Remember the offset in the file to make updates quicker
         if(!id.read(pStream))
             return false;
-
-        // Created Block Height
         blockHeight = pStream->readUnsignedInt();
 
         // Output count
         unsigned int count = pStream->readUnsignedInt();
+        if(mOutputCount != count)
+        {
+            if(mOutputs != NULL)
+                delete[] mOutputs;
+            mOutputCount = count;
+            if(mOutputCount == 0)
+            {
+                mOutputs = NULL;
+                return true;
+            }
+            mOutputs = new TransactionOutputReference[mOutputCount];
+        }
+
+        if(mOutputCount == 0)
+            return true;
+
+        if(pStream->remaining() < mOutputCount * TransactionOutputReference::FILE_SIZE)
+            return false;
 
         // Outputs
-        mOutputs.resize(count);
-        unsigned int index = 0;
-        for(std::vector<TransactionOutputReference>::iterator output=mOutputs.begin();output!=mOutputs.end();++output)
+        TransactionOutputReference *output=mOutputs;
+        for(unsigned int index=0;index<mOutputCount;++output)
             if(output->read(pStream))
+            {
                 output->index = index++;
+                ++pOutputCount;
+                if(output->spentBlockHeight != 0)
+                    ++pSpentOutputCount;
+            }
             else
                 return false;
 
         return true;
     }
 
-    TransactionOutputReference *TransactionReference::output(unsigned int pIndex)
+    unsigned int TransactionReference::spentOutputCount() const
     {
-        for(std::vector<TransactionOutputReference>::iterator output=mOutputs.begin();output!=mOutputs.end();++output)
+        unsigned int result = 0;
+        TransactionOutputReference *output=mOutputs;
+        for(unsigned int index=0;index<mOutputCount;++index,++output)
+            if(output->spentBlockHeight != 0)
+                ++result;
+        return result;
+    }
+
+    TransactionOutputReference *TransactionReference::outputAt(unsigned int pIndex)
+    {
+        TransactionOutputReference *output=mOutputs;
+        for(unsigned int index=0;index<mOutputCount;++index,++output)
             if(output->index == pIndex)
-                return &(*output);
+                return output;
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Invalid output index : %d", pIndex);
         return NULL;
     }
 
-    void TransactionReference::writeSpent(ArcMist::OutputStream *pStream, bool pWrote)
+    void TransactionReference::writeSpent(ArcMist::OutputStream *pStream, bool pWrote,
+      unsigned int &pOutputCount, unsigned int &pSpentOutputCount)
     {
-        for(std::vector<TransactionOutputReference>::iterator output=mOutputs.begin();output!=mOutputs.end();)
-            if(output->spentBlockHeight != 0)
-            {
-                if(!pWrote)
+        if(!pWrote)
+        {
+            TransactionOutputReference *output=mOutputs;
+            for(unsigned int index=0;index<mOutputCount;++index,++output)
+                if(output->spentBlockHeight != 0)
                 {
-                    // 40 (id 32, height 4, output count 4) + 8 per output before this one + 4 to skip block file offset of output
-                    pStream->setWriteOffset(fileOffset + 40 + (output->index * 8) + 4);
+                    // 40 (id 32, height 4, output count 4)
+                    // + TransactionOutputReference::FILE_SIZE per output before this one to get to the start of this output
+                    pStream->setWriteOffset(fileOffset + SIZE + (output->index * TransactionOutputReference::FILE_SIZE));
                     pStream->writeUnsignedInt(output->spentBlockHeight);
                 }
+        }
 
-                // Remove spent output reference
-                output = mOutputs.erase(output);
-            }
-            else
-                ++output;
+        removeSpent(pOutputCount, pSpentOutputCount);
     }
 
-    void TransactionReference::removeSpent()
+    void TransactionReference::removeSpent(unsigned int &pOutputCount, unsigned int &pSpentOutputCount)
     {
-        for(std::vector<TransactionOutputReference>::iterator output=mOutputs.begin();output!=mOutputs.end();)
+        if(mOutputs == NULL)
+            return;
+
+        unsigned int spentCount = 0;
+        TransactionOutputReference *output=mOutputs;
+        for(unsigned int index=0;index<mOutputCount;++index,++output)
             if(output->spentBlockHeight != 0)
-                output = mOutputs.erase(output);
-            else
-                ++output;
+                ++spentCount;
+
+        if(spentCount == 0)
+            return;
+
+        if(spentCount == mOutputCount)
+        {
+            pOutputCount -= mOutputCount;
+            pSpentOutputCount -= mOutputCount;
+            delete[] mOutputs;
+            mOutputs = NULL;
+            mOutputCount = 0;
+            return;
+        }
+
+        TransactionOutputReference *newOutputs = new TransactionOutputReference[mOutputCount - spentCount];
+        TransactionOutputReference *newOutput=newOutputs;
+        output=mOutputs;
+        for(unsigned int index=0;index<mOutputCount;++index,++output)
+            if(output->spentBlockHeight == 0)
+            {
+                *newOutput = *output;
+                ++newOutput;
+            }
+
+        delete[] mOutputs;
+        mOutputs = newOutputs;
+        mOutputCount -= spentCount;
+
+        pOutputCount -= spentCount;
+        pSpentOutputCount -= spentCount;
     }
 
-    void TransactionReference::update(std::vector<Output *> &pOutputs)
+    void TransactionReference::commit(std::vector<Output *> &pOutputs)
     {
-        for(std::vector<TransactionOutputReference>::iterator output=mOutputs.begin();output!=mOutputs.end();++output)
-            output->update(*pOutputs.at(output->index));
+        if(mOutputs == NULL)
+            return;
+
+        TransactionOutputReference *output=mOutputs;
+        for(unsigned int index=0;index<mOutputCount;++index,++output)
+            output->commit(*pOutputs.at(output->index));
     }
 
-    void TransactionReference::revert(unsigned int pBlockHeight)
+    void TransactionReference::revert(unsigned int pBlockHeight, unsigned int &pSpentOutputCount)
     {
-        for(std::vector<TransactionOutputReference>::iterator output=mOutputs.begin();output!=mOutputs.end();++output)
+        if(mOutputs == NULL)
+            return;
+
+        TransactionOutputReference *output=mOutputs;
+        for(unsigned int index=0;index<mOutputCount;++index,++output)
             if(output->spentBlockHeight == pBlockHeight)
+            {
+                --pSpentOutputCount;
                 output->spentBlockHeight = 0; // Spent at this block height, so "unspend"
+            }
     }
 
     void TransactionReference::print(ArcMist::Log::Level pLevel)
@@ -202,7 +263,15 @@ namespace BitCoin
         ArcMist::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Transaction ID : %s", id.hex().text());
         ArcMist::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Height         : %d", blockHeight);
 
-        for(std::vector<TransactionOutputReference>::iterator output=mOutputs.begin();output!=mOutputs.end();++output)
+        if(mOutputs == NULL)
+        {
+            ArcMist::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  No outputs");
+            return;
+        }
+
+        ArcMist::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Outputs:");
+        TransactionOutputReference *output=mOutputs;
+        for(unsigned int index=0;index<mOutputCount;++index,++output)
             output->print(pLevel);
     }
 
@@ -225,14 +294,15 @@ namespace BitCoin
         for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();++reference)
             if((*reference)->id == pTransactionID)
             {
-                output = (*reference)->output(pIndex);
+                output = (*reference)->outputAt(pIndex);
                 if(output != NULL && output->spentBlockHeight == 0)
                     return *reference;
             }
         return NULL;
     }
 
-    void TransactionOutputSet::write(ArcMist::OutputStream *pStream)
+    void TransactionOutputSet::write(ArcMist::OutputStream *pStream, unsigned int &pTransactionCount,
+      unsigned int &pOutputCount, unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount)
     {
         if(pStream->length() == 0) // Empty file
             pStream->writeString(START_STRING);
@@ -250,11 +320,11 @@ namespace BitCoin
             else
                 wrote = false;
 
-            (*reference)->writeSpent(pStream, wrote);
-
-            (*reference)->removeSpent();
-            if((*reference)->outputCount() == 0) // All outputs unspent
+            (*reference)->writeSpent(pStream, wrote, pOutputCount, pSpentOutputCount);
+            if((*reference)->outputCount() == 0) // All outputs spent
             {
+                --pTransactionCount;
+                --pSpentTransactionCount;
                 delete *reference;
                 reference = mReferences.erase(reference);
             }
@@ -264,7 +334,8 @@ namespace BitCoin
     }
 
     // Keep only those with spent block == 0
-    bool TransactionOutputSet::read(ArcMist::InputStream *pStream)
+    bool TransactionOutputSet::read(ArcMist::InputStream *pStream, unsigned int &pTransactionCount,
+      unsigned int &pOutputCount, unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount)
     {
         clear();
 
@@ -274,18 +345,23 @@ namespace BitCoin
             return false;
 
         TransactionReference *newReference = new TransactionReference();
+        unsigned int outputCount, spentOutputCount;
         while(pStream->remaining())
         {
-            newReference->fileOffset = pStream->readOffset();
-            if(!newReference->read(pStream))
+            outputCount = 0;
+            spentOutputCount = 0;
+            if(!newReference->read(pStream, outputCount, spentOutputCount))
             {
                 delete newReference;
                 return false;
             }
 
-            newReference->removeSpent();
-            if(newReference->outputCount() != 0) // Some outputs unspent
+            if(outputCount > spentOutputCount) // Not all outputs spent
             {
+                if(spentOutputCount > 0)
+                    newReference->removeSpent(outputCount, spentOutputCount);
+                pOutputCount += outputCount;
+                ++pTransactionCount;
                 mReferences.push_back(newReference);
                 newReference = new TransactionReference();
             }
@@ -295,43 +371,44 @@ namespace BitCoin
         return true;
     }
 
-    unsigned int TransactionOutputSet::count() const
-    {
-        unsigned int result = 0;
-        for(std::list<TransactionReference *>::const_iterator reference=mReferences.begin();reference!=mReferences.end();++reference)
-            result += (*reference)->outputCount();
-        return result;
-    }
-
-    void TransactionOutputSet::add(TransactionReference *pReference)
+    void TransactionOutputSet::add(TransactionReference *pReference, unsigned int &pTransactionCount,
+      unsigned int &pOutputCount)
     {
         mReferences.push_back(pReference);
+        ++pTransactionCount;
+        pOutputCount += pReference->outputCount();
     }
 
-    void TransactionOutputSet::commit(const Hash &pTransactionID, std::vector<Output *> &pOutputs, unsigned int pBlockHeight)
+    void TransactionOutputSet::commit(const Hash &pTransactionID, std::vector<Output *> &pOutputs,
+      unsigned int pBlockHeight)
     {
         for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();++reference)
             if((*reference)->blockHeight == pBlockHeight && (*reference)->id == pTransactionID)
-                (*reference)->update(pOutputs);
+                (*reference)->commit(pOutputs);
     }
 
-    unsigned int TransactionOutputSet::revert(unsigned int pBlockHeight)
+    void TransactionOutputSet::revert(unsigned int pBlockHeight, unsigned int &pTransactionCount,
+      unsigned int &pOutputCount, unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount)
     {
-        unsigned int result = 0;
+        unsigned int spentOutputCount;
         for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();)
             if((*reference)->fileOffset == 0xffffffff && (*reference)->blockHeight == pBlockHeight)
             {
                 // Created at this block height, so just delete
+                pOutputCount -= (*reference)->outputCount();
+                spentOutputCount = (*reference)->spentOutputCount();
+                pSpentOutputCount -= spentOutputCount;
+                --pTransactionCount;
+                if((*reference)->outputCount() == spentOutputCount)
+                    --pSpentTransactionCount;
                 delete *reference;
                 reference = mReferences.erase(reference);
             }
             else
             {
-                (*reference)->revert(pBlockHeight);
-                result += (*reference)->outputCount();
+                (*reference)->revert(pBlockHeight, pSpentOutputCount);
                 ++reference;
             }
-        return result;
     }
 
     TransactionOutputPool::TransactionOutputPool() : mMutex("Output Pool")
@@ -339,12 +416,10 @@ namespace BitCoin
         mValid = true;
         mModified = false;
         mNextBlockHeight = 0;
-        mCount = 0;
-    }
-
-    TransactionOutputPool::~TransactionOutputPool()
-    {
-
+        mTransactionCount = 0;
+        mOutputCount = 0;
+        mSpentTransactionCount = 0;
+        mSpentOutputCount = 0;
     }
 
     // Add all the outputs from a block (pending since they have no block file IDs or offsets yet)
@@ -354,8 +429,8 @@ namespace BitCoin
         for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
         {
             // Get references set for transaction ID
-            mReferences[(*transaction)->hash.lookup()].add(new TransactionReference((*transaction)->hash, pBlockHeight, (*transaction)->outputs.size()));
-            mCount += (*transaction)->outputs.size();
+            mReferences[(*transaction)->hash.lookup()].add(new TransactionReference((*transaction)->hash,
+              pBlockHeight, (*transaction)->outputs.size()), mTransactionCount, mOutputCount);
         }
         mMutex.unlock();
     }
@@ -381,9 +456,9 @@ namespace BitCoin
         mMutex.lock();
         for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
             mReferences[(*transaction)->hash.lookup()].commit((*transaction)->hash, (*transaction)->outputs, pBlockHeight);
+        mNextBlockHeight++;
         mMutex.unlock();
 
-        mNextBlockHeight++;
         mModified = true;
         return true;
     }
@@ -395,10 +470,9 @@ namespace BitCoin
 
         mMutex.lock();
         TransactionOutputSet *set = mReferences;
-        mCount = 0;
         for(unsigned int i=0;i<0x10000;i++)
         {
-            mCount += set->revert(pBlockHeight);
+            set->revert(pBlockHeight, mTransactionCount, mOutputCount, mSpentTransactionCount, mSpentOutputCount);
             ++set;
         }
         mMutex.unlock();
@@ -420,7 +494,7 @@ namespace BitCoin
         return result;
     }
 
-    bool TransactionOutputPool::load()
+    bool TransactionOutputPool::load(bool &pStop)
     {
         mValid = true;
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Loading transaction outputs");
@@ -451,15 +525,23 @@ namespace BitCoin
             mNextBlockHeight = file->readUnsignedInt();
         delete file;
 
+
         if(mValid)
         {
+            uint32_t lastReport = getTime();
             TransactionOutputSet *set = mReferences;
-            for(unsigned int i=0;i<0x10000;i++)
+            for(unsigned int i=0;i<0x10000&&!pStop;i++)
             {
+                if(getTime() - lastReport > 10)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Load is %2d%% Complete", (int)(((float)i / (float)0x10000) * 100.0f));
+                    lastReport = getTime();
+                }
                 filePathName.writeFormatted("%s%s%04x", filePath.text(), PATH_SEPARATOR, i);
                 file = new ArcMist::FileInputStream(filePathName);
                 file->setInputEndian(ArcMist::Endian::LITTLE);
-                if(!set->read(file))
+                if(!set->read(file, mTransactionCount, mOutputCount, mSpentTransactionCount, mSpentOutputCount))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                       "Failed to load outputs set %04x", i);
@@ -468,16 +550,19 @@ namespace BitCoin
                     break;
                 }
                 delete file;
-                mCount += set->count();
                 ++set;
             }
+
+            if(pStop)
+                mValid = false;
         }
 
         mMutex.unlock();
 
         if(mValid)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-              "Loaded %d transaction outputs at block height of %d", mCount, mNextBlockHeight);
+              "Loaded %d/%d transactions/outputs (%d bytes) (%d bytes spent) at block height %d",
+              mTransactionCount, mOutputCount, size(), spentSize(), mNextBlockHeight - 1);
         else
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
               "Failed to load transaction outputs");
@@ -499,7 +584,12 @@ namespace BitCoin
             return true;
         }
 
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME, "Saving unspent transaction outputs");
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+          "Saving transaction outputs at block height %d", mNextBlockHeight - 1);
+
+        unsigned int previousTransctionCount = mTransactionCount;
+        unsigned int previousOutputCount = mOutputCount;
+        unsigned int previousSize = size();
 
         mMutex.lock();
 
@@ -524,9 +614,16 @@ namespace BitCoin
 
         if(success)
         {
+            uint32_t lastReport = getTime();
             TransactionOutputSet *set = mReferences;
             for(unsigned int i=0;i<0x10000;i++)
             {
+                if(getTime() - lastReport > 10)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Save is %2d%% Complete", (int)(((float)i / (float)0x10000) * 100.0f));
+                    lastReport = getTime();
+                }
                 filePathName.writeFormatted("%s%s%04x", filePath.text(), PATH_SEPARATOR, i);
                 file = new ArcMist::FileOutputStream(filePathName);
                 file->setOutputEndian(ArcMist::Endian::LITTLE);
@@ -539,7 +636,7 @@ namespace BitCoin
                     break;
                 }
                 else
-                    set->write(file);
+                    set->write(file, mTransactionCount, mOutputCount, mSpentTransactionCount, mSpentOutputCount);
                 delete file;
                 ++set;
             }
@@ -550,8 +647,17 @@ namespace BitCoin
         if(success)
         {
             mModified = false;
+            if(mSpentTransactionCount != 0 || mSpentOutputCount != 0)
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Failed to purge %d/%d spent transactions/outputs (%d bytes)", mSpentTransactionCount,
+                  mSpentOutputCount, spentSize());
+
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-              "Saved %d transaction outputs at block height of %d", mCount, mNextBlockHeight);
+              "Purged %d/%d transactions/outputs (%d bytes)", previousTransctionCount - mTransactionCount,
+              previousOutputCount - mOutputCount, previousSize - size());
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+              "Currently %d/%d transactions/outputs (%d bytes) (%d bytes spent)",
+              mTransactionCount, mOutputCount, size(), spentSize());
         }
         else
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,

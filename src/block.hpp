@@ -62,7 +62,10 @@ namespace BitCoin
 
         void calculateHash();
         void calculateMerkleHash(Hash &pMerkleHash);
+
         bool process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const SoftForks &pSoftForks);
+
+        bool updateOutputs(TransactionOutputPool &pOutputs, uint64_t pBlockHeight);
 
         // Amount of Satoshis generated for mining a block at this height
         static uint64_t coinBaseAmount(uint64_t pBlockHeight);

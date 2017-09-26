@@ -112,8 +112,11 @@ namespace BitCoin
 
         void calculateHash();
 
-        bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions, uint64_t pBlockHeight, bool pCoinBase,
-          int32_t pBlockVersion, const SoftForks &pSoftForks);
+        bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
+          uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const SoftForks &pSoftForks);
+
+        bool updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
+          uint64_t pBlockHeight);
 
         bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
           ArcMist::Buffer &pOutputScript, Signature::HashType pHashType);

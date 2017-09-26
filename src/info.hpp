@@ -35,6 +35,7 @@ namespace BitCoin
         uint32_t maxConnections;
         uint32_t pendingSizeThreshold;
         uint32_t pendingBlocksThreshold;
+        uint32_t spentOutputsThreshold;
         uint64_t minFee;
 
         // Return list of peers in random order

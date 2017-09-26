@@ -134,6 +134,9 @@ namespace BitCoin
         if(!mChain.load(false))
             return false;
 
+        if(mStopRequested)
+            return true;
+
         mConnectionThread = new ArcMist::Thread("Connection", handleConnections);
         if(mConnectionThread == NULL)
         {
@@ -285,7 +288,9 @@ namespace BitCoin
         statStartTime.writeFormattedTime(mStatistics.startTime);
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks, %d TXOs", mChain.blockHeight(), mChain.outputCount());
+          "Block Chain : %d blocks, %d/%d transactions/outputs (%d bytes) (%d bytes spent)",
+          mChain.blockHeight(), mChain.outputs().transactionCount(), mChain.outputs().outputCount(),
+          mChain.outputs().size(), mChain.outputs().spentSize());
         if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Pending (above threshold) : %d/%d blocks/headers (%d bytes) (%d requested)", pendingBlocks,
@@ -505,10 +510,11 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - lastOutputsSaveTime > 1200)
+            if(getTime() - lastOutputsSaveTime > 1200 ||
+              daemon.mChain.outputs().spentSize() > daemon.mInfo.spentOutputsThreshold)
             {
-                lastOutputsSaveTime = getTime();
                 daemon.mChain.saveOutputs();
+                lastOutputsSaveTime = getTime();
             }
 
             if(daemon.mStopping)

@@ -145,6 +145,48 @@ namespace BitCoin
         return true;
     }
 
+    bool Transaction::updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
+      uint64_t pBlockHeight)
+    {
+        if(inputs.size() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
+            return false;
+        }
+
+        if(outputs.size() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
+            return false;
+        }
+
+        // Process Inputs
+        TransactionReference *reference;
+        unsigned int index = 0;
+        for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+        {
+            if((*input)->outpoint.index != 0xffffffff)
+            {
+                // Find unspent transaction for input
+                reference = pOutputs.findUnspent((*input)->outpoint.transactionID, (*input)->outpoint.index);
+
+                if(reference == NULL)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d outpoint transaction not found : trans %s index %d", index + 1,
+                      (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
+                    return false;
+                }
+
+                pOutputs.spend(reference, (*input)->outpoint.index, pBlockHeight);
+            }
+
+            ++index;
+        }
+
+        return true;
+    }
+
     bool Transaction::process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
       uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const SoftForks &pSoftForks)
     {
@@ -163,14 +205,13 @@ namespace BitCoin
             return false;
         }
 
-        ScriptInterpreter interpreter;
-        Output output;
-
         mFee = 0;
 
         // Process Inputs
-        unsigned int index = 0;
+        ScriptInterpreter interpreter;
         TransactionReference *reference;
+        Output output;
+        unsigned int index = 0;
         for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
         {
             if(pCoinBase)
@@ -246,7 +287,7 @@ namespace BitCoin
                     return false;
                 }
 
-                reference->output((*input)->outpoint.index)->spend(pBlockHeight);
+                pOutputs.spend(reference, (*input)->outpoint.index, pBlockHeight);
 
                 //TODO If transaction output is in this block then it won't be available through the previous function
 

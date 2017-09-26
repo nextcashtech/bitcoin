@@ -58,6 +58,7 @@ namespace BitCoin
         mPeersModified = false;
         pendingSizeThreshold = 104857600; // 100 MiB
         pendingBlocksThreshold = 512;
+        spentOutputsThreshold = 52428800; // 50 MiB
 
         if(sPath)
         {
@@ -136,6 +137,8 @@ namespace BitCoin
             pendingSizeThreshold = std::stol(value, NULL, 0);
         else if(std::strcmp(name, "pending_blocks") == 0)
             pendingBlocksThreshold = std::stol(value, NULL, 0);
+        else if(std::strcmp(name, "spent_output_size") == 0)
+            spentOutputsThreshold = std::stol(value, NULL, 0);
 
         delete[] name;
         delete[] value;

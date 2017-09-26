@@ -345,6 +345,32 @@ namespace BitCoin
         return result;
     }
 
+    bool Block::updateOutputs(TransactionOutputPool &pOutputs, uint64_t pBlockHeight)
+    {
+        if(transactions.size() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
+            return false;
+        }
+
+        // Add the transaction outputs from this block to the output pool
+        pOutputs.add(this->transactions, pBlockHeight);
+
+        unsigned int transactionOffset = 0;
+        for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
+        {
+            if(!(*transaction)->updateOutputs(pOutputs, transactions, pBlockHeight))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Transaction %d update failed",
+                  transactionOffset);
+                return false;
+            }
+            ++transactionOffset;
+        }
+
+        return true;
+    }
+
     bool Block::process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const SoftForks &pSoftForks)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Processing block %08d", pBlockHeight);
@@ -384,7 +410,8 @@ namespace BitCoin
         {
             if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version, pSoftForks))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",transactionOffset);
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",
+                  transactionOffset);
                 return false;
             }
             if(!isCoinBase)
@@ -397,15 +424,18 @@ namespace BitCoin
         if(-transactions.front()->fee() - mFees > coinBaseAmount(pBlockHeight))
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Coinbase outputs are too high");
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Coinbase %.08f", bitcoins(-transactions.front()->fee()));
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Coinbase %.08f",
+              bitcoins(-transactions.front()->fee()));
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Fees     %.08f", bitcoins(mFees));
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Block %08d Coinbase amount should be %.08f", pBlockHeight, bitcoins(coinBaseAmount(pBlockHeight)));
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block %08d Coinbase amount should be %.08f", pBlockHeight, bitcoins(coinBaseAmount(pBlockHeight)));
             return false;
         }
         else
         {
             ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Transactions %d", transactions.size());
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Coinbase     %.08f", bitcoins(-transactions.front()->fee()));
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Coinbase     %.08f",
+              bitcoins(-transactions.front()->fee()));
             ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Fees         %.08f", bitcoins(mFees));
         }
 
@@ -1015,7 +1045,7 @@ namespace BitCoin
         lock(fileID);
         BlockFile *blockFile = new BlockFile(fileID, fileName(fileID), false);
 
-        bool success = blockFile->isValid() && blockFile->readTransactionOutput(pReference->output(pIndex)->blockFileOffset, pOutput);
+        bool success = blockFile->isValid() && blockFile->readTransactionOutput(pReference->outputAt(pIndex)->blockFileOffset, pOutput);
 
         delete blockFile;
         unlock(fileID);

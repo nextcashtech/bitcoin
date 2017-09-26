@@ -116,7 +116,7 @@ namespace BitCoin
         ~Chain();
 
         unsigned int blockHeight() const { return mNextBlockHeight - 1; }
-        unsigned int outputCount() const { return mOutputs.count(); }
+        const TransactionOutputPool &outputs() const { return mOutputs; }
         const Hash &lastBlockHash() const { return mLastBlockHash; }
         unsigned int pendingBlockHeight() const { return mNextBlockHeight - 1 + mPending.size(); }
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
