@@ -259,29 +259,11 @@ namespace BitCoin
         unsigned int size() const { return mSize; }
         const uint8_t *value() const { return mData; }
 
-        // Little endian (lease significant bytes first)
-        ArcMist::String hex() const
-        {
-            ArcMist::String result;
-            if(mSize == 0)
-                return result;
-            result.writeHex(mData, mSize);
-            return result;
-        }
-
         // Big endian (most significant bytes first, i.e. leading zeroes for block hashes)
-        ArcMist::String bigHex() const
-        {
-            ArcMist::String result;
-            if(mSize == 0)
-                return result;
-            uint8_t reverse[mSize];
-            unsigned int i = mSize - 1;
-            for(unsigned int j=0;j<mSize;j++)
-                reverse[i--] = mData[j];
-            result.writeHex(reverse, mSize);
-            return result;
-        }
+        ArcMist::String hex() const;
+
+        // Little endian (least significant bytes first)
+        ArcMist::String littleHex() const;
 
         void setSize(unsigned int pSize)
         {
@@ -298,6 +280,12 @@ namespace BitCoin
                 zeroize();
             }
         }
+
+        // Big endian (most significant bytes first, i.e. leading zeroes for block hashes)
+        void setHex(const char *pHex);
+
+        // Little endian (least significant bytes first)
+        void setLittleHex(const char *pHex);
 
         void setByte(unsigned int pOffset, uint8_t pValue)
         {

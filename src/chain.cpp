@@ -620,7 +620,7 @@ namespace BitCoin
         {
             revertTargetBits();
             mOutputs.revert(mNextBlockHeight);
-            mSoftForks.revert(mNextBlockHeight);
+            mSoftForks.revert();
             mProcessMutex.unlock();
             return false;
         }
@@ -686,7 +686,7 @@ namespace BitCoin
               "Failed to commit transaction outputs to pool");
             revertTargetBits();
             mOutputs.revert(mNextBlockHeight);
-            mSoftForks.revert(mNextBlockHeight);
+            mSoftForks.revert();
             mProcessMutex.unlock();
             return false;
         }
@@ -708,7 +708,7 @@ namespace BitCoin
         }
         else
         {
-            mSoftForks.revert(mNextBlockHeight);
+            mSoftForks.revert();
             revertTargetBits();
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to add to block to file %08d : %s", mLastFileID, pBlock->hash.hex().text());
@@ -1324,8 +1324,10 @@ namespace BitCoin
 
         mProcessMutex.unlock();
 
+        // Load transaction outputs
         success = success && mOutputs.load(mStop);
 
+        // Update transaction outputs if they aren't up to current chain block height
         success = success && updateOutputs();
 
         if(success)
@@ -1631,7 +1633,7 @@ namespace BitCoin
         Block readBlock;
         ArcMist::FileInputStream readFile("tests/06128e87be8b1b4dea47a7247d5528d2702c96826c7a648497e773b800000000.pending_block");
         Info::instance().setPath("../bcc_test");
-        TransactionOutputPool pool;
+        TransactionOutputPool outputs;
         SoftForks softForks;
 
         if(!readBlock.read(&readFile, true, true, true))
@@ -1695,7 +1697,7 @@ namespace BitCoin
             /***********************************************************************************************
              * Block read process
              ***********************************************************************************************/
-            if(readBlock.process(pool, 1, softForks))
+            if(readBlock.process(outputs, 1, softForks))
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed read block process");
             else
             {
@@ -1709,36 +1711,47 @@ namespace BitCoin
         /***********************************************************************************************
          * Pending Block
          ***********************************************************************************************/
-        // Requires pool to be setup
-        // Info::instance().setPath("/var/bitcoin/mainnet");
-        // pool.load();
+        // Requires outputs to be setup
+        Info::instance().setPath("/var/bitcoin/mainnet");
+        bool stop = false;
+        softForks.load();
+        outputs.load(stop);
 
-        // ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
-        // Block block;
+        ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
+        Block block;
+        Hash hash;
+        hash.setHex("58fec06b8d8a232ee6704c461ca6a608673aa7231163eaaf1676cd99e9f4c4b4");
 
-        // if(!block.read(&file, true, true, true))
-        // {
-            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read pending block");
-            // success = false;
-        // }
-        // else
-        // {
-            // if(block.process(pool, pool.blockHeight(), 0))
+        if(!block.read(&file, true, true, true))
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read pending block");
+            success = false;
+        }
+        else
+        {
+            for(std::vector<Transaction *>::iterator trans=block.transactions.begin();trans!=block.transactions.end();++trans)
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Trans : %s", (*trans)->hash.hex().text());
+
+            outputs.add(block.transactions, outputs.blockHeight() + 1);
+
+            TransactionReference *reference = outputs.findUnspent(hash, 0);
+
+            if(reference != NULL)
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  "Found at height : %d", reference->blockHeight);
+            else
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Not Found");
+
+            // if(block.process(outputs, outputs.blockHeight() + 1, softForks))
                 // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed pending block");
             // else
             // {
                 // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed pending block");
                 // success = false;
             // }
-        // }
+        }
 
-        // block.print(ArcMist::Log::INFO, false);
-
-// // #ifdef PROFILER_ON
-        // ArcMist::FileOutputStream profilerFile("profiler.txt", true);
-        // ArcMist::ProfilerManager::write(&profilerFile);
-// #endif
-
+        block.print(ArcMist::Log::INFO, false);
 
         // ArcMist::String filePathName = "/var/bitcoin/mainnet";
         // filePathName.pathAppend("blocks");
@@ -1812,6 +1825,14 @@ namespace BitCoin
 
         // for(HashList::iterator i=list.begin();i!=list.end();++i)
             // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Hash : %s", (*i)->hex().text());
+
+#ifdef PROFILER_ON
+        Info::instance().setPath("/var/bitcoin/mainnet");
+        bool stop = false;
+        outputs.load(stop);
+        ArcMist::FileOutputStream profilerFile("profiler.txt", true);
+        ArcMist::ProfilerManager::write(&profilerFile);
+#endif
 
         return success;
     }

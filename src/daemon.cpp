@@ -46,6 +46,7 @@ namespace BitCoin
         mRunning = false;
         mStopping = false;
         mStopRequested = false;
+        mLoaded = false;
         mConnectionThread = NULL;
         mManagerThread = NULL;
         mProcessThread = NULL;
@@ -131,32 +132,11 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Starting %s on %s", BITCOIN_USER_AGENT, networkName());
 
-        if(!mChain.load(false))
-            return false;
-
-        if(mStopRequested)
-            return true;
-
-        mConnectionThread = new ArcMist::Thread("Connection", handleConnections);
-        if(mConnectionThread == NULL)
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create connection thread");
-            return false;
-        }
-
         mManagerThread = new ArcMist::Thread("Manager", manage);
         if(mManagerThread == NULL)
         {
-            mStopping = true;
+            requestStop();
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create manage thread");
-            return false;
-        }
-
-        mProcessThread = new ArcMist::Thread("Process", process);
-        if(mProcessThread == NULL)
-        {
-            mStopping = true;
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create process thread");
             return false;
         }
 
@@ -288,9 +268,12 @@ namespace BitCoin
         statStartTime.writeFormattedTime(mStatistics.startTime);
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks, %d/%d transactions/outputs (%d bytes) (%d bytes spent)",
-          mChain.blockHeight(), mChain.outputs().transactionCount(), mChain.outputs().outputCount(),
-          mChain.outputs().size(), mChain.outputs().spentSize());
+          "Block Chain : %d blocks, %d unspent transaction outputs",
+          mChain.blockHeight(), mChain.outputs().unspentOutputCount());
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Outputs : %d/%d trans/outputs (%d bytes) (%d bytes spent) (%d/%d output sets)",
+          mChain.outputs().transactionCount(), mChain.outputs().outputCount(), mChain.outputs().size(),
+          mChain.outputs().spentSize(), mChain.outputs().setCount(), mChain.outputs().totalSets());
         if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Pending (above threshold) : %d/%d blocks/headers (%d bytes) (%d requested)", pendingBlocks,
@@ -421,6 +404,39 @@ namespace BitCoin
     void Daemon::manage()
     {
         Daemon &daemon = Daemon::instance();
+
+        if(!daemon.mChain.load(false))
+        {
+            if(daemon.mStopRequested || daemon.mStopping)
+                return;
+            daemon.requestStop();
+            return;
+        }
+
+        daemon.mLoaded = true;
+
+        if(daemon.mStopping)
+            return;
+
+        daemon.mConnectionThread = new ArcMist::Thread("Connection", handleConnections);
+        if(daemon.mConnectionThread == NULL)
+        {
+            daemon.requestStop();
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create connection thread");
+            return;
+        }
+
+        if(daemon.mStopping)
+            return;
+
+        daemon.mProcessThread = new ArcMist::Thread("Process", process);
+        if(daemon.mProcessThread == NULL)
+        {
+            daemon.requestStop();
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create process thread");
+            return;
+        }
+
         uint32_t startTime = getTime();
         uint32_t lastStatReportTime = startTime;
         uint32_t lastRequestCheckTime = startTime;
@@ -494,7 +510,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            ArcMist::Thread::sleep(500);
+            ArcMist::Thread::sleep(5000);
         }
     }
 
@@ -510,6 +526,11 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
+            daemon.mChain.outputs().preLoad(10);
+
+            if(daemon.mStopping)
+                break;
+
             if(getTime() - lastOutputsSaveTime > 1200 ||
               daemon.mChain.outputs().spentSize() > daemon.mInfo.spentOutputsThreshold)
             {
@@ -520,7 +541,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            ArcMist::Thread::sleep(500);
+            ArcMist::Thread::sleep(1000);
         }
     }
 
@@ -771,7 +792,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            ArcMist::Thread::sleep(500);
+            ArcMist::Thread::sleep(5000);
         }
 
         if(listener != NULL)

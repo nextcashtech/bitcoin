@@ -60,7 +60,7 @@ namespace BitCoin
         Info &mInfo;
 
         void stop();
-        bool mRunning, mStopping, mStopRequested;
+        bool mRunning, mStopping, mStopRequested, mLoaded;
 
         // Threads
         ArcMist::Thread *mConnectionThread;

@@ -16,6 +16,8 @@
 #include <list>
 #include <stdlib.h>
 
+#define BITCOIN_OUTPUTS_LOG_NAME "BitCoin Outputs"
+
 
 namespace BitCoin
 {
@@ -50,37 +52,12 @@ namespace BitCoin
     };
 
     // Reference to transaction output with information to get it quickly
-    class TransactionOutputReference
+    // This needs to be really optimized because it use used many millions of times
+    class OutputReference
     {
     public:
 
-        static const unsigned int SIZE = 12;
-        static const unsigned int FILE_SIZE = 8;
-
-        TransactionOutputReference()
-        {
-            index            = 0;
-            blockFileOffset  = 0;
-            spentBlockHeight = 0;
-        }
-        TransactionOutputReference(const TransactionOutputReference &pCopy)
-        {
-            index            = pCopy.index;
-            blockFileOffset  = pCopy.blockFileOffset;
-            spentBlockHeight = pCopy.spentBlockHeight;
-        }
-        ~TransactionOutputReference() {}
-
-        const TransactionOutputReference &operator = (const TransactionOutputReference &pRight)
-        {
-            index            = pRight.index;
-            blockFileOffset  = pRight.blockFileOffset;
-            spentBlockHeight = pRight.spentBlockHeight;
-            return *this;
-        }
-
-        void write(ArcMist::OutputStream *pStream);
-        bool read(ArcMist::InputStream *pStream);
+        static const unsigned int SIZE = 8;
 
         // Mark as spent (only called from TransactionOutputPool::spend so it can track spent outputs)
         void spendInternal(unsigned int pBlockHeight) { spentBlockHeight = pBlockHeight; }
@@ -88,14 +65,8 @@ namespace BitCoin
         // Update block file offset
         void commit(const Output &pOutput) { blockFileOffset = pOutput.blockFileOffset; }
 
-        // Write the spent block height to the file
-        void writeSpentHeight(ArcMist::OutputStream *pStream);
-
-        void print(ArcMist::Log::Level pLevel = ArcMist::Log::Level::VERBOSE);
-
-        unsigned int index; // Not written to file
-        unsigned int blockFileOffset;
         unsigned int spentBlockHeight;
+        unsigned int blockFileOffset;
     };
 
     // Reference to a transaction's outputs with information to get them quickly
@@ -105,41 +76,94 @@ namespace BitCoin
 
         static const unsigned int SIZE = 40;
 
+        // These are used to allow reading from the file without allocating data.
+        //   So when allocation is done it can exclude the spent outputs
+        static const unsigned int STATIC_OUTPUTS_SIZE = 32;
+        static OutputReference sOutputs[STATIC_OUTPUTS_SIZE];
+
         TransactionReference() : id(32)
         {
             blockHeight  = 0;
             fileOffset   = 0xffffffff;
             mOutputCount = 0;
             mOutputs     = NULL;
+            mOutputIndices = NULL;
         }
         TransactionReference(const Hash &pID, unsigned int pBlockHeight, unsigned int pOutputCount) : id(pID)
         {
             blockHeight = pBlockHeight;
             fileOffset  = 0xffffffff;
-            mOutputCount = pOutputCount;
-            if(pOutputCount == 0)
-                mOutputs = NULL;
-            else
+            mOutputCount = 0;
+            mOutputs = NULL;
+            mOutputIndices = NULL;
+            if(pOutputCount > 0)
             {
-                mOutputs = new TransactionOutputReference[mOutputCount];
-                TransactionOutputReference *output=mOutputs;
-                for(unsigned int index=0;index<mOutputCount;++output)
-                    output->index = index++;
+                allocateOutputs(pOutputCount);
+
+                // Set indices
+                unsigned int *index = mOutputIndices;
+                for(unsigned int i=0;i<mOutputCount;++i,++index)
+                    *index = i;
+
+                // Initialize outputs
+                std::memset(mOutputs, 0, OutputReference::SIZE * mOutputCount);
             }
         }
         ~TransactionReference()
         {
             if(mOutputs != NULL)
+            {
                 delete[] mOutputs;
+                delete[] mOutputIndices;
+            }
         }
 
+        // Writes all outputs not written yet and purges spent outputs
+        // Note: Not portable. Dependent on system endian
         void write(ArcMist::OutputStream *pStream);
-        bool read(ArcMist::InputStream *pStream, unsigned int &pOutputCount, unsigned int &pSpentOutputCount);
+
+        // Reads only unspent outputs
+        // Note: Not portable. Dependent on system endian
+        bool read(ArcMist::InputStream *pStream, unsigned int &pOutputCount);
 
         unsigned int outputCount() const { return mOutputCount; }
         unsigned int spentOutputCount() const;
 
-        TransactionOutputReference *outputAt(unsigned int pIndex);
+        OutputReference *outputAt(unsigned int pIndex);
+        void allocateOutputs(unsigned int pCount)
+        {
+            // Allocate the number of outputs needed
+            if(mOutputCount != pCount)
+            {
+                if(mOutputs != NULL)
+                {
+                    delete[] mOutputs;
+                    delete[] mOutputIndices;
+                }
+                mOutputCount = pCount;
+                if(mOutputCount == 0)
+                {
+                    mOutputs = NULL;
+                    mOutputIndices = NULL;
+                }
+                else
+                {
+                    mOutputs = new OutputReference[mOutputCount];
+                    mOutputIndices = new unsigned int[mOutputCount];
+                }
+            }
+        }
+        void clearOutputs()
+        {
+            if(mOutputs != NULL)
+            {
+                delete[] mOutputs;
+                delete[] mOutputIndices;
+            }
+            mOutputCount = 0;
+            mOutputs = NULL;
+            mOutputIndices = NULL;
+        }
 
         // Write spent block heights to the file
         void writeSpent(ArcMist::OutputStream *pStream, bool pWrote, unsigned int &pOutputCount,
@@ -154,7 +178,7 @@ namespace BitCoin
         // Unmark any outputs spent at specified block height
         void revert(unsigned int pBlockHeight, unsigned int &pSpentOutputCount);
 
-        unsigned int size() const { return SIZE + (mOutputCount * TransactionOutputReference::SIZE); }
+        unsigned int size() const { return SIZE + (mOutputCount * OutputReference::SIZE); }
 
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::Level::VERBOSE);
 
@@ -165,7 +189,8 @@ namespace BitCoin
     private:
 
         unsigned int mOutputCount;
-        TransactionOutputReference *mOutputs;
+        OutputReference *mOutputs;
+        unsigned int *mOutputIndices;
 
         TransactionReference(const TransactionReference &pCopy);
         const TransactionReference &operator = (const TransactionReference &pRight);
@@ -178,22 +203,21 @@ namespace BitCoin
 
         static constexpr const char *START_STRING = "AMTX";
 
+        TransactionOutputSet() { mID = 0xffffffff; mLoaded = false; }
         ~TransactionOutputSet();
+
+        void set(unsigned int pID, const ArcMist::String &pFilePath) { mID = pID; mFilePath = pFilePath; }
 
         //unsigned int count() const { return mReferences.size(); }
 
         TransactionReference *findUnspent(const Hash &pTransactionID, uint32_t pIndex);
 
-        // Parse file if not in pending spent
-        TransactionReference *findSpent(const Hash &pTransactionID, uint32_t pIndex);
-
         void write(ArcMist::OutputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount,
           unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount);
-        bool read(ArcMist::InputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount,
-          unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount);
+        bool read(ArcMist::InputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount);
 
         // Add a new transaction's outputs
-        void add(TransactionReference *pReference, unsigned int &pTransactionCount, unsigned int &pOutputCount);
+        bool add(TransactionReference *pReference, unsigned int &pTransactionCount, unsigned int &pOutputCount);
 
         // Add block file offsets to "pending" outputs for a block
         void commit(const Hash &pTransactionID, std::vector<Output *> &pOutputs, unsigned int pBlockHeight);
@@ -202,10 +226,17 @@ namespace BitCoin
         void revert(unsigned int pBlockHeight, unsigned int &pTransactionCount, unsigned int &pOutputCount,
           unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount);
 
+        bool isLoaded() const { return mLoaded; }
+        bool load(unsigned int &pSetCount, unsigned int &pTransactionCount, unsigned int &pOutputCount);
+        bool save(unsigned int &pTransactionCount, unsigned int &pOutputCount, unsigned int &pSpentTransactionCount,
+          unsigned int &pSpentOutputCount);
         void clear();
 
     private:
 
+        unsigned int mID;
+        ArcMist::String mFilePath;
+        bool mLoaded;
         std::list<TransactionReference *> mReferences;
 
     };
@@ -229,13 +260,7 @@ namespace BitCoin
         TransactionReference *findSpent(const Hash &pTransactionID, uint32_t pIndex);
 
         // Mark an output as spent
-        void spend(TransactionReference *pReference, unsigned int pIndex, unsigned int pBlockHeight)
-        {
-            pReference->outputAt(pIndex)->spendInternal(pBlockHeight);
-            ++mSpentOutputCount;
-            if(pReference->outputCount() == pReference->spentOutputCount())
-                ++mSpentTransactionCount;
-        }
+        void spend(TransactionReference *pReference, unsigned int pIndex, unsigned int pBlockHeight);
 
         // Add block file IDs and offsets to the outputs for a block (call after writing the block to the block file)
         bool commit(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
@@ -245,20 +270,26 @@ namespace BitCoin
 
         // Height of last block
         unsigned int blockHeight() const { return mNextBlockHeight - 1; }
+        unsigned int setCount() const { return mSetCount; }
+        unsigned int totalSets() const { return 0x10000; }
         unsigned int transactionCount() const { return mTransactionCount; }
         unsigned int spentTransactionCount() const { return mSpentTransactionCount; }
         unsigned int outputCount() const { return mOutputCount; }
         unsigned int spentOutputCount() const { return mSpentOutputCount; }
+        unsigned int unspentOutputCount() const { return mOutputCount - mSpentOutputCount; }
         unsigned int size() const
         {
             return (mTransactionCount * TransactionReference::SIZE) +
-              (mOutputCount * TransactionOutputReference::SIZE);
+              (mOutputCount * OutputReference::SIZE);
         }
         unsigned int spentSize() const
         {
             return (mSpentTransactionCount * TransactionReference::SIZE) +
-              (mSpentOutputCount * TransactionOutputReference::SIZE);
+              (mSpentOutputCount * OutputReference::SIZE);
         }
+
+        // Load a random transaction output set
+        void preLoad(unsigned int pCount);
 
         // Load from/Save to file system
         bool load(bool &pStop);
@@ -273,7 +304,7 @@ namespace BitCoin
         TransactionOutputSet mReferences[0x10000];
         bool mModified;
         bool mValid;
-        unsigned int mTransactionCount, mOutputCount, mSpentTransactionCount, mSpentOutputCount;
+        unsigned int mSetCount, mTransactionCount, mOutputCount, mSpentTransactionCount, mSpentOutputCount;
         unsigned int mNextBlockHeight;
 
     };

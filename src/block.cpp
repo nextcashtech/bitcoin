@@ -373,7 +373,9 @@ namespace BitCoin
 
     bool Block::process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const SoftForks &pSoftForks)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Processing block %08d", pBlockHeight);
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+          "Processing block at height %d (%d trans) (%d bytes) : %s", pBlockHeight, transactionCount,
+          size(), hash.hex().text());
 
         if(transactions.size() == 0)
         {
@@ -393,14 +395,14 @@ namespace BitCoin
         calculateMerkleHash(calculatedMerkleHash);
         if(calculatedMerkleHash != merkleHash)
         {
-            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Block merkle root hash is invalid");
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Included   : %s", merkleHash.hex().text());
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Calculated : %s", merkleHash.hex().text());
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Block merkle root hash is invalid");
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Included   : %s", merkleHash.hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Calculated : %s", merkleHash.hex().text());
             return false;
         }
 
         // Add the transaction outputs from this block to the output pool
-        pOutputs.add(this->transactions, pBlockHeight);
+        pOutputs.add(transactions, pBlockHeight);
 
         // Validate and process transactions
         bool isCoinBase = true;
@@ -430,13 +432,6 @@ namespace BitCoin
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block %08d Coinbase amount should be %.08f", pBlockHeight, bitcoins(coinBaseAmount(pBlockHeight)));
             return false;
-        }
-        else
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Transactions %d", transactions.size());
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Coinbase     %.08f",
-              bitcoins(-transactions.front()->fee()));
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "Fees         %.08f", bitcoins(mFees));
         }
 
         return true;

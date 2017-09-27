@@ -101,7 +101,7 @@ namespace BitCoin
 
         void process(std::list<BlockStats> pBlockStats, unsigned int pBlockHeight);
 
-        void revert(unsigned int pBlockHeight);
+        void revert();
 
         // Reset all soft forks to initial state
         void reset();

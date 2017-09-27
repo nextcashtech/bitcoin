@@ -1,6 +1,7 @@
 
 COMPILER=g++
 COMPILE_FLAGS=-I./include -I../ArcMist/include -I../secp256k1/include -std=c++11 -Wall
+#To Turn profiler on add this to the end of the previous line -DPROFILER_ON
 LIBRARY_PATHS=-L../ArcMist -L../secp256k1/.libs
 LIBRARIES=-larcmist -lsecp256k1
 DEBUG_LIBRARIES=-larcmist.debug -lsecp256k1
@@ -20,7 +21,7 @@ list:
 	@echo Headers : $(HEADER_FILES)
 	@echo Sources : $(SOURCE_FILES)
 	@echo Run Options :
-	@echo "  make test    # Run unit tests"
+	@echo "  make test    # Run tests"
 	@echo "  make debug   # Build exe with gdb info"
 	@echo "  make release # Build release exe"
 	@echo "  make clean   # Remove all generated files"

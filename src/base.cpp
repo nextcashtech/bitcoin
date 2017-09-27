@@ -247,6 +247,76 @@ namespace BitCoin
         mData[length-2] = pBits & 0xff;
     }
 
+    // Big endian (most significant bytes first, i.e. leading zeroes for block hashes)
+    ArcMist::String Hash::hex() const
+    {
+        ArcMist::String result;
+        if(mSize == 0)
+            return result;
+        result.writeReverseHex(mData, mSize);
+        return result;
+    }
+
+    // Little endian (least significant bytes first)
+    ArcMist::String Hash::littleHex() const
+    {
+        ArcMist::String result;
+        if(mSize == 0)
+            return result;
+        result.writeHex(mData, mSize);
+        return result;
+    }
+
+    // Big endian (most significant bytes first, i.e. leading zeroes for block hashes)
+    void Hash::setHex(const char *pHex)
+    {
+        unsigned int length = std::strlen(pHex);
+
+        setSize(length / 2);
+        const char *hexChar = pHex + length - 1;
+        uint8_t *byte = mData;
+        bool second = false;
+
+        while(hexChar >= pHex)
+        {
+            if(second)
+            {
+                (*byte) |= ArcMist::Math::hexToNibble(*hexChar) << 4;
+                ++byte;
+            }
+            else
+                (*byte) = ArcMist::Math::hexToNibble(*hexChar);
+
+            second = !second;
+            --hexChar;
+        }
+    }
+
+    // Little endian (least significant bytes first)
+    void Hash::setLittleHex(const char *pHex)
+    {
+        unsigned int length = std::strlen(pHex);
+
+        setSize(length / 2);
+        const char *hexChar = pHex;
+        uint8_t *byte = mData;
+        bool second = false;
+
+        for(unsigned int i=0;i<length;++i)
+        {
+            if(second)
+            {
+                (*byte) |= ArcMist::Math::hexToNibble(*hexChar);
+                ++byte;
+            }
+            else
+                (*byte) = ArcMist::Math::hexToNibble(*hexChar) << 4;
+
+            second = !second;
+            ++hexChar;
+        }
+    }
+
     // Header hash must be <= target difficulty hash
     bool Hash::operator <= (const Hash &pRight)
     {
@@ -495,6 +565,53 @@ namespace BitCoin
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME,
                   "Failed hash lookup distribution : high %d, zeroes %d", highestCount, zeroCount);
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Hash set hex
+             ***********************************************************************************************/
+            Hash value;
+            value.setHex("4d085aa37e61a1bf2a6a53b72394f57a6b5ecaca0e2c385a27f96551ea92ad96");
+            ArcMist::String hex = "4d085aa37e61a1bf2a6a53b72394f57a6b5ecaca0e2c385a27f96551ea92ad96";
+
+            if(value.hex() == hex)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Hash set hex");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Hash set hex");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Hash    : %s", value.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %s", hex.text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Hash set little hex
+             ***********************************************************************************************/
+            value.setLittleHex("96ad92ea5165f9275a382c0ecaca5e6b7af59423b7536a2abfa1617ea35a084d");
+
+            if(value.hex() == hex)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Hash set little hex");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Hash set little hex");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Hash    : %s", value.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %s", hex.text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Hash little endian hex
+             ***********************************************************************************************/
+            hex = "96ad92ea5165f9275a382c0ecaca5e6b7af59423b7536a2abfa1617ea35a084d";
+
+            if(value.littleHex() == hex)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Hash little endian hex");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Hash little endian hex");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Hash    : %s", value.littleHex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %s", hex.text());
                 success = false;
             }
 

@@ -171,34 +171,34 @@ namespace BitCoin
         {
             uint32_t time = getTime();
 
-            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 30)
+            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 60)
             {
-                if(mMessageInterpreter.pendingBlockUpdateTime == 0) // Haven't started receiving blocks 30 seconds after requesting
+                if(mMessageInterpreter.pendingBlockUpdateTime == 0) // Haven't started receiving blocks 60 seconds after requesting
                 {
-                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No block for 30 seconds");
+                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No block for 60 seconds");
                     Info::instance().addPeerFail(mAddress);
                     close();
                     return;
                 }
 
-                if(time - mMessageInterpreter.pendingBlockUpdateTime > 30) // Haven't received more of the block in the last 30 seconds
+                if(time - mMessageInterpreter.pendingBlockUpdateTime > 60) // Haven't received more of the block in the last 60 seconds
                 {
-                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No update on block for 30 seconds");
+                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No update on block for 60 seconds");
                     Info::instance().addPeerFail(mAddress);
                     close();
                     return;
                 }
 
-                if(time - mMessageInterpreter.pendingBlockStartTime > 120) // Haven't finished block within 120 seconds from starting
+                if(time - mMessageInterpreter.pendingBlockStartTime > 300) // Haven't finished block within 300 seconds from starting
                 {
-                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Block not finished within 120 seconds");
+                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Block not finished within 300 seconds");
                     Info::instance().addPeerFail(mAddress);
                     close();
                     return;
                 }
             }
 
-            if(!mHeaderRequested.isEmpty() && time - mHeaderRequestTime > 60)
+            if(!mHeaderRequested.isEmpty() && time - mHeaderRequestTime > 180)
             {
                 ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Not providing headers");
                 Info::instance().addPeerFail(mAddress);
@@ -427,7 +427,7 @@ namespace BitCoin
             if(node->mStop)
                 break;
 
-            ArcMist::Thread::sleep(500);
+            ArcMist::Thread::sleep(2000);
         }
 
         node->mStopped = true;
@@ -568,7 +568,8 @@ namespace BitCoin
                     ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Pong nonce doesn't match sent Ping");
                 else
                 {
-                    mPingRoundTripTime = getTime() - mLastPingTime;
+                    if(mPingRoundTripTime == 0xffffffff)
+                        mPingRoundTripTime = getTime() - mLastPingTime;
                     mLastPingNonce = 0;
                 }
                 break;

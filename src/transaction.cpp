@@ -250,7 +250,7 @@ namespace BitCoin
                 if(reference == NULL)
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d outpoint transaction not found : trans %s index %d", index + 1,
+                      "Input %d outpoint not found : trans %s index %d", index + 1,
                       (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
                     return false;
                 }
@@ -260,7 +260,7 @@ namespace BitCoin
                     // Get output from this block
                     bool found = false;
                     for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
-                        if((*transaction)->hash == hash)
+                        if(*transaction == this)
                             break; // Only use transactions before this one
                         else if((*transaction)->hash == reference->id)
                         {
@@ -288,6 +288,9 @@ namespace BitCoin
                 }
 
                 pOutputs.spend(reference, (*input)->outpoint.index, pBlockHeight);
+                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  // "Transaction %s Input %d spent transaction output %s index %d", hash.hex().text(), index + 1,
+                  // (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
 
                 //TODO If transaction output is in this block then it won't be available through the previous function
 

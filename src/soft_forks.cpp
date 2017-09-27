@@ -335,22 +335,24 @@ namespace BitCoin
         }
     }
 
-    void SoftForks::revert(unsigned int pBlockHeight)
+    void SoftForks::revert()
     {
         mActiveVersion = mPreviousActiveVersion;
         mRequiredVersion = mPreviousRequiredVersion;
 
-        if(pBlockHeight != 0 && pBlockHeight % RETARGET_PERIOD == 0)
+        if(mHeight != 0 && mHeight % RETARGET_PERIOD == 0)
             for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
                 (*softFork)->revert();
+
+        --mHeight;
     }
 
     void SoftForks::reset()
     {
         mActiveVersion = 0;
         mRequiredVersion = 0;
-            for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
-                (*softFork)->reset();
+        for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
+            (*softFork)->reset();
     }
 
     void SoftForks::add(SoftFork *pSoftFork)
@@ -397,6 +399,8 @@ namespace BitCoin
         // Read versions
         mActiveVersion = file.readUnsignedInt();
         mRequiredVersion = file.readUnsignedInt();
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+          "Block versions %d/%d active/required", mActiveVersion, mRequiredVersion);
 
         SoftFork *newSoftFork;
         while(file.remaining())
