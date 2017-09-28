@@ -22,23 +22,6 @@
 
 namespace BitCoin
 {
-    class BlockHashInfo
-    {
-    public:
-        BlockHashInfo(const Hash &pHash, unsigned int pHeight)
-        {
-            hash = pHash;
-            height = pHeight;
-        }
-
-        Hash hash;
-        unsigned int height;
-
-    private:
-        BlockHashInfo(BlockInfo &pCopy);
-        BlockHashInfo &operator = (BlockInfo &pRight);
-    };
-
     class Node
     {
     public:
@@ -59,8 +42,10 @@ namespace BitCoin
         const char *name() { return mName.text(); }
         bool isIncoming() const { return mIsIncoming; }
         bool isSeed() const { return mIsSeed; }
+        // Versions exchanged and initial ping completed
         bool isReady() const { return mPingRoundTripTime != 0xffffffff; }
         uint32_t pingTime() const { return mPingRoundTripTime; }
+        void setPingCutoff(uint32_t pPingCutoff) { mPingCutoff = pPingCutoff; }
 
         // Time that the node connected
         uint32_t connectedTime() { return mConnectedTime; }
@@ -123,6 +108,7 @@ namespace BitCoin
         uint32_t mLastPingTime;
         uint64_t mLastPingNonce;
         uint32_t mPingRoundTripTime;
+        uint32_t mPingCutoff;
         uint64_t mMinimumFeeRate;
 
         Hash mHeaderRequested;
@@ -130,7 +116,7 @@ namespace BitCoin
 
         ArcMist::Mutex mBlockRequestMutex;
         HashList mBlocksRequested;
-        uint32_t mBlockRequestTime;
+        uint32_t mBlockRequestTime, mBlockReceiveTime;
 
         bool mConnected;
         uint32_t mConnectedTime;

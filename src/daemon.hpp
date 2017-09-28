@@ -86,6 +86,7 @@ namespace BitCoin
         ArcMist::ReadersLock mNodeLock;
         std::vector<Node *> mNodes;
         unsigned int mNodeCount, mIncomingNodes, mOutgoingNodes;
+        unsigned int mMaxOutgoing, mMaxIncoming;
 
         bool addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed = false);
         unsigned int pickNodes(unsigned int pCount);
@@ -96,7 +97,7 @@ namespace BitCoin
         void sendRequests();
         void sendPeerRequest();
         unsigned int mLastPeerCount;
-        void improvePing(int pDropFactor);
+        void improvePing();
 
         Statistics mStatistics;
         void collectStatistics();

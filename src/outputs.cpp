@@ -81,7 +81,63 @@ namespace BitCoin
         pStream->write(mOutputs, mOutputCount * OutputReference::SIZE);
     }
 
-    bool TransactionReference::read(ArcMist::InputStream *pStream, unsigned int &pOutputCount)
+    void TransactionReference::writeAll(ArcMist::OutputStream *pStream)
+    {
+        id.write(pStream);
+        pStream->writeUnsignedInt(blockHeight);
+        pStream->writeUnsignedInt(mOutputCount);
+        pStream->write(mOutputs, mOutputCount * OutputReference::SIZE);
+    }
+
+    bool TransactionReference::readAll(ArcMist::InputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount,
+      unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount)
+    {
+        if(pStream->remaining() < SIZE + OutputReference::SIZE)
+            return false;
+
+        fileOffset = NOT_WRITTEN;
+        if(!id.read(pStream))
+            return false;
+        blockHeight = pStream->readUnsignedInt();
+        unsigned int outputCount = pStream->readUnsignedInt();
+        unsigned int spentOutputCount = 0;
+
+        if(outputCount == 0)
+        {
+            clearOutputs();
+            return true; // This should never happen, but isn't technically a failure
+        }
+
+        if(pStream->remaining() < outputCount * OutputReference::SIZE)
+            return false;
+
+        // Read all the outputs into allocated outputs, then remove spent outputs
+        // Allocate the number of outputs needed
+        allocateOutputs(outputCount);
+
+        // Outputs
+        pStream->read(mOutputs, outputCount * OutputReference::SIZE);
+
+        // Set indices and count spent
+        OutputReference *output = mOutputs;
+        unsigned int *index = mOutputIndices;
+        for(unsigned int i=0;i<outputCount;++i,++index,++output)
+        {
+            *index = i;
+            if(output->spentBlockHeight != 0)
+                ++spentOutputCount;
+        }
+
+        if(spentOutputCount == outputCount)
+            ++pSpentTransactionCount;
+
+        ++pTransactionCount;
+        pOutputCount += outputCount;
+        pSpentOutputCount += spentOutputCount;
+        return true;
+    }
+
+    bool TransactionReference::readUnspent(ArcMist::InputStream *pStream)
     {
 #ifdef PROFILER_ON
         transReadProfiler.start();
@@ -155,8 +211,6 @@ namespace BitCoin
                         ++toOutput;
                         ++index;
                     }
-
-                pOutputCount += outputCount - spentOutputCount;
             }
 
 #ifdef PROFILER_ON
@@ -187,13 +241,11 @@ namespace BitCoin
 #ifdef PROFILER_ON
             transReadProfiler.stop();
 #endif
-            return true; // All outputs spent. Returning without incrementing pOutputCount will cause this object to be reused
+            return true; // All outputs spent
         }
 
         if(spentOutputCount > 0)
             removeSpent(outputCount, spentOutputCount);
-
-        pOutputCount += outputCount;
 #ifdef PROFILER_ON
         transReadProfiler.stop();
 #endif
@@ -364,62 +416,10 @@ namespace BitCoin
         for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();++reference)
             delete *reference;
         mReferences.clear();
-        mLoaded = false;
-    }
-
-    bool TransactionOutputSet::load(unsigned int &pSetCount, unsigned int &pTransactionCount, unsigned int &pOutputCount)
-    {
-        if(mLoaded)
-            return true;
-
-        ArcMist::String filePathName;
-        filePathName.writeFormatted("%s%s%04x", mFilePath.text(), PATH_SEPARATOR, mID);
-        if(!ArcMist::fileExists(filePathName))
-            return true;
-
-        ArcMist::FileInputStream file(filePathName);
-        if(!file.isValid())
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Failed to load outputs set %04x", mID);
-            return false;
-        }
-
-        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-          // "Load outputs set %04x", mID);
-        mLoaded = read(&file, pTransactionCount, pOutputCount);
-        if(mLoaded)
-            ++pSetCount;
-        return mLoaded;
-    }
-
-    bool TransactionOutputSet::save(unsigned int &pTransactionCount, unsigned int &pOutputCount,
-      unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount)
-    {
-        if(!mLoaded)
-            return true;
-
-        ArcMist::String filePathName;
-        filePathName.writeFormatted("%s%s%04x", mFilePath.text(), PATH_SEPARATOR, mID);
-        ArcMist::FileOutputStream file(filePathName);
-        if(!file.isValid())
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Failed to save outputs set %04x", mID);
-            return false;
-        }
-
-        write(&file, pTransactionCount, pOutputCount, pSpentTransactionCount, pSpentOutputCount);
-        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-          // "Saved outputs set %04x", mID);
-        return true;
     }
 
     TransactionReference *TransactionOutputSet::findUnspent(const Hash &pTransactionID, uint32_t pIndex)
     {
-        if(!mLoaded)
-            return NULL;
-
         OutputReference *output;
         for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();++reference)
             if((*reference)->id == pTransactionID)
@@ -445,7 +445,7 @@ namespace BitCoin
         return NULL;
     }
 
-    void TransactionOutputSet::write(ArcMist::OutputStream *pStream, unsigned int &pTransactionCount,
+    void TransactionOutputSet::writeUpdate(ArcMist::OutputStream *pStream, unsigned int &pTransactionCount,
       unsigned int &pOutputCount, unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount)
     {
         if(pStream->length() == 0) // Empty file
@@ -454,7 +454,7 @@ namespace BitCoin
         bool wrote;
         for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();)
         {
-            if((*reference)->fileOffset == 0xffffffff) // Not written to file yet
+            if((*reference)->fileOffset == TransactionReference::NOT_WRITTEN) // Not written to file yet
             {
                 // Append to file
                 pStream->setWriteOffset(pStream->length());
@@ -477,49 +477,15 @@ namespace BitCoin
         }
     }
 
-    // Keep only those with spent block == 0
-    bool TransactionOutputSet::read(ArcMist::InputStream *pStream, unsigned int &pTransactionCount,
-      unsigned int &pOutputCount)
+    void TransactionOutputSet::writeAll(ArcMist::OutputStream *pStream)
     {
-#ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Set Read");
-#endif
-        clear();
-
-        ArcMist::String checkStart = pStream->readString(4);
-        if(checkStart != START_STRING)
-            return false;
-
-        TransactionReference *newReference = new TransactionReference();
-        unsigned int outputCount;
-        while(pStream->remaining())
-        {
-            outputCount = 0;
-            if(!newReference->read(pStream, outputCount))
-            {
-                delete newReference;
-                return false;
-            }
-
-            if(outputCount > 0) // Not all outputs spent
-            {
-                pOutputCount += outputCount;
-                ++pTransactionCount;
-                mReferences.push_back(newReference);
-                newReference = new TransactionReference();
-            }
-        }
-
-        delete newReference;
-        return true;
+        for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();++reference)
+            (*reference)->writeAll(pStream);
     }
 
     bool TransactionOutputSet::add(TransactionReference *pReference, unsigned int &pTransactionCount,
       unsigned int &pOutputCount)
     {
-        if(!mLoaded)
-            return false;
-
         mReferences.push_back(pReference);
         ++pTransactionCount;
         pOutputCount += pReference->outputCount();
@@ -529,9 +495,6 @@ namespace BitCoin
     void TransactionOutputSet::commit(const Hash &pTransactionID, std::vector<Output *> &pOutputs,
       unsigned int pBlockHeight)
     {
-        if(!mLoaded)
-            return;
-
         for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();++reference)
             if((*reference)->blockHeight == pBlockHeight && (*reference)->id == pTransactionID)
                 (*reference)->commit(pOutputs);
@@ -540,12 +503,9 @@ namespace BitCoin
     void TransactionOutputSet::revert(unsigned int pBlockHeight, unsigned int &pTransactionCount,
       unsigned int &pOutputCount, unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount)
     {
-        if(!mLoaded)
-            return;
-
         unsigned int spentOutputCount;
         for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();)
-            if((*reference)->fileOffset == 0xffffffff && (*reference)->blockHeight == pBlockHeight)
+            if((*reference)->fileOffset == TransactionReference::NOT_WRITTEN && (*reference)->blockHeight == pBlockHeight)
             {
                 // Created at this block height, so just delete
                 pOutputCount -= (*reference)->outputCount();
@@ -569,7 +529,6 @@ namespace BitCoin
         mValid = true;
         mModified = false;
         mNextBlockHeight = 0;
-        mSetCount = 0;
         mTransactionCount = 0;
         mOutputCount = 0;
         mSpentTransactionCount = 0;
@@ -585,7 +544,6 @@ namespace BitCoin
         {
             // Get references set for transaction ID
             set = mReferences + (*transaction)->hash.lookup();
-            set->load(mSetCount, mTransactionCount, mOutputCount);
             set->add(new TransactionReference((*transaction)->hash, pBlockHeight, (*transaction)->outputs.size()),
               mTransactionCount, mOutputCount);
         }
@@ -631,7 +589,7 @@ namespace BitCoin
 
         mMutex.lock();
         TransactionOutputSet *set = mReferences;
-        for(unsigned int i=0;i<totalSets();i++)
+        for(unsigned int i=0;i<SET_COUNT;i++)
         {
             set->revert(pBlockHeight, mTransactionCount, mOutputCount, mSpentTransactionCount, mSpentOutputCount);
             ++set;
@@ -650,7 +608,6 @@ namespace BitCoin
         uint16_t lookup = pTransactionID.lookup();
         mMutex.lock();
         TransactionOutputSet *set = mReferences + lookup;
-        set->load(mSetCount, mTransactionCount, mOutputCount);
         TransactionReference *result = set->findUnspent(pTransactionID, pIndex);
         mMutex.unlock();
 
@@ -679,27 +636,6 @@ namespace BitCoin
             ++mSpentTransactionCount;
     }
 
-    void TransactionOutputPool::preLoad(unsigned int pCount)
-    {
-        if(mSetCount == totalSets())
-            return;
-
-        mMutex.lock();
-        TransactionOutputSet *set = mReferences;
-        for(unsigned int i=0;i<totalSets();i++)
-        {
-            if(!set->isLoaded())
-            {
-                set->load(mSetCount, mTransactionCount, mOutputCount);
-                --pCount;
-                if(pCount == 0)
-                    break;
-            }
-            ++set;
-        }
-        mMutex.unlock();
-    }
-
     bool TransactionOutputPool::load(bool &pStop)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Loading transaction outputs");
@@ -714,38 +650,46 @@ namespace BitCoin
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Load Outputs");
 #endif
-        ArcMist::FileInputStream *file;
-        ArcMist::String filePathName, filePath = Info::instance().path();
-        filePath.pathAppend("outputs");
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("outputs");
+        ArcMist::FileInputStream file(filePathName);
 
-        filePathName.writeFormatted("%s%s%s", filePath.text(), PATH_SEPARATOR, "height");
-        if(!ArcMist::fileExists(filePathName))
+        // Read block height
+        mNextBlockHeight = file.readUnsignedInt();
+
+        uint32_t lastReport = getTime();
+        TransactionReference *newTransaction = new TransactionReference();
+        while(file.remaining())
         {
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "No transaction outputs to load");
-            mMutex.unlock();
-            return mValid;
+            if(getTime() - lastReport > 10)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Load is %2d%% Complete", (int)(((float)file.readOffset() / (float)file.length()) * 100.0f));
+                lastReport = getTime();
+            }
+
+            if(!newTransaction->readUnspent(&file))
+            {
+                mValid = false;
+                break;
+            }
+
+            if(newTransaction->hasUnspent())
+            {
+                mReferences[newTransaction->id.lookup()].add(newTransaction, mTransactionCount, mOutputCount);
+                newTransaction = new TransactionReference();
+            }
         }
 
-        file = new ArcMist::FileInputStream(filePathName);
-        file->setInputEndian(ArcMist::Endian::LITTLE);
-        if(file->remaining() < 4)
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Failed to load height");
-            mValid = false;
-        }
-        else
-            mNextBlockHeight = file->readUnsignedInt();
-        delete file;
-
-        TransactionOutputSet *set = mReferences;
-        for(unsigned int i=0;i<totalSets();i++)
-        {
-            set->set(i, filePath);
-            ++set;
-        }
-
+        delete newTransaction;
         mMutex.unlock();
+
+        if(mValid)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+              "Loaded %d/%d unspent transactions/outputs (%d bytes) at block height %d", mTransactionCount,
+              mOutputCount, size(), mNextBlockHeight - 1);
+        else
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed to load transaction outputs");
         return mValid;
     }
 
@@ -773,38 +717,33 @@ namespace BitCoin
         mMutex.lock();
 
         bool success = true;
-        ArcMist::FileOutputStream *file;
-        ArcMist::String filePathName, filePath = Info::instance().path();
-        filePath.pathAppend("outputs");
-        ArcMist::createDirectory(filePath);
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("outputs");
+        ArcMist::FileOutputStream file(filePathName);
 
-        filePathName.writeFormatted("%s%s%s", filePath.text(), PATH_SEPARATOR, "height");
-        file = new ArcMist::FileOutputStream(filePathName, true);
-        if(file->isValid())
-            file->writeUnsignedInt(mNextBlockHeight);
-        else
+        if(!file.isValid())
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Failed to save height");
-            success = false;
+              "Failed to open transaction outputs file");
+            mMutex.unlock();
+            return false;
         }
-        delete file;
 
-        if(success)
+        // Block Height
+        file.writeUnsignedInt(mNextBlockHeight);
+
+        uint32_t lastReport = getTime();
+        TransactionOutputSet *set = mReferences;
+        for(unsigned int i=0;i<SET_COUNT;i++)
         {
-            uint32_t lastReport = getTime();
-            TransactionOutputSet *set = mReferences;
-            for(unsigned int i=0;i<totalSets();i++)
+            if(getTime() - lastReport > 10)
             {
-                if(getTime() - lastReport > 10)
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Save is %2d%% Complete", (int)(((float)i / (float)totalSets()) * 100.0f));
-                    lastReport = getTime();
-                }
-                set->save(mTransactionCount, mOutputCount, mSpentTransactionCount, mSpentOutputCount);
-                ++set;
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Save is %2d%% Complete", (int)(((float)i / (float)SET_COUNT) * 100.0f));
+                lastReport = getTime();
             }
+            set->writeUpdate(&file, mTransactionCount, mOutputCount, mSpentTransactionCount, mSpentOutputCount);
+            ++set;
         }
 
         mMutex.unlock();
@@ -821,8 +760,8 @@ namespace BitCoin
               "Purged %d/%d transactions/outputs (%d bytes)", previousTransctionCount - mTransactionCount,
               previousOutputCount - mOutputCount, previousSize - size());
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-              "Currently %d/%d sets, %d/%d transactions/outputs (%d bytes) (%d bytes spent)",
-              mSetCount, totalSets(), mTransactionCount, mOutputCount, size(), spentSize());
+              "Currently %d/%d transactions/outputs (%d bytes) (%d bytes spent)",
+              mTransactionCount, mOutputCount, size(), spentSize());
         }
         else
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,

@@ -35,10 +35,12 @@ namespace BitCoin
         mID = mNextID++;
         mHeaderRequestTime = 0;
         mBlockRequestTime = 0;
+        mBlockReceiveTime = 0;
         mLastReceiveTime = getTime();
         mLastPingNonce = 0;
         mLastPingTime = 0;
         mPingRoundTripTime = 0xffffffff;
+        mPingCutoff = 60;
         mMessagesReceived = 0;
         mConnectedTime = getTime();
         mStop = false;
@@ -153,16 +155,16 @@ namespace BitCoin
         if(!isOpen())
             return;
 
-        if(mIsSeed && getTime() - mConnectedTime > 60)
+        if(mIsSeed && getTime() - mConnectedTime > 120)
         {
             ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Seed connected for too long");
             close();
             return;
         }
 
-        if(!mIsIncoming && mPingRoundTripTime == 0xffffffff && getTime() - mConnectedTime > 60)
+        if(!mIsIncoming && mPingRoundTripTime == 0xffffffff && getTime() - mConnectedTime > 120)
         {
-            ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No pong within 60 seconds of connection");
+            ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No pong within 120 seconds of connection");
             close();
             return;
         }
@@ -171,7 +173,7 @@ namespace BitCoin
         {
             uint32_t time = getTime();
 
-            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 60)
+            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 60 && time - mBlockReceiveTime > 60)
             {
                 if(mMessageInterpreter.pendingBlockUpdateTime == 0) // Haven't started receiving blocks 60 seconds after requesting
                 {
@@ -189,13 +191,13 @@ namespace BitCoin
                     return;
                 }
 
-                if(time - mMessageInterpreter.pendingBlockStartTime > 300) // Haven't finished block within 300 seconds from starting
-                {
-                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Block not finished within 300 seconds");
-                    Info::instance().addPeerFail(mAddress);
-                    close();
-                    return;
-                }
+                // if(time - mMessageInterpreter.pendingBlockStartTime > 300) // Haven't finished block within 300 seconds from starting
+                // {
+                    // ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Block not finished within 300 seconds");
+                    // Info::instance().addPeerFail(mAddress);
+                    // close();
+                    // return;
+                // }
             }
 
             if(!mHeaderRequested.isEmpty() && time - mHeaderRequestTime > 180)
@@ -450,8 +452,18 @@ namespace BitCoin
         mConnectionMutex.unlock();
 
         // Ping every 20 minutes
-        if(!mIsIncoming && mVersionData != NULL && mVersionAcknowledged && getTime() - mLastPingTime > 1200)
-            sendPing();
+        if(!mIsIncoming && mVersionData != NULL && mVersionAcknowledged)
+        {
+            if(getTime() - mLastPingTime > 1200)
+                sendPing();
+            else if(mLastPingTime != 0 && mPingRoundTripTime == 0xffffffff &&
+              mPingCutoff != 0xffffffff && getTime() - mLastPingTime > mPingCutoff)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,
+                  "Ping not received within cutoff of %ds", mPingCutoff);
+                close();
+            }
+        }
 
         // Check for a complete message
         Message::Data *message = mMessageInterpreter.read(&mReceiveBuffer, mName);
@@ -535,9 +547,6 @@ namespace BitCoin
                 }
                 else
                 {
-                    if(mVersionData->relay && mVersionAcknowledged && !mIsSeed) // Update peer
-                        Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
-
                     // Send version acknowledge
                     Message::Data versionAcknowledgeMessage(Message::VERACK);
                     sendMessage(&versionAcknowledgeMessage);
@@ -551,12 +560,7 @@ namespace BitCoin
             }
             case Message::VERACK:
                 mVersionAcknowledged = true;
-
-                // Update peer
-                if(mVersionData != NULL && mVersionData->relay && !mIsSeed)
-                    Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
                 break;
-
             case Message::PING:
             {
                 Message::PongData pongData(((Message::PingData *)message)->nonce);
@@ -569,11 +573,26 @@ namespace BitCoin
                 else
                 {
                     if(mPingRoundTripTime == 0xffffffff)
+                    {
                         mPingRoundTripTime = getTime() - mLastPingTime;
+                        if(!mIsIncoming && !mIsSeed && mPingCutoff != 0xffffffff)
+                        {
+                            if(mPingRoundTripTime > mPingCutoff)
+                            {
+                                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,
+                                  "Dropping. Ping time %ds not within cutoff of %ds", mPingRoundTripTime, mPingCutoff);
+                                close();
+                            }
+                            else if(mVersionData != NULL && !mIsIncoming && !mIsSeed)
+                            {
+                                Info::instance().updatePeer(mAddress, mVersionData->userAgent,
+                                  mVersionData->transmittingServices);
+                            }
+                        }
+                    }
                     mLastPingNonce = 0;
                 }
                 break;
-
             case Message::REJECT:
             {
                 Message::RejectData *rejectData = (Message::RejectData *)message;
@@ -722,6 +741,7 @@ namespace BitCoin
                     {
                         delete *hash;
                         mBlocksRequested.erase(hash);
+                        mBlockReceiveTime = getTime();
                         break;
                     }
                 mBlockRequestMutex.unlock();

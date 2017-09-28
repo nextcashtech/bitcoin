@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <ctime>
 
-#define BITCOIN_USER_AGENT "/ArcMist:0.2.0/" // BIP-0014
+#define BITCOIN_USER_AGENT "/ArcMist:0.3.0/" // BIP-0014
 #define PROTOCOL_VERSION 70015
 
 
@@ -393,14 +393,14 @@ namespace BitCoin
             return true;
         }
 
-        bool read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool read(ArcMist::InputStream *pStream, ArcMist::stream_size pSize)
         {
             setSize(pSize);
             return read(pStream);
         }
 
         // ArcMist::RawOutputStream virtual
-        void write(const void *pInput, unsigned int pSize)
+        void write(const void *pInput, ArcMist::stream_size pSize)
         {
             setSize(pSize);
             std::memcpy(mData, pInput, pSize);

@@ -80,11 +80,12 @@ namespace BitCoin
         //   So when allocation is done it can exclude the spent outputs
         static const unsigned int STATIC_OUTPUTS_SIZE = 32;
         static OutputReference sOutputs[STATIC_OUTPUTS_SIZE];
+        static const ArcMist::stream_size NOT_WRITTEN = 0xffffffffffffffff;
 
         TransactionReference() : id(32)
         {
             blockHeight  = 0;
-            fileOffset   = 0xffffffff;
+            fileOffset   = NOT_WRITTEN;
             mOutputCount = 0;
             mOutputs     = NULL;
             mOutputIndices = NULL;
@@ -92,7 +93,7 @@ namespace BitCoin
         TransactionReference(const Hash &pID, unsigned int pBlockHeight, unsigned int pOutputCount) : id(pID)
         {
             blockHeight = pBlockHeight;
-            fileOffset  = 0xffffffff;
+            fileOffset  = NOT_WRITTEN;
             mOutputCount = 0;
             mOutputs = NULL;
             mOutputIndices = NULL;
@@ -118,14 +119,20 @@ namespace BitCoin
             }
         }
 
-        // Writes all outputs not written yet and purges spent outputs
+        // Writes all outputs
         // Note: Not portable. Dependent on system endian
         void write(ArcMist::OutputStream *pStream);
 
+        void writeAll(ArcMist::OutputStream *pStream);
+
         // Reads only unspent outputs
         // Note: Not portable. Dependent on system endian
-        bool read(ArcMist::InputStream *pStream, unsigned int &pOutputCount);
+        bool readUnspent(ArcMist::InputStream *pStream);
 
+        bool readAll(ArcMist::InputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount,
+          unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount);
+
+        bool hasUnspent() const { return mOutputCount > 0 && spentOutputCount() < mOutputCount; }
         unsigned int outputCount() const { return mOutputCount; }
         unsigned int spentOutputCount() const;
 
@@ -184,7 +191,7 @@ namespace BitCoin
 
         Hash id; // Transaction Hash
         unsigned int blockHeight; // Block height of transaction
-        unsigned int fileOffset; // Offset of this data in transaction reference set file
+        ArcMist::stream_size fileOffset; // Offset of this data in transaction reference set file
 
     private:
 
@@ -203,18 +210,16 @@ namespace BitCoin
 
         static constexpr const char *START_STRING = "AMTX";
 
-        TransactionOutputSet() { mID = 0xffffffff; mLoaded = false; }
         ~TransactionOutputSet();
-
-        void set(unsigned int pID, const ArcMist::String &pFilePath) { mID = pID; mFilePath = pFilePath; }
-
-        //unsigned int count() const { return mReferences.size(); }
 
         TransactionReference *findUnspent(const Hash &pTransactionID, uint32_t pIndex);
 
-        void write(ArcMist::OutputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount,
+        // Update spent transactions or add new transactions to the file
+        void writeUpdate(ArcMist::OutputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount,
           unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount);
-        bool read(ArcMist::InputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount);
+
+        // Write all data to stream
+        void writeAll(ArcMist::OutputStream *pStream);
 
         // Add a new transaction's outputs
         bool add(TransactionReference *pReference, unsigned int &pTransactionCount, unsigned int &pOutputCount);
@@ -226,25 +231,18 @@ namespace BitCoin
         void revert(unsigned int pBlockHeight, unsigned int &pTransactionCount, unsigned int &pOutputCount,
           unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount);
 
-        bool isLoaded() const { return mLoaded; }
-        bool load(unsigned int &pSetCount, unsigned int &pTransactionCount, unsigned int &pOutputCount);
-        bool save(unsigned int &pTransactionCount, unsigned int &pOutputCount, unsigned int &pSpentTransactionCount,
-          unsigned int &pSpentOutputCount);
         void clear();
 
     private:
-
-        unsigned int mID;
-        ArcMist::String mFilePath;
-        bool mLoaded;
         std::list<TransactionReference *> mReferences;
-
     };
 
     // Container for all unspent transaction outputs
     class TransactionOutputPool
     {
     public:
+
+        static const unsigned int SET_COUNT = 0x10000;
 
         TransactionOutputPool();
 
@@ -270,8 +268,6 @@ namespace BitCoin
 
         // Height of last block
         unsigned int blockHeight() const { return mNextBlockHeight - 1; }
-        unsigned int setCount() const { return mSetCount; }
-        unsigned int totalSets() const { return 0x10000; }
         unsigned int transactionCount() const { return mTransactionCount; }
         unsigned int spentTransactionCount() const { return mSpentTransactionCount; }
         unsigned int outputCount() const { return mOutputCount; }
@@ -288,9 +284,6 @@ namespace BitCoin
               (mSpentOutputCount * OutputReference::SIZE);
         }
 
-        // Load a random transaction output set
-        void preLoad(unsigned int pCount);
-
         // Load from/Save to file system
         bool load(bool &pStop);
         bool save();
@@ -301,10 +294,10 @@ namespace BitCoin
         const TransactionOutputPool &operator = (const TransactionOutputPool &pRight);
 
         ArcMist::Mutex mMutex;
-        TransactionOutputSet mReferences[0x10000];
+        TransactionOutputSet mReferences[SET_COUNT];
         bool mModified;
         bool mValid;
-        unsigned int mSetCount, mTransactionCount, mOutputCount, mSpentTransactionCount, mSpentOutputCount;
+        unsigned int mTransactionCount, mOutputCount, mSpentTransactionCount, mSpentOutputCount;
         unsigned int mNextBlockHeight;
 
     };

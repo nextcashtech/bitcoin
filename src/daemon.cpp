@@ -271,9 +271,8 @@ namespace BitCoin
           "Block Chain : %d blocks, %d unspent transaction outputs",
           mChain.blockHeight(), mChain.outputs().unspentOutputCount());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Outputs : %d/%d trans/outputs (%d bytes) (%d bytes spent) (%d/%d output sets)",
-          mChain.outputs().transactionCount(), mChain.outputs().outputCount(), mChain.outputs().size(),
-          mChain.outputs().spentSize(), mChain.outputs().setCount(), mChain.outputs().totalSets());
+          "Outputs : %d/%d trans/outputs (%d bytes) (%d bytes spent)", mChain.outputs().transactionCount(),
+          mChain.outputs().outputCount(), mChain.outputs().size(), mChain.outputs().spentSize());
         if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Pending (above threshold) : %d/%d blocks/headers (%d bytes) (%d requested)", pendingBlocks,
@@ -289,6 +288,40 @@ namespace BitCoin
           statStartTime.text());
     }
 
+    void sortOutgoingNodesByPing(std::vector<Node *> &pNodes)
+    {
+        std::vector<Node *> nodes = pNodes;
+        pNodes.clear();
+
+        // Remove incoming and seed nodes
+        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();)
+            if(!(*node)->isReady() || (*node)->isIncoming() || (*node)->isSeed())
+                node = nodes.erase(node);
+            else
+                ++node;
+
+        // Sort slowest ping to fastest ping
+        Node *highestNode;
+        std::vector<Node *> sortedNodes;
+        while(nodes.size() > 0)
+        {
+            highestNode = NULL;
+            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+                if(highestNode == NULL || highestNode->pingTime() < (*node)->pingTime())
+                    highestNode = *node;
+
+            pNodes.push_back(highestNode);
+
+            // Remove highestNode
+            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+                if(*node == highestNode)
+                {
+                    nodes.erase(node);
+                    break;
+                }
+        }
+    }
+
     void Daemon::sendRequests()
     {
         unsigned int pendingCount = mChain.pendingCount();
@@ -300,8 +333,9 @@ namespace BitCoin
 
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
-        std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+        sortOutgoingNodesByPing(nodes);
+        // Go through nodes in reverese so they are lowest ping first
+        for(std::vector<Node *>::reverse_iterator node=nodes.rbegin();node!=nodes.rend();++node)
         {
             if((*node)->isIncoming() || !(*node)->isReady())
                 continue;
@@ -331,7 +365,7 @@ namespace BitCoin
                 blocksToRequest = mChain.highestFullPendingHeight() - mChain.blockHeight() - pendingBlockCount;
             else
                 blocksToRequest = mInfo.pendingBlocksThreshold + MAX_BLOCK_REQUEST - pendingBlockCount - blocksRequestedCount;
-            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end()&&blocksToRequest>0;++node)
+            for(std::vector<Node *>::reverse_iterator node=nodes.rbegin();node!=nodes.rend()&&blocksToRequest>0;++node)
                 if((*node)->requestBlocks(mChain, MAX_BLOCK_REQUEST, reduceOnly))
                     blocksToRequest -= MAX_BLOCK_REQUEST;
         }
@@ -350,52 +384,67 @@ namespace BitCoin
         mNodeLock.readUnlock();
     }
 
-    void Daemon::improvePing(int pDropFactor)
+    void Daemon::improvePing()
     {
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
+        sortOutgoingNodesByPing(nodes);
 
-        // Remove incoming and seed nodes
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();)
-            if(!(*node)->isReady() || (*node)->isIncoming() || (*node)->isSeed())
-                node = nodes.erase(node);
-            else
-                ++node;
-
-        // Sort slowest ping to fastest ping
-        Node *highestNode;
-        std::vector<Node *> sortedNodes;
-        while(nodes.size() > 0)
+        if(nodes.size() < mMaxOutgoing / 2)
         {
-            highestNode = NULL;
-            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-                if(highestNode == NULL || highestNode->pingTime() < (*node)->pingTime())
-                    highestNode = *node;
-
-            sortedNodes.push_back(highestNode);
-
-            // Remove highestNode
-            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-                if(*node == highestNode)
-                {
-                    nodes.erase(node);
-                    break;
-                }
+            mNodeLock.readUnlock();
+            return;
         }
 
+        // Calculate average
+        double average = 0.0;
+        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+            average += (double)(*node)->pingTime();
+        average /= (double)nodes.size();
+
+        // Calculate variance
+        double variance = 0.0;
+        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+            // Sum the squared difference from the mean
+            variance += ArcMist::Math::square((double)(*node)->pingTime() - average);
+        // Average the sum
+        variance /= (double)nodes.size();
+
+        // Square root to get standard deviation
+        double standardDeviation = ArcMist::Math::squareRoot(variance);
+
+        uint32_t cutoff;
+        if(average > 60)
+            cutoff = (int)(average + (standardDeviation * 0.5));
+        else
+            cutoff = (int)(average + standardDeviation);
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Node ping : average %ds, cutoff %ds", (int)average, cutoff);
+
+        // Always drop some nodes so nodes with lower pings can still be found
+        int minimumDrop = 0;
+        if(nodes.size() == mMaxOutgoing)
+            minimumDrop = nodes.size() / 8;
+
         // Drop slowest
-        int dropCount = sortedNodes.size() / pDropFactor;
-        for(std::vector<Node *>::iterator node=sortedNodes.begin();node!=sortedNodes.end();++node)
+        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
         {
-            if(dropCount-- > 0)
+            if((*node)->pingTime() > cutoff)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %ds ping (dropping)", (*node)->name(), (*node)->pingTime());
+                  "Sorted Nodes : %s - %ds ping (dropping because of ping)", (*node)->name(), (*node)->pingTime());
+                (*node)->close();
+            }
+            else if(minimumDrop > 0)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                  "Sorted Nodes : %s - %ds ping (dropping because of minimum)", (*node)->name(), (*node)->pingTime());
                 (*node)->close();
             }
             else
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
                   "Sorted Nodes : %s - %ds ping", (*node)->name(), (*node)->pingTime());
+            --minimumDrop;
         }
 
         mNodeLock.readUnlock();
@@ -458,7 +507,7 @@ namespace BitCoin
                 break;
 
             time = getTime();
-            if(time - lastRequestCheckTime > 10)
+            if(time - lastRequestCheckTime > 30)
             {
                 lastRequestCheckTime = time;
                 daemon.sendRequests();
@@ -485,7 +534,7 @@ namespace BitCoin
                 break;
 
             time = getTime();
-            if(daemon.mLastPeerCount < 1000 && time - lastPeerRequestTime > 60)
+            if(daemon.mLastPeerCount < 2000 && time - lastPeerRequestTime > 60)
             {
                 lastPeerRequestTime = time;
                 daemon.sendPeerRequest();
@@ -494,17 +543,11 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            // Every 5 minutes for the first hour, then hourly after that
             time = getTime();
-            if(time - startTime < 3600 && time - lastPingImprovement > 300)
+            if(time - lastPingImprovement > 300) // Every 5 minutes
             {
                 lastPingImprovement = time;
-                daemon.improvePing(2);
-            }
-            else if(time - lastPingImprovement > 3600)
-            {
-                lastPingImprovement = time;
-                daemon.improvePing(4);
+                daemon.improvePing();
             }
 
             if(daemon.mStopping)
@@ -522,11 +565,6 @@ namespace BitCoin
         while(!daemon.mStopping)
         {
             daemon.mChain.process();
-
-            if(daemon.mStopping)
-                break;
-
-            daemon.mChain.outputs().preLoad(10);
 
             if(daemon.mStopping)
                 break;
@@ -619,9 +657,10 @@ namespace BitCoin
         bool found;
 
         // Try peers with good ratings first
-        mInfo.randomizePeers(peers, 2);
+        mInfo.randomizePeers(peers, 5);
         ArcMist::Network::Connection *connection;
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers with good ratings", peers.size());
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+          "Found %d peers with good ratings", peers.size());
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
         {
             // Skip nodes already connected
@@ -716,19 +755,18 @@ namespace BitCoin
         Daemon &daemon = Daemon::instance();
         ArcMist::Network::Listener *listener = NULL;
         ArcMist::Network::Connection *newConnection;
-        unsigned int maxOutgoing, maxIncoming;
         uint32_t lastFillNodesTime = 0;
         uint32_t lastCleanTime = getTime();
 
         while(!daemon.mStopping)
         {
             if(daemon.mChain.isInSync())
-                maxOutgoing = 8;
+                daemon.mMaxOutgoing = 8;
             else
-                maxOutgoing = daemon.mInfo.maxConnections / 2;
-            if(maxOutgoing > daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST)
-                maxOutgoing = daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST;
-            maxIncoming = daemon.mInfo.maxConnections - maxOutgoing;
+                daemon.mMaxOutgoing = daemon.mInfo.maxConnections / 2;
+            if(daemon.mMaxOutgoing > daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST)
+                daemon.mMaxOutgoing = daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST;
+            daemon.mMaxIncoming = daemon.mInfo.maxConnections - daemon.mMaxOutgoing;
 
             if(getTime() - lastCleanTime > 10)
             {
@@ -738,7 +776,7 @@ namespace BitCoin
 
             if(listener == NULL)
             {
-                if(daemon.mIncomingNodes < maxIncoming)
+                if(daemon.mIncomingNodes < daemon.mMaxIncoming)
                 {
                     listener = new ArcMist::Network::Listener(AF_INET6, networkPort(), 5, 1);
                     if(listener->isValid())
@@ -760,7 +798,7 @@ namespace BitCoin
                 {
                     daemon.addNode(newConnection, true);
 
-                    if(daemon.mIncomingNodes >= maxIncoming)
+                    if(daemon.mIncomingNodes >= daemon.mMaxIncoming)
                     {
                         delete listener;
                         listener = NULL;
@@ -783,9 +821,9 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(daemon.mOutgoingNodes < maxOutgoing && getTime() - lastFillNodesTime > 60)
+            if(daemon.mOutgoingNodes < daemon.mMaxOutgoing && getTime() - lastFillNodesTime > 30)
             {
-                daemon.pickNodes(maxOutgoing - daemon.mOutgoingNodes);
+                daemon.pickNodes(daemon.mMaxOutgoing - daemon.mOutgoingNodes);
                 lastFillNodesTime = getTime();
             }
 
