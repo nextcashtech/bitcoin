@@ -227,7 +227,7 @@ namespace BitCoin
                         {
                             pendingBlockLastReportTime = getTime();
                             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, pName,
-                              "Block downloading %d / %d (%d secs) : %s", pInput->remaining(), payloadSize,
+                              "Block downloading %d / %d (%ds) : %s", pInput->remaining(), payloadSize,
                               pendingBlockUpdateTime - pendingBlockStartTime, block.hash.hex().text());
                         }
                     }

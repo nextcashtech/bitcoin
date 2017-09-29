@@ -89,7 +89,7 @@ namespace BitCoin
         unsigned int mMaxOutgoing, mMaxIncoming;
 
         bool addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed = false);
-        unsigned int pickNodes(unsigned int pCount);
+        unsigned int recruitPeers(unsigned int pCount);
         void cleanNodes();
 
         Node *nodeWithInventory();
@@ -98,6 +98,7 @@ namespace BitCoin
         void sendPeerRequest();
         unsigned int mLastPeerCount;
         void improvePing();
+        void improveSpeed();
 
         Statistics mStatistics;
         void collectStatistics();

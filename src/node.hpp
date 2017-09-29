@@ -47,7 +47,9 @@ namespace BitCoin
         uint32_t pingTime() const { return mPingRoundTripTime; }
         void setPingCutoff(uint32_t pPingCutoff) { mPingCutoff = pPingCutoff; }
         unsigned int blocksDownloadedCount() const { return mBlockDownloadCount; }
-        float averageBlockDownloadTime() const;
+        unsigned int blocksDownloadedSize() const { return mBlockDownloadSize; }
+        unsigned int blocksDownloadedTime() const { return mBlockDownloadTime; }
+        double blockDownloadBytesPerSecond() const;
 
         // Time that the node connected
         uint32_t connectedTime() { return mConnectedTime; }
@@ -115,7 +117,8 @@ namespace BitCoin
         uint64_t mMinimumFeeRate;
 
         unsigned int mBlockDownloadCount;
-        float mBlockDownloadTime;
+        unsigned int mBlockDownloadSize;
+        unsigned int mBlockDownloadTime;
 
         Hash mHeaderRequested;
         uint32_t mHeaderRequestTime;

@@ -115,7 +115,7 @@ namespace BitCoin
         Chain();
         ~Chain();
 
-        unsigned int blockHeight() const { return mNextBlockHeight - 1; }
+        int blockHeight() const { return mNextBlockHeight - 1; }
         TransactionOutputPool &outputs() { return mOutputs; }
         const Hash &lastBlockHash() const { return mLastBlockHash; }
         unsigned int pendingBlockHeight() const { return mNextBlockHeight - 1 + mPending.size(); }
@@ -166,7 +166,7 @@ namespace BitCoin
         bool getBlock(unsigned int pHeight, Block &pBlock);
 
         // Get the block or height for a specific hash
-        unsigned int height(const Hash &pHash); // Returns 0xffffffff when hash is not found
+        int height(const Hash &pHash); // Returns -1 when hash is not found
         bool getBlock(const Hash &pHash, Block &pBlock);
         bool getHeader(const Hash &pHash, Block &pBlockHeader);
 
@@ -217,7 +217,7 @@ namespace BitCoin
         unsigned int blockFileID(const Hash &pHash);
 
         Hash mLastBlockHash; // Hash of last/top block on chain
-        uint64_t mNextBlockHeight; // Number of next block that will be added to the chain
+        int32_t mNextBlockHeight; // Number of next block that will be added to the chain
         BlockFile *mLastBlockFile;
         unsigned int mLastFileID;
 

@@ -267,7 +267,7 @@ namespace BitCoin
         void revert(unsigned int pBlockHeight);
 
         // Height of last block
-        unsigned int blockHeight() const { return mNextBlockHeight - 1; }
+        int blockHeight() const { return mNextBlockHeight - 1; }
         unsigned int transactionCount() const { return mTransactionCount; }
         unsigned int spentTransactionCount() const { return mSpentTransactionCount; }
         unsigned int outputCount() const { return mOutputCount; }

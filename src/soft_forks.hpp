@@ -92,7 +92,7 @@ namespace BitCoin
         SoftForks();
         ~SoftForks();
 
-        unsigned int height() const { return mHeight; }
+        int height() const { return mHeight; }
 
         int32_t activeVersion() const { return mActiveVersion; }
         int32_t requiredVersion() const { return mRequiredVersion; }
@@ -114,7 +114,7 @@ namespace BitCoin
 
         void add(SoftFork *pSoftFork);
 
-        unsigned int mHeight;
+        int mHeight;
         unsigned int mPreviousHeight;
 
         std::vector<SoftFork *> mSoftForks;

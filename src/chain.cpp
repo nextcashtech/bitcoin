@@ -229,9 +229,9 @@ namespace BitCoin
         return result;
     }
 
-    unsigned int Chain::height(const Hash &pHash)
+    int Chain::height(const Hash &pHash)
     {
-        unsigned int result = 0xffffffff;
+        int result = -1;
         if(pHash.isEmpty())
             return result; // Empty hash means start from the beginning
 
@@ -246,10 +246,10 @@ namespace BitCoin
             }
         mBlockLookup[lookup].unlock();
 
-        if(result == 0xffffffff)
+        if(result == -1)
         {
             // Check pending
-            unsigned int currentHeight = blockHeight();
+            int currentHeight = blockHeight();
             mPendingLock.readLock();
             for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             {
@@ -1045,7 +1045,7 @@ namespace BitCoin
 
     bool Chain::updateOutputs()
     {
-        unsigned int height = mOutputs.blockHeight();
+        int height = mOutputs.blockHeight();
         if(height == blockHeight())
             return true;
 

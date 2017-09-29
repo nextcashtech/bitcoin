@@ -43,7 +43,8 @@ namespace BitCoin
         mPingRoundTripTime = 0xffffffff;
         mPingCutoff = 60;
         mBlockDownloadCount = 0;
-        mBlockDownloadTime = 0.0f;
+        mBlockDownloadSize = 0;
+        mBlockDownloadTime = 0;
         mMessagesReceived = 0;
         mConnectedTime = getTime();
         mStop = false;
@@ -117,11 +118,11 @@ namespace BitCoin
         return result;
     }
 
-    float Node::averageBlockDownloadTime() const
+    double Node::blockDownloadBytesPerSecond() const
     {
-        if(mBlockDownloadCount == 0)
-            return 0.0f;
-        return mBlockDownloadTime / (float)mBlockDownloadCount;
+        if(mBlockDownloadSize == 0 || mBlockDownloadTime == 0)
+            return 0.0;
+        return (double)mBlockDownloadSize / (double)mBlockDownloadTime;
     }
 
     void Node::close()
@@ -131,6 +132,7 @@ namespace BitCoin
             mConnection->close();
         mConnectionMutex.unlock();
         requestStop();
+        mChain->releaseBlocksForNode(mID);
     }
 
     void Node::releaseBlockRequests()
@@ -265,7 +267,7 @@ namespace BitCoin
 
     bool Node::requestBlocks(HashList &pList)
     {
-        if(!isOpen() || mIsIncoming || mIsSeed)
+        if(pList.size() == 0 || !isOpen() || mIsIncoming || mIsSeed)
             return false;
 
         // Put block hashes into block request message
@@ -539,7 +541,7 @@ namespace BitCoin
                     close();
                 }
                 else if(!mIsIncoming && !mIsSeed && !mChain->isInSync() && (mVersionData->startBlockHeight < 0 ||
-                  (unsigned int)mVersionData->startBlockHeight < mChain->blockHeight()))
+                  mVersionData->startBlockHeight < mChain->blockHeight()))
                 {
                     ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Low block height");
                     Info::instance().addPeerFail(mAddress);
@@ -744,6 +746,7 @@ namespace BitCoin
                         mBlockReceiveTime = time;
                         ++mBlockDownloadCount;
                         mBlockDownloadTime += time - mMessageInterpreter.pendingBlockStartTime;
+                        mBlockDownloadSize += ((Message::BlockData *)message)->block->size();
                         break;
                     }
                 mBlockRequestMutex.unlock();
@@ -768,6 +771,10 @@ namespace BitCoin
             }
             case Message::GET_DATA:
             {
+                // Don't respond to data requests before receiving the version message
+                if(mVersionData == NULL)
+                    break;
+
                 Message::GetDataData *getDataData = (Message::GetDataData *)message;
                 Message::NotFoundData notFoundData;
                 Block block;
@@ -779,7 +786,17 @@ namespace BitCoin
                     {
                     case Message::InventoryHash::BLOCK:
                     {
-                        if(mChain->getBlock((*item)->hash, block))
+                        int height = mChain->height((*item)->hash);
+
+                        if(height == -1)
+                            notFoundData.inventory.push_back(new Message::InventoryHash(**item));
+                        else if(height < mVersionData->startBlockHeight - 1000)
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                              "Not sending block. Block height %d below node's start block height %d : %s",
+                              height, mVersionData->startBlockHeight, (*item)->hash.hex().text());
+                        }
+                        else if(mChain->getBlock((*item)->hash, block))
                         {
                             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending block at height %d : %s",
                               mChain->height((*item)->hash), (*item)->hash.hex().text());
@@ -826,12 +843,30 @@ namespace BitCoin
             }
             case Message::GET_HEADERS:
             {
+                // Don't respond to header requests before receiving the version message
+                if(mVersionData == NULL)
+                    break;
+
                 Message::GetHeadersData *getHeadersData = (Message::GetHeadersData *)message;
                 Message::HeadersData headersData;
+                int height;
 
                 for(std::vector<Hash>::iterator hash=getHeadersData->blockHeaderHashes.begin();hash!=getHeadersData->blockHeaderHashes.end();++hash)
-                    if(mChain->getBlockHeaders(headersData.headers, *hash, getHeadersData->stopHeaderHash, 2000))
-                        break; // match found
+                {
+                    height = mChain->height(*hash);
+                    if(height != -1)
+                    {
+                        if(height < mVersionData->startBlockHeight - 2000)
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                              "Not sending headers. Header height %d below node's start block height %d : %s",
+                              height, mVersionData->startBlockHeight, hash->hex().text());
+                            break;
+                        }
+                        else if(mChain->getBlockHeaders(headersData.headers, *hash, getHeadersData->stopHeaderHash, 2000))
+                            break; // match found
+                    }
+                }
 
                 if(headersData.headers.size() > 0)
                 {
