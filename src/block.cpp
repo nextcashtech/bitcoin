@@ -354,7 +354,7 @@ namespace BitCoin
         }
 
         // Add the transaction outputs from this block to the output pool
-        pOutputs.add(this->transactions, pBlockHeight);
+        pOutputs.add(this->transactions, pBlockHeight, hash);
 
         unsigned int transactionOffset = 0;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
@@ -402,7 +402,12 @@ namespace BitCoin
         }
 
         // Add the transaction outputs from this block to the output pool
-        pOutputs.add(transactions, pBlockHeight);
+        if(!pOutputs.add(transactions, pBlockHeight, hash))
+        {
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Block has transaction IDs matching unspent transaction IDs");
+            return false;
+        }
 
         // Validate and process transactions
         bool isCoinBase = true;

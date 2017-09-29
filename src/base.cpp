@@ -117,6 +117,13 @@ namespace BitCoin
         return true;
     }
 
+    Hash::Hash(const char *pHex)
+    {
+        mSize = 0;
+        mData = NULL;
+        setHex(pHex);
+    }
+
     uint16_t Hash::lookup() const
     {
         if(mSize < 2)

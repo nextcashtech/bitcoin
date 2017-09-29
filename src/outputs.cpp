@@ -421,28 +421,50 @@ namespace BitCoin
     TransactionReference *TransactionOutputSet::findUnspent(const Hash &pTransactionID, uint32_t pIndex)
     {
         OutputReference *output;
+        bool transactionFound = false;
+        unsigned int outputSpentHeight = 0xffffffff;
         for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();++reference)
             if((*reference)->id == pTransactionID)
             {
+                transactionFound = true;
                 output = (*reference)->outputAt(pIndex);
                 if(output != NULL)
                 {
                     if(output->spentBlockHeight == 0)
                         return *reference;
-
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Output spent at block height %d", output->spentBlockHeight);
-                    return NULL;
+                    else
+                        outputSpentHeight = output->spentBlockHeight;
                 }
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME, "Output %d not found");
                     return NULL;
                 }
             }
 
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME, "Transaction %d not found");
+        if(outputSpentHeight != 0xffffffff)
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              "Output spent at block height %d : index %d - %s", outputSpentHeight, pIndex, pTransactionID.hex().text());
+        else if(transactionFound)
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              "Output not found : index %d - %s", pIndex, pTransactionID.hex().text());
+        else
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME, "Transaction not found : %s",
+              pTransactionID.hex().text());
         return NULL;
+    }
+
+    TransactionReference *TransactionOutputSet::find(const Hash &pTransactionID)
+    {
+        TransactionReference *result = NULL;
+        for(std::list<TransactionReference *>::iterator reference=mReferences.begin();reference!=mReferences.end();++reference)
+            if((*reference)->id == pTransactionID)
+            {
+                result = *reference;
+                // If this transaction is spent then try to find another one
+                if(result->hasUnspentOutputs())
+                    return result;
+            }
+        return result;
     }
 
     void TransactionOutputSet::writeUpdate(ArcMist::OutputStream *pStream, unsigned int &pTransactionCount,
@@ -535,19 +557,50 @@ namespace BitCoin
         mSpentOutputCount = 0;
     }
 
+    const unsigned int TransactionOutputPool::BIP0030_HEIGHTS[BIP0030_HASH_COUNT] = { 91842, 91880 };
+    const Hash TransactionOutputPool::BIP0030_HASHES[BIP0030_HASH_COUNT] =
+    {
+        Hash("00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"),
+        Hash("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
+    };
+
     // Add all the outputs from a block (pending since they have no block file IDs or offsets yet)
-    void TransactionOutputPool::add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
+    bool TransactionOutputPool::add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight, const Hash &pBlockHash)
     {
         mMutex.lock();
         TransactionOutputSet *set;
+        TransactionReference *transactionReference;
         for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
         {
             // Get references set for transaction ID
             set = mReferences + (*transaction)->hash.lookup();
+            transactionReference = set->find((*transaction)->hash);
+            if(transactionReference != NULL && transactionReference->hasUnspentOutputs())
+            {
+                bool exceptionFound = false;
+                for(unsigned int i=0;i<BIP0030_HASH_COUNT;++i)
+                    if(BIP0030_HEIGHTS[i] == pBlockHeight && BIP0030_HASHES[i] == pBlockHash)
+                        exceptionFound = true;
+                if(exceptionFound)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                      "BIP-0030 Exception for duplicate transaction ID at block height %d : transaction %s",
+                      transactionReference->blockHeight, (*transaction)->hash);
+                }
+                else
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Transaction from block height %d has unspent outputs : %s", transactionReference->blockHeight,
+                      (*transaction)->hash);
+                    mMutex.unlock();
+                    return false;
+                }
+            }
             set->add(new TransactionReference((*transaction)->hash, pBlockHeight, (*transaction)->outputs.size()),
               mTransactionCount, mOutputCount);
         }
         mMutex.unlock();
+        return true;
     }
 
     bool TransactionOutputPool::commit(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
@@ -674,7 +727,7 @@ namespace BitCoin
                 break;
             }
 
-            if(newTransaction->hasUnspent())
+            if(newTransaction->hasUnspentOutputs())
             {
                 mReferences[newTransaction->id.lookup()].add(newTransaction, mTransactionCount, mOutputCount);
                 newTransaction = new TransactionReference();

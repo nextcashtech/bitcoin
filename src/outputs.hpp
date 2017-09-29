@@ -132,7 +132,7 @@ namespace BitCoin
         bool readAll(ArcMist::InputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount,
           unsigned int &pSpentTransactionCount, unsigned int &pSpentOutputCount);
 
-        bool hasUnspent() const { return mOutputCount > 0 && spentOutputCount() < mOutputCount; }
+        bool hasUnspentOutputs() const { return mOutputCount > 0 && spentOutputCount() < mOutputCount; }
         unsigned int outputCount() const { return mOutputCount; }
         unsigned int spentOutputCount() const;
 
@@ -212,7 +212,11 @@ namespace BitCoin
 
         ~TransactionOutputSet();
 
+        // Find an unspent transaction output
         TransactionReference *findUnspent(const Hash &pTransactionID, uint32_t pIndex);
+
+        // Returns true if there is currently a transaction with this ID with unspent outputs
+        TransactionReference *find(const Hash &pTransactionID);
 
         // Update spent transactions or add new transactions to the file
         void writeUpdate(ArcMist::OutputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount,
@@ -243,6 +247,9 @@ namespace BitCoin
     public:
 
         static const unsigned int SET_COUNT = 0x10000;
+        static const unsigned int BIP0030_HASH_COUNT = 2;
+        static const unsigned int BIP0030_HEIGHTS[BIP0030_HASH_COUNT];
+        static const Hash BIP0030_HASHES[BIP0030_HASH_COUNT];
 
         TransactionOutputPool();
 
@@ -252,10 +259,12 @@ namespace BitCoin
         TransactionReference *findUnspent(const Hash &pTransactionID, uint32_t pIndex);
 
         // Add all the outputs from a block (pending since they have no block file IDs or offsets yet)
-        void add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
+        // Returns false if one of the transaction IDs is currently unspent BIP-0030
+        bool add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight, const Hash &pBlockHash);
 
         // Find a spent transaction output
         TransactionReference *findSpent(const Hash &pTransactionID, uint32_t pIndex);
+
 
         // Mark an output as spent
         void spend(TransactionReference *pReference, unsigned int pIndex, unsigned int pBlockHeight);

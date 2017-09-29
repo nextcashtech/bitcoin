@@ -217,6 +217,7 @@ namespace BitCoin
 
         Hash() { mSize = 0; mData = NULL; }
         Hash(unsigned int pSize) { mSize = pSize; mData = new uint8_t[mSize]; zeroize(); }
+        Hash(const char *pHex);
         Hash(const Hash &pCopy) { mData = NULL; *this = pCopy; }
         ~Hash() { if(mData != NULL) delete[] mData; }
 
