@@ -51,7 +51,7 @@ namespace BitCoin
 
     protected:
 
-        static const unsigned int MAX_BLOCK_REQUEST = 16;
+        static const int MAX_BLOCK_REQUEST = 8;
 
         Daemon();
         ~Daemon();

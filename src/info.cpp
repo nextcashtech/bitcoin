@@ -23,6 +23,77 @@
 
 namespace BitCoin
 {
+    void Peer::write(ArcMist::OutputStream *pStream) const
+    {
+        // Validation Header
+        pStream->writeString("AMPR");
+
+        // User Agent Bytes
+        writeCompactInteger(pStream, userAgent.length());
+
+        // User Agent
+        pStream->writeString(userAgent);
+
+        // Rating
+        pStream->writeInt(rating);
+
+        // Time
+        pStream->writeUnsignedInt(time);
+
+        // Services
+        pStream->writeUnsignedLong(services);
+
+        // Address
+        address.write(pStream);
+    }
+
+    bool Peer::read(ArcMist::InputStream *pStream)
+    {
+        const char *match = "AMPR";
+        bool matchFound = false;
+        unsigned int matchOffset = 0;
+
+        // Search for start string
+        while(pStream->remaining())
+        {
+            if(pStream->readByte() == match[matchOffset])
+            {
+                matchOffset++;
+                if(matchOffset == 4)
+                {
+                    matchFound = true;
+                    break;
+                }
+            }
+            else
+                matchOffset = 0;
+        }
+
+        if(!matchFound)
+            return NULL;
+
+        // User Agent Bytes
+        uint64_t userAgentLength = readCompactInteger(pStream);
+
+        if(userAgentLength > 256)
+            return false;
+
+        // User Agent
+        userAgent = pStream->readString(userAgentLength);
+
+        // Rating
+        rating = pStream->readInt();
+
+        // Time
+        time = pStream->readUnsignedInt();
+
+        // Services
+        services = pStream->readUnsignedLong();
+
+        // Address
+        return address.read(pStream);
+    }
+
     Info *Info::sInstance = 0;
     ArcMist::String Info::sPath;
 
@@ -56,7 +127,7 @@ namespace BitCoin
         maxConnections = 32;
         minFee = 1; // satoshis per KiB
         mPeersModified = false;
-        pendingSizeThreshold = 104857600; // 100 MiB
+        pendingSizeThreshold = 268435456; // 256 MiB
         pendingBlocksThreshold = 512;
         spentOutputsThreshold = 52428800; // 50 MiB
 
@@ -236,7 +307,7 @@ namespace BitCoin
         mPeerLock.writeUnlock();
     }
 
-    void Info::randomizePeers(std::vector<Peer *> &pPeers, int pMinimumRating)
+    void Info::getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating)
     {
         pPeers.clear();
 
@@ -250,37 +321,38 @@ namespace BitCoin
         std::random_shuffle(pPeers.begin(), pPeers.end());
     }
 
-    void Info::addPeerFail(const IPAddress &pAddress)
+    void Info::addPeerFail(const IPAddress &pAddress, int pCount)
     {
         if(!pAddress.isValid())
             return;
 
-        bool remove = false;
+        //bool remove = false;
         mPeerLock.readLock();
         for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
             if((*peer)->address.matches(pAddress))
             {
                 // Update
-                (*peer)->rating--;
-                if((*peer)->rating < 0)
-                    remove = true;
+                (*peer)->rating -= pCount;
+                (*peer)->updateTime();
+                // if((*peer)->rating < 0)
+                    // remove = true;
                 mPeersModified = true;
                 break;
             }
         mPeerLock.readUnlock();
 
-        if(remove)
-        {
-            mPeerLock.writeLock("Remove");
-            for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
-                if((*peer)->address.matches(pAddress))
-                {
-                    mPeers.erase(peer);
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Removed peer");
-                    break;
-                }
-            mPeerLock.writeUnlock();
-        }
+        // if(remove)
+        // {
+            // mPeerLock.writeLock("Remove");
+            // for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
+                // if((*peer)->address.matches(pAddress))
+                // {
+                    // mPeers.erase(peer);
+                    // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Removed peer");
+                    // break;
+                // }
+            // mPeerLock.writeUnlock();
+        // }
     }
 
     void Info::updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices)

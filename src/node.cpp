@@ -37,10 +37,13 @@ namespace BitCoin
         mBlockRequestTime = 0;
         mBlockReceiveTime = 0;
         mLastReceiveTime = getTime();
+        mLastCheckTime = getTime();
         mLastPingNonce = 0;
         mLastPingTime = 0;
         mPingRoundTripTime = 0xffffffff;
         mPingCutoff = 60;
+        mBlockDownloadCount = 0;
+        mBlockDownloadTime = 0.0f;
         mMessagesReceived = 0;
         mConnectedTime = getTime();
         mStop = false;
@@ -114,6 +117,13 @@ namespace BitCoin
         return result;
     }
 
+    float Node::averageBlockDownloadTime() const
+    {
+        if(mBlockDownloadCount == 0)
+            return 0.0f;
+        return mBlockDownloadTime / (float)mBlockDownloadCount;
+    }
+
     void Node::close()
     {
         mConnectionMutex.lock();
@@ -150,7 +160,7 @@ namespace BitCoin
         mStatistics.clear();
     }
 
-    void Node::check(Chain &pChain)
+    void Node::check()
     {
         if(!isOpen())
             return;
@@ -169,7 +179,7 @@ namespace BitCoin
             return;
         }
 
-        if(!mIsIncoming && !pChain.isInSync())
+        if(!mIsIncoming && !mChain->isInSync())
         {
             uint32_t time = getTime();
 
@@ -190,14 +200,6 @@ namespace BitCoin
                     close();
                     return;
                 }
-
-                // if(time - mMessageInterpreter.pendingBlockStartTime > 300) // Haven't finished block within 300 seconds from starting
-                // {
-                    // ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Block not finished within 300 seconds");
-                    // Info::instance().addPeerFail(mAddress);
-                    // close();
-                    // return;
-                // }
             }
 
             if(!mHeaderRequested.isEmpty() && time - mHeaderRequestTime > 180)
@@ -238,7 +240,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Node::requestHeaders(Chain &pChain, const Hash &pStartingHash)
+    bool Node::requestHeaders(const Hash &pStartingHash)
     {
         if(!isOpen() || mIsIncoming || waitingForRequests())
             return false;
@@ -247,7 +249,7 @@ namespace BitCoin
         if(!pStartingHash.isEmpty())
         {
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Requesting block headers starting from (%d) : %s",
-              pChain.height(pStartingHash), pStartingHash.hex().text());
+              mChain->height(pStartingHash), pStartingHash.hex().text());
             getHeadersData.blockHeaderHashes.push_back(pStartingHash);
         }
         else
@@ -261,19 +263,14 @@ namespace BitCoin
         return success;
     }
 
-    bool Node::requestBlocks(Chain &pChain, unsigned int pCount, bool pReduceOnly)
+    bool Node::requestBlocks(HashList &pList)
     {
-        if(!isOpen() || mIsIncoming || waitingForRequests())
-            return false;
-
-        // Request list of blocks from the chain
-        HashList hashes;
-        if(!pChain.getBlocksNeeded(hashes, pCount, pReduceOnly, mID))
+        if(!isOpen() || mIsIncoming || mIsSeed)
             return false;
 
         // Put block hashes into block request message
         Message::GetDataData getDataData;
-        for(HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+        for(HashList::iterator hash=pList.begin();hash!=pList.end();++hash)
             getDataData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::BLOCK, **hash));
 
         bool success = sendMessage(&getDataData);
@@ -281,12 +278,13 @@ namespace BitCoin
         {
             mBlockRequestMutex.lock();
             mBlocksRequested.clear();
-            for(HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+            for(HashList::iterator hash=pList.begin();hash!=pList.end();++hash)
                 mBlocksRequested.push_back(new Hash(**hash));
             mBlockRequestTime = getTime();
             mBlockRequestMutex.unlock();
+            mChain->markBlocksForNode(pList, mID);
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Requested %d blocks starting at (%d) : %s",
-              hashes.size(), pChain.height(*hashes.front()), hashes.front()->hex().text());
+              pList.size(), mChain->height(*pList.front()), pList.front()->hex().text());
         }
         else
         {
@@ -294,7 +292,7 @@ namespace BitCoin
             mBlockRequestMutex.lock();
             mBlocksRequested.clear();
             mBlockRequestMutex.unlock();
-            pChain.releaseBlocksForNode(mID);
+            mChain->releaseBlocksForNode(mID);
         }
 
         return success;
@@ -321,7 +319,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Node::announceBlock(const Hash &pHash, Chain &pChain)
+    bool Node::announceBlock(const Hash &pHash)
     {
         //TODO if(mSendBlocksCompact)
         // {
@@ -338,7 +336,7 @@ namespace BitCoin
             Message::HeadersData headersData;
             headersData.headers.push_back(new Block());
 
-            if(!pChain.getHeader(pHash, *headersData.headers.front()))
+            if(!mChain->getHeader(pHash, *headersData.headers.front()))
                 return false;
 
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
@@ -369,7 +367,7 @@ namespace BitCoin
         return sendMessage(&inventoryData);
     }
 
-    bool Node::sendVersion(Chain &pChain)
+    bool Node::sendVersion()
     {
         if(!isOpen())
             return false;
@@ -377,7 +375,7 @@ namespace BitCoin
         Info &info = Info::instance();
         // Apparently if relay is off most of main net won't send blocks or headers
         Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip,
-          info.port, info.fullMode, pChain.blockHeight(), true); //chain.isInSync());
+          info.port, info.fullMode, mChain->blockHeight(), true); //chain.isInSync());
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
         return success;
@@ -420,23 +418,27 @@ namespace BitCoin
             return;
         }
 
-        node->sendVersion(*node->mChain);
+        node->sendVersion();
 
         while(!node->mStop)
         {
-            node->process(*node->mChain);
+            node->process();
 
             if(node->mStop)
                 break;
 
-            ArcMist::Thread::sleep(2000);
+            ArcMist::Thread::sleep(1000);
         }
 
         node->mStopped = true;
     }
 
-    void Node::process(Chain &pChain)
+    void Node::process()
     {
+        uint32_t time = getTime();
+        if(time - mLastCheckTime > 10)
+            check();
+
         mConnectionMutex.lock();
         if(mConnection == NULL)
         {
@@ -454,10 +456,10 @@ namespace BitCoin
         // Ping every 20 minutes
         if(!mIsIncoming && mVersionData != NULL && mVersionAcknowledged)
         {
-            if(getTime() - mLastPingTime > 1200)
+            if(time - mLastPingTime > 1200)
                 sendPing();
             else if(mLastPingTime != 0 && mPingRoundTripTime == 0xffffffff &&
-              mPingCutoff != 0xffffffff && getTime() - mLastPingTime > mPingCutoff)
+              mPingCutoff != 0xffffffff && time - mLastPingTime > mPingCutoff)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,
                   "Ping not received within cutoff of %ds", mPingCutoff);
@@ -471,8 +473,6 @@ namespace BitCoin
 
         if(message == NULL)
         {
-            uint64_t time = getTime();
-
             if(mMessagesReceived == 0 && time - mConnectedTime > 60)
             {
                 ArcMist::Log::add(ArcMist::Log::WARNING, mName, "No valid messages within 60 seconds of connecting");
@@ -486,13 +486,13 @@ namespace BitCoin
                 sendPing();
 
             if(!mMessageInterpreter.pendingBlockHash.isEmpty() && mMessageInterpreter.pendingBlockUpdateTime != 0)
-                pChain.updateBlockProgress(mMessageInterpreter.pendingBlockHash, mID, mMessageInterpreter.pendingBlockUpdateTime);
+                mChain->updateBlockProgress(mMessageInterpreter.pendingBlockHash, mID, mMessageInterpreter.pendingBlockUpdateTime);
 
             return;
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Received <%s>", Message::nameFor(message->type));
-        mLastReceiveTime = getTime();
+        mLastReceiveTime = time;
 
         if(mMessagesReceived < 2 && message->type != Message::VERSION && message->type != Message::VERACK &&
           message->type != Message::REJECT)
@@ -538,8 +538,8 @@ namespace BitCoin
                       "Full node bit required in protocol version");
                     close();
                 }
-                else if(!mIsIncoming && !mIsSeed && !pChain.isInSync() && (mVersionData->startBlockHeight < 0 ||
-                  (unsigned int)mVersionData->startBlockHeight < pChain.blockHeight()))
+                else if(!mIsIncoming && !mIsSeed && !mChain->isInSync() && (mVersionData->startBlockHeight < 0 ||
+                  (unsigned int)mVersionData->startBlockHeight < mChain->blockHeight()))
                 {
                     ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Low block height");
                     Info::instance().addPeerFail(mAddress);
@@ -574,7 +574,7 @@ namespace BitCoin
                 {
                     if(mPingRoundTripTime == 0xffffffff)
                     {
-                        mPingRoundTripTime = getTime() - mLastPingTime;
+                        mPingRoundTripTime = time - mLastPingTime;
                         if(!mIsIncoming && !mIsSeed && mPingCutoff != 0xffffffff)
                         {
                             if(mPingRoundTripTime > mPingCutoff)
@@ -616,7 +616,7 @@ namespace BitCoin
                 std::vector<Peer *> peers;
 
                 // Get list of peers
-                Info::instance().randomizePeers(peers, 1);
+                Info::instance().getRandomizedPeers(peers, 1);
 
                 unsigned int count = peers.size();
                 if(count > 1000) // Maximum of 1000
@@ -694,14 +694,14 @@ namespace BitCoin
 
                 // Find appropriate hashes
                 for(std::vector<Hash>::iterator i=getBlocksData->blockHeaderHashes.begin();i!=getBlocksData->blockHeaderHashes.end();++i)
-                    if(pChain.getBlockHashes(hashes, *i, 500))
+                    if(mChain->getBlockHashes(hashes, *i, 500))
                         break;
 
                 if(hashes.size() == 0)
                 {
                     // No matching starting hashes found. Start from genesis
                     Hash emptyHash;
-                    pChain.getBlockHashes(hashes, emptyHash, 500);
+                    mChain->getBlockHashes(hashes, emptyHash, 500);
                 }
 
                 unsigned int count = hashes.size();
@@ -730,7 +730,7 @@ namespace BitCoin
             case Message::BLOCK:
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
-                  "Received block (height %d) (%d bytes) : %s", pChain.height(((Message::BlockData *)message)->block->hash),
+                  "Received block (height %d) (%d bytes) : %s", mChain->height(((Message::BlockData *)message)->block->hash),
                   ((Message::BlockData *)message)->block->size(), ((Message::BlockData *)message)->block->hash.hex().text());
                 ++mStatistics.blocksReceived;
 
@@ -741,12 +741,24 @@ namespace BitCoin
                     {
                         delete *hash;
                         mBlocksRequested.erase(hash);
-                        mBlockReceiveTime = getTime();
+                        mBlockReceiveTime = time;
+                        ++mBlockDownloadCount;
+                        mBlockDownloadTime += time - mMessageInterpreter.pendingBlockStartTime;
                         break;
                     }
                 mBlockRequestMutex.unlock();
 
-                if(pChain.addPendingBlock(((Message::BlockData *)message)->block))
+                if(mMessageInterpreter.pendingBlockStartTime != 0 &&
+                  time - mMessageInterpreter.pendingBlockStartTime > 300)
+                {
+                    // Drop after the block finishes so it doesn't have to be restarted
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                      "Dropping. Block download took %ds", time - mMessageInterpreter.pendingBlockStartTime);
+                    Info::instance().addPeerFail(mAddress, 5);
+                    close();
+                }
+
+                if(mChain->addPendingBlock(((Message::BlockData *)message)->block))
                 {
                     ((Message::BlockData *)message)->block = NULL; // Memory has been handed off
                     if(!mIsSeed && mVersionData != NULL)
@@ -767,10 +779,10 @@ namespace BitCoin
                     {
                     case Message::InventoryHash::BLOCK:
                     {
-                        if(pChain.getBlock((*item)->hash, block))
+                        if(mChain->getBlock((*item)->hash, block))
                         {
                             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending block at height %d : %s",
-                              pChain.height((*item)->hash), (*item)->hash.hex().text());
+                              mChain->height((*item)->hash), (*item)->hash.hex().text());
                             if(!sendBlock(block))
                                 fail = true;
                         }
@@ -818,14 +830,14 @@ namespace BitCoin
                 Message::HeadersData headersData;
 
                 for(std::vector<Hash>::iterator hash=getHeadersData->blockHeaderHashes.begin();hash!=getHeadersData->blockHeaderHashes.end();++hash)
-                    if(pChain.getBlockHeaders(headersData.headers, *hash, getHeadersData->stopHeaderHash, 2000))
+                    if(mChain->getBlockHeaders(headersData.headers, *hash, getHeadersData->stopHeaderHash, 2000))
                         break; // match found
 
                 if(headersData.headers.size() > 0)
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
                       "Sending %d block headers starting at height %d : %s", headersData.headers.size(),
-                      pChain.height(headersData.headers.front()->hash), headersData.headers.front()->hash.hex().text());
+                      mChain->height(headersData.headers.front()->hash), headersData.headers.front()->hash.hex().text());
                     if(sendMessage(&headersData))
                         mStatistics.headersSent += headersData.headers.size();
                 }
@@ -846,7 +858,7 @@ namespace BitCoin
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Header : %s", (*header)->hash.hex().text());
 
-                    if(pChain.addPendingHeader(*header))
+                    if(mChain->addPendingHeader(*header))
                     {
                         // memory will be deleted by block chain after it is processed so remove it from this list
                         header = headersData->headers.erase(header);

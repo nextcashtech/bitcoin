@@ -471,6 +471,21 @@ namespace BitCoin
         mPendingLock.readUnlock();
     }
 
+    void Chain::markBlocksForNode(HashList &pHashes, unsigned int pNodeID)
+    {
+        mPendingLock.readLock();
+        uint32_t time = getTime();
+        for(HashList::iterator hash=pHashes.begin();hash!=pHashes.end();++hash)
+            for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+                if((*pending)->block->hash == **hash)
+                {
+                    (*pending)->requestingNode = pNodeID;
+                    (*pending)->requestedTime = time;
+                    break;
+                }
+        mPendingLock.readUnlock();
+    }
+
     void Chain::releaseBlocksForNode(unsigned int pNodeID)
     {
         mPendingLock.readLock();
@@ -483,7 +498,7 @@ namespace BitCoin
         mPendingLock.readUnlock();
     }
 
-    bool Chain::getBlocksNeeded(HashList &pHashes, unsigned int pCount, bool pReduceOnly, unsigned int pNodeID)
+    bool Chain::getBlocksNeeded(HashList &pHashes, unsigned int pCount, bool pReduceOnly)
     {
         pHashes.clear();
 
@@ -499,9 +514,6 @@ namespace BitCoin
             if(!(*pending)->isFull() && (*pending)->requestingNode == 0)
             {
                 pHashes.push_back(new Hash((*pending)->block->hash));
-                (*pending)->requestingNode = pNodeID;
-                (*pending)->requestedTime = getTime();
-
                 if(pHashes.size() >= pCount)
                     break;
             }

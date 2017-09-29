@@ -142,9 +142,11 @@ namespace BitCoin
         // Add block header to queue to be requested and downloaded
         bool addPendingHeader(Block *pBlock);
         // Builds a list of blocks that need to be requested and marks them as requested by the node specified
-        bool getBlocksNeeded(HashList &pHashes, unsigned int pCount, bool pReduceOnly, unsigned int pNodeID);
+        bool getBlocksNeeded(HashList &pHashes, unsigned int pCount, bool pReduceOnly);
         // Mark that download progress has increased for this block
         void updateBlockProgress(const Hash &pHash, unsigned int pNodeID, uint32_t pTime);
+        // Mark blocks as requested by the specified node
+        void markBlocksForNode(HashList &pHashes, unsigned int pNodeID);
         // Release all blocks requested by a specified node so they will be requested again
         void releaseBlocksForNode(unsigned int pNodeID);
 

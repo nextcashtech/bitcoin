@@ -35,7 +35,7 @@ namespace BitCoin
         bool isOpen();
         void close();
 
-        void process(Chain &pChain);
+        void process();
 
         void requestStop();
 
@@ -46,6 +46,8 @@ namespace BitCoin
         bool isReady() const { return mPingRoundTripTime != 0xffffffff; }
         uint32_t pingTime() const { return mPingRoundTripTime; }
         void setPingCutoff(uint32_t pPingCutoff) { mPingCutoff = pPingCutoff; }
+        unsigned int blocksDownloadedCount() const { return mBlockDownloadCount; }
+        float averageBlockDownloadTime() const;
 
         // Time that the node connected
         uint32_t connectedTime() { return mConnectedTime; }
@@ -54,19 +56,16 @@ namespace BitCoin
 
         unsigned int blockHeight() { if(mVersionData == NULL) return 0; else return mVersionData->startBlockHeight; }
 
-        // Check if node should be closed
-        void check(Chain &pChain);
-
         bool waitingForRequests() { return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty(); }
-        bool requestHeaders(Chain &pChain, const Hash &pStartingHash);
-        bool requestBlocks(Chain &pChain, unsigned int pCount, bool pReduceOnly);
+        bool requestHeaders(const Hash &pStartingHash);
+        bool requestBlocks(HashList &pList);
         unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
         void releaseBlockRequests();
 
         bool requestPeers();
 
         // Send notification of a new block on the chain
-        bool announceBlock(const Hash &pHash, Chain &pChain);
+        bool announceBlock(const Hash &pHash);
 
         // Send notification of a new transaction in the mempool
         //TODO Make this send periodically with a list. Filter list to remove transaction inventory received from node
@@ -83,8 +82,11 @@ namespace BitCoin
 
         Message::Interpreter mMessageInterpreter;
 
+        // Check if node should be closed
+        void check();
+
         bool sendMessage(Message::Data *pData);
-        bool sendVersion(Chain &pChain);
+        bool sendVersion();
         bool sendPing();
         bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
         bool sendBlock(Block &pBlock);
@@ -105,11 +107,15 @@ namespace BitCoin
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;
         uint32_t mLastReceiveTime;
+        uint32_t mLastCheckTime;
         uint32_t mLastPingTime;
         uint64_t mLastPingNonce;
         uint32_t mPingRoundTripTime;
         uint32_t mPingCutoff;
         uint64_t mMinimumFeeRate;
+
+        unsigned int mBlockDownloadCount;
+        float mBlockDownloadTime;
 
         Hash mHeaderRequested;
         uint32_t mHeaderRequestTime;

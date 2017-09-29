@@ -14,6 +14,7 @@
 #include "arcmist/io/buffer.hpp"
 #include "arcmist/io/network.hpp"
 #include "base.hpp"
+#include "info.hpp"
 #include "transaction.hpp"
 #include "block.hpp"
 #include "key.hpp"

@@ -322,17 +322,24 @@ namespace BitCoin
         }
     }
 
+    class NodeBlockRequests
+    {
+    public:
+        Node *node;
+        HashList list;
+    };
+
     void Daemon::sendRequests()
     {
         unsigned int pendingCount = mChain.pendingCount();
         unsigned int pendingBlockCount = mChain.pendingBlockCount();
         unsigned int pendingSize = mChain.pendingSize();
         bool reduceOnly = pendingSize >= mInfo.pendingSizeThreshold || pendingBlockCount >= mInfo.pendingBlocksThreshold;
-        unsigned int availableToRequestBlocks = 0;
         unsigned int blocksRequestedCount = 0;
 
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
+        std::vector<Node *> requestNodes;
         sortOutgoingNodesByPing(nodes);
         // Go through nodes in reverese so they are lowest ping first
         for(std::vector<Node *>::reverse_iterator node=nodes.rbegin();node!=nodes.rend();++node)
@@ -347,29 +354,82 @@ namespace BitCoin
 
             if(!mChain.isInSync() && getTime() - mLastHeaderRequestTime > 60 &&
               pendingCount < mInfo.pendingBlocksThreshold * 4 &&
-              (*node)->requestHeaders(mChain, mChain.lastPendingBlockHash()))
+              (*node)->requestHeaders(mChain.lastPendingBlockHash()))
                 mLastHeaderRequestTime = getTime();
             else
-                ++availableToRequestBlocks;
+                requestNodes.push_back(*node);
         }
 
         // Request blocks
-        if(availableToRequestBlocks == 0)
+        if(requestNodes.size() == 0)
+        {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
               "No nodes available for block requests");
-
-        if(pendingCount > pendingBlockCount && availableToRequestBlocks > 0)
-        {
-            int blocksToRequest;
-            if(reduceOnly)
-                blocksToRequest = mChain.highestFullPendingHeight() - mChain.blockHeight() - pendingBlockCount;
-            else
-                blocksToRequest = mInfo.pendingBlocksThreshold + MAX_BLOCK_REQUEST - pendingBlockCount - blocksRequestedCount;
-            for(std::vector<Node *>::reverse_iterator node=nodes.rbegin();node!=nodes.rend()&&blocksToRequest>0;++node)
-                if((*node)->requestBlocks(mChain, MAX_BLOCK_REQUEST, reduceOnly))
-                    blocksToRequest -= MAX_BLOCK_REQUEST;
+            mNodeLock.readUnlock();
+            return;
         }
 
+        int blocksToRequestCount;
+        // Don't make large block set requests without large enough request node counts
+        //   Otherwise the block staggering can be very low and slow down the download stream
+        if(reduceOnly || requestNodes.size() < 4)
+            blocksToRequestCount = requestNodes.size();
+        else
+        {
+            blocksToRequestCount = mInfo.pendingBlocksThreshold - pendingBlockCount - blocksRequestedCount;
+            if(blocksToRequestCount > (int)requestNodes.size() * MAX_BLOCK_REQUEST)
+                blocksToRequestCount = (int)requestNodes.size() * MAX_BLOCK_REQUEST;
+        }
+        if(blocksToRequestCount <= 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              "No blocks need requested");
+            mNodeLock.readUnlock();
+            return;
+        }
+
+        HashList blocksToRequest;
+        mChain.getBlocksNeeded(blocksToRequest, blocksToRequestCount, reduceOnly);
+
+        if(blocksToRequest.size() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              "No blocks found to request");
+            mNodeLock.readUnlock();
+            return;
+        }
+
+        // Divided these up (staggered) between available nodes
+        NodeBlockRequests *nodeRequests = new NodeBlockRequests[requestNodes.size()];
+        NodeBlockRequests *nodeRequest = nodeRequests;
+        unsigned int i;
+
+        // Assign nodes
+        nodeRequest = nodeRequests;
+        for(std::vector<Node *>::iterator node=requestNodes.begin();node!=requestNodes.end();++node)
+        {
+            nodeRequest->node = *node;
+            ++nodeRequest;
+        }
+
+        // Stagger out blocks
+        unsigned int requestNodeOffset = 0;
+        for(HashList::iterator hash=blocksToRequest.begin();hash!=blocksToRequest.end();++hash)
+        {
+            nodeRequests[requestNodeOffset].list.push_back(new Hash(**hash));
+            if(++requestNodeOffset >= requestNodes.size())
+                requestNodeOffset = 0;
+        }
+
+        // Send requests to nodes
+        nodeRequest = nodeRequests;
+        for(i=0;i<requestNodes.size();++i)
+        {
+            nodeRequest->node->requestBlocks(nodeRequest->list);
+            ++nodeRequest;
+        }
+
+        delete[] nodeRequests;
         mNodeLock.readUnlock();
     }
 
@@ -507,7 +567,7 @@ namespace BitCoin
                 break;
 
             time = getTime();
-            if(time - lastRequestCheckTime > 30)
+            if(time - lastRequestCheckTime > 60)
             {
                 lastRequestCheckTime = time;
                 daemon.sendRequests();
@@ -569,7 +629,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - lastOutputsSaveTime > 1200 ||
+            if(getTime() - lastOutputsSaveTime > 3600 ||
               daemon.mChain.outputs().spentSize() > daemon.mInfo.spentOutputsThreshold)
             {
                 daemon.mChain.saveOutputs();
@@ -657,7 +717,7 @@ namespace BitCoin
         bool found;
 
         // Try peers with good ratings first
-        mInfo.randomizePeers(peers, 5);
+        mInfo.getRandomizedPeers(peers, 5);
         ArcMist::Network::Connection *connection;
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d peers with good ratings", peers.size());
@@ -687,7 +747,7 @@ namespace BitCoin
         }
 
         peers.clear();
-        mInfo.randomizePeers(peers, 0);
+        mInfo.getRandomizedPeers(peers, -5);
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers", peers.size());
         mLastPeerCount = peers.size();
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
@@ -720,11 +780,6 @@ namespace BitCoin
 
     void Daemon::cleanNodes()
     {
-        mNodeLock.readLock();
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
-            (*node)->check(mChain);
-        mNodeLock.readUnlock();
-
         // Drop all closed nodes
         std::vector<Node *> toDelete;
         mNodeLock.writeLock("Clean Nodes");
@@ -760,13 +815,18 @@ namespace BitCoin
 
         while(!daemon.mStopping)
         {
-            if(daemon.mChain.isInSync())
-                daemon.mMaxOutgoing = 8;
-            else
+            if(daemon.mInfo.maxConnections > 16)
                 daemon.mMaxOutgoing = daemon.mInfo.maxConnections / 2;
+            else
+                daemon.mMaxOutgoing = 8;
             if(daemon.mMaxOutgoing > daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST)
                 daemon.mMaxOutgoing = daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST;
-            daemon.mMaxIncoming = daemon.mInfo.maxConnections - daemon.mMaxOutgoing;
+            if(daemon.mMaxOutgoing > 8 && daemon.mChain.isInSync())
+                daemon.mMaxOutgoing = 8;
+            if(daemon.mMaxOutgoing >= daemon.mInfo.maxConnections)
+                daemon.mMaxIncoming = 0;
+            else
+                daemon.mMaxIncoming = daemon.mInfo.maxConnections - daemon.mMaxOutgoing;
 
             if(getTime() - lastCleanTime > 10)
             {

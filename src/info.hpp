@@ -20,6 +20,42 @@
 
 namespace BitCoin
 {
+    class Peer
+    {
+    public:
+
+        Peer() { rating = 0; }
+        Peer(const Peer &pCopy)
+        {
+            time = pCopy.time;
+            services = pCopy.services;
+            userAgent = pCopy.userAgent;
+            rating = pCopy.rating;
+            address = pCopy.address;
+        }
+
+        void write(ArcMist::OutputStream *pStream) const;
+        bool read(ArcMist::InputStream *pStream);
+
+        void updateTime() { time = getTime(); }
+
+        Peer &operator = (const Peer &pRight)
+        {
+            time = pRight.time;
+            services = pRight.services;
+            userAgent = pRight.userAgent;
+            rating = pRight.rating;
+            address = pRight.address;
+            return *this;
+        }
+
+        uint32_t time;
+        uint64_t services;
+        ArcMist::String userAgent;
+        int32_t rating;
+        IPAddress address;
+    };
+
     class Info
     {
     public:
@@ -39,9 +75,9 @@ namespace BitCoin
         uint64_t minFee;
 
         // Return list of peers in random order
-        void randomizePeers(std::vector<Peer *> &pPeers, int pMinimumRating);
+        void getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating);
         void updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices);
-        void addPeerFail(const IPAddress &pAddress);
+        void addPeerFail(const IPAddress &pAddress, int pCount = 1);
 
         void save();
 

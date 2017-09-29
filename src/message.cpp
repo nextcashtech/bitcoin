@@ -205,7 +205,7 @@ namespace BitCoin
                     Block block;
                     block.read(pInput, false, false, true);
 
-                    if(pendingBlockStartTime == 0)
+                    if(pendingBlockHash.isEmpty())
                     {
                         // Starting new block
                         pendingBlockStartTime = getTime();
@@ -323,9 +323,6 @@ namespace BitCoin
                     break;
                 case BLOCK:
                     result = new BlockData();
-                    pendingBlockStartTime = 0;
-                    pendingBlockUpdateTime = 0;
-                    pendingBlockHash.clear();
                     break;
                 case GET_DATA:
                     result = new GetDataData();
@@ -377,6 +374,15 @@ namespace BitCoin
                   "Failed to read <%s> message", command.text());
                 delete result;
                 result = NULL;
+            }
+
+            if(result != NULL && result->type == BLOCK)
+            {
+                // Block downloaded completely before first parsing of incoming data
+                if(pendingBlockHash != ((BlockData *)result)->block->hash)
+                    pendingBlockStartTime = getTime();
+                pendingBlockUpdateTime = 0;
+                pendingBlockHash.clear();
             }
 
             pInput->flush();
