@@ -349,7 +349,7 @@ namespace BitCoin
     {
         if(transactions.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
             return false;
         }
 
@@ -361,7 +361,7 @@ namespace BitCoin
         {
             if(!(*transaction)->updateOutputs(pOutputs, transactions, pBlockHeight))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Transaction %d update failed",
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Transaction %d update failed",
                   transactionOffset);
                 return false;
             }
@@ -379,7 +379,7 @@ namespace BitCoin
 
         if(transactions.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
             return false;
         }
 
@@ -395,9 +395,9 @@ namespace BitCoin
         calculateMerkleHash(calculatedMerkleHash);
         if(calculatedMerkleHash != merkleHash)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Block merkle root hash is invalid");
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Included   : %s", merkleHash.hex().text());
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Calculated : %s", merkleHash.hex().text());
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Block merkle root hash is invalid");
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Included   : %s", merkleHash.hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Calculated : %s", merkleHash.hex().text());
             return false;
         }
 
@@ -412,7 +412,7 @@ namespace BitCoin
         {
             if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version, pSoftForks))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",
                   transactionOffset);
                 return false;
             }
@@ -425,11 +425,11 @@ namespace BitCoin
         // Check that coinbase output amount - fees is correct for block height
         if(-transactions.front()->fee() - mFees > coinBaseAmount(pBlockHeight))
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Coinbase outputs are too high");
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Coinbase %.08f",
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Coinbase outputs are too high");
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Coinbase %.08f",
               bitcoins(-transactions.front()->fee()));
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME, "Fees     %.08f", bitcoins(mFees));
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Fees     %.08f", bitcoins(mFees));
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Block %08d Coinbase amount should be %.08f", pBlockHeight, bitcoins(coinBaseAmount(pBlockHeight)));
             return false;
         }

@@ -195,13 +195,13 @@ namespace BitCoin
 #endif
         if(inputs.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
             return false;
         }
 
         if(outputs.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
             return false;
         }
 
@@ -218,7 +218,7 @@ namespace BitCoin
             {
                 if((*input)->outpoint.index != 0xffffffff)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Coinbase Input %d outpoint index is not 0xffffffff : %08x", index+1, (*input)->outpoint.index);
                     return false;
                 }
@@ -249,7 +249,7 @@ namespace BitCoin
 
                 if(reference == NULL)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint not found : trans %s index %d", index + 1,
                       (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
                     return false;
@@ -271,19 +271,19 @@ namespace BitCoin
 
                     if(!found)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d outpoint transaction not found in current block : trans %s index %d", index + 1,
                           (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
-                        reference->print(ArcMist::Log::VERBOSE);
+                        reference->print(ArcMist::Log::WARNING);
                         return false;
                     }
                 }
                 else if(!BlockFile::readOutput(reference, (*input)->outpoint.index, output))
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction failed to read : trans %s index %d", index + 1,
                       (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
-                    reference->print(ArcMist::Log::VERBOSE);
+                    reference->print(ArcMist::Log::WARNING);
                     return false;
                 }
 
@@ -305,10 +305,10 @@ namespace BitCoin
                 (*input)->script.setReadOffset(0);
                 if(!interpreter.process((*input)->script, true, (*input)->sequence, pBlockVersion, pSoftForks))
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d signature script failed : ", index+1);
-                    (*input)->print(ArcMist::Log::VERBOSE);
-                    reference->print(ArcMist::Log::VERBOSE);
+                    (*input)->print(ArcMist::Log::WARNING);
+                    reference->print(ArcMist::Log::WARNING);
                     return false;
                 }
 
@@ -319,36 +319,36 @@ namespace BitCoin
                 output.script.setReadOffset(0);
                 if(!interpreter.process(output.script, false, (*input)->sequence, pBlockVersion, pSoftForks))
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d unspent transaction output script failed : ", index + 1);
-                    (*input)->print(ArcMist::Log::VERBOSE);
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
-                    reference->print(ArcMist::Log::VERBOSE);
-                    output.print(ArcMist::Log::VERBOSE);
+                    (*input)->print(ArcMist::Log::WARNING);
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                    reference->print(ArcMist::Log::WARNING);
+                    output.print(ArcMist::Log::WARNING);
                     return false;
                 }
 
                 if(!interpreter.isValid())
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d script is not valid : ", index+1);
-                    (*input)->print(ArcMist::Log::VERBOSE);
+                    (*input)->print(ArcMist::Log::WARNING);
                     interpreter.printStack("After fail validate");
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
-                    reference->print(ArcMist::Log::VERBOSE);
-                    output.print(ArcMist::Log::VERBOSE);
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                    reference->print(ArcMist::Log::WARNING);
+                    output.print(ArcMist::Log::WARNING);
                     return false;
                 }
 
                 if(!interpreter.isVerified())
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d script did not verify : ", index+1);
-                    (*input)->print(ArcMist::Log::VERBOSE);
+                    (*input)->print(ArcMist::Log::WARNING);
                     interpreter.printStack("After fail verify");
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
-                    reference->print(ArcMist::Log::VERBOSE);
-                    output.print(ArcMist::Log::VERBOSE);
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                    reference->print(ArcMist::Log::WARNING);
+                    output.print(ArcMist::Log::WARNING);
                     return false;
                 }
 
@@ -366,7 +366,7 @@ namespace BitCoin
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d amount is negative %d : ", index + 1, (*output)->amount);
-                (*output)->print(ArcMist::Log::VERBOSE);
+                (*output)->print(ArcMist::Log::WARNING);
                 return false;
             }
 

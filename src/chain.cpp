@@ -1727,15 +1727,10 @@ namespace BitCoin
         // Info::instance().setPath("/var/bitcoin/mainnet");
         // bool stop = false;
         // softForks.load();
-
-        // outputs.convert();
         // outputs.load(stop);
-        // outputs.save();
 
         // ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
         // Block block;
-        // Hash hash;
-        // hash.setHex("58fec06b8d8a232ee6704c461ca6a608673aa7231163eaaf1676cd99e9f4c4b4");
 
         // if(!block.read(&file, true, true, true))
         // {
@@ -1744,26 +1739,13 @@ namespace BitCoin
         // }
         // else
         // {
-            // for(std::vector<Transaction *>::iterator trans=block.transactions.begin();trans!=block.transactions.end();++trans)
-                // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Trans : %s", (*trans)->hash.hex().text());
-
-            // outputs.add(block.transactions, outputs.blockHeight() + 1);
-
-            // TransactionReference *reference = outputs.findUnspent(hash, 0);
-
-            // if(reference != NULL)
-                // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                  // "Found at height : %d", reference->blockHeight);
+            // if(block.process(outputs, outputs.blockHeight() + 1, softForks))
+                // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed pending block");
             // else
-                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Not Found");
-
-            // // if(block.process(outputs, outputs.blockHeight() + 1, softForks))
-                // // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed pending block");
-            // // else
-            // // {
-                // // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed pending block");
-                // // success = false;
-            // // }
+            // {
+                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed pending block");
+                // success = false;
+            // }
         // }
 
         // block.print(ArcMist::Log::INFO, false);

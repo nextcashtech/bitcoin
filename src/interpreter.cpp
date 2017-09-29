@@ -885,7 +885,7 @@ namespace BitCoin
         if(pBuffer->length() > 8)
         {
             pBuffer->setReadOffset(0);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Arithmetic read to many bytes : %s", pBuffer->readHexString(pBuffer->length()).text());
             return false;
         }
@@ -941,7 +941,7 @@ namespace BitCoin
             if(pBuffer->length() > 5)
             {
                 pBuffer->setReadOffset(0);
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                   "Arithmetic read to many bytes (negative with 0x80) : %s",
                   pBuffer->readHexString(pBuffer->length()).text());
                 return false;
@@ -950,7 +950,7 @@ namespace BitCoin
         else if(pBuffer->length() > 4)
         {
             pBuffer->setReadOffset(0);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Arithmetic read to many bytes : %s", pBuffer->readHexString(pBuffer->length()).text());
             return false;
         }
@@ -967,7 +967,7 @@ namespace BitCoin
         }
 
         pBuffer->setReadOffset(0);
-        //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+        //ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
         //  "Arithmetic read : %s -> %08x%08x (%d)", pBuffer->readHexString(pBuffer->length()).text(),
         //  pValue >> 32, pValue, pValue & 0xffffffff);
         return true;
@@ -1015,7 +1015,7 @@ namespace BitCoin
             {
                 if(startOffset == 0)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "Arithmetic write (too many bytes) : %08x%08x -> %s", pValue >> 32, pValue);
                     return;
                 }
@@ -1030,7 +1030,7 @@ namespace BitCoin
         {
             if(startOffset == 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                   "Arithmetic write (too many bytes) : %08x%08x -> %s", pValue >> 32, pValue);
                 return;
             }
@@ -1047,7 +1047,7 @@ namespace BitCoin
         else
             pBuffer->write(bytes + startOffset, 8 - startOffset);
         pBuffer->setReadOffset(0);
-        //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+        //ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
         //  "Arithmetic write : %08x%08x (%d) -> %s", pValue >> 32, pValue, pValue & 0xffffffff,
         //  pBuffer->readHexString(pBuffer->length()).text());
     }
@@ -1067,7 +1067,7 @@ namespace BitCoin
         {
             if(mStack.size() > 1000)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                   "Stack overflow %d items", mStack.size());
                 mValid = false;
                 return false;
@@ -1075,7 +1075,7 @@ namespace BitCoin
 
             if(mIfStack.size() > 20)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                   "If Stack overflow %d items", mIfStack.size());
                 mValid = false;
                 return false;
@@ -1097,7 +1097,7 @@ namespace BitCoin
             {
                 if(opCode > pScript.remaining())
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "Push data size more than remaining script : %d/%d", opCode, pScript.remaining());
                     mValid = false;
                     return false;
@@ -1122,16 +1122,16 @@ namespace BitCoin
                 case OP_IF: // If the top stack value is not OP_FALSE the statements are executed. The top stack value is removed
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IF");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IF");
                         mValid = false;
                         return false;
                     }
 
                     // if(!bufferIsZero(top()))
-                        // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           // "OP_IF pushing to on");
                     // else
-                        // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           // "OP_IF pushing to off");
                     if(ifStackTrue())
                     {
@@ -1144,16 +1144,16 @@ namespace BitCoin
                 case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NOTIF");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NOTIF");
                         mValid = false;
                         return false;
                     }
 
                     // if(bufferIsZero(top()))
-                        // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           // "OP_NOTIF pushing to on");
                     // else
-                        // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           // "OP_NOTIF pushing to off");
                     if(ifStackTrue())
                     {
@@ -1167,27 +1167,27 @@ namespace BitCoin
                     if(mIfStack.size() > 0)
                     {
                         // if(mIfStack.back())
-                            // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                            // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               // "OP_ELSE switching to off");
                         // else
-                            // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                            // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               // "OP_ELSE switching to on");
                         mIfStack.back() = !mIfStack.back();
                     }
                     else
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "No if before else");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "No if before else");
                         mValid = false;
                         return false;
                     }
                     break;
                 case OP_ENDIF: // Ends an if/else block. All blocks must end, or the transaction is invalid. An OP_ENDIF without OP_IF earlier is also invalid.
-                    //ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "OP_ENDIF");
+                    //ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "OP_ENDIF");
                     if(mIfStack.size() > 0)
                         mIfStack.pop_back();
                     else
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "No if before endif");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "No if before endif");
                         mValid = false;
                         return false;
                     }
@@ -1196,7 +1196,7 @@ namespace BitCoin
                 case OP_VERIFY: // Marks transaction as invalid if top stack value is not true.
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_VERIFY");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_VERIFY");
                         mValid = false;
                         return false;
                     }
@@ -1206,7 +1206,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_VERIFY");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_VERIFY");
                         mValid = false;
                         return false;
                     }
@@ -1222,7 +1222,7 @@ namespace BitCoin
                 case OP_RETURN: // Marks transaction as invalid
                     if(!ifStackTrue())
                         break;
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
                     mVerified = false;
                     return true;
                 case OP_EQUAL: // Returns 1 if the the top two stack items are exactly equal, 0 otherwise
@@ -1230,7 +1230,7 @@ namespace BitCoin
                 {
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_EQUAL or OP_EQUALVERIFY");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_EQUAL or OP_EQUALVERIFY");
                         mValid = false;
                         return false;
                     }
@@ -1240,7 +1240,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
                         mValid = false;
                         return false;
                     }
@@ -1282,7 +1282,7 @@ namespace BitCoin
 #endif
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Invalid op code for signature script : OP_SHA1");
                         mValid = false;
                         return false;
@@ -1293,7 +1293,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_SHA1");
                         mValid = false;
                         return false;
@@ -1317,7 +1317,7 @@ namespace BitCoin
 #endif
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Invalid op code for signature script : OP_SHA1");
                         mValid = false;
                         return false;
@@ -1328,7 +1328,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_SHA1");
                         mValid = false;
                         return false;
@@ -1352,7 +1352,7 @@ namespace BitCoin
 #endif
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Invalid op code for signature script : OP_SHA256");
                         mValid = false;
                         return false;
@@ -1363,7 +1363,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_SHA256");
                         mValid = false;
                         return false;
@@ -1387,7 +1387,7 @@ namespace BitCoin
 #endif
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_HASH160");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_HASH160");
                         mValid = false;
                         return false;
                     }
@@ -1397,7 +1397,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
                         mValid = false;
                         return false;
                     }
@@ -1420,7 +1420,7 @@ namespace BitCoin
 #endif
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Invalid op code for signature script : OP_HASH256");
                         mValid = false;
                         return false;
@@ -1431,7 +1431,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_HASH256");
                         mValid = false;
                         return false;
@@ -1469,7 +1469,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKSIG");
                         mValid = false;
                         return false;
@@ -1491,10 +1491,10 @@ namespace BitCoin
                     else
                     {
                         pop();
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Signature check failed");
-                        //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Signature check failed");
+                        //ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                         //  "Public key : %s", publicKey.hex().text());
-                        //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        //ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                         //  "Signature : %s", scriptSignature.hex().text());
                         if(opCode == OP_CHECKSIG)
                             push(); // Push false onto the stack
@@ -1528,9 +1528,9 @@ namespace BitCoin
                     if(!ifStackTrue())
                         break;
 
-                    if(!checkStackSize(5))
+                    if(!checkStackSize(4))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKMULTISIG");
                         mValid = false;
                         return false;
@@ -1540,7 +1540,7 @@ namespace BitCoin
                     unsigned int publicKeyCount = popInteger();
                     if(!checkStackSize(publicKeyCount))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKMULTISIG public keys");
                         mValid = false;
                         return false;
@@ -1560,7 +1560,7 @@ namespace BitCoin
                     unsigned int signatureCount = popInteger();
                     if(!checkStackSize(signatureCount + 1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKMULTISIG signatures");
                         mValid = false;
                         return false;
@@ -1607,7 +1607,7 @@ namespace BitCoin
 
                     if(failed)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Multiple Signature check failed");
                         if(opCode == OP_CHECKMULTISIG)
                             push(); // Push false onto the stack
@@ -1637,7 +1637,7 @@ namespace BitCoin
 
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Invalid op code for signature script : OP_CHECKLOCKTIMEVERIFY");
                         mValid = false;
                         return false;
@@ -1654,7 +1654,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKLOCKTIMEVERIFY");
                         mValid = false;
                         return false;
@@ -1669,7 +1669,7 @@ namespace BitCoin
 
                     if(value < 0)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY top stack value can't be negative : %d", (int)value);
                         mValid = false;
                         return false;
@@ -1677,7 +1677,7 @@ namespace BitCoin
 
                     if(pSequence == 0xffffffff)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY input sequence not 0xffffffff : %08x", pSequence);
                         mVerified = false;
                         return true;
@@ -1685,7 +1685,7 @@ namespace BitCoin
 
                     if(mTransaction == NULL)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY Transaction not set");
                         mVerified = false;
                         return true;
@@ -1695,7 +1695,7 @@ namespace BitCoin
                     if(((uint32_t)value < Transaction::LOCKTIME_THRESHOLD && mTransaction->lockTime > Transaction::LOCKTIME_THRESHOLD) ||
                       ((uint32_t)value > Transaction::LOCKTIME_THRESHOLD && mTransaction->lockTime < Transaction::LOCKTIME_THRESHOLD))
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY value and lock time are different \"types\" : value %d > lock time %d",
                           (uint32_t)value, mTransaction->lockTime);
                         mVerified = false;
@@ -1705,7 +1705,7 @@ namespace BitCoin
                     // Check that the lock time has passed
                     if(mTransaction == NULL || (uint32_t)value > mTransaction->lockTime)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY value greater than lock time : value %d > lock time %d", (uint32_t)value,
                           mTransaction->lockTime);
                         mVerified = false;
@@ -1728,7 +1728,7 @@ namespace BitCoin
 
                     if(pIsSignatureScript)
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Invalid op code for signature script : OP_CHECKSEQUENCEVERIFY");
                         mValid = false;
                         return false;
@@ -1740,7 +1740,7 @@ namespace BitCoin
                     if(!ifStackTrue())
                         break;
 
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "Unsupported operation code : OP_CHECKSEQUENCEVERIFY");
                     mValid = false;
                     return false;
@@ -1753,7 +1753,7 @@ namespace BitCoin
                     count = pScript.readByte();
                     if(count > pScript.remaining())
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Push data size more than remaining script : %d/%d", count, pScript.remaining());
                         mValid = false;
                         return false;
@@ -1772,7 +1772,7 @@ namespace BitCoin
                     count = pScript.readUnsignedShort();
                     if(count > pScript.remaining())
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Push data size more than remaining script : %d/%d", count, pScript.remaining());
                         mValid = false;
                         return false;
@@ -1791,7 +1791,7 @@ namespace BitCoin
                     count = pScript.readUnsignedInt();
                     if(count > pScript.remaining())
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Push data size more than remaining script : %d/%d", count, pScript.remaining());
                         mValid = false;
                         return false;
@@ -1902,7 +1902,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_1ADD");
                         mValid = false;
                         return false;
@@ -1925,7 +1925,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_1SUB");
                         mValid = false;
                         return false;
@@ -1942,12 +1942,12 @@ namespace BitCoin
                     break;
                 }
                 case OP_2MUL: //    in    out    The input is multiplied by 2. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_2MUL is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_2DIV: //    in    out    The input is divided by 2. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_2DIV is a disabled op code");
                     mValid = false;
                     return false;
@@ -1958,7 +1958,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_NEGATE");
                         mValid = false;
                         return false;
@@ -1981,7 +1981,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_ABS");
                         mValid = false;
                         return false;
@@ -2005,7 +2005,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_NOT");
                         mValid = false;
                         return false;
@@ -2030,7 +2030,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_0NOTEQUAL");
                         mValid = false;
                         return false;
@@ -2055,7 +2055,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_ADD");
                         mValid = false;
                         return false;
@@ -2086,7 +2086,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_SUB");
                         mValid = false;
                         return false;
@@ -2111,27 +2111,27 @@ namespace BitCoin
                     break;
                 }
                 case OP_MUL: //    a b   out    a is multiplied by b. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_MUL is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_DIV: //    a b   out    a is divided by b. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_DIV is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_MOD: //    a b   out    Returns the remainder after dividing a by b. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_MOD is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_LSHIFT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RSHIFT is a disabled op code");
                     mValid = false;
                     return false;
@@ -2142,7 +2142,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_BOOLAND");
                         mValid = false;
                         return false;
@@ -2175,7 +2175,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_BOOLOR");
                         mValid = false;
                         return false;
@@ -2208,7 +2208,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_NUMEQUAL");
                         mValid = false;
                         return false;
@@ -2241,7 +2241,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_NUMEQUALVERIFY");
                         mValid = false;
                         return false;
@@ -2277,7 +2277,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_NUMNOTEQUAL");
                         mValid = false;
                         return false;
@@ -2310,7 +2310,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_LESSTHAN");
                         mValid = false;
                         return false;
@@ -2343,7 +2343,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_GREATERTHAN");
                         mValid = false;
                         return false;
@@ -2376,7 +2376,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_LESSTHANOREQUAL");
                         mValid = false;
                         return false;
@@ -2409,7 +2409,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_GREATERTHANOREQUAL");
                         mValid = false;
                         return false;
@@ -2442,7 +2442,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_MIN");
                         mValid = false;
                         return false;
@@ -2477,7 +2477,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_MAX");
                         mValid = false;
                         return false;
@@ -2512,7 +2512,7 @@ namespace BitCoin
 
                     if(!checkStackSize(3))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_WITHIN");
                         mValid = false;
                         return false;
@@ -2555,7 +2555,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TOALTSTACK");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TOALTSTACK");
                         mValid = false;
                         return false;
                     }
@@ -2569,7 +2569,7 @@ namespace BitCoin
 
                     if(!checkAltStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack not large enough for OP_FROMALTSTACK");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack not large enough for OP_FROMALTSTACK");
                         mValid = false;
                         return false;
                     }
@@ -2584,7 +2584,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DUP");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DUP");
                         mValid = false;
                         return false;
                     }
@@ -2598,7 +2598,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IFDUP");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IFDUP");
                         mValid = false;
                         return false;
                     }
@@ -2621,7 +2621,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DROP");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DROP");
                         mValid = false;
                         return false;
                     }
@@ -2635,7 +2635,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NIP");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NIP");
                         mValid = false;
                         return false;
                     }
@@ -2654,7 +2654,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_OVER");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_OVER");
                         mValid = false;
                         return false;
                     }
@@ -2673,7 +2673,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_PICK");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_PICK");
                         mValid = false;
                         return false;
                     }
@@ -2688,7 +2688,7 @@ namespace BitCoin
 
                     if(!checkStackSize(n))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2709,7 +2709,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2724,7 +2724,7 @@ namespace BitCoin
 
                     if(!checkStackSize(n))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2746,7 +2746,7 @@ namespace BitCoin
 
                     if(!checkStackSize(3))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROT");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROT");
                         mValid = false;
                         return false;
                     }
@@ -2770,7 +2770,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_SWAP");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_SWAP");
                         mValid = false;
                         return false;
                     }
@@ -2791,7 +2791,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TUCK");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TUCK");
                         mValid = false;
                         return false;
                     }
@@ -2813,7 +2813,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_2DROP");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_2DROP");
                         mValid = false;
                         return false;
                     }
@@ -2829,7 +2829,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2850,7 +2850,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_3DUP");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_3DUP");
                         mValid = false;
                         return false;
                     }
@@ -2874,7 +2874,7 @@ namespace BitCoin
 
                     if(!checkStackSize(4))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_2OVER");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_2OVER");
                         mValid = false;
                         return false;
                     }
@@ -2897,7 +2897,7 @@ namespace BitCoin
 
                     if(!checkStackSize(6))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2928,7 +2928,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2954,22 +2954,22 @@ namespace BitCoin
 
                 // Splice
                 case OP_CAT: //  x1 x2  out  Concatenates two strings. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_CAT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_SUBSTR: //  in begin size  out  Returns a section of a string. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_SUBSTR is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_LEFT: //  in size  out  Keeps only characters left of the specified point in a string. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_LEFT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_RIGHT: //  in size  out  Keeps only characters right of the specified point in a string. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
@@ -2980,7 +2980,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_SIZE");
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_SIZE");
                         mValid = false;
                         return false;
                     }
@@ -2994,22 +2994,22 @@ namespace BitCoin
 
                 // Bitwise logic
                 case OP_INVERT: //  in  out  Flips all of the bits in the input. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs. disabled.
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
@@ -3024,7 +3024,7 @@ namespace BitCoin
                 case OP_RESERVED2: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
                     if(!ifStackTrue())
                         break;
-                    ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_INTERPRETER_LOG_NAME,
+                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RESERVED op code executed");
                     mValid = false;
                     return false;
