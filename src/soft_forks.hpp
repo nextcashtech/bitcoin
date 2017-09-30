@@ -113,6 +113,12 @@ namespace BitCoin
 
         int height() const { return mHeight; }
 
+        // Version 2 BIP0034 Block height as first part of coinbase input script
+        //   Became required on mainnet at block height 227931
+        // Version 3 BIP0066 Strict DER signature formatting
+        //   Became required on mainnet at block height 363725
+        // Version 4 BIP0065 OP_CHECKLOCKTIMEVERIFY
+        //   Became required on mainnet at block height 388381
         int32_t activeVersion() const { return mActiveVersion; }
         int32_t requiredVersion() const { return mRequiredVersion; }
 
