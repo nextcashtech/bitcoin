@@ -201,6 +201,12 @@ namespace BitCoin
             ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
             return false;
         }
+        else if(pCoinBase && inputs.size() != 1)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+              "Coinbase has more than one input : %d", inputs.size());
+            return false;
+        }
 
         if(outputs.size() == 0)
         {
