@@ -19,21 +19,73 @@
 
 namespace BitCoin
 {
-    uint32_t getMedianTimePast(std::list<BlockStats> pBlockStats, unsigned int pBlockCount)
+    bool BlockStats::load()
     {
-        std::vector<uint32_t> times;
-        for(std::list<BlockStats>::reverse_iterator stat=pBlockStats.rbegin();stat!=pBlockStats.rend();++stat)
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("block_stats");
+        if(!ArcMist::fileExists(filePathName))
         {
-            times.push_back(stat->time);
-            if(times.size() >= pBlockCount)
-                break;
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+              "No block stats file to load");
+            return true;
         }
+
+        ArcMist::FileInputStream file(filePathName);
+        if(!file.isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_SOFT_FORKS_LOG_NAME,
+              "Failed to open block stats file to load");
+            return false;
+        }
+
+        resize(file.length() / sizeof(BlockStat));
+        file.read(data(), file.length());
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+          "Loaded %d block statistics", size());
+        return true;
+    }
+
+    bool BlockStats::save()
+    {
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("block_stats");
+        ArcMist::FileOutputStream file(filePathName, true);
+        if(!file.isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_SOFT_FORKS_LOG_NAME,
+              "Failed to open block stats file to save");
+            return false;
+        }
+
+        file.write(data(), size() * sizeof(BlockStat));
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+          "Saved %d block statistics", size());
+        return true;
+    }
+
+    uint32_t BlockStats::time(unsigned int pBlockHeight) const
+    {
+        if(pBlockHeight >= size())
+            return 0;
+        return at(pBlockHeight).time;
+    }
+
+    uint32_t BlockStats::getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount) const
+    {
+        if(pBlockHeight >= size())
+            return 0;
+
+        unsigned int offset = 0;
+        std::vector<uint32_t> times;
+        // Minus one because it is the previous blocks not including the current block
+        for(const BlockStat *stat=data()+pBlockHeight-1;stat!=data()-1&&offset<pMedianCount;--stat,++offset)
+            times.push_back(stat->time);
 
         // Sort times
         std::sort(times.begin(), times.end());
 
         // Return the median time
-        return times[pBlockCount / 2];
+        return times[pMedianCount / 2];
     }
 
     void SoftFork::write(ArcMist::OutputStream *pStream)
@@ -68,6 +120,64 @@ namespace BitCoin
         return true;
     }
 
+    const char *SoftFork::stateName()
+    {
+        switch(state)
+        {
+        default:
+        case UNDEFINED:
+            return "Undefined";
+        case DEFINED:
+            return "Defined";
+        case STARTED:
+            return "Started";
+        case LOCKED_IN:
+            return "Locked In";
+        case ACTIVE:
+            return "Active";
+        case FAILED:
+            return "Failed";
+        }
+    }
+
+    ArcMist::String SoftFork::description()
+    {
+        ArcMist::String result;
+        switch(state)
+        {
+        default:
+        case UNDEFINED:
+            result = "Undefined";
+            break;
+        case DEFINED:
+        {
+            ArcMist::String startTimeText;
+            startTimeText.writeFormattedTime(startTime);
+            result.writeFormatted("Defined - start time %s", startTimeText.text());
+            break;
+        }
+        case STARTED:
+        {
+            ArcMist::String timeoutText;
+            timeoutText.writeFormattedTime(timeout);
+            result.writeFormatted("Started - timeout %s", timeoutText.text());
+            break;
+        }
+        case LOCKED_IN:
+            result.writeFormatted("Locked In - block height %d", lockedHeight);
+            break;
+        case ACTIVE:
+            result.writeFormatted("Active - block height %d", lockedHeight + RETARGET_PERIOD);
+            break;
+        case FAILED:
+            ArcMist::String timeoutText;
+            timeoutText.writeFormattedTime(timeout);
+            result.writeFormatted("Failed - timeout %s", timeoutText.text());
+            break;
+        }
+        return result;
+    }
+
     SoftForks::SoftForks()
     {
         mHeight = 0;
@@ -82,21 +192,16 @@ namespace BitCoin
             mThreshHold = 1916;
 
             // Add known soft forks
-            mSoftForks.push_back(new SoftFork("BIP-0068", SoftFork::BIP0068, 0, 1462060800, 1493596800));
-            mSoftForks.push_back(new SoftFork("BIP-0112", SoftFork::BIP0112, 0, 1462060800, 1493596800));
-            mSoftForks.push_back(new SoftFork("BIP-0113", SoftFork::BIP0113, 0, 1462060800, 1493596800));
+            mSoftForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0, 1462060800, 1493596800));
             break;
         default:
         case TESTNET:
             mThreshHold = 1512;
 
             // Add known soft forks
-            mSoftForks.push_back(new SoftFork("BIP-0068", SoftFork::BIP0068, 0, 1456790400, 1493596800));
-            mSoftForks.push_back(new SoftFork("BIP-0112", SoftFork::BIP0112, 0, 1456790400, 1493596800));
-            mSoftForks.push_back(new SoftFork("BIP-0113", SoftFork::BIP0113, 0, 1456790400, 1493596800));
+            mSoftForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0, 1462060800, 1493596800));
             break;
         }
-
     }
 
     SoftForks::~SoftForks()
@@ -105,17 +210,19 @@ namespace BitCoin
             delete *softFork;
     }
 
-    SoftFork::State SoftForks::softForkState(unsigned int pID)
+    SoftFork::State SoftForks::softForkState(unsigned int pID) const
     {
-        for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
+        for(std::vector<SoftFork *>::const_iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
             if((*softFork)->id == pID)
                 return (*softFork)->state;
 
         return SoftFork::UNDEFINED;
     }
 
-    void SoftForks::process(std::list<BlockStats> pBlockStats, unsigned int pBlockHeight)
+    void SoftForks::process(const BlockStats &pBlockStats, unsigned int pBlockHeight)
     {
+        unsigned int offset;
+
         mPreviousHeight = mHeight;
 
         if(pBlockHeight != 0 && pBlockHeight % RETARGET_PERIOD == 0)
@@ -123,7 +230,7 @@ namespace BitCoin
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
               "Updating for block height %d", pBlockHeight);
 
-            uint32_t medianTime = getMedianTimePast(pBlockStats, 11);
+            uint32_t medianTimePast = pBlockStats.getMedianPastTime(pBlockHeight);
             uint32_t compositeValue = 0;
 
             for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
@@ -134,14 +241,14 @@ namespace BitCoin
                 switch((*softFork)->state)
                 {
                     case SoftFork::DEFINED:
-                        if(medianTime > (*softFork)->timeout)
+                        if(medianTimePast > (*softFork)->timeout)
                         {
                             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
                               "(%s) failed (height %d)", (*softFork)->name.text(), pBlockHeight);
                             (*softFork)->state = SoftFork::FAILED;
                             mModified = true;
                         }
-                        else if(medianTime > (*softFork)->startTime)
+                        else if(medianTimePast > (*softFork)->startTime)
                         {
                             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
                               "(%s) started (height %d)", (*softFork)->name.text(), pBlockHeight);
@@ -151,7 +258,7 @@ namespace BitCoin
                         break;
                     case SoftFork::STARTED:
                     {
-                        if(medianTime > (*softFork)->timeout)
+                        if(medianTimePast > (*softFork)->timeout)
                         {
                             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
                               "(%s) failed (height %d)", (*softFork)->name.text(), pBlockHeight);
@@ -161,7 +268,8 @@ namespace BitCoin
                         }
 
                         unsigned int support = 0;
-                        for(std::list<BlockStats>::reverse_iterator stat=++pBlockStats.rbegin();stat!=pBlockStats.rend();++stat)
+                        offset = 0;
+                        for(const BlockStat *stat=pBlockStats.data()+pBlockHeight-1;stat!=pBlockStats.data()-1&&offset<RETARGET_PERIOD;--stat,++offset)
                         {
                             if((stat->version & 0xE0000000) == 0x20000000 && (stat->version >> (*softFork)->bit) & 0x01)
                                 ++support;
@@ -197,7 +305,8 @@ namespace BitCoin
             for(i=0;i<29;i++)
                 unknownSupport[i] = 0;
 
-            for(std::list<BlockStats>::reverse_iterator stat=++pBlockStats.rbegin();stat!=pBlockStats.rend();++stat)
+            offset = 0;
+            for(const BlockStat *stat=pBlockStats.data()+pBlockHeight-1;stat!=pBlockStats.data()-1&&offset<RETARGET_PERIOD;--stat,++offset)
             {
                 if((stat->version & 0xE0000000) != 0x20000000)
                     continue;
@@ -214,7 +323,7 @@ namespace BitCoin
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::NOTIFICATION, BITCOIN_SOFT_FORKS_LOG_NAME,
                       "Unknown soft fork for bit %d with %d/%d support (height %d)", i, unknownSupport[i],
-                      pBlockStats.size(), pBlockHeight);
+                      RETARGET_PERIOD, pBlockHeight);
                 }
         }
 
@@ -224,7 +333,7 @@ namespace BitCoin
         mPreviousActiveVersion = mActiveVersion;
         mPreviousRequiredVersion = mRequiredVersion;
 
-        int totalCount = 1000;
+        unsigned int totalCount = 1000;
         int activateCount = 750;
         int requireCount = 950;
 
@@ -240,12 +349,9 @@ namespace BitCoin
             int version4OrHigherCount = 0;
             int version3OrHigherCount = 0;
             int version2OrHigherCount = 0;
-            int count = 0;
-            for(std::list<BlockStats>::reverse_iterator stat=pBlockStats.rbegin();stat!=pBlockStats.rend();++stat)
+            offset = 0;
+            for(const BlockStat *stat=pBlockStats.data()+pBlockHeight-1;stat!=pBlockStats.data()-1&&offset<totalCount;--stat,++offset)
             {
-                if(++count > totalCount)
-                    break;
-
                 switch(stat->version)
                 {
                 default:
@@ -415,7 +521,7 @@ namespace BitCoin
             }
             add(newSoftFork);
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_SOFT_FORKS_LOG_NAME,
-              "Loaded soft fork : %s", newSoftFork->name.text());
+              "Loaded soft fork %s : %s", newSoftFork->name.text(), newSoftFork->description().text());
         }
 
         mModified = false;

@@ -45,6 +45,10 @@ namespace BitCoin
     {
     public:
 
+        static const uint32_t SEQUENCE_DISABLE       = 1 << 31;
+        static const uint32_t SEQUENCE_TYPE          = 1 << 22; // Determines time or block height
+        static const uint32_t SEQUENCE_LOCKTIME_MASK = 0x0000ffff;
+
         Input() { sequence = 0xffffffff; }
 
         // Outpoint (32 trans id + 4 index), + 4 sequence, + script length size + script length
@@ -53,6 +57,9 @@ namespace BitCoin
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
+        // BIP-0068 Relative time lock sequence
+        bool sequenceDisabled() const { return SEQUENCE_DISABLE & sequence; }
+
         // Print human readable version to log
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::VERBOSE);
 
@@ -60,6 +67,7 @@ namespace BitCoin
 
         Outpoint outpoint;
         ArcMist::Buffer script;
+        // BIP-0068 Minimum time/blocks since outpoint creation before this transaction is valid
         uint32_t sequence;
 
     private:
@@ -78,7 +86,7 @@ namespace BitCoin
 
         Transaction()
         {
-            version = 1;
+            version = 2; // BIP-0068
             mFee = 0;
             lockTime = 0xffffffff;
             mSize = 0;
@@ -113,7 +121,8 @@ namespace BitCoin
         void calculateHash();
 
         bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
-          uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const SoftForks &pSoftForks);
+          uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const BlockStats &pBlockStats,
+          const SoftForks &pSoftForks);
 
         bool updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           uint64_t pBlockHeight);

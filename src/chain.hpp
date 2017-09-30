@@ -243,12 +243,10 @@ namespace BitCoin
 
         // Last BLOCK_STATS_SIZE block's statistics
         SoftForks mSoftForks;
-        std::list<BlockStats> mBlockStats;
+        BlockStats mBlockStats;
         void addBlockStats(uint32_t pVersion, uint32_t pTime)
         {
-            mBlockStats.push_back(BlockStats(pVersion, pTime));
-            if(mBlockStats.size() > RETARGET_PERIOD)
-                mBlockStats.erase(mBlockStats.begin());
+            mBlockStats.push_back(BlockStat(pVersion, pTime));
         }
 
         static Chain *sInstance;

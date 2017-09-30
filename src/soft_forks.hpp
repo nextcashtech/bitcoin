@@ -18,26 +18,42 @@
 
 namespace BitCoin
 {
-    class BlockStats
+    class BlockStat
     {
     public:
-        BlockStats(int32_t pVersion, uint32_t pTime) { version = pVersion; time = pTime; }
+        BlockStat() {}
+        BlockStat(int32_t pVersion, uint32_t pTime) { version = pVersion; time = pTime; }
 
         int32_t version;
         uint32_t time;
     };
 
-    // Note : Call after block has been added to stats
-    uint32_t getMedianTimePast(std::list<BlockStats> pBlockStats, unsigned int pBlockCount);
+    class BlockStats : public std::vector<BlockStat>
+    {
+    public:
+
+        int height() const { return size() - 1; }
+
+        uint32_t time(unsigned int pBlockHeight) const;
+
+        // Note : Call after block has been added to stats
+        uint32_t getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount = 11) const;
+
+        void revert() { erase(end()); }
+
+        bool load();
+        bool save();
+    };
 
     class SoftFork
     {
     public:
         enum ID
         {
-            BIP0068, // Relative lock-time using consensus-enforced sequence numbers
-            BIP0112, // CHECKSEQUENCEVERIFY
-            BIP0113, // Median time-past as endpoint for lock-time calculations
+            // These all share the same start time, timeout, and bit, so they will share one ID
+            BIP0068 = 1, // Relative lock-time using consensus-enforced sequence numbers
+            BIP0112 = 1, // CHECKSEQUENCEVERIFY
+            BIP0113 = 1, // Median time-past as endpoint for lock-time calculations
         };
 
         enum State
@@ -74,6 +90,9 @@ namespace BitCoin
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
+        const char *stateName();
+        ArcMist::String description();
+
         ArcMist::String name;
         unsigned int id;
         State state;
@@ -97,9 +116,9 @@ namespace BitCoin
         int32_t activeVersion() const { return mActiveVersion; }
         int32_t requiredVersion() const { return mRequiredVersion; }
 
-        SoftFork::State softForkState(unsigned int pID);
+        SoftFork::State softForkState(unsigned int pID) const;
 
-        void process(std::list<BlockStats> pBlockStats, unsigned int pBlockHeight);
+        void process(const BlockStats &pBlockStats, unsigned int pBlockHeight);
 
         void revert();
 

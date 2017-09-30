@@ -34,15 +34,16 @@ namespace BitCoin
     {
     public:
 
-        ScriptInterpreter() { mValid = true; mVerified = true; mTransaction = NULL; mInputOffset = 0; }
+        ScriptInterpreter() { mValid = true; mVerified = true; mTransaction = NULL; mInputOffset = 0; mInputSequence = 0xffffffff; }
         ~ScriptInterpreter() { clear(); }
 
         void setTransaction(Transaction *pTransaction);
         void setInputOffset(unsigned int pOffset) { mInputOffset = pOffset; }
+        void setInputSequence(uint32_t pSequence) { mInputSequence = pSequence; }
 
         // Process script
-        bool process(ArcMist::Buffer &pScript, bool pIsSignatureScript, uint32_t pSequence,
-          int32_t pBlockVersion, const SoftForks &pSoftForks);
+        bool process(ArcMist::Buffer &pScript, bool pIsSignatureScript, int32_t pBlockVersion,
+          const SoftForks &pSoftForks);
 
         // Parse and check a signature
         bool checkSignature(PublicKey &pPublicKey, ArcMist::Buffer *pSignature, bool pStrictECDSA_DER_Sigs,
@@ -88,6 +89,7 @@ namespace BitCoin
             mVerified = true;
             mTransaction = NULL;
             mInputOffset = 0;
+            mInputSequence = 0xffffffff;
 
             std::list<ArcMist::Buffer *>::iterator iter;
 
@@ -170,6 +172,7 @@ namespace BitCoin
         Hash mHash;
         Transaction *mTransaction;
         unsigned int mInputOffset;
+        uint32_t mInputSequence;
 
         void writeSigHashAllData(ArcMist::Buffer &pData, ArcMist::Buffer &pSubScript);
 

@@ -63,7 +63,8 @@ namespace BitCoin
         void calculateHash();
         void calculateMerkleHash(Hash &pMerkleHash);
 
-        bool process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const SoftForks &pSoftForks);
+        bool process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const BlockStats &pBlockStats,
+          const SoftForks &pSoftForks);
 
         bool updateOutputs(TransactionOutputPool &pOutputs, uint64_t pBlockHeight);
 
@@ -155,7 +156,7 @@ namespace BitCoin
         bool readBlockHashes(HashList &pHashes);
 
         // Append block stats from this file to the list specified
-        bool readStats(std::list<BlockStats> &pStats);
+        bool readStats(BlockStats &pStats);
 
         // Read list of block headers from this file. If pStartingHash is empty then start with first block
         bool readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash,

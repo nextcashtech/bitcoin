@@ -124,7 +124,8 @@ namespace BitCoin
         ip = 0;
         port = 8333;
         fullMode = false;
-        maxConnections = 32;
+        maxOutgoing = 32;
+        maxConnections = 64;
         minFee = 1; // satoshis per KiB
         mPeersModified = false;
         pendingSizeThreshold = 268435456; // 256 MiB
@@ -184,6 +185,14 @@ namespace BitCoin
 
         if(std::strcmp(name, "full_mode") == 0)
             fullMode = true;
+        else if(std::strcmp(name, "peers_out_max") == 0)
+        {
+            maxOutgoing = std::stol(value, NULL, 0);
+            if(maxOutgoing < 4)
+                maxOutgoing = 4;
+            else if(maxOutgoing > 64)
+                maxOutgoing = 64;
+        }
         else if(std::strcmp(name, "peers_max") == 0)
         {
             maxConnections = std::stol(value, NULL, 0);

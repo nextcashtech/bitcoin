@@ -1052,7 +1052,7 @@ namespace BitCoin
         //  pBuffer->readHexString(pBuffer->length()).text());
     }
 
-    bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript, uint32_t pSequence,
+    bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript,
       int32_t pBlockVersion, const SoftForks &pSoftForks)
     {
 #ifdef PROFILER_ON
@@ -1625,13 +1625,8 @@ namespace BitCoin
 
                     break;
                 }
-                case OP_CHECKLOCKTIMEVERIFY:
+                case OP_CHECKLOCKTIMEVERIFY: // BIP-0065
                 {
-                    /*TODO If nVersion = 4. The new rules are in effect for every block (at height H) with nVersion = 4
-                     *   and at least 750 out of 1000 blocks preceding it (with heights H-1000..H-1) also have
-                     *   nVersion >= 4. Furthermore, when 950 out of the 1000 blocks preceding a block do have
-                     *   nVersion >= 4, nVersion < 4 blocks become invalid, and all further blocks enforce the
-                     *   new rules.*/
                     if(pBlockVersion < 4 || pSoftForks.activeVersion() < 4)
                         break;
 
@@ -1643,12 +1638,6 @@ namespace BitCoin
                         return false;
                     }
 
-                    /* Marks transaction as invalid if the top stack item is greater than the transaction's nLockTime field,
-                     *   otherwise script evaluation continues as though an OP_NOP was executed. Transaction is also invalid
-                     *   if 1. the stack is empty; or 2. the top stack item is negative; or 3. the top stack item is greater
-                     *   than or equal to 500000000 while the transaction's nLockTime field is less than 500000000, or vice
-                     *   versa; or 4. the input's nSequence field is equal to 0xffffffff. The precise semantics are described
-                     *   in BIP 0065 */
                     if(!ifStackTrue())
                         break;
 
@@ -1675,10 +1664,10 @@ namespace BitCoin
                         return false;
                     }
 
-                    if(pSequence == 0xffffffff)
+                    if(mInputSequence == 0xffffffff)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_CHECKLOCKTIMEVERIFY input sequence not 0xffffffff : %08x", pSequence);
+                          "OP_CHECKLOCKTIMEVERIFY input sequence not 0xffffffff : %08x", mInputSequence);
                         mVerified = false;
                         return true;
                     }
@@ -1712,19 +1701,12 @@ namespace BitCoin
                         return true;
                     }
 
-                    // the lock-time type (height vs. timestamp) of the top stack item and the nLockTime field are not the same; or
-
                     break;
                 }
-                case OP_CHECKSEQUENCEVERIFY:
+                case OP_CHECKSEQUENCEVERIFY: // BIP-0112
                 {
-                    /*TODO This BIP is to be deployed by "versionbits" BIP9 using bit 0.
-                     * For Bitcoin mainnet, the BIP9 starttime will be midnight 1st May 2016 UTC (Epoch timestamp 1462060800)
-                     *   and BIP9 timeout will be midnight 1st May 2017 UTC (Epoch timestamp 1493596800).
-                     * For Bitcoin testnet, the BIP9 starttime will be midnight 1st March 2016 UTC (Epoch timestamp 1456790400)
-                     *   and BIP9 timeout will be midnight 1st May 2017 UTC (Epoch timestamp 1493596800).
-                     * This BIP must be deployed simultaneously with BIP68 and BIP113 using the same deployment mechanism. */
-                    break;
+                    if(pSoftForks.softForkState(SoftFork::BIP0112) != SoftFork::ACTIVE)
+                        break;
 
                     if(pIsSignatureScript)
                     {
@@ -1734,18 +1716,70 @@ namespace BitCoin
                         return false;
                     }
 
-                    /* Marks transaction as invalid if the relative lock time of the input (enforced by BIP 0068 with nSequence)
-                     *   is not equal to or longer than the value of the top stack item. The precise semantics are described in
-                     *   BIP 0112. */
                     if(!ifStackTrue())
                         break;
 
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "Unsupported operation code : OP_CHECKSEQUENCEVERIFY");
-                    mValid = false;
-                    return false;
+                    if(!checkStackSize(1))
+                    {
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_CHECKSEQUENCEVERIFY");
+                        mValid = false;
+                        return false;
+                    }
 
-                    //TODO execute OP_CHECKSEQUENCEVERIFY
+                    int64_t value;
+                    if(!arithmeticRead(top(), value))
+                    {
+                        mValid = false;
+                        return false;
+                    }
+
+                    if(value < 0)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Negative script sequence : OP_CHECKSEQUENCEVERIFY");
+                        mValid = false;
+                        return false;
+                    }
+
+                    if(!(value & Input::SEQUENCE_DISABLE)) // Script sequence disable bit set
+                    {
+                        // Transaction version doesn't support OP_CHECKSEQUENCEVERIFY
+                        if(mTransaction->version < 2)
+                        {
+                            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Transaction version less than 2 : OP_CHECKSEQUENCEVERIFY");
+                            mVerified = false;
+                            return true;
+                        }
+
+                        if(mInputSequence & Input::SEQUENCE_DISABLE) // Input sequence disable bit set
+                        {
+                            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Input sequence disable bit set : OP_CHECKSEQUENCEVERIFY");
+                            mVerified = false;
+                            return true;
+                        }
+
+                        if((value & Input::SEQUENCE_TYPE) != (mInputSequence & Input::SEQUENCE_TYPE))
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Script sequence type doesn't match input sequence type %d != %d : OP_CHECKSEQUENCEVERIFY",
+                              (value & Input::SEQUENCE_TYPE) >> 22, (mInputSequence & Input::SEQUENCE_TYPE) >> 22);
+                            mVerified = false;
+                            return true;
+                        }
+
+                        if((value & Input::SEQUENCE_LOCKTIME_MASK) > (mInputSequence & Input::SEQUENCE_LOCKTIME_MASK))
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Script sequence greater than input sequence %d > %d : OP_CHECKSEQUENCEVERIFY",
+                              value & Input::SEQUENCE_LOCKTIME_MASK, mInputSequence & Input::SEQUENCE_LOCKTIME_MASK);
+                            mVerified = false;
+                            return true;
+                        }
+                    }
+
                     break;
                 }
                 case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed

@@ -371,7 +371,8 @@ namespace BitCoin
         return true;
     }
 
-    bool Block::process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const SoftForks &pSoftForks)
+    bool Block::process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const BlockStats &pBlockStats,
+      const SoftForks &pSoftForks)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block at height %d (%d trans) (%d bytes) : %s", pBlockHeight, transactionCount,
@@ -415,7 +416,7 @@ namespace BitCoin
         unsigned int transactionOffset = 0;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version, pSoftForks))
+            if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version, pBlockStats, pSoftForks))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",
                   transactionOffset);
@@ -464,6 +465,7 @@ namespace BitCoin
         result->transactionCount = 1;
 
         Transaction *transaction = new Transaction();
+        transaction->version = 1;
 
         Input *input = new Input();
         input->script.writeHex("04FFFF001D0104455468652054696D65732030332F4A616E2F32303039204368616E63656C6C6F72206F6E206272696E6B206F66207365636F6E64206261696C6F757420666F722062616E6B73");
@@ -717,7 +719,7 @@ namespace BitCoin
     }
 
     // Append block stats from this file to the list specified
-    bool BlockFile::readStats(std::list<BlockStats> &pStats)
+    bool BlockFile::readStats(BlockStats &pStats)
     {
         if(!openFile())
         {
@@ -746,7 +748,7 @@ namespace BitCoin
             version = mInputFile->readUnsignedInt();
             mInputFile->setReadOffset(mInputFile->readOffset() + 64); // Skip previous and merkle hashes
             time = mInputFile->readUnsignedInt();
-            pStats.push_back(BlockStats(version, time));
+            pStats.push_back(BlockStat(version, time));
 
             // Go back to header in file
             mInputFile->setReadOffset(previousOffset);

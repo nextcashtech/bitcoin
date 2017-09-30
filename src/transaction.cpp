@@ -36,7 +36,7 @@ namespace BitCoin
     void Transaction::clear()
     {
         hash.clear();
-        version = 1;
+        version = 2;
         mFee = 0;
         lockTime = 0xffffffff;
 
@@ -188,11 +188,14 @@ namespace BitCoin
     }
 
     bool Transaction::process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
-      uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const SoftForks &pSoftForks)
+      uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const BlockStats &pBlockStats,
+      const SoftForks &pSoftForks)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Transaction Process");
 #endif
+        mFee = 0;
+
         if(inputs.size() == 0)
         {
             ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
@@ -205,13 +208,12 @@ namespace BitCoin
             return false;
         }
 
-        mFee = 0;
-
         // Process Inputs
         ScriptInterpreter interpreter;
         TransactionReference *reference;
         Output output;
         unsigned int index = 0;
+        bool sequenceFound = false;
         for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
         {
             if(pCoinBase)
@@ -236,7 +238,7 @@ namespace BitCoin
                     if(blockHeight < 0 || (uint64_t)blockHeight != pBlockHeight)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Version 2 block with non matching block height : actual %d, specified %d",
+                          "Version 2 block with non matching coinbase block height : actual %d, coinbase %d",
                           pBlockHeight, blockHeight);
                         return false;
                     }
@@ -246,12 +248,11 @@ namespace BitCoin
             {
                 // Find unspent transaction for input
                 reference = pOutputs.findUnspent((*input)->outpoint.transactionID, (*input)->outpoint.index);
-
                 if(reference == NULL)
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d outpoint not found : trans %s index %d", index + 1,
-                      (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
+                      "Input %d outpoint not found : index %d trans %s", index + 1,
+                      (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
                     return false;
                 }
 
@@ -272,8 +273,8 @@ namespace BitCoin
                     if(!found)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Input %d outpoint transaction not found in current block : trans %s index %d", index + 1,
-                          (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
+                          "Input %d outpoint transaction not found in current block : index %d trans %s", index + 1,
+                          (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
                         reference->print(ArcMist::Log::WARNING);
                         return false;
                     }
@@ -281,11 +282,53 @@ namespace BitCoin
                 else if(!BlockFile::readOutput(reference, (*input)->outpoint.index, output))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d outpoint transaction failed to read : trans %s index %d", index + 1,
-                      (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
+                      "Input %d outpoint transaction failed to read : index %d trans %s", index + 1,
+                      (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
                     reference->print(ArcMist::Log::WARNING);
                     return false;
                 }
+
+                // BIP-0068 Relative time lock sequence
+                if(version >= 2 && !(*input)->sequenceDisabled() &&
+                  pSoftForks.softForkState(SoftFork::BIP0068) == SoftFork::ACTIVE)
+                {
+                    // Sequence is an encoded relative time lock
+                    uint32_t lock = (*input)->sequence & Input::SEQUENCE_LOCKTIME_MASK;
+                    if((*input)->sequence & Input::SEQUENCE_TYPE)
+                    {
+                        // Seconds since outpoint median past time in units of 512 seconds granularity
+                        lock <<= 9;
+                        uint32_t currentBlockMedianTime = pBlockStats.getMedianPastTime(pBlockHeight, 11);
+                        uint32_t spentBlockMedianTime = pBlockStats.getMedianPastTime(reference->blockHeight, 11);
+                        if(currentBlockMedianTime < spentBlockMedianTime + lock)
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                              "Input %d sequence not valid. Required spent block time age %d, actual %d : index %d trans %s",
+                              index + 1, lock, currentBlockMedianTime - spentBlockMedianTime,
+                              (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
+                            ArcMist::String timeText;
+                            timeText.writeFormattedTime(spentBlockMedianTime + lock);
+                            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                              "Not valid until median block time %s", timeText.text());
+                            reference->print(ArcMist::Log::WARNING);
+                            return false;
+                        }
+                    }
+                    else if(pBlockHeight < reference->blockHeight + lock) // Number of blocks since outpoint
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Input %d sequence not valid. Required block height age %d. actual %d : index %d trans %s",
+                          index + 1, lock, pBlockHeight - reference->blockHeight,
+                          (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Not valid until block %d", reference->blockHeight + lock);
+                        reference->print(ArcMist::Log::WARNING);
+                        return false;
+                    }
+                }
+
+                if((*input)->sequence != 0xffffffff)
+                    sequenceFound = true;
 
                 pOutputs.spend(reference, (*input)->outpoint.index, pBlockHeight);
                 // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
@@ -297,13 +340,14 @@ namespace BitCoin
                 interpreter.clear();
                 interpreter.setTransaction(this);
                 interpreter.setInputOffset(index);
+                interpreter.setInputSequence((*input)->sequence);
 
                 // Process signature script
                 //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "Input %d script : ", index+1);
                 //(*input)->script.setReadOffset(0);
                 //ScriptInterpreter::printScript((*input)->script, ArcMist::Log::DEBUG);
                 (*input)->script.setReadOffset(0);
-                if(!interpreter.process((*input)->script, true, (*input)->sequence, pBlockVersion, pSoftForks))
+                if(!interpreter.process((*input)->script, true, pBlockVersion, pSoftForks))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d signature script failed : ", index+1);
@@ -317,7 +361,7 @@ namespace BitCoin
                 //output.script.setReadOffset(0);
                 //ScriptInterpreter::printScript(output.script, ArcMist::Log::DEBUG);
                 output.script.setReadOffset(0);
-                if(!interpreter.process(output.script, false, (*input)->sequence, pBlockVersion, pSoftForks))
+                if(!interpreter.process(output.script, false, pBlockVersion, pSoftForks))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d unspent transaction output script failed : ", index + 1);
@@ -356,6 +400,53 @@ namespace BitCoin
             }
 
             ++index;
+        }
+
+        if(!pCoinBase && sequenceFound)
+        {
+            if(lockTime > LOCKTIME_THRESHOLD)
+            {
+                // Lock time is a timestamp
+                if(pSoftForks.softForkState(SoftFork::BIP0113) == SoftFork::ACTIVE)
+                {
+                    if(lockTime < pBlockStats.getMedianPastTime(pBlockHeight, 11))
+                    {
+                        ArcMist::String lockTimeText, blockTimeText;
+                        lockTimeText.writeFormattedTime(lockTime);
+                        blockTimeText.writeFormattedTime(pBlockStats.getMedianPastTime(pBlockHeight, 11));
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Lock time stamp is not valid. Lock time %s < block median time %s",
+                          lockTimeText.text(), blockTimeText.text());
+                        return false;
+                    }
+                }
+                else
+                {
+                    // Add 600 to fake having a "peer time offset"
+                    //   Block 357903 transaction 98 has a lock time about 3 minutes after the block time
+                    if(lockTime > pBlockStats.time(pBlockHeight) + 600)
+                    {
+                        ArcMist::String lockTimeText, blockTimeText;
+                        lockTimeText.writeFormattedTime(lockTime);
+                        blockTimeText.writeFormattedTime(pBlockStats.time(pBlockHeight));
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Lock time stamp is not valid. Lock time %s > block time %s",
+                          lockTimeText.text(), blockTimeText.text());
+                        return false;
+                    }
+                }
+            }
+            else
+            {
+                // Lock time is a block height
+                if(lockTime > pBlockHeight)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Lock time block height is not valid. Lock height %d > block height %d",
+                      lockTime, pBlockHeight);
+                    return false;
+                }
+            }
         }
 
         // Process Outputs
@@ -849,7 +940,8 @@ namespace BitCoin
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
         interpreter.setInputOffset(0);
-        if(!interpreter.process(transaction.inputs[0]->script, true, transaction.inputs[0]->sequence, 4, softForks))
+        interpreter.setInputSequence(transaction.inputs[0]->sequence);
+        if(!interpreter.process(transaction.inputs[0]->script, true, 4, softForks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -857,7 +949,7 @@ namespace BitCoin
         else
         {
             output.script.setReadOffset(0);
-            if(!interpreter.process(output.script, false, transaction.inputs[0]->sequence, 4, softForks))
+            if(!interpreter.process(output.script, false, 4, softForks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
@@ -889,7 +981,8 @@ namespace BitCoin
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
-        if(!interpreter.process(transaction.inputs[0]->script, true, transaction.inputs[0]->sequence, 4, softForks))
+        interpreter.setInputSequence(transaction.inputs[0]->sequence);
+        if(!interpreter.process(transaction.inputs[0]->script, true, 4, softForks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -897,7 +990,7 @@ namespace BitCoin
         else
         {
             output.script.setReadOffset(0);
-            if(!interpreter.process(output.script, false, transaction.inputs[0]->sequence, 4, softForks))
+            if(!interpreter.process(output.script, false, 4, softForks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
@@ -929,7 +1022,8 @@ namespace BitCoin
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
-        if(!interpreter.process(transaction.inputs[0]->script, true, transaction.inputs[0]->sequence, 4, softForks))
+        interpreter.setInputSequence(transaction.inputs[0]->sequence);
+        if(!interpreter.process(transaction.inputs[0]->script, true, 4, softForks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -937,7 +1031,7 @@ namespace BitCoin
         else
         {
             output.script.setReadOffset(0);
-            if(!interpreter.process(output.script, false, transaction.inputs[0]->sequence, 4, softForks))
+            if(!interpreter.process(output.script, false, 4, softForks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
@@ -984,7 +1078,8 @@ namespace BitCoin
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
-        if(!interpreter.process(transaction.inputs[0]->script, true, transaction.inputs[0]->sequence, 4, softForks))
+        interpreter.setInputSequence(transaction.inputs[0]->sequence);
+        if(!interpreter.process(transaction.inputs[0]->script, true, 4, softForks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -992,7 +1087,7 @@ namespace BitCoin
         else
         {
             output.script.setReadOffset(0);
-            if(!interpreter.process(output.script, false, transaction.inputs[0]->sequence, 4, softForks))
+            if(!interpreter.process(output.script, false, 4, softForks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;

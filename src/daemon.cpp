@@ -1030,21 +1030,23 @@ namespace BitCoin
         ArcMist::Network::Connection *newConnection;
         uint32_t lastFillNodesTime = 0;
         uint32_t lastCleanTime = getTime();
+        uint32_t lastMaxCheck = 0;
 
         while(!daemon.mStopping)
         {
-            if(daemon.mInfo.maxConnections >= 32)
-                daemon.mMaxOutgoing = 32;
-            else
-                daemon.mMaxOutgoing = 8;
-            if(daemon.mMaxOutgoing > daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST)
-                daemon.mMaxOutgoing = daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST;
-            if(daemon.mMaxOutgoing > 8 && daemon.mChain.isInSync())
-                daemon.mMaxOutgoing = 8;
-            if(daemon.mMaxOutgoing >= daemon.mInfo.maxConnections)
-                daemon.mMaxIncoming = 0;
-            else
-                daemon.mMaxIncoming = daemon.mInfo.maxConnections - daemon.mMaxOutgoing;
+            if(getTime() - lastMaxCheck > 60)
+            {
+                lastMaxCheck = getTime();
+                daemon.mMaxOutgoing = daemon.mInfo.maxOutgoing;
+                if(daemon.mMaxOutgoing > daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST)
+                    daemon.mMaxOutgoing = daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST;
+                if(daemon.mMaxOutgoing > 8 && daemon.mChain.isInSync())
+                    daemon.mMaxOutgoing = 8;
+                if(daemon.mMaxOutgoing >= daemon.mInfo.maxConnections)
+                    daemon.mMaxIncoming = 0;
+                else
+                    daemon.mMaxIncoming = daemon.mInfo.maxConnections - daemon.mMaxOutgoing;
+            }
 
             if(getTime() - lastCleanTime > 10)
             {

@@ -68,6 +68,7 @@ namespace BitCoin
         uint8_t *ip;
         uint16_t port;
         bool fullMode;
+        uint32_t maxOutgoing;
         uint32_t maxConnections;
         uint32_t pendingSizeThreshold;
         uint32_t pendingBlocksThreshold;
