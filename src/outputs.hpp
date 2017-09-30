@@ -57,7 +57,9 @@ namespace BitCoin
     {
     public:
 
+        // Size of data written to file
         static const unsigned int SIZE = 8;
+        static const unsigned int MEMORY_SIZE = SIZE + 4; // index per output in transaction reference
 
         // Mark as spent (only called from TransactionOutputPool::spend so it can track spent outputs)
         void spendInternal(unsigned int pBlockHeight) { spentBlockHeight = pBlockHeight; }
@@ -74,12 +76,17 @@ namespace BitCoin
     {
     public:
 
+        // Size of data written to file (not counting outputs)
+        //   32 byte hash, 4 byte block height, 4 byte output count
         static const unsigned int SIZE = 40;
+        // 8 byte file offset, 4 byte hash size, 8 byte hash data pointer, 8 byte output data pointer,
+        //   8 byte output index data pointer
+        static const unsigned int MEMORY_SIZE = SIZE + 8 + 4 + 8 + 8 + 8;
 
         // These are used to allow reading from the file without allocating data.
         //   So when allocation is done it can exclude the spent outputs
-        static const unsigned int STATIC_OUTPUTS_SIZE = 32;
-        static OutputReference sOutputs[STATIC_OUTPUTS_SIZE];
+        static const unsigned int STATIC_OUTPUTS_COUNT = 32;
+        static OutputReference sOutputs[STATIC_OUTPUTS_COUNT];
         static const ArcMist::stream_size NOT_WRITTEN = 0xffffffffffffffff;
 
         TransactionReference() : id(32)
@@ -191,7 +198,7 @@ namespace BitCoin
 
         Hash id; // Transaction Hash
         unsigned int blockHeight; // Block height of transaction
-        ArcMist::stream_size fileOffset; // Offset of this data in transaction reference set file
+        ArcMist::stream_size fileOffset; // Offset of this data in transaction reference file
 
     private:
 
@@ -284,13 +291,13 @@ namespace BitCoin
         unsigned int unspentOutputCount() const { return mOutputCount - mSpentOutputCount; }
         unsigned int size() const
         {
-            return (mTransactionCount * TransactionReference::SIZE) +
-              (mOutputCount * OutputReference::SIZE);
+            return (mTransactionCount * TransactionReference::MEMORY_SIZE) +
+              (mOutputCount * OutputReference::MEMORY_SIZE);
         }
         unsigned int spentSize() const
         {
-            return (mSpentTransactionCount * TransactionReference::SIZE) +
-              (mSpentOutputCount * OutputReference::SIZE);
+            return (mSpentTransactionCount * TransactionReference::MEMORY_SIZE) +
+              (mSpentOutputCount * OutputReference::MEMORY_SIZE);
         }
 
         // Load from/Save to file system

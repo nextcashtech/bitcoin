@@ -70,7 +70,7 @@ namespace BitCoin
         return *this;
     }
 
-    OutputReference TransactionReference::sOutputs[TransactionReference::STATIC_OUTPUTS_SIZE];
+    OutputReference TransactionReference::sOutputs[TransactionReference::STATIC_OUTPUTS_COUNT];
 
     void TransactionReference::write(ArcMist::OutputStream *pStream)
     {
@@ -182,7 +182,7 @@ namespace BitCoin
         }
 
         // Outputs
-        if(outputCount < STATIC_OUTPUTS_SIZE)
+        if(outputCount < STATIC_OUTPUTS_COUNT)
         {
             // Read into static outputs
             pStream->read(sOutputs, outputCount * OutputReference::SIZE);
