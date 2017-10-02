@@ -83,7 +83,8 @@ namespace BitCoin
     }
 
     // P2PKH only
-    bool Transaction::addP2PKHInput(const Hash &pTransactionID, unsigned int pIndex, Output &pOutput, PrivateKey &pPrivateKey, PublicKey &pPublicKey)
+    bool Transaction::addP2PKHInput(const Hash &pTransactionID, unsigned int pIndex, Output &pOutput, PrivateKey &pPrivateKey,
+      PublicKey &pPublicKey, const Forks &pForks)
     {
         // Test unspent transaction output script type
         Hash test;
@@ -102,7 +103,7 @@ namespace BitCoin
 
         // Create signature script for unspent
         if(!ScriptInterpreter::writeP2PKHSignatureScript(pPrivateKey, pPublicKey, *this, inputs.size() - 1, pOutput.script,
-          Signature::ALL, &newInput->script))
+          Signature::ALL, &newInput->script, pForks))
         {
             delete newInput;
             return false;
@@ -189,7 +190,7 @@ namespace BitCoin
 
     bool Transaction::process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
       uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const BlockStats &pBlockStats,
-      const SoftForks &pSoftForks)
+      const Forks &pForks)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Transaction Process");
@@ -232,7 +233,7 @@ namespace BitCoin
                 }
 
                 // BIP-0034
-                if(pBlockVersion >= 2 && pSoftForks.activeVersion() >= 2)
+                if(pBlockVersion >= 2 && pForks.activeVersion() >= 2)
                 {
                     interpreter.clear();
                     interpreter.setTransaction(this);
@@ -296,7 +297,7 @@ namespace BitCoin
 
                 // BIP-0068 Relative time lock sequence
                 if(version >= 2 && !(*input)->sequenceDisabled() &&
-                  pSoftForks.softForkState(SoftFork::BIP0068) == SoftFork::ACTIVE)
+                  pForks.softForkState(SoftFork::BIP0068) == SoftFork::ACTIVE)
                 {
                     // Sequence is an encoded relative time lock
                     uint32_t lock = (*input)->sequence & Input::SEQUENCE_LOCKTIME_MASK;
@@ -353,7 +354,7 @@ namespace BitCoin
                 //(*input)->script.setReadOffset(0);
                 //ScriptInterpreter::printScript((*input)->script, ArcMist::Log::DEBUG);
                 (*input)->script.setReadOffset(0);
-                if(!interpreter.process((*input)->script, true, pBlockVersion, pSoftForks))
+                if(!interpreter.process((*input)->script, true, pBlockVersion, pForks))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d signature script failed : ", index+1);
@@ -367,7 +368,7 @@ namespace BitCoin
                 //output.script.setReadOffset(0);
                 //ScriptInterpreter::printScript(output.script, ArcMist::Log::DEBUG);
                 output.script.setReadOffset(0);
-                if(!interpreter.process(output.script, false, pBlockVersion, pSoftForks))
+                if(!interpreter.process(output.script, false, pBlockVersion, pForks))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d unspent transaction output script failed : ", index + 1);
@@ -413,7 +414,7 @@ namespace BitCoin
             if(lockTime > LOCKTIME_THRESHOLD)
             {
                 // Lock time is a timestamp
-                if(pSoftForks.softForkState(SoftFork::BIP0113) == SoftFork::ACTIVE)
+                if(pForks.softForkState(SoftFork::BIP0113) == SoftFork::ACTIVE)
                 {
                     if(lockTime < pBlockStats.getMedianPastTime(pBlockHeight, 11))
                     {
@@ -608,16 +609,24 @@ namespace BitCoin
     }
 
     bool Transaction::writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
-      ArcMist::Buffer &pOutputScript, Signature::HashType pHashType)
+      ArcMist::Buffer &pOutputScript, Signature::HashType pHashType, const Forks &pForks)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Transaction Write Sign Data");
 #endif
-        // Extract ANYONECANPAY (0x80) flag from hash type
         Signature::HashType hashType = pHashType;
+        // Extract FORKID (0x40) flag from hash type
+        bool forkID = hashType & Signature::FORKID;
+        if(forkID)
+            hashType = static_cast<Signature::HashType>(hashType ^ Signature::ANYONECANPAY);
+        // Extract ANYONECANPAY (0x80) flag from hash type
         bool anyoneCanPay = hashType & Signature::ANYONECANPAY;
         if(anyoneCanPay)
-            hashType = static_cast<Signature::HashType>(pHashType ^ Signature::ANYONECANPAY);
+            hashType = static_cast<Signature::HashType>(hashType ^ Signature::ANYONECANPAY);
+
+        // Verify bitcoin cash
+        if(pForks.cashRequired() && !forkID)
+            return false;
 
         // Build subscript from unspent/output script
         unsigned int offset;
@@ -635,13 +644,6 @@ namespace BitCoin
               "Unsupported signature hash type : 0x%02x", pHashType);
         case Signature::ALL:
         {
-            // if(anyoneCanPay)
-                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-                  // "Signature hash type ALL with ANYONECANPAY");
-            // else
-                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-                  // "Signature hash type ALL");
-
             // Input Count
             if(anyoneCanPay)
                 writeCompactInteger(pStream, 1);
@@ -669,13 +671,6 @@ namespace BitCoin
         }
         case Signature::NONE:
         {
-            // if(anyoneCanPay)
-                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-                  // "Signature hash type NONE with ANYONECANPAY");
-            // else
-                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-                  // "Signature hash type NONE");
-
             // Input Count
             if(anyoneCanPay)
                 writeCompactInteger(pStream, 1);
@@ -698,13 +693,6 @@ namespace BitCoin
         }
         case Signature::SINGLE:
         {
-            // if(anyoneCanPay)
-                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-                  // "Signature hash type SINGLE with ANYONECANPAY");
-            // else
-                // ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-                  // "Signature hash type SINGLE");
-
             // Input Count
             if(anyoneCanPay)
                 writeCompactInteger(pStream, 1);
@@ -750,7 +738,10 @@ namespace BitCoin
         pStream->writeUnsignedInt(lockTime);
 
         // Add signature hash type to the end as a 32 bit value
-        pStream->writeUnsignedInt(pHashType);
+        if(forkID)
+            pStream->writeUnsignedInt(pHashType << 8);
+        else
+            pStream->writeUnsignedInt(pHashType);
         return true;
     }
 
@@ -928,26 +919,26 @@ namespace BitCoin
          * Process Valid P2PKH Transaction
          ***********************************************************************************************/
         // Create public key script to pay the third public key
+        Forks forks;
         Hash publicKey2Hash;
         publicKey2.getHash(publicKey2Hash);
         ScriptInterpreter::writeP2PKHPublicKeyScript(publicKey2Hash, &transaction.outputs[0]->script);
 
         // Create signature script
         ScriptInterpreter::writeP2PKHSignatureScript(privateKey1, publicKey1, transaction, 0, output.script,
-          Signature::ALL, &transaction.inputs[0]->script);
+          Signature::ALL, &transaction.inputs[0]->script, forks);
 
         transaction.calculateHash();
 
         // Process the script
         ScriptInterpreter interpreter;
-        SoftForks softForks;
 
         //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
         interpreter.setInputOffset(0);
         interpreter.setInputSequence(transaction.inputs[0]->sequence);
-        if(!interpreter.process(transaction.inputs[0]->script, true, 4, softForks))
+        if(!interpreter.process(transaction.inputs[0]->script, true, 4, forks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -955,7 +946,7 @@ namespace BitCoin
         else
         {
             output.script.setReadOffset(0);
-            if(!interpreter.process(output.script, false, 4, softForks))
+            if(!interpreter.process(output.script, false, 4, forks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
@@ -980,7 +971,7 @@ namespace BitCoin
         // Create signature script
         transaction.inputs[0]->script.clear();
         ScriptInterpreter::writeP2PKHSignatureScript(privateKey1, publicKey2, transaction, 0, output.script,
-          Signature::ALL, &transaction.inputs[0]->script);
+          Signature::ALL, &transaction.inputs[0]->script, forks);
 
         transaction.inputs[0]->script.setReadOffset(0);
         transaction.calculateHash();
@@ -988,7 +979,7 @@ namespace BitCoin
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
         interpreter.setInputSequence(transaction.inputs[0]->sequence);
-        if(!interpreter.process(transaction.inputs[0]->script, true, 4, softForks))
+        if(!interpreter.process(transaction.inputs[0]->script, true, 4, forks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -996,7 +987,7 @@ namespace BitCoin
         else
         {
             output.script.setReadOffset(0);
-            if(!interpreter.process(output.script, false, 4, softForks))
+            if(!interpreter.process(output.script, false, 4, forks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
@@ -1021,7 +1012,7 @@ namespace BitCoin
         // Create signature script
         transaction.inputs[0]->script.clear();
         ScriptInterpreter::writeP2PKHSignatureScript(privateKey2, publicKey1, transaction, 0, output.script,
-          Signature::ALL, &transaction.inputs[0]->script);
+          Signature::ALL, &transaction.inputs[0]->script, forks);
 
         transaction.inputs[0]->script.setReadOffset(0);
         transaction.calculateHash();
@@ -1029,7 +1020,7 @@ namespace BitCoin
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
         interpreter.setInputSequence(transaction.inputs[0]->sequence);
-        if(!interpreter.process(transaction.inputs[0]->script, true, 4, softForks))
+        if(!interpreter.process(transaction.inputs[0]->script, true, 4, forks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -1037,7 +1028,7 @@ namespace BitCoin
         else
         {
             output.script.setReadOffset(0);
-            if(!interpreter.process(output.script, false, 4, softForks))
+            if(!interpreter.process(output.script, false, 4, forks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
@@ -1085,7 +1076,7 @@ namespace BitCoin
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.setTransaction(&transaction);
         interpreter.setInputSequence(transaction.inputs[0]->sequence);
-        if(!interpreter.process(transaction.inputs[0]->script, true, 4, softForks))
+        if(!interpreter.process(transaction.inputs[0]->script, true, 4, forks))
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -1093,7 +1084,7 @@ namespace BitCoin
         else
         {
             output.script.setReadOffset(0);
-            if(!interpreter.process(output.script, false, 4, softForks))
+            if(!interpreter.process(output.script, false, 4, forks))
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;

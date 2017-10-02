@@ -174,7 +174,7 @@ namespace BitCoin
             return;
         }
 
-        if(!mIsIncoming && mPingRoundTripTime == 0xffffffff && getTime() - mConnectedTime > 120)
+        if(mPingRoundTripTime == 0xffffffff && getTime() - mConnectedTime > 120)
         {
             ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No pong within 120 seconds of connection");
             close();
@@ -456,7 +456,7 @@ namespace BitCoin
         mConnectionMutex.unlock();
 
         // Ping every 20 minutes
-        if(!mIsIncoming && mVersionData != NULL && mVersionAcknowledged)
+        if(mVersionData != NULL && mVersionAcknowledged)
         {
             if(time - mLastPingTime > 1200)
                 sendPing();

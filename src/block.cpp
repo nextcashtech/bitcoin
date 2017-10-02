@@ -329,7 +329,7 @@ namespace BitCoin
         }
     }
 
-    uint64_t Block::coinBaseAmount(uint64_t pBlockHeight)
+    uint64_t Block::coinBaseAmount(int pBlockHeight)
     {
         if(pBlockHeight >= 6930000)
             return 0;
@@ -345,7 +345,7 @@ namespace BitCoin
         return result;
     }
 
-    bool Block::updateOutputs(TransactionOutputPool &pOutputs, uint64_t pBlockHeight)
+    bool Block::updateOutputs(TransactionOutputPool &pOutputs, int pBlockHeight)
     {
         if(transactions.size() == 0)
         {
@@ -371,8 +371,8 @@ namespace BitCoin
         return true;
     }
 
-    bool Block::process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const BlockStats &pBlockStats,
-      const SoftForks &pSoftForks)
+    bool Block::process(TransactionOutputPool &pOutputs, int pBlockHeight, const BlockStats &pBlockStats,
+      const Forks &pForks)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block at height %d (%d trans) (%d bytes) : %s", pBlockHeight, transactionCount,
@@ -384,10 +384,24 @@ namespace BitCoin
             return false;
         }
 
-        if(pSoftForks.requiredVersion() > version)
+        if(pForks.requiredVersion() > version)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Version %d required",
-              pSoftForks.requiredVersion());
+              pForks.requiredVersion());
+            return false;
+        }
+
+        if(pForks.cashForkBlockHeight() == pBlockHeight && size() < Forks::HARD_MAX_BLOCK_SIZE)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Cash fork block size must be greater than %d bytes : %d bytes", Forks::HARD_MAX_BLOCK_SIZE, size());
+            return false;
+        }
+
+        if(size() > pForks.blockMaxSize())
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Block size must be less than %d bytes : %d", pForks.blockMaxSize(), size());
             return false;
         }
 
@@ -416,7 +430,7 @@ namespace BitCoin
         unsigned int transactionOffset = 0;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version, pBlockStats, pSoftForks))
+            if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version, pBlockStats, pForks))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",
                   transactionOffset);

@@ -12,7 +12,7 @@
 #include "arcmist/io/stream.hpp"
 #include "arcmist/io/file_stream.hpp"
 #include "base.hpp"
-#include "soft_forks.hpp"
+#include "forks.hpp"
 #include "transaction.hpp"
 #include "outputs.hpp"
 
@@ -63,13 +63,13 @@ namespace BitCoin
         void calculateHash();
         void calculateMerkleHash(Hash &pMerkleHash);
 
-        bool process(TransactionOutputPool &pOutputs, uint64_t pBlockHeight, const BlockStats &pBlockStats,
-          const SoftForks &pSoftForks);
+        bool process(TransactionOutputPool &pOutputs, int pBlockHeight, const BlockStats &pBlockStats,
+          const Forks &pForks);
 
-        bool updateOutputs(TransactionOutputPool &pOutputs, uint64_t pBlockHeight);
+        bool updateOutputs(TransactionOutputPool &pOutputs, int pBlockHeight);
 
         // Amount of Satoshis generated for mining a block at this height
-        static uint64_t coinBaseAmount(uint64_t pBlockHeight);
+        static uint64_t coinBaseAmount(int pBlockHeight);
 
         // Create the Genesis block
         static Block *genesis();

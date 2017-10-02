@@ -1,7 +1,8 @@
 
 COMPILER=g++
 COMPILE_FLAGS=-I./include -I../ArcMist/include -I../secp256k1/include -std=c++11 -Wall
-#To Turn profiler on add this to the end of the previous line -DPROFILER_ON
+# To disable Bitcoin Cash add this to the end if COMPILE_FLAGS : -DDISABLE_CASH
+# To Turn profiler on add this to the end of the previous line -DPROFILER_ON
 LIBRARY_PATHS=-L../ArcMist -L../secp256k1/.libs
 LIBRARIES=-larcmist -lsecp256k1
 DEBUG_LIBRARIES=-larcmist.debug -lsecp256k1

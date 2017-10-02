@@ -11,7 +11,7 @@
 #include "arcmist/base/string.hpp"
 #include "arcmist/base/mutex.hpp"
 #include "base.hpp"
-#include "soft_forks.hpp"
+#include "forks.hpp"
 #include "block.hpp"
 #include "outputs.hpp"
 
@@ -123,7 +123,7 @@ namespace BitCoin
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
 
         // Soft fork information
-        const SoftForks &softForks() const { return mSoftForks; }
+        const Forks &softForks() const { return mForks; }
 
         // Chain is up to date with most chains
         bool isInSync() { return false; }
@@ -242,7 +242,7 @@ namespace BitCoin
         bool loadTargetBits();
 
         // Last BLOCK_STATS_SIZE block's statistics
-        SoftForks mSoftForks;
+        Forks mForks;
         BlockStats mBlockStats;
         void addBlockStats(uint32_t pVersion, uint32_t pTime)
         {

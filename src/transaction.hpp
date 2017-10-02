@@ -12,7 +12,7 @@
 #include "arcmist/io/stream.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
-#include "soft_forks.hpp"
+#include "forks.hpp"
 #include "key.hpp"
 #include "outputs.hpp"
 
@@ -122,16 +122,17 @@ namespace BitCoin
 
         bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const BlockStats &pBlockStats,
-          const SoftForks &pSoftForks);
+          const Forks &pForks);
 
         bool updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           uint64_t pBlockHeight);
 
         bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
-          ArcMist::Buffer &pOutputScript, Signature::HashType pHashType);
+          ArcMist::Buffer &pOutputScript, Signature::HashType pHashType, const Forks &pForks);
 
         // P2PKH only
-        bool addP2PKHInput(const Hash &pTransactionID, unsigned int pIndex, Output &pOutput, PrivateKey &pPrivateKey, PublicKey &pPublicKey);
+        bool addP2PKHInput(const Hash &pTransactionID, unsigned int pIndex, Output &pOutput, PrivateKey &pPrivateKey,
+          PublicKey &pPublicKey, const Forks &pForks);
         bool addP2PKHOutput(Hash pPublicKeyHash, uint64_t pAmount);
 
         // P2SH only

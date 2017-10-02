@@ -5,8 +5,8 @@
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
-#ifndef BITCOIN_SOFT_FORKS_HPP
-#define BITCOIN_SOFT_FORKS_HPP
+#ifndef BITCOIN_FORKS_HPP
+#define BITCOIN_FORKS_HPP
 
 #include "arcmist/base/string.hpp"
 #include "arcmist/io/stream.hpp"
@@ -32,6 +32,8 @@ namespace BitCoin
     {
     public:
 
+        BlockStats() { mIsValid = false; }
+
         int height() const { return size() - 1; }
 
         uint32_t time(unsigned int pBlockHeight) const;
@@ -43,6 +45,9 @@ namespace BitCoin
 
         bool load();
         bool save();
+
+    private:
+        bool mIsValid;
     };
 
     class SoftFork
@@ -104,12 +109,12 @@ namespace BitCoin
         State previousState;
     };
 
-    class SoftForks
+    class Forks
     {
     public:
 
-        SoftForks();
-        ~SoftForks();
+        Forks();
+        ~Forks();
 
         int height() const { return mHeight; }
 
@@ -123,6 +128,19 @@ namespace BitCoin
         int32_t requiredVersion() const { return mRequiredVersion; }
 
         SoftFork::State softForkState(unsigned int pID) const;
+
+        // BitCoin Cash
+#ifdef DISABLE_CASH
+        static const uint32_t CASH_ACTIVATION_TIME = 0;
+#else
+        static const uint32_t CASH_ACTIVATION_TIME = 1501590000;
+#endif
+        static const unsigned int HARD_MAX_BLOCK_SIZE = 1000000;
+        static const unsigned int CASH_START_MAX_BLOCK_SIZE = 8000000;
+
+        bool cashRequired() const { return mCashForkBlockHeight != -1 && mHeight >= mCashForkBlockHeight; }
+        int cashForkBlockHeight() const { return mCashForkBlockHeight; }
+        unsigned int blockMaxSize() const { return mBlockMaxSize; }
 
         void process(const BlockStats &pBlockStats, unsigned int pBlockHeight);
 
@@ -142,13 +160,16 @@ namespace BitCoin
         int mHeight;
         unsigned int mPreviousHeight;
 
-        std::vector<SoftFork *> mSoftForks;
+        std::vector<SoftFork *> mForks;
 
         int32_t mActiveVersion;
         int32_t mRequiredVersion;
 
         int32_t mPreviousActiveVersion;
         int32_t mPreviousRequiredVersion;
+
+        int mCashForkBlockHeight;
+        unsigned int mBlockMaxSize;
 
         unsigned int mThreshHold;
         bool mModified;

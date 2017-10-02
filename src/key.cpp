@@ -269,30 +269,6 @@ namespace BitCoin
         uint8_t input[pLength+2];
         pStream->read(input, pLength);
 
-        if(pLength == 64)
-        {
-            if(pStrictECDSA_DER_Sigs)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "BIP-0066 requires ECDSA DER signatures only. Signature length %d", pLength);
-                return false;
-            }
-
-            if(!secp256k1_ecdsa_signature_parse_compact(mContext, (secp256k1_ecdsa_signature*)mData, input))
-            {
-                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to parse compact signature (64 bytes)");
-                return false;
-            }
-            else
-                return true;
-        }
-        else if(pLength < 64)
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Failed to parse signature. Too short : %d bytes", pLength);
-            return false;
-        }
-
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Signature Read");
 #endif
@@ -460,6 +436,17 @@ namespace BitCoin
 
         if(secp256k1_ecdsa_signature_parse_der(mContext, (secp256k1_ecdsa_signature*)mData, input, totalLength))
             return true;
+
+        if(pLength == 64 && !pStrictECDSA_DER_Sigs)
+        {
+            if(secp256k1_ecdsa_signature_parse_compact(mContext, (secp256k1_ecdsa_signature*)mData, input))
+                return true;
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to parse compact signature (64 bytes)");
+                return false;
+            }
+        }
 
         ArcMist::String hex;
         hex.writeHex(input, pLength);

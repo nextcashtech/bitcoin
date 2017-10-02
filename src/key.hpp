@@ -67,7 +67,15 @@ namespace BitCoin
     {
     public:
 
-        enum HashType { INVALID = 0x00, ALL = 0x01, NONE = 0x02, SINGLE = 0x03, ANYONECANPAY = 0x80 };
+        enum HashType
+        {
+            INVALID = 0x00,      // Invalid value
+            ALL = 0x01,          // Sign all outputs
+            NONE = 0x02,         // Don't sign any outputs so anyone can modify them (i.e. miners)
+            SINGLE = 0x03,       // Only sign one output so other outputs can be added later
+            FORKID = 0x40,       // Flag for BitCoin Cash only transaction
+            ANYONECANPAY = 0x80  // Only sign this input so that other inputs can be added later
+        };
 
         Signature()
         {

@@ -5,7 +5,7 @@
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
-#include "soft_forks.hpp"
+#include "forks.hpp"
 
 #include "arcmist/base/log.hpp"
 #include "arcmist/io/file_stream.hpp"
@@ -14,7 +14,7 @@
 
 #include <algorithm>
 
-#define BITCOIN_SOFT_FORKS_LOG_NAME "BitCoin Soft Forks"
+#define BITCOIN_FORKS_LOG_NAME "BitCoin Forks"
 
 
 namespace BitCoin
@@ -25,40 +25,50 @@ namespace BitCoin
         filePathName.pathAppend("block_stats");
         if(!ArcMist::fileExists(filePathName))
         {
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
               "No block stats file to load");
+            mIsValid = true;
             return true;
         }
 
         ArcMist::FileInputStream file(filePathName);
         if(!file.isValid())
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_SOFT_FORKS_LOG_NAME,
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
               "Failed to open block stats file to load");
+            mIsValid = false;
             return false;
         }
 
         resize(file.length() / sizeof(BlockStat));
         file.read(data(), file.length());
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
           "Loaded %d block statistics", size());
+        mIsValid = true;
         return true;
     }
 
     bool BlockStats::save()
     {
+        if(!mIsValid)
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
+              "Not saving block stats. Not valid.");
+            return false;
+        }
+
         ArcMist::String filePathName = Info::instance().path();
         filePathName.pathAppend("block_stats");
         ArcMist::FileOutputStream file(filePathName, true);
         if(!file.isValid())
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_SOFT_FORKS_LOG_NAME,
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
               "Failed to open block stats file to save");
             return false;
         }
 
         file.write(data(), size() * sizeof(BlockStat));
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
           "Saved %d block statistics", size());
         return true;
     }
@@ -178,12 +188,16 @@ namespace BitCoin
         return result;
     }
 
-    SoftForks::SoftForks()
+    Forks::Forks()
     {
         mHeight = 0;
         mPreviousHeight = 0;
         mActiveVersion = 1;
+        mPreviousActiveVersion = 1;
         mRequiredVersion = 1;
+        mPreviousRequiredVersion = 1;
+        mCashForkBlockHeight = -1;
+        mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         mModified = false;
 
         switch(network())
@@ -192,48 +206,56 @@ namespace BitCoin
             mThreshHold = 1916;
 
             // Add known soft forks
-            mSoftForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0, 1462060800, 1493596800));
+            mForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0, 1462060800, 1493596800));
             break;
         default:
         case TESTNET:
             mThreshHold = 1512;
 
             // Add known soft forks
-            mSoftForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0, 1462060800, 1493596800));
+            mForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0, 1462060800, 1493596800));
             break;
         }
     }
 
-    SoftForks::~SoftForks()
+    Forks::~Forks()
     {
-        for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
+        for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             delete *softFork;
     }
 
-    SoftFork::State SoftForks::softForkState(unsigned int pID) const
+    SoftFork::State Forks::softForkState(unsigned int pID) const
     {
-        for(std::vector<SoftFork *>::const_iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
+        for(std::vector<SoftFork *>::const_iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             if((*softFork)->id == pID)
                 return (*softFork)->state;
 
         return SoftFork::UNDEFINED;
     }
 
-    void SoftForks::process(const BlockStats &pBlockStats, unsigned int pBlockHeight)
+    void Forks::process(const BlockStats &pBlockStats, unsigned int pBlockHeight)
     {
         unsigned int offset;
 
         mPreviousHeight = mHeight;
 
+        if(pBlockHeight > 12 && mCashForkBlockHeight == -1 && CASH_ACTIVATION_TIME != 0 &&
+          pBlockStats.getMedianPastTime(pBlockHeight) >= CASH_ACTIVATION_TIME)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+              "Cash fork activated at block height %d", pBlockHeight);
+            mCashForkBlockHeight = mHeight;
+            mBlockMaxSize = CASH_START_MAX_BLOCK_SIZE;
+        }
+
         if(pBlockHeight != 0 && pBlockHeight % RETARGET_PERIOD == 0)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
               "Updating for block height %d", pBlockHeight);
 
-            uint32_t medianTimePast = pBlockStats.getMedianPastTime(pBlockHeight);
             uint32_t compositeValue = 0;
-
-            for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
+            uint32_t medianTimePast = pBlockStats.getMedianPastTime(pBlockHeight);
+            for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             {
                 compositeValue |= (0x01 << (*softFork)->bit);
 
@@ -243,14 +265,14 @@ namespace BitCoin
                     case SoftFork::DEFINED:
                         if(medianTimePast > (*softFork)->timeout)
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                               "(%s) failed (height %d)", (*softFork)->name.text(), pBlockHeight);
                             (*softFork)->state = SoftFork::FAILED;
                             mModified = true;
                         }
                         else if(medianTimePast > (*softFork)->startTime)
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                               "(%s) started (height %d)", (*softFork)->name.text(), pBlockHeight);
                             (*softFork)->state = SoftFork::STARTED;
                             mModified = true;
@@ -260,7 +282,7 @@ namespace BitCoin
                     {
                         if(medianTimePast > (*softFork)->timeout)
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                               "(%s) failed (height %d)", (*softFork)->name.text(), pBlockHeight);
                             (*softFork)->state = SoftFork::FAILED;
                             mModified = true;
@@ -277,7 +299,7 @@ namespace BitCoin
 
                         if(support >= mThreshHold)
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                               "(%s) locked in (height %d)", (*softFork)->name.text(), pBlockHeight);
                             (*softFork)->lockedHeight = pBlockHeight;
                             (*softFork)->state = SoftFork::LOCKED_IN;
@@ -287,7 +309,7 @@ namespace BitCoin
                         break;
                     }
                     case SoftFork::LOCKED_IN:
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                           "Soft fork (%s) active (height %d)", (*softFork)->name.text(), pBlockHeight);
                         (*softFork)->state = SoftFork::ACTIVE;
                         mModified = true;
@@ -321,7 +343,7 @@ namespace BitCoin
             for(i=0;i<29;i++)
                 if(unknownSupport[i] > 0)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::NOTIFICATION, BITCOIN_SOFT_FORKS_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::NOTIFICATION, BITCOIN_FORKS_LOG_NAME,
                       "Unknown soft fork for bit %d with %d/%d support (height %d)", i, unknownSupport[i],
                       RETARGET_PERIOD, pBlockHeight);
                 }
@@ -372,7 +394,7 @@ namespace BitCoin
             {
                 if(mRequiredVersion < 4)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                       "Version 4 blocks now required (height %d)", pBlockHeight);
                     mRequiredVersion = 4;
                     mModified = true;
@@ -385,7 +407,7 @@ namespace BitCoin
             }
             else if(mActiveVersion < 4 && version4OrHigherCount >= activateCount)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                   "Version 4 blocks now active (height %d)", pBlockHeight);
                 mActiveVersion = 4;
                 mModified = true;
@@ -396,7 +418,7 @@ namespace BitCoin
             {
                 if(mRequiredVersion < 3)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                       "Version 3 blocks now required (height %d)", pBlockHeight);
                     mRequiredVersion = 3;
                     mModified = true;
@@ -409,7 +431,7 @@ namespace BitCoin
             }
             else if(mActiveVersion < 3 && version3OrHigherCount >= activateCount)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                   "Version 3 blocks now active (height %d)", pBlockHeight);
                 mActiveVersion = 3;
                 mModified = true;
@@ -420,7 +442,7 @@ namespace BitCoin
             {
                 if(mRequiredVersion < 2)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                       "Version 2 blocks now required (height %d)", pBlockHeight);
                     mRequiredVersion = 2;
                     mModified = true;
@@ -433,7 +455,7 @@ namespace BitCoin
             }
             else if(mActiveVersion < 2 && version2OrHigherCount >= activateCount)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                   "Version 2 blocks now active (height %d)", pBlockHeight);
                 mActiveVersion = 2;
                 mModified = true;
@@ -441,31 +463,39 @@ namespace BitCoin
         }
     }
 
-    void SoftForks::revert()
+    void Forks::revert()
     {
         mActiveVersion = mPreviousActiveVersion;
         mRequiredVersion = mPreviousRequiredVersion;
 
+        if(mHeight == mCashForkBlockHeight)
+        {
+            mCashForkBlockHeight = -1;
+            mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
+        }
+
         if(mHeight != 0 && mHeight % RETARGET_PERIOD == 0)
-            for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
+            for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
                 (*softFork)->revert();
 
         --mHeight;
     }
 
-    void SoftForks::reset()
+    void Forks::reset()
     {
         mActiveVersion = 0;
         mRequiredVersion = 0;
-        for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
+        mCashForkBlockHeight = -1;
+        mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
+        for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             (*softFork)->reset();
     }
 
-    void SoftForks::add(SoftFork *pSoftFork)
+    void Forks::add(SoftFork *pSoftFork)
     {
         // Overwrite if it is already in here
         bool found = false;
-        for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
+        for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             if((*softFork)->id == pSoftFork->id)
             {
                 delete *softFork;
@@ -475,17 +505,17 @@ namespace BitCoin
             }
 
         if(!found)
-            mSoftForks.push_back(pSoftFork);
+            mForks.push_back(pSoftFork);
     }
 
-    bool SoftForks::load(const char *pFileName)
+    bool Forks::load(const char *pFileName)
     {
         ArcMist::String filePathName = Info::instance().path();
         filePathName.pathAppend(pFileName);
 
         if(!ArcMist::fileExists(filePathName))
         {
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
               "No soft forks file to load");
             return true;
         }
@@ -494,7 +524,7 @@ namespace BitCoin
 
         if(!file.isValid())
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_SOFT_FORKS_LOG_NAME,
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
               "Failed to open soft forks file");
             return false;
         }
@@ -505,8 +535,16 @@ namespace BitCoin
         // Read versions
         mActiveVersion = file.readUnsignedInt();
         mRequiredVersion = file.readUnsignedInt();
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
           "Block versions %d/%d active/required", mActiveVersion, mRequiredVersion);
+
+        // Read cash fork block height and max size
+        mCashForkBlockHeight = file.readUnsignedInt();
+        mBlockMaxSize = file.readUnsignedInt();
+
+        if(mCashForkBlockHeight != -1)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+              "Block cash fork height %d, max block size %d", mCashForkBlockHeight, mBlockMaxSize);
 
         SoftFork *newSoftFork;
         while(file.remaining())
@@ -515,22 +553,22 @@ namespace BitCoin
             if(!newSoftFork->read(&file))
             {
                 delete newSoftFork;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_SOFT_FORKS_LOG_NAME,
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
                   "Failed to read soft fork");
                 return false;
             }
             add(newSoftFork);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_SOFT_FORKS_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
               "Loaded soft fork %s : %s", newSoftFork->name.text(), newSoftFork->description().text());
         }
 
         mModified = false;
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_SOFT_FORKS_LOG_NAME,
-          "Loaded %d soft forks", mSoftForks.size());
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+          "Loaded %d soft forks", mForks.size());
         return true;
     }
 
-    bool SoftForks::save(const char *pFileName)
+    bool Forks::save(const char *pFileName)
     {
         if(!mModified)
             return true;
@@ -541,7 +579,7 @@ namespace BitCoin
 
         if(!file.isValid())
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_SOFT_FORKS_LOG_NAME, "Failed to open soft forks file to save");
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_FORKS_LOG_NAME, "Failed to open soft forks file to save");
             return false;
         }
 
@@ -552,7 +590,11 @@ namespace BitCoin
         file.writeUnsignedInt(mActiveVersion);
         file.writeUnsignedInt(mRequiredVersion);
 
-        for(std::vector<SoftFork *>::iterator softFork=mSoftForks.begin();softFork!=mSoftForks.end();++softFork)
+        // Write cash fork block height and max size
+        file.writeUnsignedInt(mCashForkBlockHeight);
+        file.writeUnsignedInt(mBlockMaxSize);
+
+        for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             (*softFork)->write(&file);
 
         mModified = false;

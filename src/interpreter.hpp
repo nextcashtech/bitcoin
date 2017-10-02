@@ -12,6 +12,7 @@
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
 #include "key.hpp"
+#include "forks.hpp"
 #include "transaction.hpp"
 
 #include <list>
@@ -43,11 +44,11 @@ namespace BitCoin
 
         // Process script
         bool process(ArcMist::Buffer &pScript, bool pIsSignatureScript, int32_t pBlockVersion,
-          const SoftForks &pSoftForks);
+          const Forks &pForks);
 
         // Parse and check a signature
         bool checkSignature(PublicKey &pPublicKey, ArcMist::Buffer *pSignature, bool pStrictECDSA_DER_Sigs,
-          ArcMist::Buffer &pSubScript, unsigned int pSignatureStartOffset);
+          ArcMist::Buffer &pSubScript, unsigned int pSignatureStartOffset, const Forks &pForks);
 
         // No issues processing script
         bool isValid()
@@ -140,7 +141,8 @@ namespace BitCoin
                                               unsigned int pInputOffset,
                                               ArcMist::Buffer &pUnspentScript,
                                               Signature::HashType pType,
-                                              ArcMist::OutputStream *pOutput);
+                                              ArcMist::OutputStream *pOutput,
+                                              const Forks &pForks);
 
         // Create a P2PKH (Pay to Public Key Hash) public key/output script
         static void writeP2PKHPublicKeyScript(const Hash &pPublicKeyHash, ArcMist::OutputStream *pOutput);

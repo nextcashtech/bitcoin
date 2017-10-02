@@ -237,7 +237,8 @@ namespace BitCoin
                                                       unsigned int pInputOffset,
                                                       ArcMist::Buffer &pUnspentScript,
                                                       Signature::HashType pType,
-                                                      ArcMist::OutputStream *pOutput)
+                                                      ArcMist::OutputStream *pOutput,
+                                                      const Forks &pForks)
     {
         Signature signature;
 
@@ -246,7 +247,7 @@ namespace BitCoin
         unsigned int previousReadOffset = pUnspentScript.readOffset();
         pUnspentScript.setReadOffset(0);
         digest.setOutputEndian(ArcMist::Endian::LITTLE);
-        pTransaction.writeSignatureData(&digest, pInputOffset, pUnspentScript, pType);
+        pTransaction.writeSignatureData(&digest, pInputOffset, pUnspentScript, pType, pForks);
         pUnspentScript.setReadOffset(previousReadOffset);
 
         // Get digest result
@@ -832,16 +833,28 @@ namespace BitCoin
     }
 
     bool ScriptInterpreter::checkSignature(PublicKey &pPublicKey, ArcMist::Buffer *pSignature, bool pStrictECDSA_DER_Sigs,
-      ArcMist::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset)
+      ArcMist::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset, const Forks &pForks)
     {
         // Read the signature from the stack item
         Signature signature;
         pSignature->setReadOffset(0);
-        if(pSignature->length() == 0 || !signature.read(pSignature, pSignature->length()-1, pStrictECDSA_DER_Sigs))
+        if(pSignature->length() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Zero length signature");
+            return false;
+        }
+
+        if(!signature.read(pSignature, pSignature->length()-1, pStrictECDSA_DER_Sigs))
             return false;
 
         // Read the hash type from the stack item
         Signature::HashType hashType = static_cast<Signature::HashType>(pSignature->readByte());
+        if(pForks.cashRequired() && !(hashType & Signature::FORKID))
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Signature hash type missing required fork ID flag : %02x", hashType);
+            return false;
+        }
 
         // Write appropriate data to a SHA256_SHA256 digest
         ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
@@ -849,8 +862,10 @@ namespace BitCoin
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
         digest.setOutputEndian(ArcMist::Endian::LITTLE);
         Hash signatureHash(32);
-        if(mTransaction->writeSignatureData(&digest, mInputOffset, pCurrentOutputScript, hashType))
+        if(mTransaction->writeSignatureData(&digest, mInputOffset, pCurrentOutputScript, hashType, pForks))
             digest.getResult(&signatureHash); // Get digest result
+        else if(hashType & Signature::FORKID)
+            signatureHash.zeroize();
         else
             signatureHash.setByte(0, 1); // Use signature hash of 1 (probably sig hash single with not enough outputs)
 
@@ -1053,7 +1068,7 @@ namespace BitCoin
     }
 
     bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript,
-      int32_t pBlockVersion, const SoftForks &pSoftForks)
+      int32_t pBlockVersion, const Forks &pForks)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Interpreter Process");
@@ -1061,7 +1076,7 @@ namespace BitCoin
         unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;
         uint64_t count;
-        bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && pSoftForks.activeVersion() >= 3;
+        bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && pForks.activeVersion() >= 3;
 
         while(pScript.remaining())
         {
@@ -1482,7 +1497,7 @@ namespace BitCoin
                     pop();
 
                     // Check the signature (at the top of the stack) with the public key we just popped from the stack
-                    if(checkSignature(publicKey, top(), strictECDSA_DER_Sigs, pScript, sigStartOffset))
+                    if(checkSignature(publicKey, top(), strictECDSA_DER_Sigs, pScript, sigStartOffset, pForks))
                     {
                         pop();
                         if(opCode == OP_CHECKSIG)
@@ -1586,7 +1601,7 @@ namespace BitCoin
                         signatureVerified = false;
                         while(publicKeyOffset < publicKeyCount)
                             if(checkSignature(*publicKeys[publicKeyOffset++], signatures[i],
-                              strictECDSA_DER_Sigs, pScript, sigStartOffset))
+                              strictECDSA_DER_Sigs, pScript, sigStartOffset, pForks))
                             {
                                 signatureVerified = true;
                                 break;
@@ -1627,7 +1642,7 @@ namespace BitCoin
                 }
                 case OP_CHECKLOCKTIMEVERIFY: // BIP-0065
                 {
-                    if(pBlockVersion < 4 || pSoftForks.activeVersion() < 4)
+                    if(pBlockVersion < 4 || pForks.activeVersion() < 4)
                         break;
 
                     if(pIsSignatureScript)
@@ -1705,7 +1720,7 @@ namespace BitCoin
                 }
                 case OP_CHECKSEQUENCEVERIFY: // BIP-0112
                 {
-                    if(pSoftForks.softForkState(SoftFork::BIP0112) != SoftFork::ACTIVE)
+                    if(pForks.softForkState(SoftFork::BIP0112) != SoftFork::ACTIVE)
                         break;
 
                     if(pIsSignatureScript)

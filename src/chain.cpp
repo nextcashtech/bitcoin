@@ -625,15 +625,15 @@ namespace BitCoin
         }
 
         mBlockStats.push_back(BlockStat(pBlock->version, pBlock->time));
-        mSoftForks.process(mBlockStats, mNextBlockHeight);
+        mForks.process(mBlockStats, mNextBlockHeight);
 
         // Process block
-        if(!pBlock->process(mOutputs, mNextBlockHeight, mBlockStats, mSoftForks))
+        if(!pBlock->process(mOutputs, mNextBlockHeight, mBlockStats, mForks))
         {
             revertTargetBits();
             mOutputs.revert(mNextBlockHeight);
             mBlockStats.revert();
-            mSoftForks.revert();
+            mForks.revert();
             mProcessMutex.unlock();
             return false;
         }
@@ -700,7 +700,7 @@ namespace BitCoin
             revertTargetBits();
             mOutputs.revert(mNextBlockHeight);
             mBlockStats.revert();
-            mSoftForks.revert();
+            mForks.revert();
             mProcessMutex.unlock();
             return false;
         }
@@ -723,7 +723,7 @@ namespace BitCoin
         else
         {
             mBlockStats.revert();
-            mSoftForks.revert();
+            mForks.revert();
             revertTargetBits();
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to add to block to file %08d : %s", mLastFileID, pBlock->hash.hex().text());
@@ -745,7 +745,7 @@ namespace BitCoin
                 mPendingLock.readUnlock();
                 if(mLastBlockFile != NULL)
                     mLastBlockFile->updateCRC();
-                mSoftForks.save();
+                mForks.save();
                 return;
             }
 
@@ -755,7 +755,7 @@ namespace BitCoin
             {
                 if(mLastBlockFile != NULL)
                     mLastBlockFile->updateCRC();
-                mSoftForks.save();
+                mForks.save();
                 return;
             }
 
@@ -1067,7 +1067,7 @@ namespace BitCoin
         BlockFile *blockFile = NULL;
         Block block;
         unsigned int blockOffset;
-        SoftForks emptySoftForks;
+        Forks emptyForks;
         unsigned int spentOutputsThreshold = Info::instance().spentOutputsThreshold;
 
         while(!mStop)
@@ -1132,6 +1132,7 @@ namespace BitCoin
                               "Failed to read block %d from block file %08x : %s", blockOffset, fileID, (*hash)->hex().text());
                             delete blockFile;
                             BlockFile::unlock(fileID);
+                            mOutputs.save();
                             return false;
                         }
                     }
@@ -1159,7 +1160,7 @@ namespace BitCoin
         bool success = mOutputs.save();
         if(!mBlockStats.save())
             success = false;
-        if(!mSoftForks.save())
+        if(!mForks.save())
             success = false;
         if(!savePending())
             success = false;
@@ -1300,16 +1301,16 @@ namespace BitCoin
             }
         }
 
-        success = success && mSoftForks.load();
+        success = success && mForks.load();
 
-        if(success && mSoftForks.height() != mNextBlockHeight - 1)
+        if(success && mForks.height() != mNextBlockHeight - 1)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Refreshing soft forks (height %d)", mSoftForks.height());
+              "Refreshing soft forks (height %d)", mForks.height());
 
-            mSoftForks.reset();
+            mForks.reset();
             uint32_t lastReport = getTime();
-            for(int i=mSoftForks.height()+1;i<mNextBlockHeight;++i)
+            for(int i=mForks.height()+1;i<mNextBlockHeight;++i)
             {
                 if(getTime() - lastReport > 10)
                 {
@@ -1318,14 +1319,14 @@ namespace BitCoin
                     lastReport = getTime();
                 }
 
-                mSoftForks.process(mBlockStats, i);
+                mForks.process(mBlockStats, i);
             }
 
             if(mStop)
                 success = false;
 
             if(success)
-                mSoftForks.save();
+                mForks.save();
         }
 
         mProcessMutex.unlock();
@@ -1411,7 +1412,7 @@ namespace BitCoin
                     useTestMinDifficulty = network() == TESTNET && block.time - mLastBlockTime > 1200;
                     updateTargetBits(height, block.time, block.targetBits);
                     mBlockStats.push_back(BlockStat(block.version, block.time));
-                    mSoftForks.process(mBlockStats, height);
+                    mForks.process(mBlockStats, height);
                     if(mTargetBits != block.targetBits)
                     {
                         // If on TestNet and 20 minutes since last block
@@ -1429,7 +1430,7 @@ namespace BitCoin
                         }
                     }
 
-                    if(!block.process(mOutputs, height, mBlockStats, mSoftForks))
+                    if(!block.process(mOutputs, height, mBlockStats, mForks))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                           "Block %010d failed to process", height);
@@ -1461,7 +1462,7 @@ namespace BitCoin
         if(pRebuild)
         {
             mOutputs.save();
-            if(!mSoftForks.save())
+            if(!mForks.save())
                 return false;
             if(!saveTargetBits())
                 return false;
@@ -1641,7 +1642,7 @@ namespace BitCoin
         Info::instance().setPath("../bcc_test");
         TransactionOutputPool outputs;
         BlockStats blockStats;
-        SoftForks softForks;
+        Forks softForks;
 
         if(!readBlock.read(&readFile, true, true, true))
         {
