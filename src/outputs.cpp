@@ -78,7 +78,8 @@ namespace BitCoin
         id.write(pStream);
         pStream->writeUnsignedInt(blockHeight);
         pStream->writeUnsignedInt(mOutputCount);
-        pStream->write(mOutputs, mOutputCount * OutputReference::SIZE);
+        if(mOutputCount > 0)
+            pStream->write(mOutputs, mOutputCount * OutputReference::SIZE);
     }
 
     void TransactionReference::writeAll(ArcMist::OutputStream *pStream)
@@ -86,7 +87,8 @@ namespace BitCoin
         id.write(pStream);
         pStream->writeUnsignedInt(blockHeight);
         pStream->writeUnsignedInt(mOutputCount);
-        pStream->write(mOutputs, mOutputCount * OutputReference::SIZE);
+        if(mOutputCount > 0)
+            pStream->write(mOutputs, mOutputCount * OutputReference::SIZE);
     }
 
     bool TransactionReference::readAll(ArcMist::InputStream *pStream, unsigned int &pTransactionCount, unsigned int &pOutputCount,
@@ -255,7 +257,7 @@ namespace BitCoin
     unsigned int TransactionReference::spentOutputCount() const
     {
         unsigned int result = 0;
-        OutputReference *output=mOutputs;
+        OutputReference *output = mOutputs;
         for(unsigned int i=0;i<mOutputCount;++i,++output)
             if(output->spentBlockHeight != 0)
                 ++result;
@@ -372,7 +374,7 @@ namespace BitCoin
         if(mOutputs == NULL)
             return;
 
-        OutputReference *output=mOutputs;
+        OutputReference *output = mOutputs;
         for(unsigned int i=0;i<mOutputCount;++i,++output)
             if(output->spentBlockHeight == pBlockHeight)
             {
@@ -394,7 +396,7 @@ namespace BitCoin
         }
 
         ArcMist::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Outputs:");
-        OutputReference *output=mOutputs;
+        OutputReference *output = mOutputs;
         unsigned int *index = mOutputIndices;
         for(unsigned int i=0;i<mOutputCount;++i,++index,++output)
         {

@@ -41,7 +41,7 @@ namespace BitCoin
         mLastPingNonce = 0;
         mLastPingTime = 0;
         mPingRoundTripTime = 0xffffffff;
-        mPingCutoff = 60;
+        mPingCutoff = 30;
         mBlockDownloadCount = 0;
         mBlockDownloadSize = 0;
         mBlockDownloadTime = 0;
@@ -185,19 +185,19 @@ namespace BitCoin
         {
             uint32_t time = getTime();
 
-            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 60 && time - mBlockReceiveTime > 60)
+            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 30 && time - mBlockReceiveTime > 30)
             {
-                if(mMessageInterpreter.pendingBlockUpdateTime == 0) // Haven't started receiving blocks 60 seconds after requesting
+                if(mMessageInterpreter.pendingBlockUpdateTime == 0) // Haven't started receiving blocks 30 seconds after requesting
                 {
-                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No block for 60 seconds");
+                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No block for 30 seconds");
                     Info::instance().addPeerFail(mAddress);
                     close();
                     return;
                 }
 
-                if(time - mMessageInterpreter.pendingBlockUpdateTime > 60) // Haven't received more of the block in the last 60 seconds
+                if(time - mMessageInterpreter.pendingBlockUpdateTime > 30) // Haven't received more of the block in the last 60 seconds
                 {
-                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No update on block for 60 seconds");
+                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. No update on block for 30 seconds");
                     Info::instance().addPeerFail(mAddress);
                     close();
                     return;
@@ -448,11 +448,12 @@ namespace BitCoin
             return;
         }
 
-        if(!mConnection->isOpen() || !mConnection->receive(&mReceiveBuffer))
+        if(!mConnection->isOpen())
         {
             mConnectionMutex.unlock();
             return;
         }
+        mConnection->receive(&mReceiveBuffer);
         mConnectionMutex.unlock();
 
         // Ping every 20 minutes
@@ -690,13 +691,11 @@ namespace BitCoin
 
             case Message::GET_BLOCKS:
             {
+                // Send Inventory of block headers
                 Message::GetBlocksData *getBlocksData = (Message::GetBlocksData *)message;
 
-                // Send Inventory of block headers
-                Message::InventoryData inventoryData;
-                HashList hashes;
-
                 // Find appropriate hashes
+                HashList hashes;
                 for(std::vector<Hash>::iterator i=getBlocksData->blockHeaderHashes.begin();i!=getBlocksData->blockHeaderHashes.end();++i)
                     if(mChain->getBlockHashes(hashes, *i, 500))
                         break;
@@ -714,6 +713,7 @@ namespace BitCoin
 
                 // Add inventory to message
                 bool dontStop = getBlocksData->stopHeaderHash.isZero();
+                Message::InventoryData inventoryData;
                 inventoryData.inventory.resize(count);
                 unsigned int actualCount = 0;
                 Message::Inventory::iterator item=inventoryData.inventory.begin();
@@ -739,6 +739,7 @@ namespace BitCoin
                 ++mStatistics.blocksReceived;
 
                 // Remove from blocks requested
+                time = getTime();
                 mBlockRequestMutex.lock();
                 for(HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
                     if(**hash == ((Message::BlockData *)message)->block->hash)
@@ -754,7 +755,7 @@ namespace BitCoin
                 mBlockRequestMutex.unlock();
 
                 if(mMessageInterpreter.pendingBlockStartTime != 0 &&
-                  time - mMessageInterpreter.pendingBlockStartTime > 300)
+                  time - mMessageInterpreter.pendingBlockStartTime > 60)
                 {
                     // Drop after the block finishes so it doesn't have to be restarted
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
@@ -893,16 +894,21 @@ namespace BitCoin
 
                 for(std::vector<Block *>::iterator header=headersData->headers.begin();header!=headersData->headers.end();)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Header : %s", (*header)->hash.hex().text());
 
                     if(mChain->addPendingHeader(*header))
                     {
+                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Added Header : %s",
+                          (*header)->hash.hex().text());
                         // memory will be deleted by block chain after it is processed so remove it from this list
                         header = headersData->headers.erase(header);
                         addedCount++;
                     }
                     else
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Didn't add Header : %s",
+                          (*header)->hash.hex().text());
                         ++header;
+                    }
                 }
 
                 if(addedCount > 0 && !mIsSeed && mVersionData != NULL)

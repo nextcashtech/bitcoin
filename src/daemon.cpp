@@ -459,7 +459,7 @@ namespace BitCoin
             ++nodeRequest;
         }
 
-        // Stagger out blocks
+        // Stagger out block requests
         unsigned int requestNodeOffset = 0;
         for(HashList::iterator hash=blocksToRequest.begin();hash!=blocksToRequest.end();++hash)
         {
@@ -628,7 +628,7 @@ namespace BitCoin
                 score = ((*node)->blockDownloadBytesPerSecond() - averageSpeed) / speedStandardDeviation;
             else
                 score = 0.0;
-            score += (averagePing - (*node)->pingTime()) / pingStandardDeviation;
+            score += ((averagePing - (*node)->pingTime()) / pingStandardDeviation) / 2.0;
             scores.push_back(score);
         }
 
@@ -857,7 +857,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            ArcMist::Thread::sleep(1000);
+            ArcMist::Thread::sleep(100);
         }
     }
 

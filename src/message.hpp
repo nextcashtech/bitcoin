@@ -89,6 +89,13 @@ namespace BitCoin
             void write(ArcMist::OutputStream *pStream) const;
             bool read(ArcMist::InputStream *pStream, unsigned int pSize);
 
+            void clear()
+            {
+                for(iterator hash=begin();hash!=end();++hash)
+                    delete *hash;
+                std::vector<InventoryHash *>::clear();
+            }
+
         private:
             Inventory(Inventory &pCopy);
             Inventory &operator = (Inventory &pRight);
@@ -124,7 +131,6 @@ namespace BitCoin
             void write(Data *pData, ArcMist::Buffer *pOutput);
 
             int32_t version;
-
             Hash pendingBlockHash;
             uint32_t pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
             unsigned int lastPendingBlockSize;

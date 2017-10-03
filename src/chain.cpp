@@ -214,7 +214,7 @@ namespace BitCoin
             return 0; // Empty hash means start from the beginning
 
         uint16_t lookup = pHash.lookup();
-        unsigned int result = 0xffffffff;
+        unsigned int result = INVALID_FILE_ID;
 
         mBlockLookup[lookup].lock();
         BlockSet::iterator end = mBlockLookup[lookup].end();
@@ -640,7 +640,7 @@ namespace BitCoin
 
         // Add the block to the chain
         bool success = true;
-        if(mLastFileID == 0xffffffff)
+        if(mLastFileID == INVALID_FILE_ID)
         {
             // Create first block file
             mLastFileID = 0;
@@ -735,83 +735,79 @@ namespace BitCoin
 
     void Chain::process()
     {
-        while(!mStop)
+        // Check if first pending header is actually a full block and process it
+        mPendingLock.readLock();
+        if(mPending.size() == 0)
         {
-            // Check if first pending header is actually a full block and process it
-            mPendingLock.readLock();
-            if(mPending.size() == 0)
-            {
-                // No pending blocks or headers
-                mPendingLock.readUnlock();
-                if(mLastBlockFile != NULL)
-                    mLastBlockFile->updateCRC();
-                mForks.save();
-                return;
-            }
-
-            PendingData *nextPending = mPending.front();
+            // No pending blocks or headers
             mPendingLock.readUnlock();
-            if(!nextPending->isFull()) // Next pending block is not full yet
+            if(mLastBlockFile != NULL)
+                mLastBlockFile->updateCRC();
+            mForks.save();
+            return;
+        }
+
+        PendingData *nextPending = mPending.front();
+        mPendingLock.readUnlock();
+        if(!nextPending->isFull()) // Next pending block is not full yet
+        {
+            if(mLastBlockFile != NULL)
+                mLastBlockFile->updateCRC();
+            mForks.save();
+            return;
+        }
+
+        // Check this front block and add it to the chain
+        if(processBlock(nextPending->block))
+        {
+            mPendingLock.writeLock("Process");
+
+            mPendingSize -= nextPending->block->size();
+            mPendingBlocks--;
+
+            // Delete block
+            delete nextPending;
+
+            // Remove from pending
+            mPending.erase(mPending.begin());
+            if(mPending.size() == 0)
+                mLastPendingHash.clear();
+            if(mLastFullPendingOffset > 0)
+                --mLastFullPendingOffset;
+
+            mPendingLock.writeUnlock();
+        }
+        else
+        {
+            //TODO Add hash to blacklist. So it isn't downloaded again.
+
+            if(mLastBlockFile != NULL)
             {
-                if(mLastBlockFile != NULL)
-                    mLastBlockFile->updateCRC();
-                mForks.save();
-                return;
+                delete mLastBlockFile;
+                mLastBlockFile = NULL;
             }
 
-            // Check this front block and add it to the chain
-            if(processBlock(nextPending->block))
-            {
-                mPendingLock.writeLock("Process");
+            // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Clearing all pending blocks/headers");
 
-                mPendingSize -= nextPending->block->size();
-                mPendingBlocks--;
+            // // Clear pending blocks since they assumed this block was good
+            // mPendingLock.readLock();
+            // for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+                // delete *pending;
+            // mPending.clear();
+            // mLastPendingHash.clear();
+            // mLastFullPendingOffset = 0;
+            // mPendingSize = 0;
+            // mPendingBlocks = 0;
+            // mPendingLock.readUnlock();
 
-                // Delete block
-                delete nextPending;
+            //TODO Black list block hash
 
-                // Remove from pending
-                mPending.erase(mPending.begin());
-                if(mPending.size() == 0)
-                    mLastPendingHash.clear();
-                if(mLastFullPendingOffset > 0)
-                    --mLastFullPendingOffset;
+            //TODO Figure out how to recover from this
 
-                mPendingLock.writeUnlock();
-            }
-            else
-            {
-                //TODO Add hash to blacklist. So it isn't downloaded again.
-
-                if(mLastBlockFile != NULL)
-                {
-                    delete mLastBlockFile;
-                    mLastBlockFile = NULL;
-                }
-
-                // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Clearing all pending blocks/headers");
-
-                // // Clear pending blocks since they assumed this block was good
-                // mPendingLock.readLock();
-                // for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
-                    // delete *pending;
-                // mPending.clear();
-                // mLastPendingHash.clear();
-                // mLastFullPendingOffset = 0;
-                // mPendingSize = 0;
-                // mPendingBlocks = 0;
-                // mPendingLock.readUnlock();
-
-                //TODO Black list block hash
-
-                //TODO Figure out how to recover from this
-
-                // Stop daemon
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                  "Stopping daemon because this is currently unrecoverable");
-                Daemon::instance().requestStop();
-                return;
-            }
+            // Stop daemon
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Stopping daemon because this is currently unrecoverable");
+            Daemon::instance().requestStop();
         }
     }
 
@@ -830,7 +826,7 @@ namespace BitCoin
         else
             fileID = blockFileID(pStartingHash);
 
-        if(fileID == 0xffffffff)
+        if(fileID == INVALID_FILE_ID)
             return false;
 
         pHashes.clear();
@@ -916,7 +912,7 @@ namespace BitCoin
 
         pBlockHeaders.clear();
 
-        if(fileID == 0xffffffff)
+        if(fileID == INVALID_FILE_ID)
             return false; // hash not found
 
         while(pBlockHeaders.size() < pCount)
@@ -1001,7 +997,7 @@ namespace BitCoin
     bool Chain::getBlock(const Hash &pHash, Block &pBlock)
     {
         unsigned int fileID = blockFileID(pHash);
-        if(fileID == 0xffffffff)
+        if(fileID == INVALID_FILE_ID)
             return false; // hash not found
         BlockFile *blockFile;
 
@@ -1022,7 +1018,7 @@ namespace BitCoin
     bool Chain::getHeader(const Hash &pHash, Block &pBlockHeader)
     {
         unsigned int fileID = blockFileID(pHash);
-        if(fileID == 0xffffffff)
+        if(fileID == INVALID_FILE_ID)
             return false; // hash not found
         BlockFile *blockFile;
 
@@ -1188,7 +1184,7 @@ namespace BitCoin
 
         mProcessMutex.lock();
 
-        mLastFileID = 0xffffffff;
+        mLastFileID = INVALID_FILE_ID;
         mNextBlockHeight = 0;
         mLastBlockHash.setSize(32);
         mLastBlockHash.zeroize();
@@ -1257,7 +1253,7 @@ namespace BitCoin
             if(mBlockStats.height() > mNextBlockHeight)
                 mBlockStats.resize(mNextBlockHeight);
 
-            if(mBlockStats.height() < mNextBlockHeight)
+            if(mBlockStats.height() < mNextBlockHeight - 1)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   "Refreshing block statistics (height %d)", mBlockStats.height());

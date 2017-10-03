@@ -71,7 +71,9 @@ namespace BitCoin
             FAILED     // Timeout reached without support threshold
         };
 
-        SoftFork() { state = UNDEFINED; id = 0; bit = 0; startTime = 0; timeout = 0; lockedHeight = 0xffffffff; }
+        static const unsigned int NOT_LOCKED = 0xffffffff;
+
+        SoftFork() { state = UNDEFINED; id = 0; bit = 0; startTime = 0; timeout = 0; lockedHeight = NOT_LOCKED; }
         SoftFork(const char *pName, unsigned int pID, uint8_t pBit, uint32_t pStartTime, uint32_t pTimeout)
         {
             state = DEFINED;
@@ -80,7 +82,7 @@ namespace BitCoin
             bit = pBit;
             startTime = pStartTime;
             timeout = pTimeout;
-            lockedHeight = 0xffffffff;
+            lockedHeight = NOT_LOCKED;
         }
 
         void revert() { state = previousState; }
@@ -89,7 +91,7 @@ namespace BitCoin
         void reset()
         {
             state = DEFINED;
-            lockedHeight = 0xffffffff;
+            lockedHeight = NOT_LOCKED;
         }
 
         void write(ArcMist::OutputStream *pStream);

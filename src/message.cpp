@@ -446,8 +446,7 @@ namespace BitCoin
         Inventory::~Inventory()
         {
             for(iterator item=begin();item!=end();++item)
-                if(*item != NULL)
-                    delete *item;
+                delete *item;
         }
 
         void Inventory::write(ArcMist::OutputStream *pStream) const

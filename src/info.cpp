@@ -124,12 +124,12 @@ namespace BitCoin
         ip = 0;
         port = 8333;
         fullMode = false;
-        maxOutgoing = 32;
+        maxOutgoing = 8;
         maxConnections = 64;
         minFee = 1; // satoshis per KiB
         mPeersModified = false;
-        pendingSizeThreshold = 268435456; // 256 MiB
-        pendingBlocksThreshold = 512;
+        pendingSizeThreshold = 104857600; // 100 MiB
+        pendingBlocksThreshold = 256;
         spentOutputsThreshold = 104857600; // 100 MiB
 
         if(sPath)

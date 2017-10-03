@@ -515,7 +515,7 @@ namespace BitCoin
         mInputFile = NULL;
         mID = pID;
         mModified = false;
-        mCount = 0xffffffff;
+        mCount = INVALID_COUNT;
 
         if(!openFile())
         {
@@ -636,7 +636,7 @@ namespace BitCoin
 
     void BlockFile::getLastCount()
     {
-        if(mCount != 0xffffffff)
+        if(mCount != INVALID_COUNT)
             return;
 
         if(!openFile())

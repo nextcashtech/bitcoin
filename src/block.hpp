@@ -116,20 +116,10 @@ namespace BitCoin
         static void lock(unsigned int pFileID);
         static void unlock(unsigned int pFileID);
 
+        static const unsigned int MAX_BLOCKS = 100; // Maximum count of blocks in one file
+
         // Get transaction output from block file
         static bool readOutput(TransactionReference *pReference, unsigned int pIndex, Output &pOutput);
-
-        /* File format
-         *   Version = "AMBLKS01"
-         *   CRC32 of data after CRC in file
-         *   MAX_BLOCKS x Headers (32 byte block hash, 4 byte offset into file of block data)
-         *   n x Blocks in default read/write stream "network" format (where n <= MAX_BLOCKS)
-         */
-        static const unsigned int MAX_BLOCKS = 100;
-        static const unsigned int CRC_OFFSET = 8;
-        static const unsigned int HASHES_OFFSET = 12;
-        static const unsigned int HEADER_ITEM_SIZE = 36; // 32 byte hash, 4 byte data offset
-        static constexpr const char *START_STRING = "AMBLKS01";
 
         // Create a new block file. BlockFile objects will be invalid if the block file doesn't already exist
         static BlockFile *create(unsigned int pID, const char *pFilePathName);
@@ -174,6 +164,18 @@ namespace BitCoin
         void updateCRC();
 
     private:
+
+        /* File format
+         *   Version = "AMBLKS01"
+         *   CRC32 of data after CRC in file
+         *   MAX_BLOCKS x Headers (32 byte block hash, 4 byte offset into file of block data)
+         *   n x Blocks in default read/write stream "network" format (where n <= MAX_BLOCKS)
+         */
+        static const unsigned int CRC_OFFSET = 8;
+        static const unsigned int HASHES_OFFSET = 12;
+        static const unsigned int HEADER_ITEM_SIZE = 36; // 32 byte hash, 4 byte data offset
+        static constexpr const char *START_STRING = "AMBLKS01";
+        static const unsigned int INVALID_COUNT = 0xffffffff;
 
         // Open and validate a file stream for reading
         bool openFile();

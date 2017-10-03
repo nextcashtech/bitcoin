@@ -214,6 +214,7 @@ namespace BitCoin
         bool processBlock(Block *pBlock);
         //TODO Remove orphaned blocks //bool removeBlock(const Hash &pHash);
 
+        static const unsigned int INVALID_FILE_ID = 0xffffffff;
         unsigned int blockFileID(const Hash &pHash);
 
         Hash mLastBlockHash; // Hash of last/top block on chain
