@@ -118,7 +118,10 @@ namespace BitCoin
 
         static const unsigned int MAX_BLOCKS = 100; // Maximum count of blocks in one file
 
-        // Get transaction output from block file
+        // Get block from appropriate block file
+        static bool readBlock(unsigned int pHeight, Block &pBlock);
+
+        // Get transaction output from appropriate block file
         static bool readOutput(TransactionReference *pReference, unsigned int pIndex, Output &pOutput);
 
         // Create a new block file. BlockFile objects will be invalid if the block file doesn't already exist

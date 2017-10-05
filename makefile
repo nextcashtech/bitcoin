@@ -105,10 +105,6 @@ test.debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} test.cpp
 	${COMPILER} -c -ggdb -o ${OBJECT_DIRECTORY}/test.o.debug test.cpp ${COMPILE_FLAGS}
 	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/test.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o test.debug ${LINK_FLAGS}
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
-	@echo "\t\033[0;33mTESTING\033[0m"
-	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
-	@./test.debug || echo "\n                                  \033[0;31m!!!!!  Tests Failed  !!!!!\033[0m"
-	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
 clean:
 	@echo ----------------------------------------------------------------------------------------------------

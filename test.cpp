@@ -24,6 +24,9 @@ int main(int pArgumentCount, char **pArguments)
     if(!BitCoin::Base::test())
         failed++;
 
+    if(!BitCoin::Info::test())
+        failed++;
+
     if(!BitCoin::Key::test())
         failed++;
 
@@ -33,14 +36,13 @@ int main(int pArgumentCount, char **pArguments)
     if(!BitCoin::ScriptInterpreter::test())
         failed++;
 
-    if(!BitCoin::Chain::test())
-        failed++;
-
     if(!BitCoin::Message::test())
         failed++;
 
-    if(!BitCoin::Info::test())
+    if(!BitCoin::Chain::test())
         failed++;
+
+    BitCoin::Chain::tempTest();
 
     if(failed)
         return 1;

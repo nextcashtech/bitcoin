@@ -418,11 +418,7 @@ namespace BitCoin
 
         // Add the transaction outputs from this block to the output pool
         if(!pOutputs.add(transactions, pBlockHeight, hash))
-        {
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-              "Block has transaction IDs matching unspent transaction IDs");
             return false;
-        }
 
         // Validate and process transactions
         bool isCoinBase = true;
@@ -1051,9 +1047,22 @@ namespace BitCoin
         return result;
     }
 
+    bool BlockFile::readBlock(unsigned int pHeight, Block &pBlock)
+    {
+        unsigned int fileID = pHeight / 100;
+        unsigned int offset = pHeight - (fileID * 100);
+
+        BlockFile *blockFile;
+        BlockFile::lock(fileID);
+        blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+        bool success = blockFile->isValid() && blockFile->readBlock(offset, pBlock, true);
+        BlockFile::unlock(fileID);
+        return success;
+    }
+
     bool BlockFile::readOutput(TransactionReference *pReference, unsigned int pIndex, Output &pOutput)
     {
-        if(pReference == NULL)
+        if(pReference == NULL || pReference->outputAt(pIndex)->blockFileOffset == 0)
             return false;
 
         unsigned int fileID = pReference->blockHeight / MAX_BLOCKS;

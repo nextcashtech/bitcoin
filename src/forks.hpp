@@ -152,8 +152,8 @@ namespace BitCoin
         void reset();
 
         // Load from/Save to file system
-        bool load(const char *pFileName = "soft_forks");
-        bool save(const char *pFileName = "soft_forks");
+        bool load(const char *pFileName = "forks");
+        bool save(const char *pFileName = "forks");
 
     private:
 

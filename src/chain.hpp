@@ -129,7 +129,7 @@ namespace BitCoin
         bool isInSync() { return false; }
 
         // Check if a block is already in the chain
-        bool blockInChain(Hash &pHash) { return mBlockLookup[pHash.lookup()].contains(pHash); }
+        bool blockInChain(Hash &pHash) { return mBlockLookup[pHash.lookup16()].contains(pHash); }
         // Check if a header has been downloaded
         bool headerAvailable(Hash &pHash);
 
@@ -187,6 +187,7 @@ namespace BitCoin
         void requestStop() { mStop = true; }
 
         static bool test();
+        static void tempTest();
 
     private:
 

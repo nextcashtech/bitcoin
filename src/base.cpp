@@ -124,22 +124,6 @@ namespace BitCoin
         setHex(pHex);
     }
 
-    uint16_t Hash::lookup() const
-    {
-        if(mSize < 2)
-            return 0;
-        else
-            return (mData[0] << 8) + mData[1];
-    }
-
-    uint8_t Hash::lookup8() const
-    {
-        if(mSize < 1)
-            return 0;
-        else
-            return mData[0];
-    }
-
     bool Hash::getShortID(Hash &pHash, const Hash &pHeaderHash)
     {
         pHash.clear();
@@ -254,7 +238,7 @@ namespace BitCoin
     }
 
     // Header hash must be <= target difficulty hash
-    bool Hash::operator <= (const Hash &pRight)
+    bool Hash::operator <= (const Hash &pRight) const
     {
         if(mSize != pRight.mSize)
             return false;
@@ -267,6 +251,79 @@ namespace BitCoin
 
         // They are equal
         return true;
+    }
+
+    void HashList::insertSorted(const Hash &pHash)
+    {
+        if(size() == 0 || back()->compare(pHash) < 0)
+        {
+            push_back(new Hash(pHash));
+            return;
+        }
+
+        int compare;
+        Hash **bottom = data();
+        Hash **top = data() + size() - 1;
+        Hash **current;
+
+        while(true)
+        {
+            // Break the set in two halves
+            current = bottom + ((top - bottom) / 2);
+            compare = pHash.compare(**current);
+
+            if(current == bottom)
+            {
+                if((*bottom)->compare(pHash) > 0)
+                    current = bottom; // Insert before bottom
+                else if(current != top && (*top)->compare(pHash) > 0)
+                    current = top; // Insert before top
+                else
+                    current = top + 1; // Insert after top
+                break;
+            }
+
+            // Determine which half the desired item is in
+            if(compare > 0)
+                bottom = current;
+            else if(compare < 0)
+                top = current;
+            else
+                break;
+        }
+
+        iterator after = begin();
+        after += (current - data());
+        insert(after, new Hash(pHash));
+    }
+
+    bool HashList::contains(const Hash &pHash)
+    {
+        if(size() == 0 || back()->compare(pHash) < 0)
+            return false;
+
+        int compare;
+        Hash **bottom = data();
+        Hash **top = data() + size() - 1;
+        Hash **current;
+
+        while(true)
+        {
+            // Break the set in two halves
+            current = bottom + ((top - bottom) / 2);
+            compare = pHash.compare(**current);
+
+            if(current == bottom)
+                return **bottom == pHash;
+
+            // Determine which half the desired item is in
+            if(compare > 0)
+                bottom = current;
+            else if(compare < 0)
+                top = current;
+            else
+                return true;
+        }
     }
 
     uint32_t multiplyTargetBits(uint32_t pTargetBits, double pFactor, uint32_t pMax)
@@ -462,20 +519,20 @@ namespace BitCoin
              * Hash lookup distribution
              ***********************************************************************************************/
             std::vector<unsigned int> values;
-            for(unsigned int i=0;i<0xffff;i++)
+            for(unsigned int i=0;i<0x100;i++)
                 values.push_back(0);
 
             Hash hash(32);
-            unsigned int count = 0xffff * 0x0f;
+            unsigned int count = 0x100 * 0x0f;
             for(unsigned int i=0;i<count;i++)
             {
                 hash.randomize();
-                values[hash.lookup()] += 1;
+                values[hash.lookup8()] += 1;
             }
 
             unsigned int highestCount = 0;
             unsigned int zeroCount = 0;
-            for(unsigned int i=0;i<0xffff;i++)
+            for(unsigned int i=0;i<0x100;i++)
             {
                 if(values[i] == 0)
                     zeroCount++;
@@ -484,7 +541,7 @@ namespace BitCoin
             }
 
             //ArcMist::Buffer line;
-            //for(unsigned int i=0;i<0xffff;i+=16)
+            //for(unsigned int i=0;i<0x100;i+=16)
             //{
             //    line.clear();
             //    line.writeFormatted("%d\t: ", i);
@@ -734,6 +791,48 @@ namespace BitCoin
             }
             else
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Multiply by 4");
+
+            /***********************************************************************************************
+             * Test hash compare equal
+             ***********************************************************************************************/
+            Hash leftHash("0010");
+            Hash rightHash("0010");
+
+            if(leftHash.compare(rightHash) == 0)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed hash compare equal");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed hash compare equal");
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Test hash compare less than
+             ***********************************************************************************************/
+            leftHash.setHex("0010");
+            rightHash.setHex("0020");
+
+            if(leftHash.compare(rightHash) < 0)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed hash compare less than");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed hash compare less than");
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Test hash compare greater than
+             ***********************************************************************************************/
+            leftHash.setHex("0020");
+            rightHash.setHex("0010");
+
+            if(leftHash.compare(rightHash) > 0)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed hash compare greater than");
+            else
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed hash compare greater than");
+                success = false;
+            }
 
             return success;
         }

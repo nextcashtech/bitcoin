@@ -258,10 +258,33 @@ namespace BitCoin
                 return;
             mData[pOffset] = pValue;
         }
+        uint8_t getByte(unsigned int pOffset) const
+        {
+            if(pOffset >= mSize)
+                return 0;
+            return mData[pOffset];
+        }
 
         // Difficulty checks
         void setDifficulty(uint32_t pBits);
-        bool operator <= (const Hash &pRight);
+        bool operator <= (const Hash &pRight) const;
+        int compare(const Hash &pRight) const
+        {
+            if(mSize < pRight.mSize)
+                return -1;
+            if(mSize > pRight.mSize)
+                return 1;
+            uint8_t *left = mData + mSize - 1;
+            uint8_t *right = pRight.mData + mSize - 1;
+            for(unsigned int i=0;i<mSize;++i,--left,--right)
+            {
+                if(*left < *right)
+                    return -1;
+                else if(*left > *right)
+                    return 1;
+            }
+            return 0;
+        }
 
         // Set to zero size. Makes hash "empty"
         void clear() { setSize(0); }
@@ -278,8 +301,21 @@ namespace BitCoin
             return true;
         }
 
-        uint16_t lookup() const; // Used to split into 65,536 piles
-        uint8_t lookup8() const; // Used to split into 256 piles
+        uint16_t lookup16() const
+        {
+            if(mSize < 2)
+                return 0;
+            else
+                return (mData[0] << 8) + mData[1];
+        }
+
+        uint8_t lookup8() const // Used to split into 256 piles
+        {
+            if(mSize < 1)
+                return 0;
+            else
+                return mData[0];
+        }
 
         // Calculate the SipHash-2-4 "Short ID" and put it in pHash
         bool getShortID(Hash &pHash, const Hash &pHeaderHash);
@@ -394,6 +430,12 @@ namespace BitCoin
                 delete *hash;
             std::vector<Hash *>::clear();
         }
+
+        // Insert an item into a sorted list and retain sorting
+        void insertSorted(const Hash &pHash);
+
+        // Return true if the item exists in a sorted list
+        bool contains(const Hash &pHash);
 
     private:
         HashList(HashList &pCopy);

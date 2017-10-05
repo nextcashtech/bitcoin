@@ -268,23 +268,22 @@ namespace BitCoin
         statStartTime.writeFormattedTime(mStatistics.startTime);
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks, %d unspent transaction outputs",
-          mChain.blockHeight(), mChain.outputs().unspentOutputCount());
+          "Block Chain : %d blocks", mChain.blockHeight());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Outputs : %d/%d trans/outputs (%d bytes) (%d bytes spent)", mChain.outputs().transactionCount(),
-          mChain.outputs().outputCount(), mChain.outputs().size(), mChain.outputs().spentSize());
+          "Outputs : %d/%d trans/outputs (%d KiB) (%d KiB pending)", mChain.outputs().transactionCount(),
+          mChain.outputs().outputCount(), mChain.outputs().size() / 1024, mChain.outputs().pendingSize() / 1024);
         if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Pending (above threshold) : %d/%d blocks/headers (%d bytes) (%d requested)", pendingBlocks,
-              pendingCount - pendingBlocks, pendingSize, blocksRequestedCount);
+              "Pending (above threshold) : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks,
+              pendingCount - pendingBlocks, pendingSize / 1024, blocksRequestedCount);
         else
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Pending : %d/%d blocks/headers (%d bytes) (%d requested)", pendingBlocks, pendingCount - pendingBlocks,
-              pendingSize, blocksRequestedCount);
+              "Pending : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks, pendingCount - pendingBlocks,
+              pendingSize / 1024, blocksRequestedCount);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Nodes : %d/%d outgoing/incoming (%d downloading)", mOutgoingNodes, mIncomingNodes, downloading);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Network : %d/%d bytes received/sent (since %s)", mStatistics.bytesReceived, mStatistics.bytesSent,
+          "Network : %d/%d KiB received/sent (since %s)", mStatistics.bytesReceived / 1024, mStatistics.bytesSent / 1024,
           statStartTime.text());
     }
 
@@ -539,21 +538,21 @@ namespace BitCoin
             if((*node)->blockDownloadBytesPerSecond() > cutoff)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d bytes/s, %ds ping (dropping because of ping)", (*node)->name(),
-                  (int)(*node)->blockDownloadBytesPerSecond(), (*node)->pingTime());
+                  "Sorted Nodes : %s - %d KiB/s, %ds ping (dropping because of ping)", (*node)->name(),
+                  (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
             else if(minimumDrop > 0)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d bytes/s, %ds ping (dropping because of minimum)", (*node)->name(),
-                  (int)(*node)->blockDownloadBytesPerSecond(), (*node)->pingTime());
+                  "Sorted Nodes : %s - %d KiB/s, %ds ping (dropping because of minimum)", (*node)->name(),
+                  (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
             else
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d bytes/s, %ds ping", (*node)->name(),
-                  (int)(*node)->blockDownloadBytesPerSecond(), (*node)->pingTime());
+                  "Sorted Nodes : %s - %d KiB/s, %ds ping", (*node)->name(),
+                  (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
             --minimumDrop;
         }
 
@@ -686,8 +685,8 @@ namespace BitCoin
 
         double dropScore = averageScore - (scoreStandardDeviation * 1.25);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Node Performance Summary : average speed %d bytes/s, average ping %ds, drop score %d",
-          (int)averageSpeed, (int)averagePing, (int)(100.0 * dropScore));
+          "Node Performance Summary : average speed %d KiB/s, average ping %ds, drop score %d",
+          (int)averageSpeed / 1024, (int)averagePing, (int)(100.0 * dropScore));
 
         // Always drop some nodes so nodes with lower pings can still be found
         int minimumDrop = 0;
@@ -701,21 +700,21 @@ namespace BitCoin
             if(*nodeScore < dropScore)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d bytes/s, %ds ping (dropping because of score)", (*node)->name(),
-                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond(), (*node)->pingTime());
+                  "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping (dropping because of score)", (*node)->name(),
+                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
             else if(minimumDrop > 0)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d bytes/s, %ds ping (dropping because of minimum)", (*node)->name(),
-                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond(), (*node)->pingTime());
+                  "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping (dropping because of minimum)", (*node)->name(),
+                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
             else
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d bytes/s, %ds ping", (*node)->name(),
-                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond(), (*node)->pingTime());
+                  "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping", (*node)->name(),
+                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
 
             --minimumDrop;
             ++nodeScore;
@@ -770,9 +769,8 @@ namespace BitCoin
 
         while(!daemon.mStopping)
         {
-            // Wait 60 seconds so hopefully a bunch of nodes are ready to request at the same time to improve staggering
             time = getTime();
-            if(getTime() - lastStatReportTime > 60)
+            if(getTime() - lastStatReportTime > 180)
             {
                 lastStatReportTime = getTime();
                 daemon.printStatistics();
@@ -781,6 +779,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
+            // Wait 60 seconds so hopefully a bunch of nodes are ready to request at the same time to improve staggering
             time = getTime();
             if(time - lastRequestCheckTime > 60)
             {
@@ -838,7 +837,7 @@ namespace BitCoin
     void Daemon::process()
     {
         Daemon &daemon = Daemon::instance();
-        uint32_t lastOutputsSaveTime = getTime();
+        uint32_t lastOutputsPurgeTime = getTime();
 
         while(!daemon.mStopping)
         {
@@ -847,11 +846,10 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - lastOutputsSaveTime > 3600 ||
-              daemon.mChain.outputs().spentSize() > daemon.mInfo.spentOutputsThreshold)
+            if(getTime() - lastOutputsPurgeTime > 300)
             {
-                daemon.mChain.saveOutputs();
-                lastOutputsSaveTime = getTime();
+                daemon.mChain.outputs().purge();
+                lastOutputsPurgeTime = getTime();
             }
 
             if(daemon.mStopping)
