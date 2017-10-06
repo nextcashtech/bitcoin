@@ -124,13 +124,13 @@ namespace BitCoin
         ip = 0;
         port = 8333;
         fullMode = false;
-        maxOutgoing = 8;
         maxConnections = 64;
-        minFee = 1; // satoshis per KiB
+        minFee = 1000; // satoshis per KiB
         mPeersModified = false;
         pendingSizeThreshold = 104857600; // 100 MiB
         pendingBlocksThreshold = 256;
-        outputsThreshold = 268435456; // 256 MiB per pile
+        outputsThreshold = 268435456; // 256 MiB
+        outputsCacheAge = 5000;
 
         if(sPath)
         {
@@ -185,15 +185,7 @@ namespace BitCoin
 
         if(std::strcmp(name, "full_mode") == 0)
             fullMode = true;
-        else if(std::strcmp(name, "peers_out_max") == 0)
-        {
-            maxOutgoing = std::stol(value, NULL, 0);
-            if(maxOutgoing < 4)
-                maxOutgoing = 4;
-            else if(maxOutgoing > 64)
-                maxOutgoing = 64;
-        }
-        else if(std::strcmp(name, "peers_max") == 0)
+        else if(std::strcmp(name, "max_connections") == 0)
         {
             maxConnections = std::stol(value, NULL, 0);
             if(maxConnections < 0)
@@ -219,6 +211,8 @@ namespace BitCoin
             pendingBlocksThreshold = std::stol(value, NULL, 0);
         else if(std::strcmp(name, "output_threshold") == 0)
             outputsThreshold = std::stol(value, NULL, 0);
+        else if(std::strcmp(name, "output_cache_age") == 0)
+            outputsCacheAge = std::stol(value, NULL, 0);
 
         delete[] name;
         delete[] value;

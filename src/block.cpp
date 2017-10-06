@@ -7,6 +7,10 @@
  **************************************************************************/
 #include "block.hpp"
 
+#ifdef PROFILER_ON
+#include "arcmist/dev/profiler.hpp"
+#endif
+
 #include "arcmist/base/log.hpp"
 #include "arcmist/base/endian.hpp"
 #include "arcmist/base/thread.hpp"
@@ -354,12 +358,13 @@ namespace BitCoin
         }
 
         // Add the transaction outputs from this block to the output pool
-        pOutputs.add(this->transactions, pBlockHeight, hash);
+        pOutputs.add(this->transactions, pBlockHeight);
 
         unsigned int transactionOffset = 0;
+        std::vector<unsigned int> spentAges;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            if(!(*transaction)->updateOutputs(pOutputs, transactions, pBlockHeight))
+            if(!(*transaction)->updateOutputs(pOutputs, transactions, pBlockHeight, spentAges))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Transaction %d update failed",
                   transactionOffset);
@@ -368,12 +373,24 @@ namespace BitCoin
             ++transactionOffset;
         }
 
+        if(spentAges.size() > 0)
+        {
+            unsigned int totalSpentAge = 0;
+            for(std::vector<unsigned int>::iterator spentAge=spentAges.begin();spentAge!=spentAges.end();++spentAge)
+                totalSpentAge += *spentAge;
+            unsigned int averageSpentAge = totalSpentAge / spentAges.size();
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Average spent age for block %d is %d", pBlockHeight, averageSpentAge);
+        }
         return true;
     }
 
     bool Block::process(TransactionOutputPool &pOutputs, int pBlockHeight, const BlockStats &pBlockStats,
       const Forks &pForks)
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Block Process");
+#endif
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block at height %d (%d trans) (%d bytes) : %s", pBlockHeight, transactionCount,
           size(), hash.hex().text());
@@ -416,17 +433,24 @@ namespace BitCoin
             return false;
         }
 
+        //TODO Turn this check back on after reaching a reasonable block height
+        // Check that this block doesn't have any duplicate transaction IDs
+        // if(!pOutputs.checkDuplicates(transactions, pBlockHeight, hash))
+            // return false;
+
         // Add the transaction outputs from this block to the output pool
-        if(!pOutputs.add(transactions, pBlockHeight, hash))
+        if(!pOutputs.add(transactions, pBlockHeight))
             return false;
 
         // Validate and process transactions
         bool isCoinBase = true;
         mFees = 0;
         unsigned int transactionOffset = 0;
+        std::vector<unsigned int> spentAges;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version, pBlockStats, pForks))
+            if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version,
+              pBlockStats, pForks, spentAges))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",
                   transactionOffset);
@@ -438,6 +462,16 @@ namespace BitCoin
             ++transactionOffset;
         }
 
+        if(spentAges.size() > 0)
+        {
+            unsigned int totalSpentAge = 0;
+            for(std::vector<unsigned int>::iterator spentAge=spentAges.begin();spentAge!=spentAges.end();++spentAge)
+                totalSpentAge += *spentAge;
+            unsigned int averageSpentAge = totalSpentAge / spentAges.size();
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Average spent age for block %d is %d", pBlockHeight, averageSpentAge);
+        }
+
         // Check that coinbase output amount - fees is correct for block height
         if(-transactions.front()->fee() - mFees > coinBaseAmount(pBlockHeight))
         {
@@ -446,7 +480,7 @@ namespace BitCoin
               bitcoins(-transactions.front()->fee()));
             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Fees     %.08f", bitcoins(mFees));
             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-              "Block %08d Coinbase amount should be %.08f", pBlockHeight, bitcoins(coinBaseAmount(pBlockHeight)));
+              "Block %d Coinbase amount should be %.08f", pBlockHeight, bitcoins(coinBaseAmount(pBlockHeight)));
             return false;
         }
 
@@ -527,7 +561,8 @@ namespace BitCoin
         // Check start string
         if(startString != START_STRING)
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOCK_LOG_NAME, "Block file missing start string");
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x missing start string", mID);
             mValid = false;
             return;
         }
@@ -552,7 +587,7 @@ namespace BitCoin
             if(crc != calculatedCRC)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
-                  "Block file has invalid CRC : %08x != %08x", crc, calculatedCRC);
+                  "Block file %08x has invalid CRC : %08x != %08x", mID, crc, calculatedCRC);
                 mValid = false;
                 return;
             }
@@ -617,7 +652,7 @@ namespace BitCoin
         delete outputFile;
 
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
-          "Block file created with CRC : %08x", crc);
+          "Block file %08x created with CRC : %08x", pID, crc);
 
         // Create and return block file object
         BlockFile *result = new BlockFile(pID, pFilePathName);
@@ -666,6 +701,9 @@ namespace BitCoin
 
     bool BlockFile::addBlock(Block &pBlock)
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Block Add");
+#endif
         if(!mValid)
             return false;
 
@@ -952,6 +990,9 @@ namespace BitCoin
         if(!mModified)
             return;
 
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Block Update CRC");
+#endif
         if(!openFile())
         {
             mValid = false;
@@ -983,7 +1024,7 @@ namespace BitCoin
         delete outputFile;
 
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
-          "Block file CRC updated : %08x", crc);
+          "Block file %08x CRC updated : %08x", mID, crc);
     }
 
     void BlockFile::lock(unsigned int pFileID)
@@ -1036,14 +1077,8 @@ namespace BitCoin
     ArcMist::String BlockFile::fileName(unsigned int pID)
     {
         // Build path
-        ArcMist::String result = path();
-
-        // Encode ID
-        ArcMist::String hexID;
-        uint32_t reverseID = ArcMist::Endian::convert(pID, ArcMist::Endian::BIG);
-        hexID.writeHex(&reverseID, 4);
-        result.pathAppend(hexID);
-
+        ArcMist::String result;
+        result.writeFormatted("%s%s%08x", path().text(), ArcMist::PATH_SEPARATOR, pID);
         return result;
     }
 
@@ -1062,6 +1097,9 @@ namespace BitCoin
 
     bool BlockFile::readOutput(TransactionReference *pReference, unsigned int pIndex, Output &pOutput)
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Block Read Output");
+#endif
         if(pReference == NULL || pReference->outputAt(pIndex)->blockFileOffset == 0)
             return false;
 

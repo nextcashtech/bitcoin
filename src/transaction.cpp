@@ -147,7 +147,7 @@ namespace BitCoin
     }
 
     bool Transaction::updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
-      uint64_t pBlockHeight)
+      uint64_t pBlockHeight, std::vector<unsigned int> &pSpentAges)
     {
         if(inputs.size() == 0)
         {
@@ -179,6 +179,8 @@ namespace BitCoin
                     return false;
                 }
 
+                pSpentAges.push_back(pBlockHeight - reference->blockHeight);
+
                 pOutputs.spend(reference, (*input)->outpoint.index, pBlockHeight);
             }
 
@@ -190,10 +192,11 @@ namespace BitCoin
 
     bool Transaction::process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
       uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const BlockStats &pBlockStats,
-      const Forks &pForks)
+      const Forks &pForks, std::vector<unsigned int> &pSpentAges)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Transaction Process");
+        ArcMist::Profiler verifyProfiler("Transaction Inputs", false);
 #endif
         mFee = 0;
 
@@ -263,6 +266,8 @@ namespace BitCoin
                     return false;
                 }
 
+                pSpentAges.push_back(pBlockHeight - reference->blockHeight);
+
                 if(reference->blockHeight == pBlockHeight)
                 {
                     // Get output from this block
@@ -295,6 +300,9 @@ namespace BitCoin
                     return false;
                 }
 
+#ifdef PROFILER_ON
+                verifyProfiler.start();
+#endif
                 // BIP-0068 Relative time lock sequence
                 if(version >= 2 && !(*input)->sequenceDisabled() &&
                   pForks.softForkState(SoftFork::BIP0068) == SoftFork::ACTIVE)
@@ -318,6 +326,9 @@ namespace BitCoin
                             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                               "Not valid until median block time %s", timeText.text());
                             reference->print(ArcMist::Log::WARNING);
+#ifdef PROFILER_ON
+                            verifyProfiler.stop();
+#endif
                             return false;
                         }
                     }
@@ -330,6 +341,9 @@ namespace BitCoin
                         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Not valid until block %d", reference->blockHeight + lock);
                         reference->print(ArcMist::Log::WARNING);
+#ifdef PROFILER_ON
+                        verifyProfiler.stop();
+#endif
                         return false;
                     }
                 }
@@ -360,6 +374,9 @@ namespace BitCoin
                       "Input %d signature script failed : ", index+1);
                     (*input)->print(ArcMist::Log::WARNING);
                     reference->print(ArcMist::Log::WARNING);
+#ifdef PROFILER_ON
+                    verifyProfiler.stop();
+#endif
                     return false;
                 }
 
@@ -376,6 +393,9 @@ namespace BitCoin
                     ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
                     reference->print(ArcMist::Log::WARNING);
                     output.print(ArcMist::Log::WARNING);
+#ifdef PROFILER_ON
+                    verifyProfiler.stop();
+#endif
                     return false;
                 }
 
@@ -388,6 +408,9 @@ namespace BitCoin
                     ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
                     reference->print(ArcMist::Log::WARNING);
                     output.print(ArcMist::Log::WARNING);
+#ifdef PROFILER_ON
+                    verifyProfiler.stop();
+#endif
                     return false;
                 }
 
@@ -400,12 +423,18 @@ namespace BitCoin
                     ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
                     reference->print(ArcMist::Log::WARNING);
                     output.print(ArcMist::Log::WARNING);
+#ifdef PROFILER_ON
+                    verifyProfiler.stop();
+#endif
                     return false;
                 }
 
                 mFee += output.amount;
             }
 
+#ifdef PROFILER_ON
+            verifyProfiler.stop();
+#endif
             ++index;
         }
 
@@ -456,6 +485,9 @@ namespace BitCoin
             }
         }
 
+#ifdef PROFILER_ON
+        ArcMist::Profiler outputsProfiler("Transaction Outputs");
+#endif
         // Process Outputs
         index = 0;
         for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
@@ -612,7 +644,7 @@ namespace BitCoin
       ArcMist::Buffer &pOutputScript, Signature::HashType pHashType, const Forks &pForks)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Transaction Write Sign Data");
+        ArcMist::Profiler profiler("Transaction Sign Data");
 #endif
         Signature::HashType hashType = pHashType;
         // Extract FORKID (0x40) flag from hash type

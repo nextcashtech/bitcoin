@@ -7,6 +7,10 @@
  **************************************************************************/
 #include "forks.hpp"
 
+#ifdef PROFILER_ON
+#include "arcmist/dev/profiler.hpp"
+#endif
+
 #include "arcmist/base/log.hpp"
 #include "arcmist/io/file_stream.hpp"
 #include "base.hpp"
@@ -235,6 +239,9 @@ namespace BitCoin
 
     void Forks::process(const BlockStats &pBlockStats, unsigned int pBlockHeight)
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler outputsProfiler("Forks Process");
+#endif
         unsigned int offset;
 
         mPreviousHeight = mHeight;

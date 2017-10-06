@@ -116,11 +116,12 @@ namespace BitCoin
         ~Chain();
 
         int blockHeight() const { return mNextBlockHeight - 1; }
-        TransactionOutputPool &outputs() { return mOutputs; }
         const Hash &lastBlockHash() const { return mLastBlockHash; }
         unsigned int pendingBlockHeight() const { return mNextBlockHeight - 1 + mPending.size(); }
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
+
+        TransactionOutputPool &outputs() { return mOutputs; }
 
         // Soft fork information
         const Forks &softForks() const { return mForks; }
@@ -174,7 +175,6 @@ namespace BitCoin
         //   If pList is true then all the block hashes will be output
         bool load(bool pList);
         bool save();
-        bool saveOutputs();
 
         // Process pending headers and blocks
         void process();

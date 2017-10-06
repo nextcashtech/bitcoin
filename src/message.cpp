@@ -487,13 +487,16 @@ namespace BitCoin
 
         VersionData::VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort,
                                  const uint8_t *pTransmittingIP, uint16_t pTransmittingPort,
-                                 bool pFullNode, uint32_t pStartBlockHeight, bool pRelay) : Data(VERSION)
+                                 bool pFullNode, bool pCashNode, uint32_t pStartBlockHeight, bool pRelay) : Data(VERSION)
         {
             version = PROTOCOL_VERSION;
             services = 0x00;
 
             if(pFullNode)
                 services |= FULL_NODE_BIT;
+
+            if(pCashNode)
+                services |= CASH_NODE_BIT;
 
             //services |= FILTER_NODE_BIT; //TODO BIP-0111 Add 0x02 (1 << 2) bit to services to support filter messages
 
@@ -1265,7 +1268,7 @@ namespace BitCoin
              ***********************************************************************************************/
             uint8_t rIP[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x04, 0x03, 0x02, 0x01 };
             uint8_t tIP[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x08, 0x07, 0x06, 0x05 };
-            VersionData versionSendData(rIP, 1333, tIP, 1333, false, 125, false);
+            VersionData versionSendData(rIP, 1333, tIP, 1333, false, false, 125, false);
             ArcMist::Buffer messageBuffer;
 
             interpreter.write(&versionSendData, &messageBuffer);

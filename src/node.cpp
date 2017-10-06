@@ -377,7 +377,7 @@ namespace BitCoin
         Info &info = Info::instance();
         // Apparently if relay is off most of main net won't send blocks or headers
         Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip,
-          info.port, info.fullMode, mChain->blockHeight(), true); //chain.isInSync());
+          info.port, info.fullMode, mChain->softForks().cashRequired(), mChain->blockHeight(), mChain->isInSync());
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
         return success;
@@ -540,7 +540,14 @@ namespace BitCoin
                 if(!mIsIncoming && !mIsSeed && !(mVersionData->transmittingServices & Message::VersionData::FULL_NODE_BIT))
                 {
                     sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
-                      "Full node bit required in protocol version");
+                      "Full node bit (0x01) required in protocol version");
+                    close();
+                }
+                else if(!mIsIncoming && !mIsSeed && mChain->softForks().cashRequired() &&
+                  !(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT))
+                {
+                    sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
+                      "Cash node bit (0x20) required in protocol version");
                     close();
                 }
                 else if(!mIsIncoming && !mIsSeed && !mChain->isInSync() && (mVersionData->startBlockHeight < 0 ||

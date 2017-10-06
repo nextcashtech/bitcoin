@@ -155,7 +155,7 @@ namespace BitCoin
         unsigned int outputCount() const { return mOutputCount; }
         unsigned int spentOutputCount() const;
 
-        bool wasModifiedInBlock(unsigned int pBlockHeight) const;
+        bool wasModifiedInOrAfterBlock(unsigned int pBlockHeight) const;
 
         OutputReference *outputAt(unsigned int pIndex)
         {
@@ -229,9 +229,6 @@ namespace BitCoin
         // Clear the list without deleting the items within it
         void clearNoDelete() { std::vector<TransactionReference *>::clear(); }
 
-        // Add an item to the end of the list
-        //void add(TransactionReference *pItem) { push_back(pItem); }
-
         // Insert an item into a sorted list and retain sorting
         void insertSorted(TransactionReference *pItem);
 
@@ -240,6 +237,10 @@ namespace BitCoin
 
         // Merge two sorted lists. pRight is empty after this call
         void mergeSorted(TransactionReferenceList &pRight);
+
+        // Remove transaction references created below a specified block height
+        void dropBlocks(unsigned int pBlockHeight, unsigned int &pTransactionCount,
+          unsigned int &pOutputCount);
 
         // Return an iterator to the first matching item in the list
         iterator firstMatching(const Hash &pHash);
@@ -275,21 +276,26 @@ namespace BitCoin
         // Remove pending adds and spends (Note: Only reverts changes not written to the file yet)
         void revert(unsigned int pBlockHeight, bool pHard = false);
 
+        // Pull all transactions from the file created at or after the specified block height
+        //   Returns count of transactions found
+        unsigned int pullBlocks(unsigned int pBlockHeight);
+
         unsigned int transactionCount() const { return mHeaderSize / TransactionReference::SIZE; }
         unsigned int outputCount() const { return mOutputSize / OutputReference::SIZE; }
         unsigned long long size() const
         {
             return (unsigned long long)mHeaderSize - (unsigned long long)(SUBSET_COUNT * 8) +
-              (unsigned long long)mOutputSize + pendingSize();
+              (unsigned long long)mOutputSize + cachedSize();
         }
         // New data added, but not yet saved
-        unsigned long long pendingSize() const
+        unsigned long long cachedSize() const
         {
-            return ((unsigned long long)mPendingCount * (unsigned long long)TransactionReference::SIZE) +
-              ((unsigned long long)mPendingOutputCount * (unsigned long long)OutputReference::SIZE);
+            return ((unsigned long long)mCachedCount * (unsigned long long)TransactionReference::SIZE) +
+              ((unsigned long long)mCachedOutputCount * (unsigned long long)OutputReference::SIZE);
         }
 
-        bool save();
+        // pBlockHeight is the block height below which to drop transactions from memory
+        bool save(unsigned int pDropBlockHeight);
 
         void clear();
 
@@ -303,7 +309,7 @@ namespace BitCoin
         //   Returns count of transactions found
         unsigned int pullBlock(unsigned int pBlockHeight);
 
-        bool transactionIsPending(const Hash &pTransactionID, unsigned int pBlockHeight);
+        bool transactionIsCached(const Hash &pTransactionID, unsigned int pBlockHeight);
 
         bool openHeaderFile()
         {
@@ -337,15 +343,14 @@ namespace BitCoin
         }
 
         // File is sorted transaction references with offsets to output data in output file
-        // mPending contains transactions added since last "save"
+        // mCached contains transactions added since last "save"
         // mModified contains transactions with outputs spent/modified since last "save"
         ArcMist::ReadersLock mLock;
         unsigned int mID;
         ArcMist::String mFilePathName;
         ArcMist::FileInputStream *mHeaderFile, *mOutputsFile;
-        TransactionReferenceList mPending[SUBSET_COUNT];
-        unsigned int mPendingCount, mPendingOutputCount;
-        HashList mLookedUp[SUBSET_COUNT]; // Transaction IDs that have already had pull attempts
+        TransactionReferenceList mCached[SUBSET_COUNT];
+        unsigned int mCachedCount, mCachedOutputCount;
         ArcMist::stream_size mHeaderSize, mOutputSize;
         bool mRewriteOutputs;
 
@@ -368,9 +373,15 @@ namespace BitCoin
         // Find an unspent transaction output
         TransactionReference *findUnspent(const Hash &pTransactionID, uint32_t pIndex);
 
+        // BIP-0030 Check if this block's transactions match any existing unspent transaction IDs
+        //   This is expensive since it is a negative lookup and has to search a file for every transaction.
+        //   Positive lookups can be limited extremely by cacheing transactions from recent (a few thousand) blocks
+        bool checkDuplicates(const std::vector<Transaction *> &pBlockTransactions,
+          unsigned int pBlockHeight, const Hash &pBlockHash);
+
         // Add all the outputs from a block (pending since they have no block file IDs or offsets yet)
         // Returns false if one of the transaction IDs is currently unspent BIP-0030
-        bool add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight, const Hash &pBlockHash);
+        bool add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
 
         // Find a spent transaction output
         TransactionReference *findSpent(const Hash &pTransactionID, uint32_t pIndex);
@@ -381,15 +392,27 @@ namespace BitCoin
         // Add block file IDs and offsets to the outputs for a block (call after writing the block to the block file)
         bool commit(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
 
-        // Remove pending adds and spends
+        // Reverts all blocks above a specified block height
         bool revert(unsigned int pBlockHeight, bool pHard = false);
+
+        // Pull all transactions from the files created at or after the specified block height
+        //   Returns count of transactions found
+        unsigned int pullBlocks(unsigned int pBlockHeight);
 
         // Height of last block
         int blockHeight() const { return mNextBlockHeight - 1; }
         unsigned int transactionCount() const;
         unsigned int outputCount() const;
         unsigned long long size() const;
-        unsigned long long pendingSize() const;
+        unsigned long long cachedSize() const;
+
+        unsigned int cacheBlockHeight() const
+        {
+            if(mNextBlockHeight > mCacheAge)
+                return mNextBlockHeight - mCacheAge;
+            else
+                return 0;
+        }
 
         // Load from/Save to file system
         bool load();
@@ -407,6 +430,10 @@ namespace BitCoin
         bool mModified;
         bool mValid;
         unsigned int mNextBlockHeight;
+        unsigned int mSavedBlockHeight;
+        unsigned int mCacheAge;
+
+        std::vector<TransactionReference *> mToCommit;
 
     };
 }

@@ -122,10 +122,10 @@ namespace BitCoin
 
         bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const BlockStats &pBlockStats,
-          const Forks &pForks);
+          const Forks &pForks, std::vector<unsigned int> &pSpentAges);
 
         bool updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
-          uint64_t pBlockHeight);
+          uint64_t pBlockHeight, std::vector<unsigned int> &pSpentAges);
 
         bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
           ArcMist::Buffer &pOutputScript, Signature::HashType pHashType, const Forks &pForks);

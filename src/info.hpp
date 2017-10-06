@@ -68,11 +68,21 @@ namespace BitCoin
         uint8_t *ip;
         uint16_t port;
         bool fullMode;
-        uint32_t maxOutgoing;
+
+        // Maximum number of connections incoming and outgoing
         uint32_t maxConnections;
+
+        // Maximum size in bytes/block count to download and save while waiting for processing
         uint32_t pendingSizeThreshold;
         uint32_t pendingBlocksThreshold;
+
+        // Amount of memory to use for transaction outputs before saving to file
         uint32_t outputsThreshold;
+
+        // Block age under which to save unspent transaction outputs in memory
+        uint32_t outputsCacheAge;
+
+        // Minimum fee for transaction mem pool
         uint64_t minFee;
 
         // Return list of peers in random order

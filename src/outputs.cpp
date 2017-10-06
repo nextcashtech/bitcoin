@@ -191,9 +191,9 @@ namespace BitCoin
         return result;
     }
 
-    bool TransactionReference::wasModifiedInBlock(unsigned int pBlockHeight) const
+    bool TransactionReference::wasModifiedInOrAfterBlock(unsigned int pBlockHeight) const
     {
-        if(blockHeight == pBlockHeight)
+        if(blockHeight >= pBlockHeight)
             return true;
 
         if(mOutputCount == 0 || mOutputs == NULL)
@@ -201,7 +201,7 @@ namespace BitCoin
 
         OutputReference *output = mOutputs;
         for(unsigned int i=0;i<mOutputCount;++i,++output)
-            if(output->spentBlockHeight == pBlockHeight)
+            if(output->spentBlockHeight >= pBlockHeight)
                 return true;
 
         return false;
@@ -233,7 +233,7 @@ namespace BitCoin
         bool result = false;
         OutputReference *output = mOutputs;
         for(unsigned int i=0;i<mOutputCount;++i,++output)
-            if(output->spentBlockHeight == pBlockHeight)
+            if(output->spentBlockHeight >= pBlockHeight)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
                   "Unspending transaction output for block %d : index %d - %s",
@@ -268,76 +268,10 @@ namespace BitCoin
         }
     }
 
-    OutputSet::OutputSet() : mLock("Output Set")
-    {
-        mHeaderFile = NULL;
-        mHeaderSize = 0;
-        mOutputsFile = NULL;
-        mOutputSize = 0;
-        mPendingCount = 0;
-        mPendingOutputCount = 0;
-        mRewriteOutputs = false;
-    }
-
-    OutputSet::~OutputSet()
-    {
-        TransactionReferenceList *pending = mPending;
-        HashList *lookup = mLookedUp;
-        for(unsigned int i=0;i<SUBSET_COUNT;++i)
-        {
-            lookup->clear();
-            ++pending;
-            pending->clear();
-            ++pending;
-        }
-
-        if(mHeaderFile != NULL)
-            delete mHeaderFile;
-        if(mOutputsFile != NULL)
-            delete mOutputsFile;
-    }
-
-    void OutputSet::setup(unsigned int pID, const char *pFilePath)
-    {
-        mLock.writeLock("Setup");
-        mID = pID;
-        mFilePathName.writeFormatted("%s%s%02x", pFilePath, ArcMist::PATH_SEPARATOR, mID);
-        if(!ArcMist::fileExists(mFilePathName))
-        {
-            // Create header file
-            ArcMist::FileOutputStream outputHeaderFile(mFilePathName, true);
-
-            // Write zeroized subset offsets
-            ArcMist::stream_size subsetFileOffsets[SUBSET_COUNT];
-            std::memset(subsetFileOffsets, 0, SUBSET_COUNT * 8);
-            outputHeaderFile.write(subsetFileOffsets, SUBSET_COUNT * 8);
-            mHeaderSize = SUBSET_COUNT * 8;
-        }
-        else
-        {
-            openHeaderFile();
-            mHeaderSize = mHeaderFile->length();
-            closeHeaderFile();
-        }
-        ArcMist::String outputsFilePathName = mFilePathName + ".outputs";
-        if(!ArcMist::fileExists(outputsFilePathName))
-        {
-            ArcMist::FileOutputStream(outputsFilePathName, true); // Create file
-            mOutputSize = 0;
-        }
-        else
-        {
-            openOutputsFile();
-            mOutputSize = mOutputsFile->length();
-            closeOutputFile();
-        }
-        mLock.writeUnlock();
-    }
-
     void TransactionReferenceList::insertSorted(TransactionReference *pItem)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Insert Sorted");
+        ArcMist::Profiler profiler("Outputs Insert Sorted");
 #endif
         if(size() == 0 || *back() < *pItem)
         {
@@ -406,7 +340,7 @@ namespace BitCoin
     void TransactionReferenceList::mergeSorted(TransactionReferenceList &pRight)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Merge Sorted");
+        ArcMist::Profiler profiler("Outputs Merge Sorted");
 #endif
         TransactionReferenceList copy = *this;
         clearNoDelete();
@@ -432,7 +366,7 @@ namespace BitCoin
     TransactionReferenceList::iterator TransactionReferenceList::firstMatching(const Hash &pHash)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("First Matching");
+        ArcMist::Profiler profiler("Outputs First Matching");
 #endif
         if(size() == 0 || back()->id.compare(pHash) < 0)
             return end();
@@ -489,6 +423,23 @@ namespace BitCoin
         return result;
     }
 
+    void TransactionReferenceList::dropBlocks(unsigned int pBlockHeight, unsigned int &pTransactionCount,
+      unsigned int &pOutputCount)
+    {
+        std::vector<TransactionReference *> items = *this;
+        clearNoDelete();
+        for(iterator item=items.begin();item!=items.end();++item)
+            if((*item)->blockHeight < pBlockHeight || !(*item)->hasUnspentOutputs())
+            {
+                // Drop the item
+                --pTransactionCount;
+                pOutputCount -= (*item)->outputCount();
+                delete *item;
+            }
+            else
+                push_back(*item); // Keep the item
+    }
+
     void TransactionReferenceList::print(unsigned int pID)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
@@ -517,11 +468,74 @@ namespace BitCoin
         return true;
     }
 
-    bool OutputSet::save()
+    OutputSet::OutputSet() : mLock("Output Set")
+    {
+        mHeaderFile = NULL;
+        mHeaderSize = 0;
+        mOutputsFile = NULL;
+        mOutputSize = 0;
+        mCachedCount = 0;
+        mCachedOutputCount = 0;
+        mRewriteOutputs = false;
+    }
+
+    OutputSet::~OutputSet()
+    {
+        TransactionReferenceList *cached = mCached;
+        for(unsigned int i=0;i<SUBSET_COUNT;++i)
+        {
+            cached->clear();
+            ++cached;
+        }
+
+        if(mHeaderFile != NULL)
+            delete mHeaderFile;
+        if(mOutputsFile != NULL)
+            delete mOutputsFile;
+    }
+
+    void OutputSet::setup(unsigned int pID, const char *pFilePath)
+    {
+        mLock.writeLock("Setup");
+        mID = pID;
+        mFilePathName.writeFormatted("%s%s%02x", pFilePath, ArcMist::PATH_SEPARATOR, mID);
+        if(!ArcMist::fileExists(mFilePathName))
+        {
+            // Create header file
+            ArcMist::FileOutputStream outputHeaderFile(mFilePathName, true);
+
+            // Write zeroized subset offsets
+            ArcMist::stream_size subsetFileOffsets[SUBSET_COUNT];
+            std::memset(subsetFileOffsets, 0, SUBSET_COUNT * 8);
+            outputHeaderFile.write(subsetFileOffsets, SUBSET_COUNT * 8);
+            mHeaderSize = SUBSET_COUNT * 8;
+        }
+        else
+        {
+            openHeaderFile();
+            mHeaderSize = mHeaderFile->length();
+            closeHeaderFile();
+        }
+        ArcMist::String outputsFilePathName = mFilePathName + ".outputs";
+        if(!ArcMist::fileExists(outputsFilePathName))
+        {
+            ArcMist::FileOutputStream(outputsFilePathName, true); // Create file
+            mOutputSize = 0;
+        }
+        else
+        {
+            openOutputsFile();
+            mOutputSize = mOutputsFile->length();
+            closeOutputFile();
+        }
+        mLock.writeUnlock();
+    }
+
+    bool OutputSet::save(unsigned int pDropBlockHeight)
     {
         mLock.writeLock("Save");
 
-        if(mPendingCount == 0)
+        if(mCachedCount == 0)
         {
             mLock.writeUnlock();
             return true;
@@ -590,7 +604,7 @@ namespace BitCoin
         else
             outputFile = new ArcMist::FileOutputStream(mFilePathName + ".outputs");
 
-        TransactionReferenceList::iterator fileItem, fileEnd, pendingItem, pendingEnd;
+        TransactionReferenceList::iterator fileItem, fileEnd, cachedItem, cachedEnd;
         int compare;
 
         // Write current subset offsets to file
@@ -602,32 +616,34 @@ namespace BitCoin
             subsetFileOffsets[i] = headerFile->writeOffset();
             fileItem = fileList[i].begin();
             fileEnd = fileList[i].end();
-            pendingItem = mPending[i].begin();
-            pendingEnd = mPending[i].end();
+            cachedItem = mCached[i].begin();
+            cachedEnd = mCached[i].end();
 
             // Write both lists to file while retaining sort
-            while(fileItem != fileEnd || pendingItem != pendingEnd)
+            while(fileItem != fileEnd || cachedItem != cachedEnd)
             {
                 if(fileItem == fileEnd) // All file items already written
-                    (*pendingItem++)->write(headerFile, outputFile, mRewriteOutputs);
-                else if(pendingItem == pendingEnd) // All pending items already written
+                    (*cachedItem++)->write(headerFile, outputFile, mRewriteOutputs);
+                else if(cachedItem == cachedEnd) // All cached items already written
                     (*fileItem++)->write(headerFile, outputFile, mRewriteOutputs);
                 else
                 {
                     // Determine which item is next in sorted order
-                    compare = (*fileItem)->compare(**pendingItem);
+                    compare = (*fileItem)->compare(**cachedItem);
                     if(compare < 0)
                         (*fileItem++)->write(headerFile, outputFile, mRewriteOutputs);
                     else if(compare > 0)
-                        (*pendingItem++)->write(headerFile, outputFile, mRewriteOutputs);
+                        (*cachedItem++)->write(headerFile, outputFile, mRewriteOutputs);
                     else
                     {
-                        // They are both the same so only write the pending because it has been updated
-                        (*pendingItem++)->write(headerFile, outputFile, mRewriteOutputs);
+                        // They are both the same so only write the cached because it's more up to date
+                        (*cachedItem++)->write(headerFile, outputFile, mRewriteOutputs);
                         ++fileItem;
                     }
                 }
             }
+
+            mCached[i].dropBlocks(pDropBlockHeight, mCachedCount, mCachedOutputCount);
         }
 
         // Write updated subset offsets to file
@@ -640,45 +656,96 @@ namespace BitCoin
         mOutputSize = outputFile->length();
         delete outputFile;
 
-        clear(); // Clear pending data that was just saved
+        mRewriteOutputs = false;
         mLock.writeUnlock();
         return true;
     }
 
     void OutputSet::clear()
     {
-        TransactionReferenceList *pending = mPending;
-        HashList *lookup = mLookedUp;
+        TransactionReferenceList *cached = mCached;
         for(unsigned int i=0;i<SUBSET_COUNT;++i)
         {
-            lookup->clear();
-            ++lookup;
-            pending->clear();
-            ++pending;
+            cached->clear();
+            ++cached;
         }
-        mPendingCount = 0;
-        mPendingOutputCount = 0;
+        mCachedCount = 0;
+        mCachedOutputCount = 0;
         mRewriteOutputs = false;
     }
 
-    bool OutputSet::transactionIsPending(const Hash &pTransactionID, unsigned int pBlockHeight)
+    bool OutputSet::transactionIsCached(const Hash &pTransactionID, unsigned int pBlockHeight)
     {
-        TransactionReferenceList &pending = mPending[pTransactionID.getByte(1)];
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Trans Cached");
+#endif
+        TransactionReferenceList &cached = mCached[pTransactionID.getByte(1)];
 
-        // Look in pending
+        // Look in cached
         mLock.readLock();
-        for(TransactionReferenceList::iterator item=pending.firstMatching(pTransactionID);item!=pending.end();++item)
-            if((*item)->id == pTransactionID && (*item)->blockHeight == pBlockHeight)
+        for(TransactionReferenceList::iterator item=cached.firstMatching(pTransactionID);item!=cached.end();++item)
+            if((*item)->id == pTransactionID)
             {
-                mLock.readUnlock();
-                return true;
+                if((*item)->blockHeight == pBlockHeight)
+                {
+                    mLock.readUnlock();
+                    return true;
+                }
             }
+            else
+                break;
         mLock.readUnlock();
         return false;
     }
 
+    unsigned int OutputSet::pullBlocks(unsigned int pBlockHeight)
+    {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Pull Blocks");
+#endif
+        if(!openHeaderFile() || !openOutputsFile())
+            return 0;
+
+        bool wasEmpty = mCachedCount == 0;
+
+        // Skip subset file offsets
+        mHeaderFile->setReadOffset(SUBSET_COUNT * 8);
+
+        TransactionReference *newReference = new TransactionReference();
+        unsigned int itemsAdded = 0;
+        while(mHeaderFile->remaining())
+        {
+            if(!newReference->read(mHeaderFile, mOutputsFile))
+            {
+                delete newReference;
+                return itemsAdded;
+            }
+            else
+            {
+                if(newReference->blockHeight >= pBlockHeight && newReference->hasUnspentOutputs() &&
+                  (wasEmpty || !transactionIsCached(newReference->id, newReference->blockHeight)))
+                {
+                    if(wasEmpty)
+                        mCached[newReference->id.getByte(1)].push_back(newReference);
+                    else
+                        mCached[newReference->id.getByte(1)].insertSorted(newReference);
+                    ++itemsAdded;
+                    ++mCachedCount;
+                    mCachedOutputCount += newReference->outputCount();
+                    newReference = new TransactionReference();
+                }
+            }
+        }
+
+        delete newReference;
+        return itemsAdded;
+    }
+
     unsigned int OutputSet::pullBlock(unsigned int pBlockHeight)
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Pull Block");
+#endif
         if(!openHeaderFile() || !openOutputsFile())
             return 0;
 
@@ -696,13 +763,13 @@ namespace BitCoin
             }
             else
             {
-                if(newReference->wasModifiedInBlock(pBlockHeight) &&
-                  !transactionIsPending(newReference->id, newReference->blockHeight))
+                if(newReference->wasModifiedInOrAfterBlock(pBlockHeight) &&
+                  !transactionIsCached(newReference->id, newReference->blockHeight))
                 {
-                    mPending[newReference->id.getByte(1)].insertSorted(newReference);
+                    mCached[newReference->id.getByte(1)].insertSorted(newReference);
                     ++itemsAdded;
-                    ++mPendingCount;
-                    mPendingOutputCount += newReference->outputCount();
+                    ++mCachedCount;
+                    mCachedOutputCount += newReference->outputCount();
                     newReference = new TransactionReference();
                 }
             }
@@ -715,7 +782,7 @@ namespace BitCoin
     unsigned int OutputSet::pull(const Hash &pTransactionID, TransactionReferenceList &pList)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Pull");
+        ArcMist::Profiler profiler("Outputs Pull");
 #endif
         if(!openHeaderFile() || !openOutputsFile())
             return 0;
@@ -756,21 +823,11 @@ namespace BitCoin
 
             // Determine which half the desired item is in
             if(compare > 0)
-            {
-                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-                  // "Hash > %s", hash.hex().text());
                 bottom = current;
-            }
             else if(compare < 0)
-            {
-                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-                  // "Hash < %s", hash.hex().text());
                 top = current;
-            }
             else
             {
-                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-                  // "Hash = %s", hash.hex().text());
                 // Item found
                 // Loop backwards until it doesn't match then loop forward adding all with matching transaction ID
                 while(current > 0)
@@ -793,19 +850,16 @@ namespace BitCoin
             }
         }
 
-        mLookedUp[pTransactionID.getByte(1)].insertSorted(pTransactionID);
-
-        TransactionReference *newReference;
+        TransactionReference *newReference = new TransactionReference();
         unsigned int itemsAdded = 0;
         while(mHeaderFile->remaining())
         {
-            newReference = new TransactionReference();
             if(newReference->readMatchingID(pTransactionID, mHeaderFile, mOutputsFile))
             {
                 pList.insertSorted(newReference);
                 ++itemsAdded;
-                ++mPendingCount;
-                mPendingOutputCount += newReference->outputCount();
+                ++mCachedCount;
+                mCachedOutputCount += newReference->outputCount();
                 newReference = new TransactionReference();
             }
             else
@@ -815,22 +869,23 @@ namespace BitCoin
             }
         }
 
+        delete newReference;
         return itemsAdded;
     }
 
     TransactionReference *OutputSet::find(const Hash &pTransactionID, uint32_t pIndex)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Find");
+        ArcMist::Profiler profiler("Outputs Find");
 #endif
         OutputReference *output;
         unsigned int blockHeight = 0xffffffff;
         unsigned int outputSpentHeight = 0xffffffff;
-        TransactionReferenceList &pending = mPending[pTransactionID.getByte(1)];
+        TransactionReferenceList &cached = mCached[pTransactionID.getByte(1)];
 
-        // Look in pending
+        // Look in cached
         mLock.readLock();
-        for(TransactionReferenceList::iterator item=pending.firstMatching(pTransactionID);item!=pending.end();++item)
+        for(TransactionReferenceList::iterator item=cached.firstMatching(pTransactionID);item!=cached.end();++item)
             if((*item)->id == pTransactionID)
             {
                 blockHeight = (*item)->blockHeight;
@@ -850,34 +905,31 @@ namespace BitCoin
                 break;
         mLock.readUnlock();
 
-        if(!mLookedUp[pTransactionID.getByte(1)].contains(pTransactionID))
+        // Pull from file
+        mLock.writeLock("Pull");
+        unsigned int foundCount = pull(pTransactionID, cached);
+        if(foundCount > 0)
         {
-            // Pull from file
-            mLock.writeLock("Pull");
-            unsigned int foundCount = pull(pTransactionID, pending);
-            if(foundCount > 0)
-            {
-                for(TransactionReferenceList::iterator pulled=pending.firstMatching(pTransactionID);pulled!=pending.end();++pulled)
-                    if((*pulled)->id == pTransactionID)
+            for(TransactionReferenceList::iterator pulled=cached.firstMatching(pTransactionID);pulled!=cached.end();++pulled)
+                if((*pulled)->id == pTransactionID)
+                {
+                    blockHeight = (*pulled)->blockHeight;
+                    output = (*pulled)->outputAt(pIndex);
+                    if(output != NULL)
                     {
-                        blockHeight = (*pulled)->blockHeight;
-                        output = (*pulled)->outputAt(pIndex);
-                        if(output != NULL)
+                        if(output->spentBlockHeight == 0)
                         {
-                            if(output->spentBlockHeight == 0)
-                            {
-                                mLock.writeUnlock();
-                                return *pulled;
-                            }
-                            else
-                                outputSpentHeight = output->spentBlockHeight;
+                            mLock.writeUnlock();
+                            return *pulled;
                         }
+                        else
+                            outputSpentHeight = output->spentBlockHeight;
                     }
-                    else
-                        break;
-            }
-            mLock.writeUnlock();
+                }
+                else
+                    break;
         }
+        mLock.writeUnlock();
 
         if(outputSpentHeight != 0xffffffff)
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
@@ -896,13 +948,13 @@ namespace BitCoin
     TransactionReference *OutputSet::find(const Hash &pTransactionID)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Find ID");
+        ArcMist::Profiler profiler("Outputs Find ID");
 #endif
-        TransactionReferenceList &pending = mPending[pTransactionID.getByte(1)];
+        TransactionReferenceList &cached = mCached[pTransactionID.getByte(1)];
 
-        // Look in pending
+        // Look in cached
         mLock.readLock();
-        for(TransactionReferenceList::iterator item=pending.firstMatching(pTransactionID);item!=pending.end();++item)
+        for(TransactionReferenceList::iterator item=cached.firstMatching(pTransactionID);item!=cached.end();++item)
             if((*item)->id == pTransactionID)
             {
                 if((*item)->hasUnspentOutputs())
@@ -915,27 +967,24 @@ namespace BitCoin
                 break;
         mLock.readUnlock();
 
-        if(!mLookedUp[pTransactionID.getByte(1)].contains(pTransactionID))
+        // Pull from file
+        mLock.writeLock("Pull");
+        unsigned int foundCount = pull(pTransactionID, cached);
+        if(foundCount > 0)
         {
-            // Pull from file
-            mLock.writeLock("Pull");
-            unsigned int foundCount = pull(pTransactionID, pending);
-            if(foundCount > 0)
-            {
-                for(TransactionReferenceList::iterator pulled=pending.firstMatching(pTransactionID);pulled!=pending.end();++pulled)
-                    if((*pulled)->id == pTransactionID)
+            for(TransactionReferenceList::iterator pulled=cached.firstMatching(pTransactionID);pulled!=cached.end();++pulled)
+                if((*pulled)->id == pTransactionID)
+                {
+                    if((*pulled)->hasUnspentOutputs())
                     {
-                        if((*pulled)->hasUnspentOutputs())
-                        {
-                            mLock.writeUnlock();
-                            return *pulled;
-                        }
+                        mLock.writeUnlock();
+                        return *pulled;
                     }
-                    else
-                        break;
-            }
-            mLock.writeUnlock();
+                }
+                else
+                    break;
         }
+        mLock.writeUnlock();
 
         return NULL;
     }
@@ -943,18 +992,21 @@ namespace BitCoin
     void OutputSet::add(TransactionReference *pTransaction)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Add");
+        ArcMist::Profiler profiler("Outputs Add");
 #endif
-        mPending[pTransaction->id.getByte(1)].insertSorted(pTransaction);
-        ++mPendingCount;
-        mPendingOutputCount += pTransaction->outputCount();
+        mCached[pTransaction->id.getByte(1)].insertSorted(pTransaction);
+        ++mCachedCount;
+        mCachedOutputCount += pTransaction->outputCount();
     }
 
     void OutputSet::commit(const Hash &pTransactionID, std::vector<Output *> &pOutputs, unsigned int pBlockHeight)
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Commit");
+#endif
         mLock.writeLock("Commit");
-        TransactionReferenceList &pending = mPending[pTransactionID.getByte(1)];
-        for(TransactionReferenceList::iterator item=pending.begin();item!=pending.end();++item)
+        TransactionReferenceList &cached = mCached[pTransactionID.getByte(1)];
+        for(TransactionReferenceList::iterator item=cached.begin();item!=cached.end();++item)
             if((*item)->blockHeight == pBlockHeight && (*item)->id == pTransactionID)
             {
                 (*item)->commit(pOutputs);
@@ -965,16 +1017,19 @@ namespace BitCoin
 
     void OutputSet::revert(unsigned int pBlockHeight, bool pHard)
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Revert");
+#endif
         if(pHard)
             pullBlock(pBlockHeight);
 
         mLock.writeLock("Commit");
-        TransactionReferenceList *pending = mPending;
+        TransactionReferenceList *cached = mCached;
         for(unsigned int i=0;i<SUBSET_COUNT;++i)
         {
-            for(TransactionReferenceList::iterator item=pending->begin();item!=pending->end();++item)
+            for(TransactionReferenceList::iterator item=cached->begin();item!=cached->end();++item)
             {
-                if((*item)->blockHeight == pBlockHeight)
+                if((*item)->blockHeight >= pBlockHeight)
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
                       "Deleting transaction for block %d : %s", (*item)->blockHeight, (*item)->id.hex().text());
@@ -987,7 +1042,7 @@ namespace BitCoin
 
                 (*item)->revert(pBlockHeight);
             }
-            ++pending;
+            ++cached;
         }
         mLock.writeUnlock();
     }
@@ -1035,13 +1090,13 @@ namespace BitCoin
         return result;
     }
 
-    unsigned long long TransactionOutputPool::pendingSize() const
+    unsigned long long TransactionOutputPool::cachedSize() const
     {
         unsigned long long result = 0;
         const OutputSet *set = mSets;
         for(unsigned int i=0;i<SET_COUNT;i++)
         {
-            result += set->pendingSize();
+            result += set->cachedSize();
             ++set;
         }
         return result;
@@ -1054,24 +1109,14 @@ namespace BitCoin
         Hash("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
     };
 
-    // Add all the outputs from a block (pending since they have no block file IDs or offsets yet)
-    bool TransactionOutputPool::add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight, const Hash &pBlockHash)
+    bool TransactionOutputPool::checkDuplicates(const std::vector<Transaction *> &pBlockTransactions,
+      unsigned int pBlockHeight, const Hash &pBlockHash)
     {
-        if(pBlockHeight != mNextBlockHeight)
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Can't add transactions for non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight);
-            return false;
-        }
-
-        OutputSet *set;
         TransactionReference *transactionReference;
-        unsigned int count = 0;
         for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
         {
             // Get references set for transaction ID
-            set = mSets + (*transaction)->hash.lookup8();
-            transactionReference = set->find((*transaction)->hash);
+            transactionReference = mSets[(*transaction)->hash.lookup8()].find((*transaction)->hash);
             if(transactionReference != NULL && transactionReference->hasUnspentOutputs())
             {
                 bool exceptionFound = false;
@@ -1092,12 +1137,37 @@ namespace BitCoin
                     return false;
                 }
             }
-            set->add(new TransactionReference((*transaction)->hash, pBlockHeight, (*transaction)->outputs.size()));
+        }
+
+        return true;
+    }
+
+    // Add all the outputs from a block (cached since they have no block file IDs or offsets yet)
+    bool TransactionOutputPool::add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
+    {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Add Block");
+#endif
+        mToCommit.clear();
+
+        if(pBlockHeight != mNextBlockHeight)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Can't add transactions for non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight);
+            return false;
+        }
+
+        TransactionReference *transactionReference;
+        unsigned int count = 0;
+        for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
+        {
+            // Get references set for transaction ID
+            transactionReference = new TransactionReference((*transaction)->hash, pBlockHeight, (*transaction)->outputs.size());
+            mToCommit.push_back(transactionReference);
+            mSets[(*transaction)->hash.lookup8()].add(transactionReference);
             ++count;
         }
 
-        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-          // "Added %d transaction's outputs for block %d", count, pBlockHeight);
         return true;
     }
 
@@ -1119,9 +1189,32 @@ namespace BitCoin
             return false;
         }
 
-        for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
-            mSets[(*transaction)->hash.lookup8()].commit((*transaction)->hash, (*transaction)->outputs, pBlockHeight);
+        if(mToCommit.size() != pBlockTransactions.size())
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Can't commit non matching transaction set");
+            return false;
+        }
 
+        std::vector<TransactionReference *>::iterator reference = mToCommit.begin();
+        for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
+        {
+            if((*reference)->id == (*transaction)->hash)
+            {
+                (*reference)->commit((*transaction)->outputs);
+                ++reference;
+            }
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Can't commit non matching transaction");
+                return false;
+            }
+
+            // mSets[(*transaction)->hash.lookup8()].commit((*transaction)->hash, (*transaction)->outputs, pBlockHeight);
+        }
+
+        mToCommit.clear();
         ++mNextBlockHeight;
         mModified = true;
         return true;
@@ -1139,6 +1232,9 @@ namespace BitCoin
             return false;
         }
 
+        if(pBlockHeight >= mSavedBlockHeight)
+            pHard = false;
+
         OutputSet *set = mSets;
         for(unsigned int i=0;i<SET_COUNT;i++)
         {
@@ -1146,8 +1242,8 @@ namespace BitCoin
             ++set;
         }
 
-        if(pBlockHeight == mNextBlockHeight)
-            --mNextBlockHeight;
+        mToCommit.clear();
+        mNextBlockHeight = pBlockHeight;
         mModified = true;
         return true;
     }
@@ -1184,11 +1280,37 @@ namespace BitCoin
         output->spendInternal(pBlockHeight);
     }
 
+    unsigned int TransactionOutputPool::pullBlocks(unsigned int pBlockHeight)
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+          "Caching unspent transaction outputs after block %d", pBlockHeight);
+
+        uint32_t lastReport = getTime();
+        unsigned int itemsAdded = 0;
+        OutputSet *set = mSets;
+        for(unsigned int i=0;i<SET_COUNT;i++)
+        {
+            if(getTime() - lastReport > 10)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Caching is %2d%% Complete", (int)(((float)i / (float)SET_COUNT) * 100.0f));
+                lastReport = getTime();
+            }
+            itemsAdded += set->pullBlocks(pBlockHeight);
+            ++set;
+        }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+          "Cached %d transactions (%d KiB)", itemsAdded, cachedSize() / 1024);
+        return itemsAdded;
+    }
+
     bool TransactionOutputPool::load()
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Loading transaction outputs");
 
         mValid = true;
+        mCacheAge = Info::instance().outputsCacheAge;
         ArcMist::String filePath = Info::instance().path();
         filePath.pathAppend("outputs");
         ArcMist::createDirectory(filePath);
@@ -1215,9 +1337,14 @@ namespace BitCoin
         }
 
         if(mValid)
+        {
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
               "Loaded %d/%d transactions/outputs (%d KiB) at block height %d", transactionCount(),
               outputCount(), size() / 1024, mNextBlockHeight - 1);
+            mSavedBlockHeight = mNextBlockHeight;
+
+            pullBlocks(cacheBlockHeight());
+        }
         else
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed to load transaction outputs");
         return mValid;
@@ -1225,7 +1352,7 @@ namespace BitCoin
 
     bool TransactionOutputPool::purge()
     {
-        if(pendingSize() > Info::instance().outputsThreshold)
+        if(cachedSize() > Info::instance().outputsThreshold)
             return save();
         return true;
     }
@@ -1246,8 +1373,8 @@ namespace BitCoin
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-          "Saving transaction outputs at block height %d (%d KiB pending)", mNextBlockHeight - 1,
-          pendingSize() / 1024);
+          "Saving transaction outputs at block height %d (%d KiB cached)", mNextBlockHeight - 1,
+          cachedSize() / 1024);
 
         bool success = true;
         ArcMist::String filePathName = Info::instance().path();
@@ -1274,16 +1401,18 @@ namespace BitCoin
                   "Save is %2d%% Complete", (int)(((float)i / (float)SET_COUNT) * 100.0f));
                 lastReport = getTime();
             }
-            if(!set->save())
+            if(!set->save(cacheBlockHeight()))
                 success = false;
             ++set;
         }
 
         if(success)
         {
+            mSavedBlockHeight = mNextBlockHeight;
             mModified = false;
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-              "Saved %d/%d transactions/outputs (%d KiB)", transactionCount(), outputCount(), size() / 1024);
+              "Saved %d/%d transactions/outputs (%d KiB) (%d KiB cached)", transactionCount(), outputCount(),
+              size() / 1024, cachedSize() / 1024);
         }
         else
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
@@ -1338,10 +1467,10 @@ namespace BitCoin
                   "Convert is %2d%% Complete", (int)(((float)file.readOffset() / (float)file.length()) * 100.0f));
 
                 // Purge after 1 GiB
-                if(pendingSize() > 1073741824)
+                if(cachedSize() > 1073741824)
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Purging %d bytes", pendingSize());
+                      "Purging %d bytes", cachedSize());
                     save();
                 }
 

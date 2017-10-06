@@ -43,8 +43,6 @@ namespace BitCoin
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             delete *pending;
         mPendingLock.writeUnlock();
-        if(mLastBlockFile != NULL)
-            delete mLastBlockFile;
     }
 
     bool Chain::revertTargetBits()
@@ -85,28 +83,28 @@ namespace BitCoin
         //   find a hash under the target goes down
         // Adjust factor below 1.0 means the target is going down, which also means the difficulty to
         //   find a hash under the target goes up
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
           "Time spent on last 2016 blocks %d - %d = %d", mLastBlockTime, mLastTargetTime, mLastBlockTime - mLastTargetTime);
         double adjustFactor = (double)(mLastBlockTime - mLastTargetTime) / 1209600.0;
 
         if(adjustFactor > 1.0)
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Increasing target bits %08x by a factor of %f to reduce difficulty by %.02f%%", mLastTargetBits,
               adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
         else
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Decreasing target bits %08x by a factor of %f to increase difficulty by %.02f%%", mLastTargetBits,
               adjustFactor, ((1.0 / adjustFactor) - 1.0) * 100.0);
 
         if(adjustFactor < 0.25)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Changing target adjust factor to 0.25 because of maximum decrease of 75%");
             adjustFactor = 0.25; // Maximum decrease of 75%
         }
         else if(adjustFactor > 4.0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Changing target adjust factor to 4.0 because of maximum increase of 400%");
             adjustFactor = 4.0; // Maximum increase of 400%
         }
@@ -600,6 +598,9 @@ namespace BitCoin
 
     bool Chain::processBlock(Block *pBlock)
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler outputsProfiler("Chain Process Block");
+#endif
         mProcessMutex.lock();
 
         // Check target bits
@@ -646,7 +647,7 @@ namespace BitCoin
             mLastFileID = 0;
             ArcMist::String filePathName = BlockFile::fileName(mLastFileID);
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Creating first block file %08d", mLastFileID, mLastFileID + 1);
+              "Creating first block file %08x", mLastFileID, mLastFileID + 1);
             BlockFile::lock(mLastFileID);
             mLastBlockFile = BlockFile::create(mLastFileID, filePathName);
             if(mLastBlockFile == NULL) // Failed to create file
@@ -662,7 +663,7 @@ namespace BitCoin
             if(!mLastBlockFile->isValid())
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-                  "Block file %08d is invalid", mLastFileID);
+                  "Block file %08x is invalid", mLastFileID);
 
                 success = false;
                 BlockFile::unlock(mLastFileID);
@@ -671,7 +672,7 @@ namespace BitCoin
             else if(mLastBlockFile->isFull())
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                  "Block file %08d is full. Starting new block file %08d", mLastFileID, mLastFileID + 1);
+                  "Block file %08x is full. Starting new block file %08x", mLastFileID, mLastFileID + 1);
 
                 BlockFile::unlock(mLastFileID);
                 delete mLastBlockFile;
@@ -726,7 +727,7 @@ namespace BitCoin
             mForks.revert();
             revertTargetBits();
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-              "Failed to add to block to file %08d : %s", mLastFileID, pBlock->hash.hex().text());
+              "Failed to add block to file %08x : %s", mLastFileID, pBlock->hash.hex().text());
         }
 
         mProcessMutex.unlock();
@@ -735,6 +736,9 @@ namespace BitCoin
 
     void Chain::process()
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler outputsProfiler("Chain Process");
+#endif
         if(mStop)
             return;
 
@@ -811,6 +815,7 @@ namespace BitCoin
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Stopping daemon because this is currently unrecoverable");
             Daemon::instance().requestStop();
+            mStop = true;
         }
     }
 
@@ -1079,7 +1084,7 @@ namespace BitCoin
                 if(!blockFile->isValid())
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-                      "Block file %s is invalid", filePathName.text());
+                      "Block file %08x is invalid", fileID);
                     delete blockFile;
                     BlockFile::unlock(fileID);
                     return false;
@@ -1088,7 +1093,7 @@ namespace BitCoin
                 if(!blockFile->readBlockHashes(hashes))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-                      "Failed to read hashes from block file %s", filePathName.text());
+                      "Failed to read hashes from block file %08x", fileID);
                     delete blockFile;
                     BlockFile::unlock(fileID);
                     return false;
@@ -1108,7 +1113,7 @@ namespace BitCoin
                             if(block.updateOutputs(mOutputs, height))
                             {
                                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                                  "Processed block %08d (%d trans) (%d bytes) : %s", height, block.transactionCount,
+                                  "Processed block %d (%d trans) (%d bytes) : %s", height, block.transactionCount,
                                   block.size(), block.hash.hex().text());
                                 mOutputs.commit(block.transactions, height++);
                                 if(getTime() - lastPurgeTime > 300)
@@ -1155,19 +1160,19 @@ namespace BitCoin
 
     bool Chain::save()
     {
-        bool success = mOutputs.save();
+        if(mLastBlockFile != NULL)
+            delete mLastBlockFile;
+        mLastBlockFile = NULL;
+        bool success = true;
         if(!mBlockStats.save())
             success = false;
         if(!mForks.save())
             success = false;
         if(!savePending())
             success = false;
+        if(!mOutputs.save())
+            success = false;
         return success;
-    }
-
-    bool Chain::saveOutputs()
-    {
-        return mOutputs.save();
     }
 
     // Load block info from files
@@ -1208,7 +1213,8 @@ namespace BitCoin
 
                 if(!blockFile->readBlockHashes(hashes))
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read hashes from block file %s", filePathName.text());
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                      "Failed to read hashes from block file %08x", fileID);
                     delete blockFile;
                     BlockFile::unlock(fileID);
                     success = false;
@@ -1218,13 +1224,15 @@ namespace BitCoin
                 BlockFile::unlock(fileID);
 
                 if(pList)
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Block file %s", filePathName.text());
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                      "Block file %08x", fileID);
 
                 mLastFileID = fileID;
                 for(HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
                 {
                     if(pList)
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Block %08d : %s", mNextBlockHeight, (*hash)->hex().text());
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                          "Block %d : %s", mNextBlockHeight, (*hash)->hex().text());
                     lookup = (*hash)->lookup16();
                     mBlockLookup[lookup].lock();
                     mBlockLookup[lookup].push_back(new BlockInfo(**hash, fileID, mNextBlockHeight));
@@ -1284,7 +1292,8 @@ namespace BitCoin
 
                     if(!blockFile->readStats(mBlockStats))
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed to read hashes from block file %s", filePathName.text());
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                          "Failed to read hashes from block file %08x", fileID);
                         delete blockFile;
                         BlockFile::unlock(fileID);
                         success = false;
@@ -1376,7 +1385,7 @@ namespace BitCoin
             if(!blockFile->isValid())
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-                  "Block file %08d isn't valid", fileID);
+                  "Block file %08x isn't valid", fileID);
                 break;
             }
 
@@ -1730,6 +1739,8 @@ namespace BitCoin
         // blockStats.load();
         // softForks.load();
         // outputs.load();
+        // // outputs.revert(388700, true);
+        // // outputs.save();
 
         // // outputs.convert();
         // // outputs.save();
@@ -1804,17 +1815,32 @@ namespace BitCoin
               // "Failed to find transaction : %s", hash.hex().text());
 
 
-
-
-
-
-
-
         // block.print(ArcMist::Log::INFO, false);
 
 
+
+
+
+
+        // Info::instance().setPath("/var/bitcoin/mainnet");
+        // Chain chain;
+
+        // chain.load(false);
+
+        // for(int i=0;i<5;++i)
+            // chain.process();
+
+        // chain.save();
+
+
+
 #ifdef PROFILER_ON
-        ArcMist::FileOutputStream profilerFile("profiler.txt", true);
+        ArcMist::String profilerTime;
+        profilerTime.writeFormattedTime(getTime(), "%Y%m%d.%H%M");
+        ArcMist::String profilerFileName = "profiler.";
+        profilerFileName += profilerTime;
+        profilerFileName += ".txt";
+        ArcMist::FileOutputStream profilerFile(profilerFileName, true);
         ArcMist::ProfilerManager::write(&profilerFile);
 #endif
     }

@@ -7,6 +7,10 @@
  **************************************************************************/
 #include "daemon.hpp"
 
+#ifdef PROFILER_ON
+#include "arcmist/dev/profiler.hpp"
+#endif
+
 #include "arcmist/base/log.hpp"
 #include "arcmist/io/network.hpp"
 #include "info.hpp"
@@ -210,6 +214,16 @@ namespace BitCoin
             delete mManagerThread;
         mManagerThread = NULL;
 
+#ifdef PROFILER_ON
+        ArcMist::String profilerTime;
+        profilerTime.writeFormattedTime(getTime(), "%Y%m%d.%H%M");
+        ArcMist::String profilerFileName = "profiler.";
+        profilerFileName += profilerTime;
+        profilerFileName += ".txt";
+        ArcMist::FileOutputStream profilerFile(profilerFileName, true);
+        ArcMist::ProfilerManager::write(&profilerFile);
+#endif
+
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Saving data");
         saveStatistics();
         mChain.save();
@@ -270,8 +284,8 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Block Chain : %d blocks", mChain.blockHeight());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Outputs : %d/%d trans/outputs (%d KiB) (%d KiB pending)", mChain.outputs().transactionCount(),
-          mChain.outputs().outputCount(), mChain.outputs().size() / 1024, mChain.outputs().pendingSize() / 1024);
+          "Outputs : %d/%d trans/outputs (%d KiB) (%d KiB cached)", mChain.outputs().transactionCount(),
+          mChain.outputs().outputCount(), mChain.outputs().size() / 1024, mChain.outputs().cachedSize() / 1024);
         if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Pending (above threshold) : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks,
@@ -496,7 +510,7 @@ namespace BitCoin
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         sortOutgoingNodesByPing(nodes);
 
-        if(nodes.size() < mMaxOutgoing / 2)
+        if(nodes.size() < MAX_OUTGOING_CONNECTION_COUNT / 2)
         {
             mNodeLock.readUnlock();
             return;
@@ -529,7 +543,7 @@ namespace BitCoin
 
         // Always drop some nodes so nodes with lower pings can still be found
         int minimumDrop = 0;
-        if(nodes.size() == mMaxOutgoing)
+        if(nodes.size() == MAX_OUTGOING_CONNECTION_COUNT)
             minimumDrop = nodes.size() / 8;
 
         // Drop slowest
@@ -564,7 +578,7 @@ namespace BitCoin
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
 
-        if(nodes.size() < mMaxOutgoing / 2)
+        if(nodes.size() < MAX_OUTGOING_CONNECTION_COUNT / 2)
         {
             mNodeLock.readUnlock();
             return;
@@ -577,7 +591,7 @@ namespace BitCoin
             else
                 ++node;
 
-        if(nodes.size() < mMaxOutgoing / 2)
+        if(nodes.size() < MAX_OUTGOING_CONNECTION_COUNT / 2)
         {
             mNodeLock.readUnlock();
             return;
@@ -690,7 +704,7 @@ namespace BitCoin
 
         // Always drop some nodes so nodes with lower pings can still be found
         int minimumDrop = 0;
-        if(sortedScores.size() == mMaxOutgoing)
+        if(sortedScores.size() == MAX_OUTGOING_CONNECTION_COUNT)
             minimumDrop = sortedScores.size() / 8;
 
         // Drop slowest
@@ -821,10 +835,7 @@ namespace BitCoin
             if(time - lastImprovement > 300) // Every 5 minutes
             {
                 lastImprovement = time;
-                if(daemon.mChain.isInSync())
-                    daemon.improvePing();
-                else
-                    daemon.improveSpeed();
+                daemon.improveSpeed();
             }
 
             if(daemon.mStopping)
@@ -1028,24 +1039,14 @@ namespace BitCoin
         ArcMist::Network::Connection *newConnection;
         uint32_t lastFillNodesTime = 0;
         uint32_t lastCleanTime = getTime();
-        uint32_t lastMaxCheck = 0;
+
+        if(MAX_OUTGOING_CONNECTION_COUNT >= daemon.mInfo.maxConnections)
+            daemon.mMaxIncoming = 0;
+        else
+            daemon.mMaxIncoming = daemon.mInfo.maxConnections - MAX_OUTGOING_CONNECTION_COUNT;
 
         while(!daemon.mStopping)
         {
-            if(getTime() - lastMaxCheck > 60)
-            {
-                lastMaxCheck = getTime();
-                daemon.mMaxOutgoing = daemon.mInfo.maxOutgoing;
-                if(daemon.mMaxOutgoing > daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST)
-                    daemon.mMaxOutgoing = daemon.mInfo.pendingBlocksThreshold / MAX_BLOCK_REQUEST;
-                if(daemon.mMaxOutgoing > 8 && daemon.mChain.isInSync())
-                    daemon.mMaxOutgoing = 8;
-                if(daemon.mMaxOutgoing >= daemon.mInfo.maxConnections)
-                    daemon.mMaxIncoming = 0;
-                else
-                    daemon.mMaxIncoming = daemon.mInfo.maxConnections - daemon.mMaxOutgoing;
-            }
-
             if(getTime() - lastCleanTime > 10)
             {
                 lastCleanTime = getTime();
@@ -1099,9 +1100,9 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(daemon.mOutgoingNodes < daemon.mMaxOutgoing && getTime() - lastFillNodesTime > 30)
+            if(daemon.mOutgoingNodes < MAX_OUTGOING_CONNECTION_COUNT && getTime() - lastFillNodesTime > 30)
             {
-                daemon.recruitPeers(daemon.mMaxOutgoing - daemon.mOutgoingNodes);
+                daemon.recruitPeers(MAX_OUTGOING_CONNECTION_COUNT - daemon.mOutgoingNodes);
                 lastFillNodesTime = getTime();
             }
 

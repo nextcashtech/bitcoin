@@ -141,13 +141,14 @@ namespace BitCoin
         {
         public:
 
-            static const unsigned int FULL_NODE_BIT = 0x01;
+            static const unsigned int FULL_NODE_BIT   = 0x01;
             static const unsigned int FILTER_NODE_BIT = 0x02;
+            static const unsigned int CASH_NODE_BIT   = 0x20;
 
             VersionData() : Data(VERSION) { }
             VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort,
                         const uint8_t *pTransmittingIP, uint16_t pTransmittingPort,
-                        bool pFullNode, uint32_t pStartBlockHeight, bool pRelay);
+                        bool pFullNode, bool pCashNode, uint32_t pStartBlockHeight, bool pRelay);
 
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);

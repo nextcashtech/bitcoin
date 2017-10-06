@@ -5,6 +5,11 @@
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
+
+#ifdef PROFILER_ON
+#include "arcmist/dev/profiler.hpp"
+#endif
+
 #include "arcmist/base/string.hpp"
 #include "arcmist/base/math.hpp"
 #include "arcmist/base/log.hpp"
@@ -272,6 +277,9 @@ int main(int pArgumentCount, char **pArguments)
         pidStream.writeByte('\n');
     }
 
+#ifdef PROFILER_ON
+    ArcMist::Profiler profiler("main"); // Attempt to trigger destroy of profiler instance after daemon instance
+#endif
     BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
 
     // "testnet-seed.bitcoin.jonasschnelli.ch"

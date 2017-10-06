@@ -52,6 +52,7 @@ namespace BitCoin
     protected:
 
         static const int MAX_BLOCK_REQUEST = 8;
+        static const int MAX_OUTGOING_CONNECTION_COUNT = 8;
 
         Daemon();
         ~Daemon();
@@ -86,7 +87,7 @@ namespace BitCoin
         ArcMist::ReadersLock mNodeLock;
         std::vector<Node *> mNodes;
         unsigned int mNodeCount, mIncomingNodes, mOutgoingNodes;
-        unsigned int mMaxOutgoing, mMaxIncoming;
+        unsigned int mMaxIncoming;
 
         bool addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed = false);
         unsigned int recruitPeers(unsigned int pCount);
