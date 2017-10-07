@@ -162,6 +162,8 @@ namespace BitCoin
         // Write to a script to push the following size of data to the stack
         static void writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput);
 
+        static Transaction *createCoinbaseTransaction(int pBlockHeight, const Hash &pPublicKeyHash);
+
         static bool arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue);
         static void arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue);
 

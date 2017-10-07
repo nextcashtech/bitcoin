@@ -84,6 +84,13 @@ namespace BitCoin
         return at(pBlockHeight).time;
     }
 
+    uint32_t BlockStats::targetBits(unsigned int pBlockHeight) const
+    {
+        if(pBlockHeight >= size())
+            return 0;
+        return at(pBlockHeight).targetBits;
+    }
+
     uint32_t BlockStats::getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount) const
     {
         if(pBlockHeight >= size())
@@ -107,11 +114,12 @@ namespace BitCoin
         pStream->writeByte(name.length());
         pStream->writeString(name);
         pStream->writeUnsignedInt(id);
-        pStream->writeByte(state);
         pStream->writeByte(bit);
         pStream->writeUnsignedInt(startTime);
         pStream->writeUnsignedInt(timeout);
-        pStream->writeUnsignedInt(lockedHeight);
+
+        pStream->writeByte(state);
+        pStream->writeInt(lockedHeight);
     }
 
     bool SoftFork::read(ArcMist::InputStream *pStream)
@@ -126,11 +134,12 @@ namespace BitCoin
 
         name = pStream->readString(nameLength);
         id = pStream->readUnsignedInt();
-        state = static_cast<SoftFork::State>(pStream->readByte());
         bit = pStream->readByte();
         startTime = pStream->readUnsignedInt();
         timeout = pStream->readUnsignedInt();
-        lockedHeight = pStream->readUnsignedInt();
+
+        state = static_cast<SoftFork::State>(pStream->readByte());
+        lockedHeight = pStream->readInt();
         return true;
     }
 
@@ -192,17 +201,63 @@ namespace BitCoin
         return result;
     }
 
+    void SoftFork::revert(const BlockStats &pBlockStats, int pBlockHeight)
+    {
+        switch(state)
+        {
+        default:
+        case UNDEFINED:
+        case DEFINED:
+            break;
+        case STARTED:
+            if(pBlockStats.time(pBlockHeight) < startTime)
+                state = DEFINED;
+            break;
+        case LOCKED_IN:
+            if(pBlockHeight < lockedHeight)
+            {
+                lockedHeight = NOT_LOCKED;
+                if(pBlockStats.time(pBlockHeight) < startTime)
+                    state = DEFINED;
+                else
+                    state = STARTED;
+            }
+            break;
+        case ACTIVE:
+            if(pBlockHeight < lockedHeight)
+            {
+                lockedHeight = NOT_LOCKED;
+                if(pBlockStats.time(pBlockHeight) < startTime)
+                    state = DEFINED;
+                else
+                    state = STARTED;
+            }
+            else if(pBlockHeight < lockedHeight + RETARGET_PERIOD)
+                state = LOCKED_IN;
+            break;
+        case FAILED:
+            if(pBlockStats.time(pBlockHeight) < startTime)
+                state = DEFINED;
+            else if(pBlockStats.time(pBlockHeight) < timeout)
+                state = STARTED;
+            break;
+        }
+    }
+
     Forks::Forks()
     {
         mHeight = 0;
-        mPreviousHeight = 0;
         mActiveVersion = 1;
-        mPreviousActiveVersion = 1;
         mRequiredVersion = 1;
-        mPreviousRequiredVersion = 1;
         mCashForkBlockHeight = -1;
         mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         mModified = false;
+
+        for(unsigned int i=0;i<3;i++)
+        {
+            mVersionActivationHeights[i] = -1;
+            mVersionRequiredHeights[i] = -1;
+        }
 
         switch(network())
         {
@@ -211,6 +266,8 @@ namespace BitCoin
 
             // Add known soft forks
             mForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0, 1462060800, 1493596800));
+            mForks.push_back(new SoftFork("BIP-0141", SoftFork::BIP0141, 1, 1479168000, 1510704000));
+            mForks.push_back(new SoftFork("BIP-0091", SoftFork::BIP0091, 4, 1496275200, 1510704000));
             break;
         default:
         case TESTNET:
@@ -218,6 +275,7 @@ namespace BitCoin
 
             // Add known soft forks
             mForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0, 1462060800, 1493596800));
+            mForks.push_back(new SoftFork("BIP-0141", SoftFork::BIP0141, 1, 1462060800, 1493596800));
             break;
         }
     }
@@ -237,25 +295,133 @@ namespace BitCoin
         return SoftFork::UNDEFINED;
     }
 
-    void Forks::process(const BlockStats &pBlockStats, unsigned int pBlockHeight)
+    void Forks::process(const BlockStats &pBlockStats, int pBlockHeight)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler outputsProfiler("Forks Process");
 #endif
         unsigned int offset;
 
-        mPreviousHeight = mHeight;
-
-        if(pBlockHeight > 12 && mCashForkBlockHeight == -1 && CASH_ACTIVATION_TIME != 0 &&
-          pBlockStats.getMedianPastTime(pBlockHeight) >= CASH_ACTIVATION_TIME)
+        if(mRequiredVersion < 4)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-              "Cash fork activated at block height %d", pBlockHeight);
-            mCashForkBlockHeight = mHeight;
-            mBlockMaxSize = CASH_START_MAX_BLOCK_SIZE;
+            unsigned int totalCount = 1000;
+            int activateCount = 750;
+            int requireCount = 950;
+
+            if(network() == TESTNET)
+            {
+                totalCount = 100;
+                activateCount = 51;
+                requireCount = 75;
+            }
+
+            int version4OrHigherCount = 0;
+            int version3OrHigherCount = 0;
+            int version2OrHigherCount = 0;
+            offset = 0;
+            for(const BlockStat *stat=pBlockStats.data()+pBlockHeight-1;stat!=pBlockStats.data()-1&&offset<totalCount;--stat,++offset)
+            {
+                switch(stat->version)
+                {
+                default:
+                case 4:
+                    version4OrHigherCount++;
+                case 3:
+                    version3OrHigherCount++;
+                case 2:
+                    version2OrHigherCount++;
+                case 1:
+                case 0:
+                    break;
+                }
+            }
+
+            // BIP-0065
+            if(version4OrHigherCount >= requireCount)
+            {
+                if(mRequiredVersion < 4)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                      "Version 4 blocks now required (height %d)", pBlockHeight);
+                    mVersionRequiredHeights[2] = pBlockHeight;
+                    mRequiredVersion = 4;
+                    mModified = true;
+                }
+                if(mActiveVersion < 4)
+                {
+                    mVersionActivationHeights[2] = pBlockHeight;
+                    mActiveVersion = 4;
+                    mModified = true;
+                }
+            }
+            else if(mActiveVersion < 4 && version4OrHigherCount >= activateCount)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                  "Version 4 blocks now active (height %d)", pBlockHeight);
+                mVersionActivationHeights[2] = pBlockHeight;
+                mActiveVersion = 4;
+                mModified = true;
+            }
+
+            // BIP-0066
+            if(version3OrHigherCount >= requireCount)
+            {
+                if(mRequiredVersion < 3)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                      "Version 3 blocks now required (height %d)", pBlockHeight);
+                    mVersionRequiredHeights[1] = pBlockHeight;
+                    mRequiredVersion = 3;
+                    mModified = true;
+                }
+                if(mActiveVersion < 3)
+                {
+                    mVersionActivationHeights[1] = pBlockHeight;
+                    mActiveVersion = 3;
+                    mModified = true;
+                }
+            }
+            else if(mActiveVersion < 3 && version3OrHigherCount >= activateCount)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                  "Version 3 blocks now active (height %d)", pBlockHeight);
+                mVersionActivationHeights[1] = pBlockHeight;
+                mActiveVersion = 3;
+                mModified = true;
+            }
+
+            // BIP-0034
+            if(version2OrHigherCount >= requireCount)
+            {
+                if(mRequiredVersion < 2)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                      "Version 2 blocks now required (height %d)", pBlockHeight);
+                    mVersionRequiredHeights[0] = pBlockHeight;
+                    mRequiredVersion = 2;
+                    mModified = true;
+                }
+                if(mActiveVersion < 2)
+                {
+                    mVersionActivationHeights[0] = pBlockHeight;
+                    mActiveVersion = 2;
+                    mModified = true;
+                }
+            }
+            else if(mActiveVersion < 2 && version2OrHigherCount >= activateCount)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                  "Version 2 blocks now active (height %d)", pBlockHeight);
+                mVersionActivationHeights[0] = pBlockHeight;
+                mActiveVersion = 2;
+                mModified = true;
+            }
         }
 
-        if(pBlockHeight != 0 && pBlockHeight % RETARGET_PERIOD == 0)
+        mHeight = pBlockHeight;
+        mModified = true;
+
+        if(mRequiredVersion >= 4 && pBlockHeight != 0 && pBlockHeight % RETARGET_PERIOD == 0)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
               "Updating for block height %d", pBlockHeight);
@@ -266,7 +432,6 @@ namespace BitCoin
             {
                 compositeValue |= (0x01 << (*softFork)->bit);
 
-                (*softFork)->previousState = (*softFork)->state;
                 switch((*softFork)->state)
                 {
                     case SoftFork::DEFINED:
@@ -307,10 +472,17 @@ namespace BitCoin
                         if(support >= mThreshHold)
                         {
                             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                              "(%s) locked in (height %d)", (*softFork)->name.text(), pBlockHeight);
+                              "(%s) locked in %d/%d (height %d)", (*softFork)->name.text(), support,
+                              mThreshHold, pBlockHeight);
                             (*softFork)->lockedHeight = pBlockHeight;
                             (*softFork)->state = SoftFork::LOCKED_IN;
                             mModified = true;
+                        }
+                        else
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                              "(%s) not locked in %d/%d (height %d)", (*softFork)->name.text(), support,
+                              mThreshHold, pBlockHeight);
                         }
 
                         break;
@@ -356,142 +528,68 @@ namespace BitCoin
                 }
         }
 
-        mHeight = pBlockHeight;
-        mModified = true;
-
-        mPreviousActiveVersion = mActiveVersion;
-        mPreviousRequiredVersion = mRequiredVersion;
-
-        unsigned int totalCount = 1000;
-        int activateCount = 750;
-        int requireCount = 950;
-
-        if(network() == TESTNET)
+        if(pBlockHeight > 12 && mCashForkBlockHeight == -1 && CASH_ACTIVATION_TIME != 0 &&
+          pBlockStats.getMedianPastTime(pBlockHeight) >= CASH_ACTIVATION_TIME)
         {
-            totalCount = 100;
-            activateCount = 51;
-            requireCount = 75;
-        }
-
-        if(mRequiredVersion < 4)
-        {
-            int version4OrHigherCount = 0;
-            int version3OrHigherCount = 0;
-            int version2OrHigherCount = 0;
-            offset = 0;
-            for(const BlockStat *stat=pBlockStats.data()+pBlockHeight-1;stat!=pBlockStats.data()-1&&offset<totalCount;--stat,++offset)
-            {
-                switch(stat->version)
-                {
-                default:
-                case 4:
-                    version4OrHigherCount++;
-                case 3:
-                    version3OrHigherCount++;
-                case 2:
-                    version2OrHigherCount++;
-                case 1:
-                case 0:
-                    break;
-                }
-            }
-
-            // BIP-0065
-            if(version4OrHigherCount >= requireCount)
-            {
-                if(mRequiredVersion < 4)
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                      "Version 4 blocks now required (height %d)", pBlockHeight);
-                    mRequiredVersion = 4;
-                    mModified = true;
-                }
-                if(mActiveVersion < 4)
-                {
-                    mActiveVersion = 4;
-                    mModified = true;
-                }
-            }
-            else if(mActiveVersion < 4 && version4OrHigherCount >= activateCount)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                  "Version 4 blocks now active (height %d)", pBlockHeight);
-                mActiveVersion = 4;
-                mModified = true;
-            }
-
-            // BIP-0066
-            if(version3OrHigherCount >= requireCount)
-            {
-                if(mRequiredVersion < 3)
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                      "Version 3 blocks now required (height %d)", pBlockHeight);
-                    mRequiredVersion = 3;
-                    mModified = true;
-                }
-                if(mActiveVersion < 3)
-                {
-                    mActiveVersion = 3;
-                    mModified = true;
-                }
-            }
-            else if(mActiveVersion < 3 && version3OrHigherCount >= activateCount)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                  "Version 3 blocks now active (height %d)", pBlockHeight);
-                mActiveVersion = 3;
-                mModified = true;
-            }
-
-            // BIP-0034
-            if(version2OrHigherCount >= requireCount)
-            {
-                if(mRequiredVersion < 2)
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                      "Version 2 blocks now required (height %d)", pBlockHeight);
-                    mRequiredVersion = 2;
-                    mModified = true;
-                }
-                if(mActiveVersion < 2)
-                {
-                    mActiveVersion = 2;
-                    mModified = true;
-                }
-            }
-            else if(mActiveVersion < 2 && version2OrHigherCount >= activateCount)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                  "Version 2 blocks now active (height %d)", pBlockHeight);
-                mActiveVersion = 2;
-                mModified = true;
-            }
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+              "Cash fork activated at block height %d", pBlockHeight);
+            mCashForkBlockHeight = mHeight;
+            mBlockMaxSize = CASH_START_MAX_BLOCK_SIZE;
         }
     }
 
-    void Forks::revert()
+    void Forks::revert(const BlockStats &pBlockStats, int pBlockHeight)
     {
-        mActiveVersion = mPreviousActiveVersion;
-        mRequiredVersion = mPreviousRequiredVersion;
-
-        if(mHeight == mCashForkBlockHeight)
+        // Back out any version active/required heights below new block height
+        for(unsigned int i=0;i<3;++i)
         {
+            if(mVersionRequiredHeights[i] != -1 && mVersionRequiredHeights[i] > pBlockHeight)
+                mVersionRequiredHeights[i] = -1;
+            if(mVersionActivationHeights[i] != -1 && mVersionActivationHeights[i] > pBlockHeight)
+                mVersionActivationHeights[i] = -1;
+        }
+
+        if(mVersionRequiredHeights[2] != -1 && pBlockHeight >= mVersionRequiredHeights[2])
+            mRequiredVersion = 4;
+        else if(mVersionRequiredHeights[1] != -1 && pBlockHeight >= mVersionRequiredHeights[1])
+            mRequiredVersion = 3;
+        else if(mVersionRequiredHeights[0] != -1 && pBlockHeight >= mVersionRequiredHeights[0])
+            mRequiredVersion = 2;
+        else
+            mRequiredVersion = 1;
+
+        if(mVersionActivationHeights[2] != -1 && pBlockHeight >= mVersionActivationHeights[2])
+            mActiveVersion = 4;
+        else if(mVersionActivationHeights[1] != -1 && pBlockHeight >= mVersionActivationHeights[1])
+            mActiveVersion = 3;
+        else if(mVersionActivationHeights[0] != -1 && pBlockHeight >= mVersionActivationHeights[0])
+            mActiveVersion = 2;
+        else
+            mActiveVersion = 1;
+
+        if(mCashForkBlockHeight != -1 && pBlockHeight < mCashForkBlockHeight)
+        {
+            // Undo cash fork
             mCashForkBlockHeight = -1;
             mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         }
 
-        if(mHeight != 0 && mHeight % RETARGET_PERIOD == 0)
-            for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
-                (*softFork)->revert();
+        for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
+            (*softFork)->revert(pBlockStats, pBlockHeight);
 
-        --mHeight;
+        mHeight = pBlockHeight;
+        mModified = true;
     }
 
     void Forks::reset()
     {
         mActiveVersion = 0;
         mRequiredVersion = 0;
+        for(unsigned int i=0;i<3;i++)
+        {
+            mVersionActivationHeights[i] = -1;
+            mVersionRequiredHeights[i] = -1;
+        }
         mCashForkBlockHeight = -1;
         mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
@@ -537,11 +635,32 @@ namespace BitCoin
         }
 
         // Read height
-        mHeight = file.readUnsignedInt();
+        mHeight = file.readInt();
 
-        // Read versions
-        mActiveVersion = file.readUnsignedInt();
-        mRequiredVersion = file.readUnsignedInt();
+        // Read versions block heights
+        for(unsigned int i=0;i<3;++i)
+            mVersionActivationHeights[i] = file.readInt();
+        for(unsigned int i=0;i<3;++i)
+            mVersionRequiredHeights[i] = file.readInt();
+
+        if(mVersionRequiredHeights[2] != -1 && mHeight >= mVersionRequiredHeights[2])
+            mRequiredVersion = 4;
+        else if(mVersionRequiredHeights[1] != -1 && mHeight >= mVersionRequiredHeights[1])
+            mRequiredVersion = 3;
+        else if(mVersionRequiredHeights[0] != -1 && mHeight >= mVersionRequiredHeights[0])
+            mRequiredVersion = 2;
+        else
+            mRequiredVersion = 1;
+
+        if(mVersionActivationHeights[2] != -1 && mHeight >= mVersionActivationHeights[2])
+            mActiveVersion = 4;
+        else if(mVersionActivationHeights[1] != -1 && mHeight >= mVersionActivationHeights[1])
+            mActiveVersion = 3;
+        else if(mVersionActivationHeights[0] != -1 && mHeight >= mVersionActivationHeights[0])
+            mActiveVersion = 2;
+        else
+            mActiveVersion = 1;
+
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
           "Block versions %d/%d active/required", mActiveVersion, mRequiredVersion);
 
@@ -591,11 +710,13 @@ namespace BitCoin
         }
 
         // Write height
-        file.writeUnsignedInt(mHeight);
+        file.writeInt(mHeight);
 
-        // Write versions
-        file.writeUnsignedInt(mActiveVersion);
-        file.writeUnsignedInt(mRequiredVersion);
+        // Write versions block heights
+        for(unsigned int i=0;i<3;++i)
+            file.writeInt(mVersionActivationHeights[i]);
+        for(unsigned int i=0;i<3;++i)
+            file.writeInt(mVersionRequiredHeights[i]);
 
         // Write cash fork block height and max size
         file.writeUnsignedInt(mCashForkBlockHeight);

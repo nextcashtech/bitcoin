@@ -122,8 +122,7 @@ namespace BitCoin
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
 
         TransactionOutputPool &outputs() { return mOutputs; }
-
-        // Soft fork information
+        const BlockStats &blockStats() const { return mBlockStats; }
         const Forks &softForks() const { return mForks; }
 
         // Chain is up to date with most chains
@@ -186,6 +185,8 @@ namespace BitCoin
         // Set flag to stop processing
         void requestStop() { mStop = true; }
 
+        // For testing only
+        void setMaxTargetBits(uint32_t pMaxTargetBits) { mMaxTargetBits = pMaxTargetBits; }
         static bool test();
         static void tempTest();
 
@@ -199,6 +200,7 @@ namespace BitCoin
         std::list<PendingData *> mPending;
         Hash mLastPendingHash;
         unsigned int mPendingSize, mPendingBlocks, mLastFullPendingOffset;
+        uint32_t mBlockProcessStartTime;
 
         // Save pending data to the file system
         bool savePending();
@@ -224,20 +226,16 @@ namespace BitCoin
         unsigned int mLastFileID;
 
         // Target
+        uint32_t mMaxTargetBits;
         uint32_t mTargetBits; // Current target bits
         uint32_t mLastTargetTime; // Time of last block that was used to update target
         uint32_t mLastBlockTime; // Time of last block
         uint32_t mLastTargetBits; // Target bits of last block
-        // For reverting target
-        uint32_t mRevertTargetBits;
-        uint32_t mRevertLastTargetTime;
-        uint32_t mRevertLastBlockTime;
-        uint32_t mRevertLastTargetBits;
 
         // Update target bits based on new block
         bool updateTargetBits(unsigned int pHeight, uint32_t pNextBlockTime, uint32_t pNextBlockTargetBits);
-        // Revert target bits to state before last update
-        bool revertTargetBits();
+        // Revert target bits to state of specified block height
+        bool revertTargetBits(unsigned int pHeight);
 
         // Save/Load target bits state from file system
         bool saveTargetBits();
@@ -246,10 +244,6 @@ namespace BitCoin
         // Last BLOCK_STATS_SIZE block's statistics
         Forks mForks;
         BlockStats mBlockStats;
-        void addBlockStats(uint32_t pVersion, uint32_t pTime)
-        {
-            mBlockStats.push_back(BlockStat(pVersion, pTime));
-        }
 
         static Chain *sInstance;
 

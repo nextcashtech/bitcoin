@@ -314,6 +314,30 @@ namespace BitCoin
         pOutput->writeByte(OP_EQUAL);
     }
 
+    Transaction *ScriptInterpreter::createCoinbaseTransaction(int pBlockHeight, const Hash &pPublicKeyHash)
+    {
+        Transaction *result = new Transaction();
+        result->version = 2;
+
+        Input *input = new Input();
+        ArcMist::Buffer blockHeight;
+        arithmeticWrite(&blockHeight, pBlockHeight); // Write block height into coinbase input
+        input->script.writeByte(blockHeight.length());
+        blockHeight.readStream(&input->script, blockHeight.length());
+        input->script.compact();
+        result->inputs.push_back(input);
+
+        Output *output = new Output();
+        output->amount = coinBaseAmount(pBlockHeight);
+        writeP2PKHPublicKeyScript(pPublicKeyHash, &output->script);
+        output->script.compact();
+        result->outputs.push_back(output);
+
+        result->lockTime = 0;
+        result->calculateHash();
+        return result;
+    }
+
     void ScriptInterpreter::writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput)
     {
         if(pSize <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)

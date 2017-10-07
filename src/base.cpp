@@ -156,6 +156,13 @@ namespace BitCoin
     {
         uint8_t length = ((pBits >> 24) & 0xff) - 1;
 
+        // Starts with zero so increase
+        if((pBits & 0x00ff0000) == 0)
+        {
+            --length;
+            pBits <<= 8;
+        }
+
         setSize(32);
         zeroize();
 

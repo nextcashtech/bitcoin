@@ -1232,6 +1232,13 @@ namespace BitCoin
             return false;
         }
 
+        if(pBlockHeight > mNextBlockHeight)
+            return true; // No revert needed
+
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Revert");
+#endif
+
         if(pBlockHeight >= mSavedBlockHeight)
             pHard = false;
 

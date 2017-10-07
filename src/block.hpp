@@ -68,11 +68,11 @@ namespace BitCoin
 
         bool updateOutputs(TransactionOutputPool &pOutputs, int pBlockHeight);
 
-        // Amount of Satoshis generated for mining a block at this height
-        static uint64_t coinBaseAmount(int pBlockHeight);
-
         // Create the Genesis block
         static Block *genesis();
+
+        // Update coinbase transaction to take all the fees
+        void finalize();
 
     private:
 
@@ -125,9 +125,9 @@ namespace BitCoin
         static bool readOutput(TransactionReference *pReference, unsigned int pIndex, Output &pOutput);
 
         // Create a new block file. BlockFile objects will be invalid if the block file doesn't already exist
-        static BlockFile *create(unsigned int pID, const char *pFilePathName);
+        static BlockFile *create(unsigned int pID);
 
-        BlockFile(unsigned int pID, const char *pFilePathName, bool pValidate = true);
+        BlockFile(unsigned int pID, bool pValidate = true);
         ~BlockFile() { updateCRC(); if(mInputFile != NULL) delete mInputFile; }
 
         unsigned int id() const { return mID; }

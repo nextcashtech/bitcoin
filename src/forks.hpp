@@ -22,10 +22,12 @@ namespace BitCoin
     {
     public:
         BlockStat() {}
-        BlockStat(int32_t pVersion, uint32_t pTime) { version = pVersion; time = pTime; }
+        BlockStat(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits)
+          { version = pVersion; time = pTime; targetBits = pTargetBits; }
 
-        int32_t version;
+        int32_t  version;
         uint32_t time;
+        uint32_t targetBits;
     };
 
     class BlockStats : public std::vector<BlockStat>
@@ -37,11 +39,16 @@ namespace BitCoin
         int height() const { return size() - 1; }
 
         uint32_t time(unsigned int pBlockHeight) const;
+        uint32_t targetBits(unsigned int pBlockHeight) const;
 
         // Note : Call after block has been added to stats
         uint32_t getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount = 11) const;
 
-        void revert() { erase(end()); }
+        void revert(unsigned int pBlockHeight)
+        {
+            if(size() > pBlockHeight + 1)
+                resize(pBlockHeight + 1);
+        }
 
         bool load();
         bool save();
@@ -59,6 +66,8 @@ namespace BitCoin
             BIP0068 = 1, // Relative lock-time using consensus-enforced sequence numbers
             BIP0112 = 1, // CHECKSEQUENCEVERIFY
             BIP0113 = 1, // Median time-past as endpoint for lock-time calculations
+            BIP0141 = 2, // Segregated Witness (BIP-0141, BIP-0143, BIP-0147, BIP-0148)
+            BIP0091 = 3, // Segragated Witness (Reduced Threshold)
         };
 
         enum State
@@ -71,26 +80,36 @@ namespace BitCoin
             FAILED     // Timeout reached without support threshold
         };
 
-        static const unsigned int NOT_LOCKED = 0xffffffff;
+        static const int NOT_LOCKED = -1;
 
-        SoftFork() { state = UNDEFINED; id = 0; bit = 0; startTime = 0; timeout = 0; lockedHeight = NOT_LOCKED; }
-        SoftFork(const char *pName, unsigned int pID, uint8_t pBit, uint32_t pStartTime, uint32_t pTimeout)
+        SoftFork()
         {
-            state = DEFINED;
+            id = 0;
+            bit = 0;
+            startTime = 0;
+            timeout = 0;
+
+            state = UNDEFINED;
+            lockedHeight = NOT_LOCKED;
+        }
+        SoftFork(const char *pName, unsigned int pID, uint8_t pBit, unsigned int pStartTime, unsigned int pTimeout)
+        {
             name = pName;
             id = pID;
             bit = pBit;
             startTime = pStartTime;
             timeout = pTimeout;
+
+            state = DEFINED;
             lockedHeight = NOT_LOCKED;
         }
 
-        void revert() { state = previousState; }
+        void revert(const BlockStats &pBlockStats, int pBlockHeight);
 
         // Reset to initial state
         void reset()
         {
-            state = DEFINED;
+            state        = DEFINED;
             lockedHeight = NOT_LOCKED;
         }
 
@@ -100,15 +119,16 @@ namespace BitCoin
         const char *stateName();
         ArcMist::String description();
 
+        // Predefined values
         ArcMist::String name;
         unsigned int id;
-        State state;
         uint8_t bit;
-        uint32_t startTime;
-        uint32_t timeout;
-        unsigned int lockedHeight;
+        unsigned int startTime;
+        unsigned int timeout;
 
-        State previousState;
+        // Values that change based on chain state
+        State state;
+        int lockedHeight;
     };
 
     class Forks
@@ -144,9 +164,9 @@ namespace BitCoin
         int cashForkBlockHeight() const { return mCashForkBlockHeight; }
         unsigned int blockMaxSize() const { return mBlockMaxSize; }
 
-        void process(const BlockStats &pBlockStats, unsigned int pBlockHeight);
+        void process(const BlockStats &pBlockStats, int pBlockHeight);
 
-        void revert();
+        void revert(const BlockStats &pBlockStats, int pBlockHeight);
 
         // Reset all soft forks to initial state
         void reset();
@@ -160,15 +180,15 @@ namespace BitCoin
         void add(SoftFork *pSoftFork);
 
         int mHeight;
-        unsigned int mPreviousHeight;
 
         std::vector<SoftFork *> mForks;
 
         int32_t mActiveVersion;
         int32_t mRequiredVersion;
 
-        int32_t mPreviousActiveVersion;
-        int32_t mPreviousRequiredVersion;
+        // For revert
+        int mVersionActivationHeights[3];
+        int mVersionRequiredHeights[3];
 
         int mCashForkBlockHeight;
         unsigned int mBlockMaxSize;

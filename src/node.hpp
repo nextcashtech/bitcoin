@@ -130,6 +130,7 @@ namespace BitCoin
         bool mConnected;
         uint32_t mConnectedTime;
         unsigned int mMessagesReceived;
+        unsigned int mPingCount;
 
         static unsigned int mNextID;
 

@@ -31,13 +31,31 @@ namespace BitCoin
         return std::time(NULL);
     }
 
+    // Convert Satoshis to Bitcoins
     inline double bitcoins(int64_t pSatoshis)
     {
         return (double)pSatoshis / 100000000;
     }
 
+    // Amount of Satoshis generated for mining a block at this height
+    inline uint64_t coinBaseAmount(int pBlockHeight)
+    {
+        if(pBlockHeight >= 6930000)
+            return 0;
+
+        uint64_t result = 5000000000; // 50 bitcoins
+        while(pBlockHeight > 210000)
+        {
+            // Half every 210,000 blocks
+            result /= 2;
+            pBlockHeight -= 210000;
+        }
+
+        return result;
+    }
+
     // Number of blocks for each difficulty and soft fork update
-    static const unsigned int RETARGET_PERIOD = 2016;
+    static const int RETARGET_PERIOD = 2016;
 
     const char *networkName();
     const char *networkStartString();

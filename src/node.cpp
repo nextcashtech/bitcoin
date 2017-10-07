@@ -46,6 +46,7 @@ namespace BitCoin
         mBlockDownloadSize = 0;
         mBlockDownloadTime = 0;
         mMessagesReceived = 0;
+        mPingCount = 0;
         mConnectedTime = getTime();
         mStop = false;
         mStopped = false;
@@ -375,7 +376,6 @@ namespace BitCoin
             return false;
 
         Info &info = Info::instance();
-        // Apparently if relay is off most of main net won't send blocks or headers
         Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip,
           info.port, info.fullMode, mChain->softForks().cashRequired(), mChain->blockHeight(), mChain->isInSync());
         bool success = sendMessage(&versionMessage);
@@ -385,10 +385,13 @@ namespace BitCoin
 
     bool Node::sendPing()
     {
+        uint32_t time = getTime();
+        if(time - mLastPingTime < 60)
+            return true;
         Message::PingData pingData;
         bool success = sendMessage(&pingData);
         mLastPingNonce = pingData.nonce;
-        mLastPingTime = getTime();
+        mLastPingTime = time;
         return success;
     }
 
@@ -456,18 +459,13 @@ namespace BitCoin
         mConnection->receive(&mReceiveBuffer);
         mConnectionMutex.unlock();
 
-        // Ping every 20 minutes
-        if(mVersionData != NULL && mVersionAcknowledged)
+        if(mVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
+          mPingRoundTripTime == 0xffffffff && mPingCutoff != 0xffffffff &&
+          time - mLastPingTime > mPingCutoff)
         {
-            if(time - mLastPingTime > 1200)
-                sendPing();
-            else if(mLastPingTime != 0 && mPingRoundTripTime == 0xffffffff &&
-              mPingCutoff != 0xffffffff && time - mLastPingTime > mPingCutoff)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,
-                  "Ping not received within cutoff of %ds", mPingCutoff);
-                close();
-            }
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,
+              "Ping not received within cutoff of %ds", mPingCutoff);
+            close();
         }
 
         // Check for a complete message
@@ -510,6 +508,12 @@ namespace BitCoin
         }
 
         ++mMessagesReceived;
+
+        if(mMessagesReceived > 500)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Dropping. Reached message limit");
+            close();
+        }
 
         switch(message->type)
         {
@@ -572,16 +576,27 @@ namespace BitCoin
             }
             case Message::VERACK:
                 mVersionAcknowledged = true;
+                sendPing();
                 break;
             case Message::PING:
             {
+                ++mPingCount;
                 Message::PongData pongData(((Message::PingData *)message)->nonce);
                 sendMessage(&pongData);
+
+                if(mPingCount > 100)
+                {
+                    ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Dropping. Reached ping limit");
+                    close();
+                }
                 break;
             }
             case Message::PONG:
                 if(((Message::PongData *)message)->nonce != 0 && mLastPingNonce != ((Message::PongData *)message)->nonce)
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Pong nonce doesn't match sent Ping");
+                {
+                    ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Dropping. Pong nonce doesn't match sent Ping");
+                    close();
+                }
                 else
                 {
                     if(mPingRoundTripTime == 0xffffffff)

@@ -239,8 +239,6 @@ namespace BitCoin
 
     void Block::calculateHash()
     {
-        hash.clear();
-
         if(transactions.size() == 0)
             return;
 
@@ -331,22 +329,6 @@ namespace BitCoin
             // Calculate the next level
             calculateMerkleHashLevel(hashes.begin(), hashes.end(), pMerkleHash);
         }
-    }
-
-    uint64_t Block::coinBaseAmount(int pBlockHeight)
-    {
-        if(pBlockHeight >= 6930000)
-            return 0;
-
-        uint64_t result = 5000000000; // 50 bitcoins
-        while(pBlockHeight > 210000)
-        {
-            // Half every 210,000 blocks
-            result /= 2;
-            pBlockHeight -= 210000;
-        }
-
-        return result;
     }
 
     bool Block::updateOutputs(TransactionOutputPool &pOutputs, int pBlockHeight)
@@ -469,7 +451,7 @@ namespace BitCoin
                 totalSpentAge += *spentAge;
             unsigned int averageSpentAge = totalSpentAge / spentAges.size();
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-              "Average spent age for block %d is %d", pBlockHeight, averageSpentAge);
+              "Average spent age for block %d is %d for %d inputs", pBlockHeight, averageSpentAge, spentAges.size());
         }
 
         // Check that coinbase output amount - fees is correct for block height
@@ -534,14 +516,24 @@ namespace BitCoin
         return result;
     }
 
+    void Block::finalize()
+    {
+        //TODO Update total coinbase amount
+
+        transactionCount = transactions.size();
+        nonce = ArcMist::Math::randomLong();
+        calculateMerkleHash(merkleHash);
+        calculateHash();
+    }
+
     ArcMist::Mutex BlockFile::mBlockFileMutex("Block File");
     std::vector<unsigned int> BlockFile::mLockedBlockFileIDs;
     ArcMist::String BlockFile::mBlockFilePath;
 
-    BlockFile::BlockFile(unsigned int pID, const char *pFilePathName, bool pValidate)
+    BlockFile::BlockFile(unsigned int pID, bool pValidate)
     {
         mValid = true;
-        mFilePathName = pFilePathName;
+        mFilePathName = fileName(pID);
         mInputFile = NULL;
         mID = pID;
         mModified = false;
@@ -550,7 +542,7 @@ namespace BitCoin
         if(!openFile())
         {
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
-              "Failed to open block file : %s", pFilePathName);
+              "Failed to open block file : %s", mFilePathName.text());
             mValid = false;
             return;
         }
@@ -609,9 +601,10 @@ namespace BitCoin
         return mInputFile->isValid();
     }
 
-    BlockFile *BlockFile::create(unsigned int pID, const char *pFilePathName)
+    BlockFile *BlockFile::create(unsigned int pID)
     {
-        ArcMist::FileOutputStream *outputFile = new ArcMist::FileOutputStream(pFilePathName, true);
+        ArcMist::createDirectory(path());
+        ArcMist::FileOutputStream *outputFile = new ArcMist::FileOutputStream(fileName(pID), true);
         outputFile->setOutputEndian(ArcMist::Endian::LITTLE);
 
         if(!outputFile->isValid())
@@ -655,7 +648,7 @@ namespace BitCoin
           "Block file %08x created with CRC : %08x", pID, crc);
 
         // Create and return block file object
-        BlockFile *result = new BlockFile(pID, pFilePathName);
+        BlockFile *result = new BlockFile(pID);
         if(result->isValid())
             return result;
         else
@@ -777,8 +770,7 @@ namespace BitCoin
 
         mInputFile->setReadOffset(HASHES_OFFSET + 32); // Set offset to offset of first data offset location in file
         unsigned int blockOffset, previousOffset;
-        uint32_t version;
-        uint32_t time;
+        uint32_t version, time, targetBits;
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
             // Read location of block in file from header
@@ -796,7 +788,8 @@ namespace BitCoin
             version = mInputFile->readUnsignedInt();
             mInputFile->setReadOffset(mInputFile->readOffset() + 64); // Skip previous and merkle hashes
             time = mInputFile->readUnsignedInt();
-            pStats.push_back(BlockStat(version, time));
+            targetBits = mInputFile->readUnsignedInt();
+            pStats.push_back(BlockStat(version, time, targetBits));
 
             // Go back to header in file
             mInputFile->setReadOffset(previousOffset);
@@ -1106,9 +1099,10 @@ namespace BitCoin
         unsigned int fileID = pReference->blockHeight / MAX_BLOCKS;
 
         lock(fileID);
-        BlockFile *blockFile = new BlockFile(fileID, fileName(fileID), false);
+        BlockFile *blockFile = new BlockFile(fileID, false);
 
-        bool success = blockFile->isValid() && blockFile->readTransactionOutput(pReference->outputAt(pIndex)->blockFileOffset, pOutput);
+        bool success = blockFile->isValid() &&
+          blockFile->readTransactionOutput(pReference->outputAt(pIndex)->blockFileOffset, pOutput);
 
         delete blockFile;
         unlock(fileID);

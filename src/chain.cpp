@@ -26,6 +26,7 @@ namespace BitCoin
     Chain::Chain() : mPendingLock("Chain Pending"),
       mProcessMutex("Chain Process")
     {
+        mMaxTargetBits = 0x1d00ffff;
         mNextBlockHeight = 0;
         mLastFileID = 0;
         mPendingSize = 0;
@@ -45,27 +46,25 @@ namespace BitCoin
         mPendingLock.writeUnlock();
     }
 
-    bool Chain::revertTargetBits()
+    bool Chain::revertTargetBits(unsigned int pHeight)
     {
-        mTargetBits = mRevertTargetBits;
-        mLastTargetTime = mRevertLastTargetTime;
-        mLastBlockTime = mRevertLastBlockTime;
-        mLastTargetBits = mRevertLastTargetBits;
+        mTargetBits = mBlockStats.targetBits(pHeight);
+
+        mLastTargetBits = mBlockStats.targetBits(pHeight - 1);
+        mLastBlockTime = mBlockStats.time(pHeight - 1);
+
+        unsigned int lastRetargetHeight = pHeight - (pHeight % RETARGET_PERIOD);
+        mLastTargetTime = mBlockStats.time(lastRetargetHeight);
+
         return saveTargetBits();
     }
 
     bool Chain::updateTargetBits(unsigned int pHeight, uint32_t pNextBlockTime, uint32_t pNextBlockTargetBits)
     {
-        // Save values in case we have to undo this
-        mRevertTargetBits = mTargetBits;
-        mRevertLastTargetTime = mLastTargetTime;
-        mRevertLastBlockTime  = mLastBlockTime;
-        mRevertLastTargetBits = mLastTargetBits;
-
         if(mLastTargetTime == 0)
         {
             // This is the first block
-            mTargetBits = 0x1d00ffff;
+            mTargetBits = mMaxTargetBits;
             mLastTargetTime = pNextBlockTime;
             mLastBlockTime = pNextBlockTime;
             mLastTargetBits = pNextBlockTargetBits;
@@ -114,7 +113,7 @@ namespace BitCoin
          */
 
         // Treat targetValue as a 256 bit number and multiply it by adjustFactor
-        mTargetBits = multiplyTargetBits(mLastTargetBits, adjustFactor);
+        mTargetBits = multiplyTargetBits(mLastTargetBits, adjustFactor, mMaxTargetBits);
         mLastTargetTime = pNextBlockTime;
         mLastBlockTime = pNextBlockTime;
         mLastTargetBits = pNextBlockTargetBits;
@@ -553,13 +552,16 @@ namespace BitCoin
         mPendingLock.readUnlock();
 
         if(success)
+        {
             ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
               "Added pending block : %s", pBlock->hash.hex().text());
+            return true;
+        }
         else if(!found)
         {
             // Check if this is the latest block
             mPendingLock.writeLock("Add Block");
-            if(pBlock->hash == mLastBlockHash && mPending.size() == 0)
+            if(pBlock->previousHash == mLastBlockHash && mPending.size() == 0)
             {
                 if(!pBlock->hasProofOfWork())
                 {
@@ -580,6 +582,7 @@ namespace BitCoin
                 mPendingSize += pBlock->size();
                 mPendingBlocks++;
                 mPendingLock.writeUnlock();
+                return true;
             }
             else
             {
@@ -590,10 +593,11 @@ namespace BitCoin
                 else
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                       "Received unknown block : %s", pBlock->hash.hex().text());
+                return false;
             }
         }
 
-        return success;
+        return false;
     }
 
     bool Chain::processBlock(Block *pBlock)
@@ -602,6 +606,8 @@ namespace BitCoin
         ArcMist::Profiler outputsProfiler("Chain Process Block");
 #endif
         mProcessMutex.lock();
+
+        mBlockProcessStartTime = getTime();
 
         // Check target bits
         bool useTestMinDifficulty = network() == TESTNET && pBlock->time - mLastBlockTime > 1200;
@@ -619,22 +625,22 @@ namespace BitCoin
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                   "Block target bits don't match chain's current target bits : chain %08x != block %08x",
                   mTargetBits, pBlock->targetBits);
-                revertTargetBits();
+                revertTargetBits(mNextBlockHeight);
                 mProcessMutex.unlock();
                 return false;
             }
         }
 
-        mBlockStats.push_back(BlockStat(pBlock->version, pBlock->time));
+        mBlockStats.push_back(BlockStat(pBlock->version, pBlock->time, pBlock->targetBits));
         mForks.process(mBlockStats, mNextBlockHeight);
 
         // Process block
         if(!pBlock->process(mOutputs, mNextBlockHeight, mBlockStats, mForks))
         {
-            revertTargetBits();
+            revertTargetBits(mNextBlockHeight);
             mOutputs.revert(mNextBlockHeight);
-            mBlockStats.revert();
-            mForks.revert();
+            mBlockStats.revert(mNextBlockHeight);
+            mForks.revert(mBlockStats, mNextBlockHeight);
             mProcessMutex.unlock();
             return false;
         }
@@ -645,11 +651,10 @@ namespace BitCoin
         {
             // Create first block file
             mLastFileID = 0;
-            ArcMist::String filePathName = BlockFile::fileName(mLastFileID);
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Creating first block file %08x", mLastFileID, mLastFileID + 1);
             BlockFile::lock(mLastFileID);
-            mLastBlockFile = BlockFile::create(mLastFileID, filePathName);
+            mLastBlockFile = BlockFile::create(mLastFileID);
             if(mLastBlockFile == NULL) // Failed to create file
                 success = false;
         }
@@ -658,7 +663,7 @@ namespace BitCoin
             // Check if last block file is full
             BlockFile::lock(mLastFileID);
             if(mLastBlockFile == NULL)
-                mLastBlockFile = new BlockFile(mLastFileID, BlockFile::fileName(mLastFileID));
+                mLastBlockFile = new BlockFile(mLastFileID);
 
             if(!mLastBlockFile->isValid())
             {
@@ -680,8 +685,7 @@ namespace BitCoin
                 // Create next file
                 mLastFileID++;
                 BlockFile::lock(mLastFileID);
-                ArcMist::String filePathName = BlockFile::fileName(mLastFileID);
-                mLastBlockFile = BlockFile::create(mLastFileID, filePathName);
+                mLastBlockFile = BlockFile::create(mLastFileID);
                 if(mLastBlockFile == NULL) // Failed to create file
                     success = false;
             }
@@ -698,10 +702,10 @@ namespace BitCoin
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to commit transaction outputs to pool");
-            revertTargetBits();
+            revertTargetBits(mNextBlockHeight);
             mOutputs.revert(mNextBlockHeight);
-            mBlockStats.revert();
-            mForks.revert();
+            mBlockStats.revert(mNextBlockHeight);
+            mForks.revert(mBlockStats, mNextBlockHeight);
             mProcessMutex.unlock();
             return false;
         }
@@ -718,14 +722,15 @@ namespace BitCoin
             mLastTargetBits = pBlock->targetBits;
 
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added block to chain at height %d (%d trans) (%d bytes) : %s", mNextBlockHeight - 1, pBlock->transactionCount,
-              pBlock->size(), pBlock->hash.hex().text());
+              "Added block to chain at height %d (%d trans) (%d bytes) (%d s) : %s",
+              mNextBlockHeight - 1, pBlock->transactionCount, pBlock->size(), getTime() - mBlockProcessStartTime,
+              pBlock->hash.hex().text());
         }
         else
         {
-            mBlockStats.revert();
-            mForks.revert();
-            revertTargetBits();
+            mBlockStats.revert(mNextBlockHeight);
+            mForks.revert(mBlockStats, mNextBlockHeight);
+            revertTargetBits(mNextBlockHeight);
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to add block to file %08x : %s", mLastFileID, pBlock->hash.hex().text());
         }
@@ -845,7 +850,7 @@ namespace BitCoin
             if(fileID == mLastFileID && mLastBlockFile != NULL)
                 blockFile = mLastBlockFile;
             else
-                blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+                blockFile = new BlockFile(fileID);
 
             if(!blockFile->readBlockHashes(fileList))
             {
@@ -897,7 +902,7 @@ namespace BitCoin
             if(fileID == mLastFileID && mLastBlockFile != NULL)
                 blockFile = mLastBlockFile;
             else
-                blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+                blockFile = new BlockFile(fileID);
 
             hash = blockFile->lastHash();
             if(!hash.isEmpty())
@@ -929,7 +934,7 @@ namespace BitCoin
             if(fileID == mLastFileID && mLastBlockFile != NULL)
                 blockFile = mLastBlockFile;
             else
-                blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+                blockFile = new BlockFile(fileID);
 
             if(!blockFile->isValid() || !blockFile->readBlockHeaders(pBlockHeaders, hash, pStoppingHash, pCount))
             {
@@ -968,7 +973,7 @@ namespace BitCoin
         if(fileID == mLastFileID && mLastBlockFile != NULL)
             blockFile = mLastBlockFile;
         else
-            blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+            blockFile = new BlockFile(fileID);
 
         bool success = blockFile->isValid() && blockFile->readHash(offset, pHash);
 
@@ -992,7 +997,7 @@ namespace BitCoin
         if(fileID == mLastFileID && mLastBlockFile != NULL)
             blockFile = mLastBlockFile;
         else
-            blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+            blockFile = new BlockFile(fileID);
 
         bool success = blockFile->isValid() && blockFile->readBlock(offset, pBlock, true);
 
@@ -1013,7 +1018,7 @@ namespace BitCoin
         if(fileID == mLastFileID && mLastBlockFile != NULL)
             blockFile = mLastBlockFile;
         else
-            blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+            blockFile = new BlockFile(fileID);
 
         bool success = blockFile->isValid() && blockFile->readBlock(pHash, pBlock, true);
 
@@ -1034,7 +1039,7 @@ namespace BitCoin
         if(fileID == mLastFileID && mLastBlockFile != NULL)
             blockFile = mLastBlockFile;
         else
-            blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+            blockFile = new BlockFile(fileID);
 
         bool success = blockFile->isValid() && blockFile->readBlock(pHash, pBlockHeader, false);
 
@@ -1080,7 +1085,7 @@ namespace BitCoin
             if(ArcMist::fileExists(filePathName))
             {
                 BlockFile::lock(fileID);
-                blockFile = new BlockFile(fileID, filePathName);
+                blockFile = new BlockFile(fileID);
                 if(!blockFile->isValid())
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
@@ -1202,7 +1207,7 @@ namespace BitCoin
             filePathName = BlockFile::fileName(fileID);
             if(ArcMist::fileExists(filePathName))
             {
-                blockFile = new BlockFile(fileID, filePathName, false);
+                blockFile = new BlockFile(fileID, false);
                 if(!blockFile->isValid())
                 {
                     delete blockFile;
@@ -1269,6 +1274,7 @@ namespace BitCoin
                   "Refreshing block statistics (height %d)", mBlockStats.height());
 
                 mBlockStats.clear();
+                mBlockStats.reserve(mNextBlockHeight);
                 uint32_t lastReport = getTime();
                 for(fileID=0;fileID<=mLastFileID;fileID++)
                 {
@@ -1280,8 +1286,7 @@ namespace BitCoin
                     }
 
                     BlockFile::lock(fileID);
-                    filePathName = BlockFile::fileName(fileID);
-                    blockFile = new BlockFile(fileID, filePathName, false);
+                    blockFile = new BlockFile(fileID, false);
                     if(!blockFile->isValid())
                     {
                         delete blockFile;
@@ -1380,7 +1385,7 @@ namespace BitCoin
                 break;
 
             BlockFile::lock(fileID);
-            blockFile = new BlockFile(fileID, filePathName);
+            blockFile = new BlockFile(fileID);
 
             if(!blockFile->isValid())
             {
@@ -1418,7 +1423,7 @@ namespace BitCoin
 
                     useTestMinDifficulty = network() == TESTNET && block.time - mLastBlockTime > 1200;
                     updateTargetBits(height, block.time, block.targetBits);
-                    mBlockStats.push_back(BlockStat(block.version, block.time));
+                    mBlockStats.push_back(BlockStat(block.version, block.time, block.targetBits));
                     mForks.process(mBlockStats, height);
                     if(mTargetBits != block.targetBits)
                     {
