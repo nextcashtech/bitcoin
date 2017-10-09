@@ -67,7 +67,7 @@ namespace BitCoin
             BIP0112 = 1, // CHECKSEQUENCEVERIFY
             BIP0113 = 1, // Median time-past as endpoint for lock-time calculations
             BIP0141 = 2, // Segregated Witness (BIP-0141, BIP-0143, BIP-0147, BIP-0148)
-            BIP0091 = 3, // Segragated Witness (Reduced Threshold)
+            BIP0091 = 3, // Segregated Witness (Reduced Threshold)
         };
 
         enum State
