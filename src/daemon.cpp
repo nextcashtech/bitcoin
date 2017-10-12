@@ -134,7 +134,7 @@ namespace BitCoin
         previousSigPipeHandler = signal(SIGPIPE, handleSigPipe);
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Starting %s on %s", BITCOIN_USER_AGENT, networkName());
+          "Starting %s on %s in %s", BITCOIN_USER_AGENT, networkName(), Info::instance().path().text());
 
         mManagerThread = new ArcMist::Thread("Manager", manage);
         if(mManagerThread == NULL)
@@ -454,7 +454,7 @@ namespace BitCoin
         if(blocksToRequest.size() == 0)
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-              "No blocks found to request");
+              "No blocks to request");
             mNodeLock.readUnlock();
             return;
         }

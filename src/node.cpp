@@ -738,14 +738,14 @@ namespace BitCoin
                 Message::InventoryData inventoryData;
                 inventoryData.inventory.resize(count);
                 unsigned int actualCount = 0;
-                Message::Inventory::iterator item=inventoryData.inventory.begin();
+                Message::Inventory::iterator item = inventoryData.inventory.begin();
                 for(HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
                 {
                     *item = new Message::InventoryHash(Message::InventoryHash::BLOCK, **hash);
-                    actualCount++;
+                    ++actualCount;
+                    ++item;
                     if(!dontStop && **hash == getBlocksData->stopHeaderHash)
                         break;
-                    ++item;
                 }
                 inventoryData.inventory.resize(actualCount);
 

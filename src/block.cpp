@@ -114,13 +114,21 @@ namespace BitCoin
 
         // Hash of previous block
         if(!previousHash.read(pStream))
+        {
+            if(digest != NULL)
+                delete digest;
             return false;
+        }
         if(pCalculateHash)
             previousHash.write(digest);
 
         // Merkle Root Hash
         if(!merkleHash.read(pStream))
+        {
+            if(digest != NULL)
+                delete digest;
             return false;
+        }
         if(pCalculateHash)
             merkleHash.write(digest);
 
@@ -164,30 +172,28 @@ namespace BitCoin
         }
 
         if(pStream->remaining() < transactionCount)
-        {
-            if(digest != NULL)
-                delete digest;
             return false;
-        }
 
         // Transactions
         transactions.clear();
         transactions.resize(transactionCount);
-        bool fail = false;
+        unsigned int actualCount = 0;
+        bool success = true;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            if(!fail)
+            *transaction = new Transaction();
+            ++actualCount;
+            if(!(*transaction)->read(pStream, true, pBlockFile))
             {
-                *transaction = new Transaction();
-                if(!(*transaction)->read(pStream, true, pBlockFile))
-                    fail = true;
+                success = false;
+                break;
             }
-            else
-                *transaction = NULL;
         }
+        if(actualCount != transactions.size())
+            transactions.resize(actualCount);
 
         mSize = pStream->readOffset() - startOffset;
-        return !fail;
+        return success;
     }
 
     void Block::clear()
@@ -305,8 +311,8 @@ namespace BitCoin
         calculateMerkleHashLevel(nextLevel.begin(), nextLevel.end(), pResult);
 
         // Destroy the next level
-        for(std::vector<Hash *>::iterator i=nextLevel.begin();i!=nextLevel.end();++i)
-            delete *i;
+        for(std::vector<Hash *>::iterator hash=nextLevel.begin();hash!=nextLevel.end();++hash)
+            delete *hash;
     }
 
     void Block::calculateMerkleHash(Hash &pMerkleHash)

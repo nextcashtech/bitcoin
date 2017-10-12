@@ -64,7 +64,15 @@ namespace BitCoin
         void spendInternal(unsigned int pBlockHeight) { spentBlockHeight = pBlockHeight; }
 
         // Update block file offset
-        void commit(const Output &pOutput) { blockFileOffset = pOutput.blockFileOffset; }
+        bool commit(const Output &pOutput)
+        {
+            if(blockFileOffset != pOutput.blockFileOffset)
+            {
+                blockFileOffset = pOutput.blockFileOffset;
+                return true;
+            }
+            return false;
+        }
 
         unsigned int spentBlockHeight;
         unsigned int blockFileOffset;
@@ -76,28 +84,27 @@ namespace BitCoin
     public:
 
         // Size of data written to file (not counting outputs)
-        //   32 byte hash, 4 byte block height, 4 byte output count, 8 byte file offset
-        static const unsigned int SIZE = 48;
+        //   32 byte hash, 4 byte block height, 4 byte output count
+        static const unsigned int SIZE = 40;
         // 4 byte hash size, 8 byte hash data pointer, 8 byte output data pointer,
-        //   8 byte output index data pointer
-        static const unsigned int MEMORY_SIZE = SIZE + 4 + 8 + 8 + 8;
-        static const ArcMist::stream_size NOT_WRITTEN = 0xffffffffffffffff;
+        //   8 byte file offset, 1 byte flags
+        static const unsigned int MEMORY_SIZE = SIZE + 4 + 8 + 8 + 8 + 1;
 
         TransactionReference() : id(32)
         {
-            blockHeight      = 0;
-            outputFileOffset = NOT_WRITTEN;
-            mOutputCount     = 0;
-            mOutputs         = NULL;
-            toDelete         = false;
+            blockHeight  = 0;
+            mOutputCount = 0;
+            mOutputs     = NULL;
+            mFlags       = 0;
+            fileOffset   = ArcMist::INVALID_STREAM_SIZE;
         }
         TransactionReference(const Hash &pID, unsigned int pBlockHeight, unsigned int pOutputCount) : id(pID)
         {
-            blockHeight      = pBlockHeight;
-            outputFileOffset = NOT_WRITTEN;
-            mOutputCount     = 0;
-            mOutputs         = NULL;
-            toDelete         = false;
+            blockHeight  = pBlockHeight;
+            mOutputCount = 0;
+            mOutputs     = NULL;
+            mFlags       = 0;
+            fileOffset   = ArcMist::INVALID_STREAM_SIZE;
             if(pOutputCount > 0)
             {
                 allocateOutputs(pOutputCount);
@@ -110,17 +117,20 @@ namespace BitCoin
                 delete[] mOutputs;
         }
 
-        // Read only header data. Used for resorting header file
-        bool readHeaderOnly(ArcMist::InputStream *pHeaderStream);
+        bool readHeader(ArcMist::InputStream *pStream);
 
         // Read the hash, then if the hash matches read the rest
-        bool readMatchingID(const Hash &pHash, ArcMist::InputStream *pHeaderStream,
-          ArcMist::InputStream *pOutputStream);
+        bool readMatchingID(const Hash &pHash, ArcMist::InputStream *pStream);
 
-        bool readOld(ArcMist::InputStream *pStream);
+        // Read the hash, then block height and return false if the block height is equal to or above specified
+        bool readAboveBlock(unsigned int pBlockHeight, ArcMist::InputStream *pStream);
 
-        bool read(ArcMist::InputStream *pHeaderStream, ArcMist::InputStream *pOutputStream);
-        bool write(ArcMist::OutputStream *pHeaderStream, ArcMist::OutputStream *pOutputStream, bool pRewriteOutputs);
+        bool read(ArcMist::InputStream *pStream);
+        bool write(ArcMist::OutputStream *pStream);
+
+        bool writeIndex(ArcMist::OutputStream *pStream);
+
+        bool readOld(ArcMist::InputStream *pHeaderStream, ArcMist::InputStream *pOutputStream);
 
         bool operator == (const TransactionReference &pRight) const
         {
@@ -155,6 +165,8 @@ namespace BitCoin
         unsigned int outputCount() const { return mOutputCount; }
         unsigned int spentOutputCount() const;
 
+        void spendInternal(unsigned int pIndex, unsigned int pBlockHeight);
+
         bool wasModifiedInOrAfterBlock(unsigned int pBlockHeight) const;
 
         OutputReference *outputAt(unsigned int pIndex)
@@ -163,27 +175,9 @@ namespace BitCoin
                 return mOutputs + pIndex;
             return NULL;
         }
-        void allocateOutputs(unsigned int pCount)
-        {
-            // Allocate the number of outputs needed
-            if(mOutputCount != pCount)
-            {
-                if(mOutputs != NULL)
-                    delete[] mOutputs;
-                mOutputCount = pCount;
-                if(mOutputCount == 0)
-                    mOutputs = NULL;
-                else
-                    mOutputs = new OutputReference[mOutputCount];
-            }
-        }
-        void clearOutputs()
-        {
-            if(mOutputs != NULL)
-                delete[] mOutputs;
-            mOutputCount = 0;
-            mOutputs = NULL;
-        }
+
+        bool allocateOutputs(unsigned int pCount);
+        void clearOutputs();
 
         // Update block file offsets in outputs
         void commit(std::vector<Output *> &pOutputs);
@@ -193,16 +187,37 @@ namespace BitCoin
 
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::Level::VERBOSE);
 
+        // Flags
+        bool markedDelete() const { return mFlags & DELETE_FLAG; }
+        bool isModified() const { return mFlags & MODIFIED_FLAG; }
+        bool wasModified() const { return mFlags & WAS_MODIFIED_FLAG; }
+
+        void setDelete() { mFlags |= DELETE_FLAG; }
+        void setModified() { mFlags |= MODIFIED_FLAG; }
+        void setWasModified() { mFlags |= WAS_MODIFIED_FLAG; }
+
+        void clearDelete() { mFlags ^= DELETE_FLAG; }
+        void clearModified() { mFlags ^= MODIFIED_FLAG; }
+        void clearWasModified() { mFlags ^= WAS_MODIFIED_FLAG; }
+        void clearFlags() { mFlags = 0; }
+
         Hash id; // Transaction Hash
         unsigned int blockHeight; // Block height of transaction
-        ArcMist::stream_size outputFileOffset; // Offset of the output data in the output file
-
-        bool toDelete;
+        ArcMist::stream_size fileOffset; // Offset into file where transaction reference is written
 
     private:
 
+        // Max check values for validation
+        static const unsigned int MAX_OUTPUT_COUNT = 0x0000ffff;
+        static const unsigned int MAX_BLOCK_HEIGHT = 0x00ffffff;
+
         unsigned int mOutputCount;
         OutputReference *mOutputs;
+
+        static const uint8_t DELETE_FLAG       = 0x01;
+        static const uint8_t MODIFIED_FLAG     = 0x02;
+        static const uint8_t WAS_MODIFIED_FLAG = 0x04;
+        uint8_t mFlags;
 
         TransactionReference(const TransactionReference &pCopy);
         const TransactionReference &operator = (const TransactionReference &pRight);
@@ -229,8 +244,9 @@ namespace BitCoin
         // Clear the list without deleting the items within it
         void clearNoDelete() { std::vector<TransactionReference *>::clear(); }
 
-        // Insert an item into a sorted list and retain sorting
-        void insertSorted(TransactionReference *pItem);
+        // Insert an item into a sorted list and retain sorting.
+        //   Return false if the item was already in the list
+        bool insertSorted(TransactionReference *pItem);
 
         // Returns true if the list is properly sorted
         bool checkSort();
@@ -238,9 +254,11 @@ namespace BitCoin
         // Merge two sorted lists. pRight is empty after this call
         void mergeSorted(TransactionReferenceList &pRight);
 
-        // Remove transaction references created below a specified block height
-        void dropBlocks(unsigned int pBlockHeight, unsigned int &pTransactionCount,
-          unsigned int &pOutputCount);
+        // Remove transaction references matching the following criteria.
+        //   Created below a specified block height
+        //   All outputs spent
+        //   Marked for delete
+        void drop(unsigned int pBlockHeight, unsigned int &pOutputCount);
 
         // Return an iterator to the first matching item in the list
         iterator firstMatching(const Hash &pHash);
@@ -249,17 +267,72 @@ namespace BitCoin
 
     };
 
+    class IndexEntry
+    {
+    public:
+
+        IndexEntry() {}
+
+        IndexEntry(const TransactionReference *pReference)
+        {
+            fileOffset  = pReference->fileOffset;
+            // blockHeight = pReference->blockHeight;
+            // unspent     = pReference->hasUnspentOutputs();
+        }
+
+        void invalidate()
+        {
+            fileOffset = ArcMist::INVALID_STREAM_SIZE;
+            // blockHeight = 0xffffffff;
+            // unspent     = true;
+        }
+
+        const IndexEntry &operator = (const TransactionReference *pReference)
+        {
+            fileOffset  = pReference->fileOffset;
+            // blockHeight = pReference->blockHeight;
+            // unspent     = pReference->hasUnspentOutputs();
+            return *this;
+        }
+
+        bool read(ArcMist::InputStream *pStream)
+        {
+            if(pStream->remaining() < sizeof(IndexEntry))
+                return false;
+            pStream->read(this, sizeof(IndexEntry));
+            return true;
+        }
+
+        bool write(ArcMist::OutputStream *pStream)
+        {
+            pStream->write(this, sizeof(IndexEntry));
+            return true;
+        }
+
+        ArcMist::stream_size fileOffset;
+        // unsigned int blockHeight;
+        // bool unspent;
+
+    };
+
+    class SampleEntry
+    {
+    public:
+        SampleEntry() {}
+
+        Hash hash;
+        ArcMist::stream_size indexOffset;
+    };
+
     // Set of transaction outputs
     class OutputSet
     {
     public:
 
-        static const unsigned int SUBSET_COUNT = 0x100;
-
         OutputSet();
         ~OutputSet();
 
-        void setup(unsigned int pID, const char *pFilePath);
+        bool setup(unsigned int pID, const char *pFilePath, unsigned int pCacheSize = 4096);
 
         // Find a transaction with an unspent output at the specified index
         TransactionReference *find(const Hash &pTransactionID, uint32_t pIndex);
@@ -271,28 +344,30 @@ namespace BitCoin
         void add(TransactionReference *pReference);
 
         // Add block file offsets to "pending" outputs for a block
-        void commit(const Hash &pTransactionID, std::vector<Output *> &pOutputs, unsigned int pBlockHeight);
+        void commit(TransactionReference *pReference, std::vector<Output *> &pOutputs);
 
         // Remove pending adds and spends (Note: Only reverts changes not written to the file yet)
         void revert(unsigned int pBlockHeight, bool pHard = false);
 
         // Pull all transactions from the file created at or after the specified block height
         //   Returns count of transactions found
-        unsigned int pullBlocks(unsigned int pBlockHeight);
+        unsigned int pullBlocks(unsigned int pBlockHeight, bool pUnspentOnly = true);
 
-        unsigned int transactionCount() const { return mHeaderSize / TransactionReference::SIZE; }
-        unsigned int outputCount() const { return mOutputSize / OutputReference::SIZE; }
+        unsigned int transactionCount() const { return mTransactionCount; }
+        unsigned int outputCount() const { return mOutputCount; }
         unsigned long long size() const
         {
-            return (unsigned long long)mHeaderSize - (unsigned long long)(SUBSET_COUNT * 8) +
-              (unsigned long long)mOutputSize + cachedSize();
+            return ((unsigned long long)mTransactionCount * TransactionReference::MEMORY_SIZE) +
+              ((unsigned long long)mOutputCount * OutputReference::SIZE) + cachedSize();
         }
         // New data added, but not yet saved
         unsigned long long cachedSize() const
         {
-            return ((unsigned long long)mCachedCount * (unsigned long long)TransactionReference::SIZE) +
-              ((unsigned long long)mCachedOutputCount * (unsigned long long)OutputReference::SIZE);
+            return ((unsigned long long)mCache.size() * (unsigned long long)TransactionReference::SIZE) +
+              ((unsigned long long)mCacheOutputCount * (unsigned long long)OutputReference::SIZE);
         }
+
+        static bool readOld(TransactionReferenceList &pList, const char *pHeaderFileName, const char *pOutputsFileName);
 
         // pBlockHeight is the block height below which to drop transactions from memory
         bool save(unsigned int pDropBlockHeight);
@@ -301,58 +376,35 @@ namespace BitCoin
 
     private:
 
-        // Pull al transactions with matching IDs from the file and put them in pending.
-        //   Returns count of transactions found
-        unsigned int pull(const Hash &pTransactionID, TransactionReferenceList &pList);
+        static const unsigned int HEADER_SIZE = 8; // transaction count and output count
 
-        // Pull all transactions created or spent at the specified block height from the file and put them in pending.
+        // Pull all transactions with matching IDs from the file and put them in cached.
         //   Returns count of transactions found
-        unsigned int pullBlock(unsigned int pBlockHeight);
+        TransactionReference *pull(const Hash &pTransactionID, unsigned int &pItemsPulled);
+        unsigned int pullLinear(const Hash &pTransactionID);
 
         bool transactionIsCached(const Hash &pTransactionID, unsigned int pBlockHeight);
 
-        bool openHeaderFile()
-        {
-            if(mHeaderFile == NULL)
-                mHeaderFile = new ArcMist::FileInputStream(mFilePathName);
-            if(!mHeaderFile->isValid())
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Failed to open header file for set %02x", mID);
-            return mHeaderFile->isValid();
-        }
-        void closeHeaderFile()
-        {
-            if(mHeaderFile != NULL)
-                delete mHeaderFile;
-            mHeaderFile = NULL;
-        }
-        bool openOutputsFile()
-        {
-            if(mOutputsFile == NULL)
-                mOutputsFile = new ArcMist::FileInputStream(mFilePathName + ".outputs");
-            if(!mOutputsFile->isValid())
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Failed to open outputs file for set %02x", mID);
-            return mOutputsFile->isValid();
-        }
-        void closeOutputFile()
-        {
-            if(mOutputsFile != NULL)
-                delete mOutputsFile;
-            mOutputsFile = NULL;
-        }
-
         // File is sorted transaction references with offsets to output data in output file
-        // mCached contains transactions added since last "save"
+        // mCache contains transactions added since last "save"
         // mModified contains transactions with outputs spent/modified since last "save"
         ArcMist::ReadersLock mLock;
         unsigned int mID;
-        ArcMist::String mFilePathName;
-        ArcMist::FileInputStream *mHeaderFile, *mOutputsFile;
-        TransactionReferenceList mCached[SUBSET_COUNT];
-        unsigned int mCachedCount, mCachedOutputCount;
-        ArcMist::stream_size mHeaderSize, mOutputSize;
-        bool mRewriteOutputs;
+        ArcMist::String mFilePath;
+        ArcMist::FileInputStream *mIndexFile;
+        ArcMist::FileInputStream *mDataFile;
+
+        TransactionReferenceList mCache;
+        unsigned int mTransactionCount; // Number of transactions currently indexed
+        unsigned int mOutputCount; // Number of transaction outputs currently indexed
+        unsigned int mCacheOutputCount; // Number of transactions outputs in cache
+
+        // Number of samples to pull from the file for preliminary search narrowing
+        static const unsigned int SAMPLE_SIZE = 1024;
+        SampleEntry *mSamples;
+        bool mSamplesLoaded;
+
+        void loadSamples();
 
     };
 
@@ -367,6 +419,7 @@ namespace BitCoin
         static const Hash BIP0030_HASHES[BIP0030_HASH_COUNT];
 
         TransactionOutputPool();
+        ~TransactionOutputPool() { mToCommit.clearNoDelete(); } // Will be deleted in sets
 
         bool isValid() const { return mValid; }
 
@@ -415,7 +468,7 @@ namespace BitCoin
         }
 
         // Load from/Save to file system
-        bool load();
+        bool load(bool pPreload = true);
         bool purge();
         bool save();
 
@@ -433,7 +486,7 @@ namespace BitCoin
         unsigned int mSavedBlockHeight;
         unsigned int mCacheAge;
 
-        std::vector<TransactionReference *> mToCommit;
+        TransactionReferenceList mToCommit;
 
     };
 }

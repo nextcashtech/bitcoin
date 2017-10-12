@@ -1114,22 +1114,28 @@ namespace BitCoin
                         BlockFile::lock(fileID);
                         if(blockFile->readBlock(blockOffset, block, true))
                         {
+                            mBlockProcessStartTime = getTime();
+
                             BlockFile::unlock(fileID);
                             if(block.updateOutputs(mOutputs, height))
                             {
                                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                                  "Processed block %d (%d trans) (%d bytes) : %s", height, block.transactionCount,
-                                  block.size(), block.hash.hex().text());
+                                  "Processed block %d (%d trans) (%d bytes) (%d s) : %s", height, block.transactionCount,
+                                  block.size(), getTime() - mBlockProcessStartTime, block.hash.hex().text());
                                 mOutputs.commit(block.transactions, height++);
                                 if(getTime() - lastPurgeTime > 300)
+                                {
                                     mOutputs.purge();
+                                    lastPurgeTime = getTime();
+                                }
                             }
                             else
                             {
                                 mOutputs.revert(height);
                                 mOutputs.save();
                                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-                                  "Failed to process block at height %d. At offset %d in block file %08x : %s", height, blockOffset, fileID, (*hash)->hex().text());
+                                  "Failed to process block at height %d. At offset %d in block file %08x : %s",
+                                  height, blockOffset, fileID, (*hash)->hex().text());
                                 delete blockFile;
                                 return false;
                             }
@@ -1735,21 +1741,19 @@ namespace BitCoin
     void Chain::tempTest()
     {
         // TransactionOutputPool outputs;
-        // BlockStats blockStats;
-        // Forks softForks;
+        // // BlockStats blockStats;
+        // // Forks softForks;
 
-        // // ArcMist::Log::setOutputFile("revert.log");
+        // // ArcMist::Log::setOutputFile("convert.log");
         // Info::instance().setPath("/var/bitcoin/mainnet");
 
-        // blockStats.load();
-        // softForks.load();
-        // outputs.load();
-        // // outputs.revert(388700, true);
-        // // outputs.save();
+        // // blockStats.load();
+        // // softForks.load();
+        // outputs.load(false);
+        // // // outputs.revert(388700, true);
+        // // // outputs.save();
 
-        // // outputs.convert();
-        // // outputs.save();
-
+        // outputs.convert();
 
 
         // ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
@@ -1770,17 +1774,17 @@ namespace BitCoin
 
 
 
-        // Hash hash("710a6644895bb6f1225a8aa5141809bef02ca0c7c210356e5579fec969488eab");
+        // Hash hash("ffffc1856901838e7128469d3f3d53bfc0d3cc83f647af242da7a37d7dda158d");
         // unsigned int index = 0;
 
-        // // Load transactions from block
-        // outputs.add(block.transactions, outputs.blockHeight() + 1, block.hash);
+        // // // Load transactions from block
+        // // outputs.add(block.transactions, outputs.blockHeight() + 1, block.hash);
 
-        // // Check for matching transaction in block
-        // for(std::vector<Transaction *>::iterator tran=block.transactions.begin();tran!=block.transactions.end();++tran)
-            // if((*tran)->hash == hash)
-                // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                  // "Added transaction : %s", hash.hex().text());
+        // // // Check for matching transaction in block
+        // // for(std::vector<Transaction *>::iterator tran=block.transactions.begin();tran!=block.transactions.end();++tran)
+            // // if((*tran)->hash == hash)
+                // // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  // // "Added transaction : %s", hash.hex().text());
 
         // TransactionReference *reference = outputs.findUnspent(hash, index);
         // Output output;
@@ -1788,32 +1792,32 @@ namespace BitCoin
         // {
             // reference->print();
 
-            // if((int)reference->blockHeight == outputs.blockHeight())
-            // {
-                // for(std::vector<Transaction *>::iterator tran=block.transactions.begin();tran!=block.transactions.end();++tran)
-                    // if((*tran)->hash == reference->id)
-                    // {
-                        // unsigned int outputIndex = 0;
-                        // for(std::vector<Output *>::iterator item=(*tran)->outputs.begin();item!=(*tran)->outputs.end();++item)
-                        // {
-                            // if(outputIndex == index)
-                            // {
-                                // output = **item;
-                                // output.print();
-                                // break;
-                            // }
-                            // ++outputIndex;
-                        // }
-                    // }
-            // }
-            // else
-            // {
+            // // if((int)reference->blockHeight == outputs.blockHeight())
+            // // {
+                // // for(std::vector<Transaction *>::iterator tran=block.transactions.begin();tran!=block.transactions.end();++tran)
+                    // // if((*tran)->hash == reference->id)
+                    // // {
+                        // // unsigned int outputIndex = 0;
+                        // // for(std::vector<Output *>::iterator item=(*tran)->outputs.begin();item!=(*tran)->outputs.end();++item)
+                        // // {
+                            // // if(outputIndex == index)
+                            // // {
+                                // // output = **item;
+                                // // output.print();
+                                // // break;
+                            // // }
+                            // // ++outputIndex;
+                        // // }
+                    // // }
+            // // }
+            // // else
+            // // {
                 // if(BlockFile::readOutput(reference, index, output))
                     // output.print();
                 // else
                     // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                       // "Failed to read output for transaction");
-            // }
+            // // }
         // }
         // else
             // ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,

@@ -66,116 +66,245 @@ namespace BitCoin
         return *this;
     }
 
-    bool TransactionReference::readHeaderOnly(ArcMist::InputStream *pHeaderStream)
+    bool TransactionReference::allocateOutputs(unsigned int pCount)
     {
-        // Outputs
-        clearOutputs();
-
-        // Header
-        if(pHeaderStream->remaining() < SIZE)
-            return false;
-
-        id.read(pHeaderStream);
-        blockHeight = pHeaderStream->readUnsignedInt();
-        outputFileOffset = pHeaderStream->readUnsignedLong();
-        mOutputCount = pHeaderStream->readUnsignedInt();
-        return true;
-    }
-
-    bool TransactionReference::readMatchingID(const Hash &pHash, ArcMist::InputStream *pHeaderStream,
-      ArcMist::InputStream *pOutputStream)
-    {
-        // Header
-        if(!id.read(pHeaderStream) || id != pHash)
-            return false;
-
-        if(pHeaderStream->remaining() < SIZE - 32)
-            return false;
-        blockHeight = pHeaderStream->readUnsignedInt();
-        outputFileOffset = pHeaderStream->readUnsignedLong();
-        unsigned int outputCount = pHeaderStream->readUnsignedInt();
-
-        // Outputs
-        pOutputStream->setReadOffset(outputFileOffset);
-        if(pOutputStream->remaining() < OutputReference::SIZE * outputCount)
-            return false;
-
-        allocateOutputs(outputCount);
-        pOutputStream->read(mOutputs, mOutputCount * OutputReference::SIZE);
-        return true;
-    }
-
-    bool TransactionReference::read(ArcMist::InputStream *pHeaderStream, ArcMist::InputStream *pOutputStream)
-    {
-        // Header
-        if(pHeaderStream->remaining() < SIZE)
-            return false;
-
-        id.read(pHeaderStream);
-        blockHeight = pHeaderStream->readUnsignedInt();
-        outputFileOffset = pHeaderStream->readUnsignedLong();
-        unsigned int outputCount = pHeaderStream->readUnsignedInt();
-
-        // Outputs
-        pOutputStream->setReadOffset(outputFileOffset);
-        if(pOutputStream->remaining() < OutputReference::SIZE * outputCount)
-            return false;
-
-        allocateOutputs(outputCount);
-        pOutputStream->read(mOutputs, mOutputCount * OutputReference::SIZE);
-        return true;
-    }
-
-    bool TransactionReference::write(ArcMist::OutputStream *pHeaderStream, ArcMist::OutputStream *pOutputStream,
-      bool pRewriteOutputs)
-    {
-        if(toDelete)
-            return true;
-
-        // Outputs
-        if(mOutputs != NULL) // Check for header only mode
+        // Allocate the number of outputs needed
+        if(mOutputCount != pCount)
         {
-            if(pRewriteOutputs || outputFileOffset == NOT_WRITTEN)
-            {
-                pOutputStream->setWriteOffset(pOutputStream->length());
-                outputFileOffset = pOutputStream->length();
-            }
+            if(mOutputs != NULL)
+                delete[] mOutputs;
+            mOutputCount = pCount;
+            if(mOutputCount == 0)
+                mOutputs = NULL;
             else
-                pOutputStream->setWriteOffset(outputFileOffset);
-            pOutputStream->write(mOutputs, mOutputCount * OutputReference::SIZE);
+            {
+                try
+                {
+                    mOutputs = new OutputReference[mOutputCount];
+                }
+                catch(std::bad_alloc &pBadAlloc)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Bad allocation (Allocate %d Outputs) : %s", mOutputCount, pBadAlloc.what());
+                    return false;
+                }
+            }
         }
 
-        // Header
-        id.write(pHeaderStream);
-        pHeaderStream->writeUnsignedInt(blockHeight);
-        pHeaderStream->writeUnsignedLong(outputFileOffset);
-        pHeaderStream->writeUnsignedInt(mOutputCount);
         return true;
     }
 
-    bool TransactionReference::readOld(ArcMist::InputStream *pStream)
+    void TransactionReference::clearOutputs()
     {
-        outputFileOffset = NOT_WRITTEN;
+        if(mOutputs != NULL)
+            delete[] mOutputs;
+        mOutputCount = 0;
+        mOutputs = NULL;
+    }
+
+    bool TransactionReference::readHeader(ArcMist::InputStream *pStream)
+    {
+        if(pStream->remaining() < SIZE)
+            return false;
+
+        fileOffset = pStream->readOffset();
+        if(!id.read(pStream, 32))
+            return false;
+
+        blockHeight = pStream->readUnsignedInt();
+        if(blockHeight > MAX_BLOCK_HEIGHT)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Block height too high : %d", blockHeight);
+            return false;
+        }
+
+        clearOutputs();
+        mOutputCount = pStream->readUnsignedInt();
+        if(mOutputCount > MAX_OUTPUT_COUNT)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Output Count too high : %d", mOutputCount);
+            return false;
+        }
+
+        if(pStream->remaining() < OutputReference::SIZE * mOutputCount)
+            return false;
+
+        return true;
+    }
+
+    bool TransactionReference::readMatchingID(const Hash &pHash, ArcMist::InputStream *pStream)
+    {
+        if(pStream->remaining() < SIZE)
+            return false;
+
+        fileOffset = pStream->readOffset();
+        if(!id.read(pStream) || id != pHash)
+            return false;
+
+        blockHeight = pStream->readUnsignedInt();
+        if(blockHeight > MAX_BLOCK_HEIGHT)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Block height too high : %d", blockHeight);
+            return false;
+        }
+
+        unsigned int outputCount = pStream->readUnsignedInt();
+        if(outputCount > MAX_OUTPUT_COUNT)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Output Count too high : %d", outputCount);
+            return false;
+        }
+
+        if(pStream->remaining() < OutputReference::SIZE * outputCount)
+            return false;
+
+        if(!allocateOutputs(outputCount))
+            return false;
+        pStream->read(mOutputs, mOutputCount * OutputReference::SIZE);
+        clearFlags();
+        return true;
+    }
+
+    bool TransactionReference::readAboveBlock(unsigned int pBlockHeight, ArcMist::InputStream *pStream)
+    {
+        if(pStream->remaining() < SIZE)
+            return false;
+
+        fileOffset = pStream->readOffset();
+
+        // Check block height first
+        pStream->setReadOffset(fileOffset + 32);
+        blockHeight = pStream->readUnsignedInt();
+        if(blockHeight < pBlockHeight)
+            return false;
+
+        // Read all data
+        pStream->setReadOffset(fileOffset);
         if(!id.read(pStream))
             return false;
-        blockHeight = pStream->readUnsignedInt();
-        unsigned int outputCount = pStream->readUnsignedInt();
 
-        if(outputCount == 0)
+        blockHeight = pStream->readUnsignedInt();
+        if(blockHeight > MAX_BLOCK_HEIGHT)
         {
-            clearOutputs();
-            return true; // This should never happen, but isn't technically a failure
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Block height too high : %d", blockHeight);
+            return false;
         }
 
-        if(pStream->remaining() < outputCount * OutputReference::SIZE)
+        unsigned int outputCount = pStream->readUnsignedInt();
+        if(outputCount > MAX_OUTPUT_COUNT)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Output Count too high : %d", outputCount);
+            return false;
+        }
+
+        if(pStream->remaining() < OutputReference::SIZE * outputCount)
             return false;
 
-        // Read all the outputs into allocated outputs, then remove spent outputs
-        // Allocate the number of outputs needed
-        allocateOutputs(outputCount);
+        if(!allocateOutputs(outputCount))
+            return false;
+        pStream->read(mOutputs, mOutputCount * OutputReference::SIZE);
+        clearFlags();
+        return true;
+    }
+
+    bool TransactionReference::readOld(ArcMist::InputStream *pHeaderStream, ArcMist::InputStream *pOutputStream)
+    {
+        // Header
+        if(pHeaderStream->remaining() < SIZE)
+            return false;
+
+        id.read(pHeaderStream);
+        blockHeight = pHeaderStream->readUnsignedInt();
+        unsigned int outputFileOffset = pHeaderStream->readUnsignedLong();
+        unsigned int outputCount = pHeaderStream->readUnsignedInt();
 
         // Outputs
-        pStream->read(mOutputs, outputCount * OutputReference::SIZE);
+        pOutputStream->setReadOffset(outputFileOffset);
+        if(pOutputStream->remaining() < OutputReference::SIZE * outputCount)
+            return false;
+
+        if(!allocateOutputs(outputCount))
+            return false;
+        pOutputStream->read(mOutputs, mOutputCount * OutputReference::SIZE);
+
+        clearFlags();
+        fileOffset = ArcMist::INVALID_STREAM_SIZE;
+        return true;
+    }
+
+    bool TransactionReference::read(ArcMist::InputStream *pStream)
+    {
+        fileOffset = pStream->readOffset();
+        if(!id.read(pStream))
+            return false;
+        if(pStream->remaining() < SIZE - 32)
+            return false;
+
+        blockHeight = pStream->readUnsignedInt();
+        if(blockHeight > MAX_BLOCK_HEIGHT)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Block height too high : %d", blockHeight);
+            return false;
+        }
+
+        unsigned int outputCount = pStream->readUnsignedInt();
+        if(outputCount > MAX_OUTPUT_COUNT)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Output Count too high : %d", outputCount);
+            return false;
+        }
+
+        if(pStream->remaining() < OutputReference::SIZE * outputCount)
+            return false;
+
+        if(!allocateOutputs(outputCount))
+            return false;
+        pStream->read(mOutputs, mOutputCount * OutputReference::SIZE);
+        clearFlags();
+        return true;
+    }
+
+    bool TransactionReference::write(ArcMist::OutputStream *pStream)
+    {
+        if(mOutputs == NULL)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              "Trying to write header only transaction : %s", id.hex().text());
+            return false;
+        }
+
+        // Not modified and already written to file
+        if(!isModified() && fileOffset != ArcMist::INVALID_STREAM_SIZE)
+            return true;
+
+        // Not written yet, append to end of file
+        if(fileOffset == ArcMist::INVALID_STREAM_SIZE)
+            fileOffset = pStream->length();
+
+        if(pStream->writeOffset() != fileOffset)
+            pStream->setWriteOffset(fileOffset);
+
+        id.write(pStream);
+        pStream->writeUnsignedInt(blockHeight);
+        pStream->writeUnsignedInt(mOutputCount);
+        pStream->write(mOutputs, mOutputCount * OutputReference::SIZE);
+        clearModified();
+        setWasModified();
+        return true;
+    }
+
+    bool TransactionReference::writeIndex(ArcMist::OutputStream *pStream)
+    {
+        IndexEntry entry = this;
+        pStream->write(&entry, sizeof(IndexEntry));
         return true;
     }
 
@@ -189,6 +318,33 @@ namespace BitCoin
             if(output->spentBlockHeight != 0)
                 ++result;
         return result;
+    }
+
+    // Mark an output as spent
+    void TransactionReference::spendInternal(unsigned int pIndex, unsigned int pBlockHeight)
+    {
+        if(mOutputs == NULL)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              "Trying to spend header only transaction at index %d : %s", pIndex, id.hex().text());
+            return;
+        }
+
+        OutputReference *output = outputAt(pIndex);
+        if(output == NULL)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              "Spend index %d not found", pIndex);
+            return;
+        }
+        else if(output->spentBlockHeight != 0)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              "Spend index %d already spent at block height %d", pIndex, output->spentBlockHeight);
+            return;
+        }
+        output->spendInternal(pBlockHeight);
+        setModified();
     }
 
     bool TransactionReference::wasModifiedInOrAfterBlock(unsigned int pBlockHeight) const
@@ -210,25 +366,34 @@ namespace BitCoin
     void TransactionReference::commit(std::vector<Output *> &pOutputs)
     {
         if(mOutputs == NULL)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              "Trying to commit header only transaction : %s", id.hex().text());
             return;
+        }
 
         if(mOutputCount != pOutputs.size())
         {
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
               "Mismatched transaction outputs on commit %d != %d : %s", mOutputCount, pOutputs.size(),
               id.hex().text());
-              return;
+            return;
         }
 
         OutputReference *output = mOutputs;
         for(std::vector<Output *>::iterator fullOutput=pOutputs.begin();fullOutput!=pOutputs.end();++fullOutput,++output)
-            output->commit(**fullOutput);
+            if(output->commit(**fullOutput))
+                setModified();
     }
 
     bool TransactionReference::revert(unsigned int pBlockHeight)
     {
         if(mOutputs == NULL)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              "Trying to revert header only transaction : %s", id.hex().text());
             return false;
+        }
 
         bool result = false;
         OutputReference *output = mOutputs;
@@ -240,6 +405,7 @@ namespace BitCoin
                   output->spentBlockHeight, i, id.hex().text());
                 output->spentBlockHeight = 0; // Spent at this block height, so "unspend"
                 result = true;
+                setModified();
             }
         return result;
     }
@@ -268,7 +434,7 @@ namespace BitCoin
         }
     }
 
-    void TransactionReferenceList::insertSorted(TransactionReference *pItem)
+    bool TransactionReferenceList::insertSorted(TransactionReference *pItem)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Insert Sorted");
@@ -276,7 +442,13 @@ namespace BitCoin
         if(size() == 0 || *back() < *pItem)
         {
             push_back(pItem);
-            return;
+            return true;
+        }
+
+        if(*front() > *pItem)
+        {
+            insert(begin(), pItem);
+            return true;
         }
 
         int compare;
@@ -293,12 +465,19 @@ namespace BitCoin
 
             if(current == bottom)
             {
+                if(**current == *pItem)
+                    return false;
+
                 if(**bottom > *pItem)
                     current = bottom; // Insert before bottom
                 else if(current != top && **top > *pItem)
                     current = top; // Insert before top
                 else
                     current = top + 1; // Insert after top
+
+                if(**current == *pItem)
+                    return false;
+
                 break;
             }
 
@@ -323,7 +502,10 @@ namespace BitCoin
 
                 while(pItem->id == (*current)->id)
                 {
-                    if((*current)->blockHeight > pItem->blockHeight)
+                    compare = pItem->compare(**current);
+                    if(compare == 0)
+                        return false;
+                    else if(compare < 0)
                         break;
                     ++current;
                 }
@@ -335,6 +517,7 @@ namespace BitCoin
         iterator after = begin();
         after += (current - data());
         insert(after, pItem);
+        return true;
     }
 
     void TransactionReferenceList::mergeSorted(TransactionReferenceList &pRight)
@@ -368,7 +551,7 @@ namespace BitCoin
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs First Matching");
 #endif
-        if(size() == 0 || back()->id.compare(pHash) < 0)
+        if(size() == 0 || back()->id.compare(pHash) < 0 || front()->id.compare(pHash) > 0)
             return end();
 
         int compare;
@@ -423,16 +606,14 @@ namespace BitCoin
         return result;
     }
 
-    void TransactionReferenceList::dropBlocks(unsigned int pBlockHeight, unsigned int &pTransactionCount,
-      unsigned int &pOutputCount)
+    void TransactionReferenceList::drop(unsigned int pBlockHeight, unsigned int &pOutputCount)
     {
         std::vector<TransactionReference *> items = *this;
         clearNoDelete();
         for(iterator item=items.begin();item!=items.end();++item)
-            if((*item)->blockHeight < pBlockHeight || !(*item)->hasUnspentOutputs())
+            if((*item)->blockHeight < pBlockHeight || !(*item)->hasUnspentOutputs() || (*item)->markedDelete())
             {
                 // Drop the item
-                --pTransactionCount;
                 pOutputCount -= (*item)->outputCount();
                 delete *item;
             }
@@ -470,407 +651,777 @@ namespace BitCoin
 
     OutputSet::OutputSet() : mLock("Output Set")
     {
-        mHeaderFile = NULL;
-        mHeaderSize = 0;
-        mOutputsFile = NULL;
-        mOutputSize = 0;
-        mCachedCount = 0;
-        mCachedOutputCount = 0;
-        mRewriteOutputs = false;
+        mID = 0x100;
+        mIndexFile = NULL;
+        mDataFile = NULL;
+        mTransactionCount = 0;
+        mOutputCount = 0;
+        mCacheOutputCount = 0;
+        mSamplesLoaded = false;
+        mSamples = NULL;
     }
 
     OutputSet::~OutputSet()
     {
-        TransactionReferenceList *cached = mCached;
-        for(unsigned int i=0;i<SUBSET_COUNT;++i)
-        {
-            cached->clear();
-            ++cached;
-        }
-
-        if(mHeaderFile != NULL)
-            delete mHeaderFile;
-        if(mOutputsFile != NULL)
-            delete mOutputsFile;
+        if(mIndexFile != NULL)
+            delete mIndexFile;
+        if(mDataFile != NULL)
+            delete mDataFile;
+        if(mSamples != NULL)
+            delete[] mSamples;
     }
 
-    void OutputSet::setup(unsigned int pID, const char *pFilePath)
+    void OutputSet::clear()
+    {
+        mCache.clear();
+        mCacheOutputCount = 0;
+        if(mSamples != NULL)
+            delete[] mSamples;
+        mSamples = NULL;
+        mSamplesLoaded = false;
+        if(mIndexFile != NULL)
+            delete mIndexFile;
+        mIndexFile = NULL;
+        if(mDataFile != NULL)
+            delete mDataFile;
+        mDataFile = NULL;
+    }
+
+    bool OutputSet::setup(unsigned int pID, const char *pFilePath, unsigned int pCacheSize)
     {
         mLock.writeLock("Setup");
-        mID = pID;
-        mFilePathName.writeFormatted("%s%s%02x", pFilePath, ArcMist::PATH_SEPARATOR, mID);
-        if(!ArcMist::fileExists(mFilePathName))
-        {
-            // Create header file
-            ArcMist::FileOutputStream outputHeaderFile(mFilePathName, true);
 
-            // Write zeroized subset offsets
-            ArcMist::stream_size subsetFileOffsets[SUBSET_COUNT];
-            std::memset(subsetFileOffsets, 0, SUBSET_COUNT * 8);
-            outputHeaderFile.write(subsetFileOffsets, SUBSET_COUNT * 8);
-            mHeaderSize = SUBSET_COUNT * 8;
-        }
-        else
+        mFilePath = pFilePath;
+        ArcMist::String filePathName;
+        mID = pID;
+        if(mIndexFile != NULL)
+            delete mIndexFile;
+        mIndexFile = NULL;
+        if(mDataFile != NULL)
+            delete mDataFile;
+        mDataFile = NULL;
+
+        bool created = false;
+        filePathName.writeFormatted("%s%s%02x.index", mFilePath.text(), ArcMist::PATH_SEPARATOR, mID);
+        if(!ArcMist::fileExists(filePathName))
         {
-            openHeaderFile();
-            mHeaderSize = mHeaderFile->length();
-            closeHeaderFile();
+            // Create file
+            ArcMist::FileOutputStream *indexOutFile = new ArcMist::FileOutputStream(filePathName, true);
+            indexOutFile->writeUnsignedInt(0);
+            mTransactionCount = 0;
+            indexOutFile->writeUnsignedInt(0);
+            mOutputCount = 0;
+            created = true;
+            delete indexOutFile;
         }
-        ArcMist::String outputsFilePathName = mFilePathName + ".outputs";
-        if(!ArcMist::fileExists(outputsFilePathName))
+
+        mIndexFile = new ArcMist::FileInputStream(filePathName);
+        mIndexFile->setReadOffset(0);
+        if(!created)
         {
-            ArcMist::FileOutputStream(outputsFilePathName, true); // Create file
-            mOutputSize = 0;
+            mTransactionCount = mIndexFile->readUnsignedInt();
+            mOutputCount = mIndexFile->readUnsignedInt();
         }
-        else
+
+        filePathName.writeFormatted("%s%s%02x.data", mFilePath.text(), ArcMist::PATH_SEPARATOR, mID);
+        if(created)
         {
-            openOutputsFile();
-            mOutputSize = mOutputsFile->length();
-            closeOutputFile();
+            // Create file
+            ArcMist::FileOutputStream *dataOutFile = new ArcMist::FileOutputStream(filePathName, true);
+            delete dataOutFile;
         }
+        mDataFile = new ArcMist::FileInputStream(filePathName);
+
+        mCache.clear();
+        mCache.reserve(pCacheSize);
+
+        if(!mIndexFile->isValid() || !mDataFile->isValid())
+        {
+            mLock.writeUnlock();
+            return false;
+        }
+
+        loadSamples();
         mLock.writeUnlock();
+        return true;
     }
 
-    bool OutputSet::save(unsigned int pDropBlockHeight)
+    bool OutputSet::readOld(TransactionReferenceList &pList, const char *pHeaderFileName, const char *pOutputsFileName)
     {
-        mLock.writeLock("Save");
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Read Old");
+#endif
+        ArcMist::FileStream headerFile(pHeaderFileName);
+        ArcMist::FileStream outputsFile(pOutputsFileName);
 
-        if(mCachedCount == 0)
-        {
-            mLock.writeUnlock();
-            return true;
-        }
-
-        if(!openHeaderFile())
-        {
-            mLock.writeUnlock();
-            return false;
-        }
-
-        if(mRewriteOutputs && !openOutputsFile())
-        {
-            mLock.writeUnlock();
-            return false;
-        }
-
-        bool success = true;
-        ArcMist::stream_size subsetFileOffsets[SUBSET_COUNT];
-        TransactionReferenceList fileList[SUBSET_COUNT];
         TransactionReference *newReference;
-
-        mHeaderFile->setReadOffset(0);
-        mHeaderFile->read(subsetFileOffsets, SUBSET_COUNT * 8);
-
-        // Read in file items
-        while(mHeaderFile->remaining())
+        bool success = true;
+        headerFile.setReadOffset(0x100 * sizeof(ArcMist::stream_size));
+        while(headerFile.remaining())
         {
             newReference = new TransactionReference();
-            if(mRewriteOutputs)
-            {
-                if(!newReference->read(mHeaderFile, mOutputsFile))
-                {
-                    delete newReference;
-                    success = false;
-                    break;
-                }
-            }
-            else if(!newReference->readHeaderOnly(mHeaderFile))
+            if(!newReference->readOld(&headerFile, &outputsFile))
             {
                 delete newReference;
                 success = false;
                 break;
             }
-            fileList[newReference->id.getByte(1)].push_back(newReference);
+            pList.push_back(newReference);
+        }
+        return success;
+    }
+
+    bool OutputSet::save(unsigned int pDropBlockHeight)
+    {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Save");
+#endif
+        mLock.writeLock("Save");
+
+        if(mCache.size() == 0)
+        {
+            mLock.writeUnlock();
+            return true;
         }
 
-        if(!success)
+        if(!mDataFile->isValid())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Failed to read output set %02x while saving", mID);
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Data file failed in save");
             mLock.writeUnlock();
             return false;
         }
 
-        // Close the input files
-        closeHeaderFile();
-        closeOutputFile();
+        //TODO Possibly skip save if no items have been modified
 
-        // Rewrite the data
-        ArcMist::FileOutputStream *headerFile = new ArcMist::FileOutputStream(mFilePathName, true); // Truncate
-        ArcMist::FileOutputStream *outputFile;
-        // Only truncate the output file if it needs rewritten
-        if(mRewriteOutputs)
-            outputFile = new ArcMist::FileOutputStream(mFilePathName + ".outputs", true); // Truncate
-        else
-            outputFile = new ArcMist::FileOutputStream(mFilePathName + ".outputs");
+        bool success = true;
 
-        TransactionReferenceList::iterator fileItem, fileEnd, cachedItem, cachedEnd;
-        int compare;
-
-        // Write current subset offsets to file
-        headerFile->setWriteOffset(0);
-        headerFile->write(subsetFileOffsets, SUBSET_COUNT * 8);
-
-        for(unsigned int i=0;i<SUBSET_COUNT;++i)
+        // Count all added transactions
+        unsigned int addedTransactionCount = 0, addedOutputCount = 0;
+        unsigned int removedTransactionCount = 0, removedOutputCount = 0;
+        for(TransactionReferenceList::iterator item=mCache.begin();item!=mCache.end();++item)
         {
-            subsetFileOffsets[i] = headerFile->writeOffset();
-            fileItem = fileList[i].begin();
-            fileEnd = fileList[i].end();
-            cachedItem = mCached[i].begin();
-            cachedEnd = mCached[i].end();
-
-            // Write both lists to file while retaining sort
-            while(fileItem != fileEnd || cachedItem != cachedEnd)
+            if((*item)->fileOffset == ArcMist::INVALID_STREAM_SIZE)
             {
-                if(fileItem == fileEnd) // All file items already written
-                    (*cachedItem++)->write(headerFile, outputFile, mRewriteOutputs);
-                else if(cachedItem == cachedEnd) // All cached items already written
-                    (*fileItem++)->write(headerFile, outputFile, mRewriteOutputs);
-                else
+                if(!(*item)->markedDelete())
                 {
-                    // Determine which item is next in sorted order
-                    compare = (*fileItem)->compare(**cachedItem);
-                    if(compare < 0)
-                        (*fileItem++)->write(headerFile, outputFile, mRewriteOutputs);
-                    else if(compare > 0)
-                        (*cachedItem++)->write(headerFile, outputFile, mRewriteOutputs);
-                    else
-                    {
-                        // They are both the same so only write the cached because it's more up to date
-                        (*cachedItem++)->write(headerFile, outputFile, mRewriteOutputs);
-                        ++fileItem;
-                    }
+                    ++addedTransactionCount;
+                    addedOutputCount += (*item)->outputCount();
                 }
             }
-
-            mCached[i].dropBlocks(pDropBlockHeight, mCachedCount, mCachedOutputCount);
-        }
-
-        // Write updated subset offsets to file
-        headerFile->setWriteOffset(0);
-        headerFile->write(subsetFileOffsets, SUBSET_COUNT * 8);
-
-        // Close the output files
-        mHeaderSize = headerFile->length();
-        delete headerFile;
-        mOutputSize = outputFile->length();
-        delete outputFile;
-
-        mRewriteOutputs = false;
-        mLock.writeUnlock();
-        return true;
-    }
-
-    void OutputSet::clear()
-    {
-        TransactionReferenceList *cached = mCached;
-        for(unsigned int i=0;i<SUBSET_COUNT;++i)
-        {
-            cached->clear();
-            ++cached;
-        }
-        mCachedCount = 0;
-        mCachedOutputCount = 0;
-        mRewriteOutputs = false;
-    }
-
-    bool OutputSet::transactionIsCached(const Hash &pTransactionID, unsigned int pBlockHeight)
-    {
-#ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Outputs Trans Cached");
-#endif
-        TransactionReferenceList &cached = mCached[pTransactionID.getByte(1)];
-
-        // Look in cached
-        mLock.readLock();
-        for(TransactionReferenceList::iterator item=cached.firstMatching(pTransactionID);item!=cached.end();++item)
-            if((*item)->id == pTransactionID)
+            else if((*item)->markedDelete())
             {
-                if((*item)->blockHeight == pBlockHeight)
+                ++removedTransactionCount;
+                removedOutputCount += (*item)->outputCount();
+            }
+        }
+
+        TransactionReferenceList::iterator item;
+        std::vector<IndexEntry> indices;
+        std::vector<IndexEntry>::iterator index;
+        TransactionReferenceList newList;
+        TransactionReference *nextTransaction;
+        int compare;
+        ArcMist::String filePathName;
+
+#ifdef PROFILER_ON
+        ArcMist::Profiler readIndexProfiler("Outputs Save Read Index");
+#endif
+        // Read current index data
+        indices.resize(mTransactionCount);
+        mIndexFile->setReadOffset(HEADER_SIZE); // Transaction count, output count
+        mIndexFile->read(indices.data(), mTransactionCount * sizeof(IndexEntry));
+
+        // Reopen data file as an output stream
+        delete mDataFile;
+        mDataFile = NULL;
+        filePathName.writeFormatted("%s%s%02x.data", mFilePath.text(), ArcMist::PATH_SEPARATOR, mID);
+        ArcMist::FileOutputStream *dataOutFile = new ArcMist::FileOutputStream(filePathName);
+
+        // Write all cached transactions (update/append) so they all have file offsets
+        for(TransactionReferenceList::iterator item=mCache.begin();item!=mCache.end();++item)
+            if(!(*item)->markedDelete())
+                (*item)->write(dataOutFile);
+        dataOutFile->flush();
+
+        // Reopen data input file
+        delete dataOutFile;
+        filePathName.writeFormatted("%s%s%02x.data", mFilePath.text(), ArcMist::PATH_SEPARATOR, mID);
+        mDataFile = new ArcMist::FileInputStream(filePathName);
+
+#ifdef PROFILER_ON
+        readIndexProfiler.stop();
+#endif
+
+        // Skip re-sort if no new items have been added or removed (only updated)
+        if(addedTransactionCount == 0 && removedTransactionCount == 0)
+        {
+            // Clear "was modified" flags
+            for(TransactionReferenceList::iterator item=mCache.begin();item!=mCache.end();++item)
+                (*item)->clearWasModified();
+
+            mLock.writeUnlock();
+            return true;
+        }
+
+#ifdef PROFILER_ON
+        ArcMist::Profiler updateIndexProfiler("Outputs Save Update Index");
+#endif
+        // Insert new values into index
+        nextTransaction = new TransactionReference();
+        item = mCache.begin();
+        index = indices.begin();
+        std::vector<IndexEntry> newIndices;
+        unsigned int indexOffset = 1;
+
+        newIndices.reserve(mTransactionCount + addedTransactionCount - removedTransactionCount);
+
+        if(index != indices.end())
+        {
+            // Read first item header from file
+            mDataFile->setReadOffset(index->fileOffset);
+            if(!nextTransaction->readHeader(mDataFile))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Failed to read header at index %d offset %d", indexOffset, index->fileOffset);
+                success = false;
+            }
+        }
+
+        while(index != indices.end() && success)
+        {
+            if(item == mCache.end())
+            {
+                // Add most recently read transaction to new index
+                newIndices.push_back(*index);
+                ++index;
+                ++indexOffset;
+                if(index == indices.end())
+                    break;
+                mDataFile->setReadOffset(index->fileOffset);
+                if(!nextTransaction->readHeader(mDataFile))
                 {
-                    mLock.readUnlock();
-                    return true;
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Failed to read header at index %d offset %d", indexOffset, index->fileOffset);
+                    success = false;
+                    break;
                 }
             }
             else
-                break;
-        mLock.readUnlock();
-        return false;
+            {
+                compare = nextTransaction->compare(**item);
+                if(compare < 0)
+                {
+                    // Add most recently read transaction to new index
+                    newIndices.push_back(*index);
+                    ++index;
+                    ++indexOffset;
+                    if(index == indices.end())
+                        break;
+                    mDataFile->setReadOffset(index->fileOffset);
+                    if(!nextTransaction->readHeader(mDataFile))
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                          "Failed to read header at index %d offset %d", indexOffset, index->fileOffset);
+                        success = false;
+                        break;
+                    }
+                }
+                else if(compare > 0)
+                {
+                    if(!(*item)->markedDelete())
+                        newIndices.push_back(IndexEntry((*item))); // Add cache item to new index
+                    ++item;
+                }
+                else
+                {
+                    // Item already in cache. Add cache item to new index and go to next item
+                    if(!(*item)->markedDelete())
+                        newIndices.push_back(IndexEntry((*item)));
+                    ++item;
+
+                    ++index;
+                    ++indexOffset;
+                    if(index == indices.end())
+                        break;
+                    mDataFile->setReadOffset(index->fileOffset);
+                    if(!nextTransaction->readHeader(mDataFile))
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                          "Failed to read header at index %d offset %d", indexOffset, indexOffset, index->fileOffset);
+                        success = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        delete nextTransaction;
+
+        // Add any remaining cache items to the new index
+        while(item != mCache.end())
+        {
+            if(!(*item)->markedDelete())
+                newIndices.push_back(IndexEntry((*item)));
+            ++item;
+        }
+
+#ifdef PROFILER_ON
+        updateIndexProfiler.stop();
+#endif
+
+#ifdef PROFILER_ON
+        ArcMist::Profiler writeIndexProfiler("Outputs Save Write Index");
+#endif
+        // Reopen index file as an output stream
+        delete mIndexFile;
+        mIndexFile = NULL;
+        filePathName.writeFormatted("%s%s%02x.index", mFilePath.text(), ArcMist::PATH_SEPARATOR, mID);
+        ArcMist::FileOutputStream *indexOutFile = new ArcMist::FileOutputStream(filePathName);
+
+        // Write the new index
+        indexOutFile->setWriteOffset(0);
+        indexOutFile->writeUnsignedInt(mTransactionCount + addedTransactionCount - removedTransactionCount);
+        indexOutFile->writeUnsignedInt(mOutputCount + addedOutputCount - removedOutputCount);
+        indexOutFile->write(newIndices.data(), newIndices.size() * sizeof(IndexEntry));
+
+        // Overwrite any extra data at the end of the file
+        IndexEntry padIndex;
+        padIndex.invalidate();
+        while(indexOutFile->writeOffset() < indexOutFile->length())
+            padIndex.write(indexOutFile);
+        indexOutFile->flush();
+
+        // Reopen index file as an input stream
+        delete indexOutFile;
+        filePathName.writeFormatted("%s%s%02x.index", mFilePath.text(), ArcMist::PATH_SEPARATOR, mID);
+        mIndexFile = new ArcMist::FileInputStream(filePathName);
+
+#ifdef PROFILER_ON
+        writeIndexProfiler.stop();
+#endif
+
+#ifdef PROFILER_ON
+        ArcMist::Profiler dropProfiler("Outputs Save Drop");
+#endif
+        mCache.drop(pDropBlockHeight, mCacheOutputCount);
+#ifdef PROFILER_ON
+        dropProfiler.stop();
+#endif
+
+        // Assert the counts still match (otherwise something went wrong)
+        if(mTransactionCount + addedTransactionCount - removedTransactionCount != newIndices.size())
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Output set index %02x update counts not adding up. Index %d, Transactions/added/removed %d/%d/%d",
+              mID, newIndices.size(), mTransactionCount, addedTransactionCount, removedTransactionCount);
+            success = false;
+        }
+
+        if(success)
+        {
+            // Update counts
+            mTransactionCount += addedTransactionCount;
+            mTransactionCount -= removedTransactionCount;
+            mOutputCount += addedOutputCount;
+            mOutputCount -= removedOutputCount;
+
+            // Reload samples
+            loadSamples();
+
+            // Clear "was modified" flags
+            for(TransactionReferenceList::iterator item=mCache.begin();item!=mCache.end();++item)
+                (*item)->clearWasModified();
+        }
+
+        mLock.writeUnlock();
+        return success;
     }
 
-    unsigned int OutputSet::pullBlocks(unsigned int pBlockHeight)
+    // void OutputSet::print()
+    // {
+        // // Read current index data
+        // IndexEntry index;
+        // mIndexFile->setReadOffset(HEADER_SIZE); // Transaction count, output count
+
+        // TransactionReference *nextTransaction = new TransactionReference();
+        // for(unsigned int i=0;i<100;i++)
+        // {
+            // index.read(mIndexFile);
+            // mDataFile->setReadOffset(index.fileOffset);
+            // if(nextTransaction->read(mDataFile))
+                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+                  // "Hash : %s", nextTransaction->id.hex().text());
+        // }
+
+        // delete nextTransaction;
+    // }
+
+    unsigned int OutputSet::pullBlocks(unsigned int pBlockHeight, bool pUnspentOnly)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Pull Blocks");
 #endif
-        if(!openHeaderFile() || !openOutputsFile())
-            return 0;
-
-        bool wasEmpty = mCachedCount == 0;
-
-        // Skip subset file offsets
-        mHeaderFile->setReadOffset(SUBSET_COUNT * 8);
-
-        TransactionReference *newReference = new TransactionReference();
-        unsigned int itemsAdded = 0;
-        while(mHeaderFile->remaining())
+        if(!mDataFile->isValid())
         {
-            if(!newReference->read(mHeaderFile, mOutputsFile))
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Data file failed in pull blocks");
+            return 0;
+        }
+
+        // Read current index data
+        IndexEntry index;
+        mIndexFile->setReadOffset(HEADER_SIZE); // Transaction count, output count
+
+        TransactionReference *nextTransaction;
+        try
+        {
+            nextTransaction = new TransactionReference();
+        }
+        catch(std::bad_alloc &pBadAlloc)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Bad allocation (Pull Blocks Initial) : %s", pBadAlloc.what());
+            return 0;
+        }
+        unsigned int itemsAdded = 0;
+        while(mIndexFile->remaining())
+        {
+            index.read(mIndexFile);
+            mDataFile->setReadOffset(index.fileOffset);
+            if(nextTransaction->readAboveBlock(pBlockHeight, mDataFile) &&
+              (!pUnspentOnly || nextTransaction->hasUnspentOutputs()) &&
+              mCache.insertSorted(nextTransaction))
             {
-                delete newReference;
-                return itemsAdded;
-            }
-            else
-            {
-                if(newReference->blockHeight >= pBlockHeight && newReference->hasUnspentOutputs() &&
-                  (wasEmpty || !transactionIsCached(newReference->id, newReference->blockHeight)))
+                ++itemsAdded;
+                mCacheOutputCount += nextTransaction->outputCount();
+                try
                 {
-                    if(wasEmpty)
-                        mCached[newReference->id.getByte(1)].push_back(newReference);
-                    else
-                        mCached[newReference->id.getByte(1)].insertSorted(newReference);
-                    ++itemsAdded;
-                    ++mCachedCount;
-                    mCachedOutputCount += newReference->outputCount();
-                    newReference = new TransactionReference();
+                    nextTransaction = new TransactionReference();
+                }
+                catch(std::bad_alloc &pBadAlloc)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Bad allocation (Pull Blocks) : %s", pBadAlloc.what());
+                    return itemsAdded;
                 }
             }
         }
 
-        delete newReference;
+        delete nextTransaction;
         return itemsAdded;
     }
 
-    unsigned int OutputSet::pullBlock(unsigned int pBlockHeight)
-    {
-#ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Outputs Pull Block");
-#endif
-        if(!openHeaderFile() || !openOutputsFile())
-            return 0;
-
-        // Skip subset file offsets
-        mHeaderFile->setReadOffset(SUBSET_COUNT * 8);
-
-        TransactionReference *newReference = new TransactionReference();
-        unsigned int itemsAdded = 0;
-        while(mHeaderFile->remaining())
-        {
-            if(!newReference->read(mHeaderFile, mOutputsFile))
-            {
-                delete newReference;
-                return itemsAdded;
-            }
-            else
-            {
-                if(newReference->wasModifiedInOrAfterBlock(pBlockHeight) &&
-                  !transactionIsCached(newReference->id, newReference->blockHeight))
-                {
-                    mCached[newReference->id.getByte(1)].insertSorted(newReference);
-                    ++itemsAdded;
-                    ++mCachedCount;
-                    mCachedOutputCount += newReference->outputCount();
-                    newReference = new TransactionReference();
-                }
-            }
-        }
-
-        delete newReference;
-        return itemsAdded;
-    }
-
-    unsigned int OutputSet::pull(const Hash &pTransactionID, TransactionReferenceList &pList)
+    unsigned int OutputSet::pullLinear(const Hash &pTransactionID)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Pull");
 #endif
-        if(!openHeaderFile() || !openOutputsFile())
+        if(mTransactionCount == 0)
             return 0;
 
-        Hash hash(32);
-        int compare;
-        ArcMist::stream_size current;
-
-        // Get the file offset of this transaction ID's subset
-        int setID = pTransactionID.getByte(1);
-        mHeaderFile->setReadOffset(setID * 8);
-        ArcMist::stream_size bottom = mHeaderFile->readUnsignedLong();
-
-        // Read that file offset of the next subset
-        ArcMist::stream_size top;
-        if(setID == 0xff)
-            top = mHeaderFile->length();
-        else
-            top = mHeaderFile->readUnsignedLong();
-
-        while(true)
+        if(!mDataFile->isValid())
         {
-            // Break the set in two halves
-            current = (top - bottom) / 2;
-            current -= current % TransactionReference::SIZE;
-            current += bottom;
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Data file failed in pull linear");
+            return 0;
+        }
 
-            if(current == bottom)
+        // Linear search
+        IndexEntry index;
+        Hash hash(32);
+        unsigned int itemsAdded;
+        bool first = true;
+
+        mIndexFile->setReadOffset(HEADER_SIZE);
+
+        while(mIndexFile->remaining())
+        {
+            index.read(mIndexFile);
+            mDataFile->setReadOffset(index.fileOffset);
+            if(!hash.read(mDataFile))
+                return 0;
+            if(first)
             {
-                mHeaderFile->setReadOffset(bottom);
-                break; // Check for match
+                first = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+                  "First : %s", hash.hex().text());
+            }
+            if(hash == pTransactionID)
+                break;
+            if(hash.getByte(31) == pTransactionID.getByte(31))
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Linear : %s", hash.hex().text());
+        }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+          "Last : %s", hash.hex().text());
+
+        TransactionReference *nextTransaction = new TransactionReference();
+
+        mIndexFile->setReadOffset(mIndexFile->readOffset() - sizeof(IndexEntry));
+        while(mIndexFile->remaining())
+        {
+            index.read(mIndexFile);
+            mDataFile->setReadOffset(index.fileOffset);
+            if(!nextTransaction->readMatchingID(pTransactionID, mDataFile))
+                break;
+            if(mCache.insertSorted(nextTransaction))
+            {
+                ++itemsAdded;
+                mCacheOutputCount += nextTransaction->outputCount();
+                nextTransaction = new TransactionReference();
+            }
+        }
+
+        delete nextTransaction;
+        return itemsAdded;
+    }
+
+    void OutputSet::loadSamples()
+    {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Load Samples");
+#endif
+        mSamplesLoaded = false;
+
+        if(!mDataFile->isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Data file failed in load samples");
+            return;
+        }
+
+        unsigned int delta = mTransactionCount / SAMPLE_SIZE;
+        if(delta < 1)
+            return;
+
+        if(mSamples == NULL)
+        {
+            try
+            {
+                mSamples = new SampleEntry[SAMPLE_SIZE];
+            }
+            catch(std::bad_alloc &pBadAlloc)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Bad allocation (Load Samples) : %s", pBadAlloc.what());
+                return;
+            }
+        }
+
+        // Load samples
+        IndexEntry index;
+        SampleEntry *sample = mSamples;
+        mIndexFile->setReadOffset(HEADER_SIZE);
+        for(unsigned int i=0;i<SAMPLE_SIZE-1;++i)
+        {
+            sample->indexOffset = mIndexFile->readOffset();
+            if(!index.read(mIndexFile))
+                return;
+
+            mDataFile->setReadOffset(index.fileOffset);
+            if(!sample->hash.read(mDataFile, 32))
+                return;
+
+            mIndexFile->setReadOffset(sample->indexOffset + ((ArcMist::stream_size)delta * sizeof(IndexEntry)));
+            ++sample;
+        }
+
+        // Get last sample
+        mSamples[SAMPLE_SIZE-1].indexOffset = HEADER_SIZE + ((mTransactionCount - 1) * sizeof(IndexEntry));
+        mIndexFile->setReadOffset(mSamples[SAMPLE_SIZE-1].indexOffset);
+        if(!index.read(mIndexFile))
+            return;
+
+        mDataFile->setReadOffset(index.fileOffset);
+        if(!mSamples[SAMPLE_SIZE-1].hash.read(mDataFile, 32))
+            return;
+
+        mSamplesLoaded = true;
+    }
+
+    TransactionReference *OutputSet::pull(const Hash &pTransactionID, unsigned int &pItemsPulled)
+    {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Pull");
+#endif
+        if(mTransactionCount == 0)
+            return NULL;
+
+        int compare;
+        IndexEntry index;
+        Hash hash(32);
+        bool found = false;
+        ArcMist::stream_size first = HEADER_SIZE, begin, end, current;
+
+        if(!mDataFile->isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Data file failed in pull");
+            return NULL;
+        }
+
+        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+          // "Pull : %s", pTransactionID.hex().text());
+
+        if(mSamplesLoaded)
+        {
+            // Check if is before the first
+            compare = mSamples[0].hash.compare(pTransactionID);
+            if(compare > 0)
+                return NULL;
+            else if(compare == 0)
+            {
+                found = true;
+                current = mSamples[0].indexOffset;
+            }
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              // "First : %s", mSamples[0].hash.hex().text());
+
+            // Check if it is after the last
+            compare = mSamples[SAMPLE_SIZE-1].hash.compare(pTransactionID);
+            if(compare < 0)
+                return NULL;
+            else if(compare == 0)
+            {
+                found = true;
+                current = mSamples[SAMPLE_SIZE-1].indexOffset;
+            }
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              // "Last : %s", mSamples[SAMPLE_SIZE - 1].hash.hex().text());
+
+            // Binary search the samples
+            unsigned int sampleBegin = 0;
+            unsigned int sampleEnd = SAMPLE_SIZE - 1;
+            unsigned int sampleCurrent;
+
+            while(!found)
+            {
+                sampleCurrent = (sampleBegin + sampleEnd) / 2;
+                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+                  // "Sample : %s", mSamples[sampleCurrent].hash.hex().text());
+
+                if(sampleCurrent == sampleBegin || sampleCurrent == sampleEnd)
+                    break;
+
+                // Determine which half the desired item is in
+                compare = pTransactionID.compare(mSamples[sampleCurrent].hash);
+                if(compare > 0)
+                    sampleBegin = sampleCurrent;
+                else if(compare < 0)
+                    sampleEnd = sampleCurrent;
+                else
+                {
+                    found = true;
+                    current = mSamples[sampleCurrent].indexOffset;
+                    break;
+                }
             }
 
-            // Read the item in the middle
-            mHeaderFile->setReadOffset(current);
-            hash.read(mHeaderFile);
-            compare = pTransactionID.compare(hash);
+            // Setup index binary search on sample subset of indices
+            begin = mSamples[sampleBegin].indexOffset;
+            end = mSamples[sampleEnd].indexOffset;
+        }
+        else
+        {
+            // Setup index binary search on all indices
+            begin = first;
+            end   = first + ((mTransactionCount - 1) * sizeof(IndexEntry));
+        }
+
+        // Binary search the file indices
+        while(!found)
+        {
+            // Break the set in two halves
+            current = (end - begin) / 2;
+            current -= current % sizeof(IndexEntry);
+            current += begin;
+
+            if(current == begin)
+            {
+                // Read the item
+                mIndexFile->setReadOffset(current);
+                index.read(mIndexFile);
+                mDataFile->setReadOffset(index.fileOffset);
+                if(!hash.read(mDataFile))
+                    return NULL;
+
+                if(pTransactionID == hash)
+                    break;
+                else if(current != end)
+                {
+                    current = end;
+                    mIndexFile->setReadOffset(current);
+                    index.read(mIndexFile);
+                    mDataFile->setReadOffset(index.fileOffset);
+                    if(!hash.read(mDataFile))
+                        return NULL;
+
+                    if(pTransactionID == hash)
+                        break;
+                    else
+                        return NULL;
+                }
+                else
+                    return NULL;
+            }
+
+            // Read the middle item
+            mIndexFile->setReadOffset(current);
+            index.read(mIndexFile);
+            mDataFile->setReadOffset(index.fileOffset);
+            if(!hash.read(mDataFile))
+                return NULL;
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              // "Binary : %s", hash.hex().text());
 
             // Determine which half the desired item is in
+            compare = pTransactionID.compare(hash);
             if(compare > 0)
-                bottom = current;
+                begin = current;
             else if(compare < 0)
-                top = current;
+                end = current;
             else
+                break;
+        }
+
+        // Match found
+        // Loop backwards to find the first matching
+        while(current > first)
+        {
+            current -= sizeof(IndexEntry);
+            mIndexFile->setReadOffset(current);
+            index.read(mIndexFile);
+            mDataFile->setReadOffset(index.fileOffset);
+            if(!hash.read(mDataFile))
+                return NULL;
+
+            if(pTransactionID != hash)
             {
-                // Item found
-                // Loop backwards until it doesn't match then loop forward adding all with matching transaction ID
-                while(current > 0)
-                {
-                    current -= TransactionReference::SIZE;
-                    mHeaderFile->setReadOffset(current);
-                    hash.read(mHeaderFile);
-                    if(hash != pTransactionID)
-                    {
-                        current += TransactionReference::SIZE;
-                        mHeaderFile->setReadOffset(current);
-                        break;
-                    }
-                }
-
-                if(current == 0)
-                    mHeaderFile->setReadOffset(current);
-
+                current += sizeof(IndexEntry);
                 break;
             }
         }
 
-        TransactionReference *newReference = new TransactionReference();
-        unsigned int itemsAdded = 0;
-        while(mHeaderFile->remaining())
+        // Read in all matching
+        TransactionReference *result = NULL;
+        TransactionReference *nextTransaction = new TransactionReference();
+        while(current <= end)
         {
-            if(newReference->readMatchingID(pTransactionID, mHeaderFile, mOutputsFile))
-            {
-                pList.insertSorted(newReference);
-                ++itemsAdded;
-                ++mCachedCount;
-                mCachedOutputCount += newReference->outputCount();
-                newReference = new TransactionReference();
-            }
-            else
-            {
-                delete newReference;
-                return itemsAdded;
-            }
-        }
+            mIndexFile->setReadOffset(current);
+            index.read(mIndexFile);
+            mDataFile->setReadOffset(index.fileOffset);
+            if(!nextTransaction->readMatchingID(pTransactionID, mDataFile))
+                break;
 
-        delete newReference;
-        return itemsAdded;
+            if(mCache.insertSorted(nextTransaction))
+            {
+                if(result == NULL)
+                    result = nextTransaction;
+                ++pItemsPulled;
+                mCacheOutputCount += nextTransaction->outputCount();
+                nextTransaction = new TransactionReference();
+            }
+            current += sizeof(IndexEntry);
+        }
+        delete nextTransaction;
+        return result;
     }
 
     TransactionReference *OutputSet::find(const Hash &pTransactionID, uint32_t pIndex)
@@ -881,13 +1432,15 @@ namespace BitCoin
         OutputReference *output;
         unsigned int blockHeight = 0xffffffff;
         unsigned int outputSpentHeight = 0xffffffff;
-        TransactionReferenceList &cached = mCached[pTransactionID.getByte(1)];
 
         // Look in cached
         mLock.readLock();
-        for(TransactionReferenceList::iterator item=cached.firstMatching(pTransactionID);item!=cached.end();++item)
+        for(TransactionReferenceList::iterator item=mCache.firstMatching(pTransactionID);item!=mCache.end();++item)
             if((*item)->id == pTransactionID)
             {
+                if((*item)->markedDelete())
+                    continue;
+
                 blockHeight = (*item)->blockHeight;
                 output = (*item)->outputAt(pIndex);
                 if(output != NULL)
@@ -907,12 +1460,35 @@ namespace BitCoin
 
         // Pull from file
         mLock.writeLock("Pull");
-        unsigned int foundCount = pull(pTransactionID, cached);
-        if(foundCount > 0)
+        unsigned int foundCount = 0;
+        TransactionReference *firstPulled = pull(pTransactionID, foundCount);
+
+        // Check first pulled transaction for match
+        if(firstPulled != NULL && !firstPulled->markedDelete())
         {
-            for(TransactionReferenceList::iterator pulled=cached.firstMatching(pTransactionID);pulled!=cached.end();++pulled)
+            blockHeight = firstPulled->blockHeight;
+            output = firstPulled->outputAt(pIndex);
+            if(output != NULL)
+            {
+                if(output->spentBlockHeight == 0)
+                {
+                    mLock.writeUnlock();
+                    return firstPulled;
+                }
+                else
+                    outputSpentHeight = output->spentBlockHeight;
+            }
+        }
+
+        // Check other pulled transactions for matches
+        if(foundCount > 1)
+        {
+            for(TransactionReferenceList::iterator pulled=mCache.firstMatching(pTransactionID);pulled!=mCache.end();++pulled)
                 if((*pulled)->id == pTransactionID)
                 {
+                    if((*pulled)->markedDelete())
+                        continue;
+
                     blockHeight = (*pulled)->blockHeight;
                     output = (*pulled)->outputAt(pIndex);
                     if(output != NULL)
@@ -929,6 +1505,7 @@ namespace BitCoin
                 else
                     break;
         }
+
         mLock.writeUnlock();
 
         if(outputSpentHeight != 0xffffffff)
@@ -950,13 +1527,14 @@ namespace BitCoin
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Find ID");
 #endif
-        TransactionReferenceList &cached = mCached[pTransactionID.getByte(1)];
-
         // Look in cached
         mLock.readLock();
-        for(TransactionReferenceList::iterator item=cached.firstMatching(pTransactionID);item!=cached.end();++item)
+        for(TransactionReferenceList::iterator item=mCache.firstMatching(pTransactionID);item!=mCache.end();++item)
             if((*item)->id == pTransactionID)
             {
+                if((*item)->markedDelete())
+                    continue;
+
                 if((*item)->hasUnspentOutputs())
                 {
                     mLock.readUnlock();
@@ -969,12 +1547,28 @@ namespace BitCoin
 
         // Pull from file
         mLock.writeLock("Pull");
-        unsigned int foundCount = pull(pTransactionID, cached);
-        if(foundCount > 0)
+        unsigned int foundCount = 0;
+        TransactionReference *firstPulled = pull(pTransactionID, foundCount);
+
+        // Check first pulled transaction for match
+        if(firstPulled != NULL && !firstPulled->markedDelete())
         {
-            for(TransactionReferenceList::iterator pulled=cached.firstMatching(pTransactionID);pulled!=cached.end();++pulled)
+            if(firstPulled->hasUnspentOutputs())
+            {
+                mLock.writeUnlock();
+                return firstPulled;
+            }
+        }
+
+        // Check other pulled transactions for matches
+        if(foundCount > 1)
+        {
+            for(TransactionReferenceList::iterator pulled=mCache.firstMatching(pTransactionID);pulled!=mCache.end();++pulled)
                 if((*pulled)->id == pTransactionID)
                 {
+                    if((*pulled)->markedDelete())
+                        continue;
+
                     if((*pulled)->hasUnspentOutputs())
                     {
                         mLock.writeUnlock();
@@ -994,24 +1588,23 @@ namespace BitCoin
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Add");
 #endif
-        mCached[pTransaction->id.getByte(1)].insertSorted(pTransaction);
-        ++mCachedCount;
-        mCachedOutputCount += pTransaction->outputCount();
+        mCache.insertSorted(pTransaction);
+        mCacheOutputCount += pTransaction->outputCount();
     }
 
-    void OutputSet::commit(const Hash &pTransactionID, std::vector<Output *> &pOutputs, unsigned int pBlockHeight)
+    void OutputSet::commit(TransactionReference *pReference, std::vector<Output *> &pOutputs)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Commit");
 #endif
+        if(!mDataFile->isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Data file failed in commit");
+            return;
+        }
+
         mLock.writeLock("Commit");
-        TransactionReferenceList &cached = mCached[pTransactionID.getByte(1)];
-        for(TransactionReferenceList::iterator item=cached.begin();item!=cached.end();++item)
-            if((*item)->blockHeight == pBlockHeight && (*item)->id == pTransactionID)
-            {
-                (*item)->commit(pOutputs);
-                break;
-            }
+        pReference->commit(pOutputs);
         mLock.writeUnlock();
     }
 
@@ -1021,28 +1614,20 @@ namespace BitCoin
         ArcMist::Profiler profiler("Outputs Revert");
 #endif
         if(pHard)
-            pullBlock(pBlockHeight);
+            pullBlocks(pBlockHeight);
 
         mLock.writeLock("Commit");
-        TransactionReferenceList *cached = mCached;
-        for(unsigned int i=0;i<SUBSET_COUNT;++i)
+        for(TransactionReferenceList::iterator item=mCache.begin();item!=mCache.end();++item)
         {
-            for(TransactionReferenceList::iterator item=cached->begin();item!=cached->end();++item)
+            if((*item)->blockHeight >= pBlockHeight)
             {
-                if((*item)->blockHeight >= pBlockHeight)
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Deleting transaction for block %d : %s", (*item)->blockHeight, (*item)->id.hex().text());
-                    // Created at this block height, so mark for delete on next save
-                    (*item)->toDelete = true;
-                    // If the outputs have already been written then they need to be removed from the outputs file.
-                    if((*item)->outputFileOffset != TransactionReference::NOT_WRITTEN)
-                        mRewriteOutputs = true;
-                }
-
-                (*item)->revert(pBlockHeight);
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Deleting transaction for block %d : %s", (*item)->blockHeight, (*item)->id.hex().text());
+                // Created at this block height, so mark for delete on next save
+                (*item)->setDelete();
             }
-            ++cached;
+
+            (*item)->revert(pBlockHeight);
         }
         mLock.writeUnlock();
     }
@@ -1148,7 +1733,7 @@ namespace BitCoin
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Add Block");
 #endif
-        mToCommit.clear();
+        mToCommit.clearNoDelete();
 
         if(pBlockHeight != mNextBlockHeight)
         {
@@ -1196,12 +1781,12 @@ namespace BitCoin
             return false;
         }
 
-        std::vector<TransactionReference *>::iterator reference = mToCommit.begin();
+        TransactionReferenceList::iterator reference = mToCommit.begin();
         for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
         {
             if((*reference)->id == (*transaction)->hash)
             {
-                (*reference)->commit((*transaction)->outputs);
+                mSets[(*reference)->id.lookup8()].commit(*reference, (*transaction)->outputs);
                 ++reference;
             }
             else
@@ -1210,11 +1795,9 @@ namespace BitCoin
                   "Can't commit non matching transaction");
                 return false;
             }
-
-            // mSets[(*transaction)->hash.lookup8()].commit((*transaction)->hash, (*transaction)->outputs, pBlockHeight);
         }
 
-        mToCommit.clear();
+        mToCommit.clearNoDelete();
         ++mNextBlockHeight;
         mModified = true;
         return true;
@@ -1249,7 +1832,7 @@ namespace BitCoin
             ++set;
         }
 
-        mToCommit.clear();
+        mToCommit.clearNoDelete();
         mNextBlockHeight = pBlockHeight;
         mModified = true;
         return true;
@@ -1271,20 +1854,7 @@ namespace BitCoin
     // Mark an output as spent
     void TransactionOutputPool::spend(TransactionReference *pReference, unsigned int pIndex, unsigned int pBlockHeight)
     {
-        OutputReference *output = pReference->outputAt(pIndex);
-        if(output == NULL)
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-              "Spend index %d not found", pIndex);
-            return;
-        }
-        else if(output->spentBlockHeight != 0)
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-              "Spend index %d already spent at block height %d", pIndex, output->spentBlockHeight);
-            return;
-        }
-        output->spendInternal(pBlockHeight);
+        pReference->spendInternal(pIndex, pBlockHeight);
     }
 
     unsigned int TransactionOutputPool::pullBlocks(unsigned int pBlockHeight)
@@ -1312,7 +1882,7 @@ namespace BitCoin
         return itemsAdded;
     }
 
-    bool TransactionOutputPool::load()
+    bool TransactionOutputPool::load(bool pPreload)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Loading transaction outputs");
 
@@ -1321,8 +1891,15 @@ namespace BitCoin
         ArcMist::String filePath = Info::instance().path();
         filePath.pathAppend("outputs");
         ArcMist::createDirectory(filePath);
+
         for(unsigned int i=0;i<SET_COUNT;++i)
-            mSets[i].setup(i, filePath);
+            if(!mSets[i].setup(i, filePath))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Failed to setup set %d", i);
+                mValid = false;
+                return false;
+            }
 
         ArcMist::String filePathName = filePath;
         filePathName.pathAppend("height");
@@ -1350,7 +1927,19 @@ namespace BitCoin
               outputCount(), size() / 1024, mNextBlockHeight - 1);
             mSavedBlockHeight = mNextBlockHeight;
 
-            pullBlocks(cacheBlockHeight());
+            if(pPreload)
+            {
+                try
+                {
+                    pullBlocks(cacheBlockHeight());
+                }
+                catch(std::bad_alloc &pBadAlloc)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Bad allocation (Pull Blocks Uncaught) : %s", pBadAlloc.what());
+                    mValid = false;
+                }
+            }
         }
         else
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed to load transaction outputs");
@@ -1397,6 +1986,7 @@ namespace BitCoin
 
         // Block Height
         file.writeUnsignedInt(mNextBlockHeight);
+        file.flush();
 
         uint32_t lastReport = getTime();
         OutputSet *set = mSets;
@@ -1432,70 +2022,95 @@ namespace BitCoin
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Converting transaction outputs");
 
+        bool success = true;
         mValid = true;
-
-        ArcMist::String filePathName = Info::instance().path();
-        filePathName.pathAppend("old_outputs");
+        ArcMist::String oldFilePath = Info::instance().path();
+        oldFilePath.pathAppend("old_outputs");
+        ArcMist::String filePathName = oldFilePath;
+        filePathName.pathAppend("height");
         if(!ArcMist::fileExists(filePathName))
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Failed to open old outputs file");
-            mValid = false;
             return false;
+        else
+        {
+            ArcMist::FileInputStream file(filePathName);
+            if(!file.isValid())
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Failed to open old height file to load");
+                mValid = false;
+                return false;
+            }
+
+            // Read block height
+            mNextBlockHeight = file.readUnsignedInt();
         }
 
-        ArcMist::FileInputStream file(filePathName);
-
-        // Read block height
-        mNextBlockHeight = file.readUnsignedInt();
-
-        ArcMist::String heightFilePathName = Info::instance().path();
-        heightFilePathName.pathAppend("outputs");
-        heightFilePathName.pathAppend("height");
-        ArcMist::FileOutputStream heightFile(heightFilePathName, true);
-        if(!heightFile.isValid())
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Failed to open height file to save");
-            mValid = false;
-            return false;
-        }
-
-        // Block Height
-        heightFile.writeUnsignedInt(mNextBlockHeight);
+        ArcMist::String filePath = Info::instance().path();
+        filePath.pathAppend("outputs");
+        ArcMist::createDirectory(filePath);
 
         uint32_t lastReport = getTime();
-        TransactionReference *newTransaction = new TransactionReference();
-        while(file.remaining())
+        OutputSet *set = mSets;
+        TransactionReferenceList list;
+        list.reserve(1000000);
+        for(unsigned int i=0;i<SET_COUNT;i++)
         {
             if(getTime() - lastReport > 10)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Convert is %2d%% Complete", (int)(((float)file.readOffset() / (float)file.length()) * 100.0f));
-
-                // Purge after 1 GiB
-                if(cachedSize() > 1073741824)
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Purging %d bytes", cachedSize());
-                    save();
-                }
-
+                  "Convert is %2d%% Complete", (int)(((float)i / (float)SET_COUNT) * 100.0f));
                 lastReport = getTime();
             }
 
-            if(!newTransaction->readOld(&file))
+            filePathName.writeFormatted("%s%s%02x", oldFilePath.text(), ArcMist::PATH_SEPARATOR, i);
+            set->setup(i, filePath, 1000000);
+            if(!OutputSet::readOld(list, filePathName, filePathName + ".outputs"))
             {
-                mValid = false;
+                success = false;
                 break;
             }
 
-            mSets[newTransaction->id.lookup8()].add(newTransaction);
-            mModified = true;
-            newTransaction = new TransactionReference();
+            for(TransactionReferenceList::iterator item=list.begin();item!=list.end();++item)
+                set->add(*item);
+
+            if(!set->save(mNextBlockHeight))
+            {
+                success = false;
+                break;
+            }
+
+            set->clear();
+            list.clearNoDelete();
+            ++set;
         }
 
-        delete newTransaction;
-        return save();
+        filePathName = filePath;
+        filePathName.pathAppend("height");
+        ArcMist::FileOutputStream file(filePathName, true);
+        if(!file.isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Failed to open old height file to load");
+            mValid = false;
+            return false;
+        }
+
+        file.writeUnsignedInt(mNextBlockHeight);
+        return success;
     }
+
+    // void TransactionOutputPool::print()
+    // {
+        // ArcMist::String filePath = Info::instance().path();
+        // filePath.pathAppend("outputs");
+        // ArcMist::createDirectory(filePath);
+
+        // ArcMist::String filePathName = filePath;
+        // filePathName.pathAppend("data");
+        // mDataFile = new ArcMist::FileStream(filePathName);
+
+        // //filePathName.writeFormatted("%s%s%02x", filePath.text(), ArcMist::PATH_SEPARATOR, 0);
+        // mSets[0].setup(0, filePath, mDataFile);
+        // mSets[0].print();
+    // }
 }
