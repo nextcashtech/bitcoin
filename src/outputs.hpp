@@ -468,7 +468,7 @@ namespace BitCoin
         }
 
         // Load from/Save to file system
-        bool load(bool pPreload = true);
+        bool load(bool pPreCache = true);
         bool purge();
         bool save();
 

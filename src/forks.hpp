@@ -46,8 +46,8 @@ namespace BitCoin
 
         void revert(unsigned int pBlockHeight)
         {
-            if(size() > pBlockHeight + 1)
-                resize(pBlockHeight + 1);
+            if(size() > pBlockHeight)
+                resize(pBlockHeight);
         }
 
         bool load();
@@ -63,9 +63,9 @@ namespace BitCoin
         enum ID
         {
             // These all share the same start time, timeout, and bit, so they will share one ID
-            BIP0068 = 1, // Relative lock-time using consensus-enforced sequence numbers
-            BIP0112 = 1, // CHECKSEQUENCEVERIFY
-            BIP0113 = 1, // Median time-past as endpoint for lock-time calculations
+            BIP0068 = 1, // Relative lock-time using consensus-enforced sequence numbers(activated height 419328)
+            BIP0112 = 1, // CHECKSEQUENCEVERIFY(activated height 419328)
+            BIP0113 = 1, // Median time-past as endpoint for lock-time calculations(activated height 419328)
             BIP0141 = 2, // Segregated Witness (BIP-0141, BIP-0143, BIP-0147, BIP-0148)
             BIP0091 = 3, // Segregated Witness (Reduced Threshold)
         };
@@ -146,7 +146,7 @@ namespace BitCoin
         //   Became required on mainnet at block height 363725
         // Version 4 BIP0065 OP_CHECKLOCKTIMEVERIFY
         //   Became required on mainnet at block height 388381
-        int32_t activeVersion() const { return mActiveVersion; }
+        int32_t enabledVersion() const { return mEnabledVersion; }
         int32_t requiredVersion() const { return mRequiredVersion; }
 
         SoftFork::State softForkState(unsigned int pID) const;
@@ -183,11 +183,11 @@ namespace BitCoin
 
         std::vector<SoftFork *> mForks;
 
-        int32_t mActiveVersion;
+        int32_t mEnabledVersion;
         int32_t mRequiredVersion;
 
         // For revert
-        int mVersionActivationHeights[3];
+        int mVersionEnabledHeights[3];
         int mVersionRequiredHeights[3];
 
         int mCashForkBlockHeight;

@@ -286,6 +286,7 @@ namespace BitCoin
         // Difficulty checks
         void setDifficulty(uint32_t pBits);
         bool operator <= (const Hash &pRight) const;
+
         int compare(const Hash &pRight) const
         {
             if(mSize < pRight.mSize)
@@ -453,7 +454,7 @@ namespace BitCoin
         void insertSorted(const Hash &pHash);
 
         // Return true if the item exists in a sorted list
-        bool contains(const Hash &pHash);
+        bool containsSorted(const Hash &pHash);
 
     private:
         HashList(HashList &pCopy);
@@ -462,6 +463,9 @@ namespace BitCoin
 
     // Multiply a target bits encoded 256 bit number by a factor
     uint32_t multiplyTargetBits(uint32_t pTargetBits, double factor, uint32_t pMax = 0x1d00ffff);
+
+    // Integer value for target
+    uint64_t targetValue(uint32_t pTargetBits);
 
     enum Base58Type { PUBLIC_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY, TEST_PUBLIC_KEY_HASH, TEST_SCRIPT_HASH };
     ArcMist::String base58Encode(Base58Type pType, ArcMist::InputStream *pStream, unsigned int pSize);

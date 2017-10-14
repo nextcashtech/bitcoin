@@ -1882,7 +1882,7 @@ namespace BitCoin
         return itemsAdded;
     }
 
-    bool TransactionOutputPool::load(bool pPreload)
+    bool TransactionOutputPool::load(bool pPreCache)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Loading transaction outputs");
 
@@ -1927,7 +1927,7 @@ namespace BitCoin
               outputCount(), size() / 1024, mNextBlockHeight - 1);
             mSavedBlockHeight = mNextBlockHeight;
 
-            if(pPreload)
+            if(pPreCache)
             {
                 try
                 {

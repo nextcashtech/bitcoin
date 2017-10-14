@@ -217,7 +217,7 @@ namespace BitCoin
     void Block::print(ArcMist::Log::Level pLevel, bool pIncludeTransactions)
     {
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Hash          : %s", hash.hex().text());
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Version       : %d", version);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Version       : 0x%08x", version);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Previous Hash : %s", previousHash.hex().text());
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "MerkleHash    : %s", merkleHash.hex().text());
         ArcMist::String timeText;

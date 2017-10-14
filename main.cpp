@@ -128,14 +128,13 @@ int main(int pArgumentCount, char **pArguments)
 
     if(printBlock)
     {
-        BitCoin::Chain chain;
-        BitCoin::Hash hash;
         BitCoin::Block block;
-
-        chain.load(false);
 
         if(printBlock.length() == 64)
         {
+            BitCoin::Hash hash;
+            BitCoin::Chain chain;
+            chain.load(false, false);
             ArcMist::Buffer buffer;
             buffer.writeHex(printBlock.text());
             hash.read(&buffer, 32);
@@ -149,7 +148,7 @@ int main(int pArgumentCount, char **pArguments)
         else
         {
             unsigned int height = std::stol(printBlock.text());
-            if(!chain.getBlock(height, block))
+            if(!BitCoin::BlockFile::readBlock(height, block))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, MAIN_LOG_NAME,
                   "Failed to find block at height %d", height);
@@ -157,7 +156,7 @@ int main(int pArgumentCount, char **pArguments)
             }
         }
 
-        block.print(ArcMist::Log::INFO, true);
+        block.print(ArcMist::Log::INFO, false);
         return 0;
     }
 

@@ -26,56 +26,37 @@ namespace BitCoin
     Chain::Chain() : mPendingLock("Chain Pending"),
       mProcessMutex("Chain Process")
     {
-        mMaxTargetBits = 0x1d00ffff;
         mNextBlockHeight = 0;
         mLastFileID = 0;
         mPendingSize = 0;
         mPendingBlocks = 0;
+        mMaxTargetBits = 0x1d00ffff;
         mTargetBits = 0;
-        mLastTargetTime = 0;
-        mLastBlockTime = 0;
         mLastBlockFile = NULL;
         mLastFullPendingOffset = 0;
+        mStop = false;
     }
 
     Chain::~Chain()
     {
         mPendingLock.writeLock("Destroy");
+        if(mLastBlockFile != NULL)
+            delete mLastBlockFile;
         for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             delete *pending;
         mPendingLock.writeUnlock();
     }
 
-    bool Chain::revertTargetBits(unsigned int pHeight)
+    bool Chain::updateTargetBits()
     {
-        mTargetBits = mBlockStats.targetBits(pHeight);
-
-        mLastTargetBits = mBlockStats.targetBits(pHeight - 1);
-        mLastBlockTime = mBlockStats.time(pHeight - 1);
-
-        unsigned int lastRetargetHeight = pHeight - (pHeight % RETARGET_PERIOD);
-        mLastTargetTime = mBlockStats.time(lastRetargetHeight);
-
-        return saveTargetBits();
-    }
-
-    bool Chain::updateTargetBits(unsigned int pHeight, uint32_t pNextBlockTime, uint32_t pNextBlockTargetBits)
-    {
-        if(mLastTargetTime == 0)
-        {
-            // This is the first block
+        if(mBlockStats.height() <= 1)
             mTargetBits = mMaxTargetBits;
-            mLastTargetTime = pNextBlockTime;
-            mLastBlockTime = pNextBlockTime;
-            mLastTargetBits = pNextBlockTargetBits;
-            return saveTargetBits();
-        }
-        else if(pHeight == 0 || pHeight % RETARGET_PERIOD != 0)
-        {
-            mLastBlockTime = pNextBlockTime;
-            mLastTargetBits = pNextBlockTargetBits;
-            return true;
-        }
+        else if(mBlockStats.height() % RETARGET_PERIOD != 0)
+            return true; // No adjustment at this height
+
+        uint32_t lastBlockTime      = mBlockStats.time(mBlockStats.height() - 1);
+        uint32_t lastAdjustmentTime = mBlockStats.time(mBlockStats.height() - RETARGET_PERIOD);
+        uint32_t lastTargetBits     = mBlockStats.targetBits(mBlockStats.height() - 1);
 
         // Calculate percent of time actually taken for the last 2016 blocks by the goal time of 2 weeks
         // Adjust factor over 1.0 means the target is going up, which also means the difficulty to
@@ -83,16 +64,16 @@ namespace BitCoin
         // Adjust factor below 1.0 means the target is going down, which also means the difficulty to
         //   find a hash under the target goes up
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Time spent on last 2016 blocks %d - %d = %d", mLastBlockTime, mLastTargetTime, mLastBlockTime - mLastTargetTime);
-        double adjustFactor = (double)(mLastBlockTime - mLastTargetTime) / 1209600.0;
+          "Time spent on last 2016 blocks %d - %d = %d", lastBlockTime, lastAdjustmentTime, lastBlockTime - lastAdjustmentTime);
+        double adjustFactor = (double)(lastBlockTime - lastAdjustmentTime) / 1209600.0;
 
         if(adjustFactor > 1.0)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Increasing target bits %08x by a factor of %f to reduce difficulty by %.02f%%", mLastTargetBits,
+              "Increasing target bits 0x%08x by a factor of %f to reduce difficulty by %.02f%%", lastTargetBits,
               adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
         else
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Decreasing target bits %08x by a factor of %f to increase difficulty by %.02f%%", mLastTargetBits,
+              "Decreasing target bits 0x%08x by a factor of %f to increase difficulty by %.02f%%", lastTargetBits,
               adjustFactor, ((1.0 / adjustFactor) - 1.0) * 100.0);
 
         if(adjustFactor < 0.25)
@@ -113,79 +94,11 @@ namespace BitCoin
          */
 
         // Treat targetValue as a 256 bit number and multiply it by adjustFactor
-        mTargetBits = multiplyTargetBits(mLastTargetBits, adjustFactor, mMaxTargetBits);
-        mLastTargetTime = pNextBlockTime;
-        mLastBlockTime = pNextBlockTime;
-        mLastTargetBits = pNextBlockTargetBits;
+        mTargetBits = multiplyTargetBits(lastTargetBits, adjustFactor, mMaxTargetBits);
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "New target bits for block height %d : %08x", pHeight, mTargetBits);
-        return saveTargetBits();
-    }
-
-    bool Chain::saveTargetBits()
-    {
-        // Save to a file
-        ArcMist::String filePathName = Info::instance().path();
-        filePathName.pathAppend("blocks");
-        filePathName.pathAppend("target");
-        ArcMist::FileOutputStream *file = new ArcMist::FileOutputStream(filePathName, true);
-        file->setOutputEndian(ArcMist::Endian::LITTLE);
-        if(file->isValid())
-        {
-            file->writeUnsignedInt(mLastTargetTime);
-            file->writeUnsignedInt(mTargetBits);
-        }
-        else
-        {
-            delete file;
-            return false;
-        }
-        delete file;
+          "New target bits for block height %d : 0x%08x", mBlockStats.height(), mTargetBits);
         return true;
-    }
-
-    bool Chain::loadTargetBits()
-    {
-        if(mNextBlockHeight == 0)
-        {
-            mLastBlockTime = 0;
-            mLastTargetTime = 0;
-            mTargetBits = 0;
-            return true;
-        }
-
-        // Get last block time
-        Block block;
-        if(!getBlock(mNextBlockHeight - 1, block))
-        {
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Failed to read last block from file");
-            return false;
-        }
-        mLastBlockTime = block.time;
-        mLastTargetBits = block.targetBits;
-
-        bool success = true;
-        ArcMist::String filePathName = Info::instance().path();
-        filePathName.pathAppend("blocks");
-        filePathName.pathAppend("target");
-        ArcMist::FileInputStream *file = new ArcMist::FileInputStream(filePathName);
-        file->setInputEndian(ArcMist::Endian::LITTLE);
-        if(file->isValid())
-        {
-            mLastTargetTime = file->readUnsignedInt();
-            mTargetBits = file->readUnsignedInt();
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-              "Loaded target bits of %08x", mTargetBits);
-        }
-        else
-        {
-            //TODO Recalculate
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Failed to read target bits file");
-            success = false;
-        }
-        delete file;
-        return success;
     }
 
     bool Chain::headerAvailable(Hash &pHash)
@@ -608,10 +521,12 @@ namespace BitCoin
         mProcessMutex.lock();
 
         mBlockProcessStartTime = getTime();
+        mBlockStats.push_back(BlockStat(pBlock->version, pBlock->time, pBlock->targetBits));
+        uint32_t previousTargetBits = mTargetBits;
 
         // Check target bits
-        bool useTestMinDifficulty = network() == TESTNET && pBlock->time - mLastBlockTime > 1200;
-        updateTargetBits(mNextBlockHeight, pBlock->time, pBlock->targetBits);
+        bool useTestMinDifficulty = network() == TESTNET && pBlock->time - mBlockStats.time(mBlockStats.height() - 1) > 1200;
+        updateTargetBits();
         if(pBlock->targetBits != mTargetBits)
         {
             // If on TestNet and 20 minutes since last block
@@ -625,19 +540,18 @@ namespace BitCoin
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                   "Block target bits don't match chain's current target bits : chain %08x != block %08x",
                   mTargetBits, pBlock->targetBits);
-                revertTargetBits(mNextBlockHeight);
+                mTargetBits = previousTargetBits;
+                mBlockStats.revert(mNextBlockHeight);
                 mProcessMutex.unlock();
                 return false;
             }
         }
 
-        mBlockStats.push_back(BlockStat(pBlock->version, pBlock->time, pBlock->targetBits));
         mForks.process(mBlockStats, mNextBlockHeight);
 
         // Process block
         if(!pBlock->process(mOutputs, mNextBlockHeight, mBlockStats, mForks))
         {
-            revertTargetBits(mNextBlockHeight);
             mOutputs.revert(mNextBlockHeight);
             mBlockStats.revert(mNextBlockHeight);
             mForks.revert(mBlockStats, mNextBlockHeight);
@@ -667,9 +581,6 @@ namespace BitCoin
 
             if(!mLastBlockFile->isValid())
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-                  "Block file %08x is invalid", mLastFileID);
-
                 success = false;
                 BlockFile::unlock(mLastFileID);
                 delete mLastBlockFile;
@@ -702,7 +613,6 @@ namespace BitCoin
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to commit transaction outputs to pool");
-            revertTargetBits(mNextBlockHeight);
             mOutputs.revert(mNextBlockHeight);
             mBlockStats.revert(mNextBlockHeight);
             mForks.revert(mBlockStats, mNextBlockHeight);
@@ -719,7 +629,6 @@ namespace BitCoin
 
             ++mNextBlockHeight;
             mLastBlockHash = pBlock->hash;
-            mLastTargetBits = pBlock->targetBits;
 
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Added block to chain at height %d (%d trans) (%d bytes) (%d s) : %s",
@@ -730,7 +639,6 @@ namespace BitCoin
         {
             mBlockStats.revert(mNextBlockHeight);
             mForks.revert(mBlockStats, mNextBlockHeight);
-            revertTargetBits(mNextBlockHeight);
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to add block to file %08x : %s", mLastFileID, pBlock->hash.hex().text());
         }
@@ -1187,7 +1095,7 @@ namespace BitCoin
     }
 
     // Load block info from files
-    bool Chain::load(bool pList)
+    bool Chain::load(bool pList, bool pPreCacheOutputs)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Indexing block hashes");
 
@@ -1261,23 +1169,24 @@ namespace BitCoin
 
         if(success)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Indexed %d block hashes", mNextBlockHeight);
-
-        if(success && !loadTargetBits())
-            success = false;
+              "Indexed block hashes to height %d", mNextBlockHeight - 1);
 
         if(success && !mBlockStats.load())
             success = false;
 
         if(success)
         {
-            if(mBlockStats.height() > mNextBlockHeight)
-                mBlockStats.resize(mNextBlockHeight);
+            if(mBlockStats.height() > mNextBlockHeight - 1)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  "Reverting block statistics to height of %d", mNextBlockHeight - 1);
+                mBlockStats.revert(mNextBlockHeight - 1);
+            }
 
             if(mBlockStats.height() < mNextBlockHeight - 1)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                  "Refreshing block statistics (height %d)", mBlockStats.height());
+                  "Refreshing block statistics to height %d", mNextBlockHeight - 1);
 
                 mBlockStats.clear();
                 mBlockStats.reserve(mNextBlockHeight);
@@ -1304,7 +1213,7 @@ namespace BitCoin
                     if(!blockFile->readStats(mBlockStats))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-                          "Failed to read hashes from block file %08x", fileID);
+                          "Failed to read stats from block file %08x", fileID);
                         delete blockFile;
                         BlockFile::unlock(fileID);
                         success = false;
@@ -1312,6 +1221,9 @@ namespace BitCoin
                     }
                     delete blockFile;
                     BlockFile::unlock(fileID);
+
+                    if(mStop)
+                        break;
                 }
 
                 if(success)
@@ -1319,38 +1231,58 @@ namespace BitCoin
             }
         }
 
+        if(success)
+            mTargetBits = mBlockStats.targetBits(mBlockStats.height());
+
+        if(mStop)
+        {
+            mProcessMutex.unlock();
+            return false;
+        }
+
         success = success && mForks.load();
 
-        if(success && mForks.height() != mNextBlockHeight - 1)
+        if(success)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Refreshing soft forks (height %d)", mForks.height());
-
-            mForks.reset();
-            uint32_t lastReport = getTime();
-            for(int i=mForks.height()+1;i<mNextBlockHeight;++i)
+            if(mForks.height() > mNextBlockHeight - 1)
             {
-                if(getTime() - lastReport > 10)
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                      "Soft forks load is %2d%% Complete", (int)(((float)i / (float)mNextBlockHeight) * 100.0f));
-                    lastReport = getTime();
-                }
-
-                mForks.process(mBlockStats, i);
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  "Reverting forks to height of %d", mNextBlockHeight - 1);
+                mForks.revert(mBlockStats, mNextBlockHeight - 1);
             }
 
-            if(mStop)
-                success = false;
+            if(mForks.height() < mNextBlockHeight -1)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  "Updating forks to height %d", mNextBlockHeight - 1);
 
-            if(success)
-                mForks.save();
+                uint32_t lastReport = getTime();
+                for(int i=mForks.height()+1;i<mNextBlockHeight;++i)
+                {
+                    if(getTime() - lastReport > 10)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                          "Forks load is %2d%% Complete", (int)(((float)i / (float)mNextBlockHeight) * 100.0f));
+                        lastReport = getTime();
+                    }
+
+                    if(mStop)
+                        break;
+
+                    mForks.process(mBlockStats, i);
+                }
+            }
+
+            mForks.save();
         }
 
         mProcessMutex.unlock();
 
+        if(mStop)
+            return false;
+
         // Load transaction outputs
-        success = success && mOutputs.load();
+        success = success && mOutputs.load(pPreCacheOutputs);
 
         // Update transaction outputs if they aren't up to current chain block height
         success = success && updateOutputs();
@@ -1427,9 +1359,9 @@ namespace BitCoin
                         return false;
                     }
 
-                    useTestMinDifficulty = network() == TESTNET && block.time - mLastBlockTime > 1200;
-                    updateTargetBits(height, block.time, block.targetBits);
+                    useTestMinDifficulty = network() == TESTNET && block.time - mBlockStats.time(mBlockStats.height() - 1) > 1200;
                     mBlockStats.push_back(BlockStat(block.version, block.time, block.targetBits));
+                    updateTargetBits();
                     mForks.process(mBlockStats, height);
                     if(mTargetBits != block.targetBits)
                     {
@@ -1444,6 +1376,8 @@ namespace BitCoin
                             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                               "Block %010d target bits don't match chain's current target bits : chain %08x != block %08x",
                               height, mTargetBits, block.targetBits);
+                            mBlockStats.revert(height);
+                            mForks.revert(mBlockStats, height);
                             return false;
                         }
                     }
@@ -1481,8 +1415,6 @@ namespace BitCoin
         {
             mOutputs.save();
             if(!mForks.save())
-                return false;
-            if(!saveTargetBits())
                 return false;
         }
 
@@ -1745,6 +1677,7 @@ namespace BitCoin
         // // Forks softForks;
 
         // // ArcMist::Log::setOutputFile("convert.log");
+        // setNetwork(MAINNET);
         // Info::instance().setPath("/var/bitcoin/mainnet");
 
         // // blockStats.load();
@@ -1759,7 +1692,7 @@ namespace BitCoin
         // ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");
         // Block block;
 
-        // // BlockFile::readBlock(386340, block);
+        // // // BlockFile::readBlock(386340, block);
 
         // if(!block.read(&file, true, true, true))
         // {
@@ -1831,15 +1764,22 @@ namespace BitCoin
 
 
 
+        // setNetwork(MAINNET);
         // Info::instance().setPath("/var/bitcoin/mainnet");
         // Chain chain;
 
-        // chain.load(false);
+        // chain.load(false, false);
+        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Height %d", chain.blockStats().height());
 
-        // for(int i=0;i<5;++i)
-            // chain.process();
+        // uint32_t time = chain.blockStats().getMedianPastTime(419436);
+        // ArcMist::String timeString;
+        // timeString.writeFormattedTime(time);
 
-        // chain.save();
+        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Median Time %d : %s", time, timeString.text());
+
+
+        // chain.savePending();
+
 
 
 

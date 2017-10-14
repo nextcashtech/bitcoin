@@ -52,7 +52,16 @@ namespace BitCoin
     {
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Hash      : %s", hash.hex().text());
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Version   : %d", version);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Lock Time : 0x%08x", lockTime);
+        if(lockTime > LOCKTIME_THRESHOLD)
+        {
+            ArcMist::String lockTimeText;
+            lockTimeText.writeFormattedTime(lockTime);
+            ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME,
+              "Lock Time : time stamp %d - %s", lockTime, lockTimeText.text());
+        }
+        else
+            ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME,
+              "Lock Time : block height %d", lockTime);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Fee       : %f", bitcoins(mFee));
 
         ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "%d Inputs", inputs.size());
@@ -236,7 +245,7 @@ namespace BitCoin
                 }
 
                 // BIP-0034
-                if(pBlockVersion >= 2 && pForks.activeVersion() >= 2)
+                if(pBlockVersion >= 2 && pForks.enabledVersion() >= 2)
                 {
                     interpreter.clear();
                     interpreter.setTransaction(this);
@@ -248,7 +257,7 @@ namespace BitCoin
                     if(blockHeight < 0 || (uint64_t)blockHeight != pBlockHeight)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Version 2 block with non matching coinbase block height : actual %d, coinbase %d",
+                          "Non matching coinbase block height : actual %d, coinbase %d",
                           pBlockHeight, blockHeight);
                         return false;
                     }
@@ -445,20 +454,21 @@ namespace BitCoin
                 // Lock time is a timestamp
                 if(pForks.softForkState(SoftFork::BIP0113) == SoftFork::ACTIVE)
                 {
-                    if(lockTime < pBlockStats.getMedianPastTime(pBlockHeight, 11))
+                    if(lockTime > pBlockStats.getMedianPastTime(pBlockHeight, 11))
                     {
                         ArcMist::String lockTimeText, blockTimeText;
                         lockTimeText.writeFormattedTime(lockTime);
                         blockTimeText.writeFormattedTime(pBlockStats.getMedianPastTime(pBlockHeight, 11));
                         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Lock time stamp is not valid. Lock time %s < block median time %s",
+                          "Lock time stamp is not valid. Lock time %s > block median time %s",
                           lockTimeText.text(), blockTimeText.text());
+                        print(ArcMist::Log::VERBOSE);
                         return false;
                     }
                 }
                 else
                 {
-                    // Add 600 to fake having a "peer time offset"
+                    // Add 600 to fake having a "peer time offset" for older blocks
                     //   Block 357903 transaction 98 has a lock time about 3 minutes after the block time
                     if(lockTime > pBlockStats.time(pBlockHeight) + 600)
                     {
@@ -468,6 +478,7 @@ namespace BitCoin
                         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Lock time stamp is not valid. Lock time %s > block time %s",
                           lockTimeText.text(), blockTimeText.text());
+                        print(ArcMist::Log::VERBOSE);
                         return false;
                     }
                 }
@@ -480,6 +491,7 @@ namespace BitCoin
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Lock time block height is not valid. Lock height %d > block height %d",
                       lockTime, pBlockHeight);
+                    print(ArcMist::Log::VERBOSE);
                     return false;
                 }
             }
@@ -497,12 +509,14 @@ namespace BitCoin
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d amount is negative %d : ", index + 1, (*output)->amount);
                 (*output)->print(ArcMist::Log::WARNING);
+                print(ArcMist::Log::VERBOSE);
                 return false;
             }
 
             if(!pCoinBase && (*output)->amount > 0 && (*output)->amount > mFee)
             {
                 ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "Outputs are more than inputs");
+                print(ArcMist::Log::VERBOSE);
                 return false;
             }
 

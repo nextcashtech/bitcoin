@@ -1100,7 +1100,7 @@ namespace BitCoin
         unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;
         uint64_t count;
-        bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && pForks.activeVersion() >= 3;
+        bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && pForks.enabledVersion() >= 3;
 
         while(pScript.remaining())
         {
@@ -1666,7 +1666,7 @@ namespace BitCoin
                 }
                 case OP_CHECKLOCKTIMEVERIFY: // BIP-0065
                 {
-                    if(pBlockVersion < 4 || pForks.activeVersion() < 4)
+                    if(pBlockVersion < 4 || pForks.enabledVersion() < 4)
                         break;
 
                     if(pIsSignatureScript)

@@ -172,7 +172,7 @@ namespace BitCoin
 
         // Load block data from file system
         //   If pList is true then all the block hashes will be output
-        bool load(bool pList);
+        bool load(bool pList, bool pPreCacheOutputs = true);
         bool save();
 
         // Process pending headers and blocks
@@ -228,18 +228,9 @@ namespace BitCoin
         // Target
         uint32_t mMaxTargetBits;
         uint32_t mTargetBits; // Current target bits
-        uint32_t mLastTargetTime; // Time of last block that was used to update target
-        uint32_t mLastBlockTime; // Time of last block
-        uint32_t mLastTargetBits; // Target bits of last block
 
         // Update target bits based on new block
-        bool updateTargetBits(unsigned int pHeight, uint32_t pNextBlockTime, uint32_t pNextBlockTargetBits);
-        // Revert target bits to state of specified block height
-        bool revertTargetBits(unsigned int pHeight);
-
-        // Save/Load target bits state from file system
-        bool saveTargetBits();
-        bool loadTargetBits();
+        bool updateTargetBits();
 
         // Last BLOCK_STATS_SIZE block's statistics
         Forks mForks;
