@@ -368,7 +368,7 @@ namespace BitCoin
                 totalSpentAge += *spentAge;
             unsigned int averageSpentAge = totalSpentAge / spentAges.size();
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-              "Average spent age for block %d is %d", pBlockHeight, averageSpentAge);
+              "Average spent age for block %d is %d for %d inputs", pBlockHeight, averageSpentAge, spentAges.size());
         }
         return true;
     }

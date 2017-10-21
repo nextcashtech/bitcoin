@@ -129,7 +129,7 @@ namespace BitCoin
         mPeersModified = false;
         pendingSizeThreshold = 104857600; // 100 MiB
         pendingBlocksThreshold = 256;
-        outputsThreshold = 268435456; // 256 MiB
+        outputsThreshold = 536870912; // 512 MiB
         outputsCacheAge = 5000;
 
         if(sPath)

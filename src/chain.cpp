@@ -333,13 +333,18 @@ namespace BitCoin
                 success = false;
                 break;
             }
-            mPendingSize += newBlock->size();
-            if(newBlock->transactionCount > 0)
-                mPendingBlocks++;
-            mPending.push_back(new PendingData(newBlock));
-            if(mPending.back()->isFull())
-                mLastFullPendingOffset = offset;
-            ++offset;
+            if(!blockInChain(newBlock->hash))
+            {
+                mPendingSize += newBlock->size();
+                if(newBlock->transactionCount > 0)
+                    mPendingBlocks++;
+                mPending.push_back(new PendingData(newBlock));
+                if(mPending.back()->isFull())
+                    mLastFullPendingOffset = offset;
+                ++offset;
+            }
+            else
+                delete newBlock;
         }
 
         if(success)
@@ -363,8 +368,6 @@ namespace BitCoin
         }
 
         mPendingLock.writeUnlock();
-        file.close();
-        ArcMist::removeFile(filePathName.text());
         return success;
     }
 
@@ -553,8 +556,8 @@ namespace BitCoin
         if(!pBlock->process(mOutputs, mNextBlockHeight, mBlockStats, mForks))
         {
             mOutputs.revert(mNextBlockHeight);
-            mBlockStats.revert(mNextBlockHeight);
             mForks.revert(mBlockStats, mNextBlockHeight);
+            mBlockStats.revert(mNextBlockHeight);
             mProcessMutex.unlock();
             return false;
         }
@@ -614,8 +617,8 @@ namespace BitCoin
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to commit transaction outputs to pool");
             mOutputs.revert(mNextBlockHeight);
-            mBlockStats.revert(mNextBlockHeight);
             mForks.revert(mBlockStats, mNextBlockHeight);
+            mBlockStats.revert(mNextBlockHeight);
             mProcessMutex.unlock();
             return false;
         }
@@ -637,8 +640,8 @@ namespace BitCoin
         }
         else
         {
-            mBlockStats.revert(mNextBlockHeight);
             mForks.revert(mBlockStats, mNextBlockHeight);
+            mBlockStats.revert(mNextBlockHeight);
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to add block to file %08x : %s", mLastFileID, pBlock->hash.hex().text());
         }
@@ -1376,8 +1379,8 @@ namespace BitCoin
                             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                               "Block %010d target bits don't match chain's current target bits : chain %08x != block %08x",
                               height, mTargetBits, block.targetBits);
-                            mBlockStats.revert(height);
                             mForks.revert(mBlockStats, height);
+                            mBlockStats.revert(height);
                             return false;
                         }
                     }

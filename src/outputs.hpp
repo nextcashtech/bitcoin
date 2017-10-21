@@ -187,18 +187,20 @@ namespace BitCoin
 
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::Level::VERBOSE);
 
+        bool isHeader() const { return mOutputs == NULL; }
+
         // Flags
         bool markedDelete() const { return mFlags & DELETE_FLAG; }
         bool isModified() const { return mFlags & MODIFIED_FLAG; }
-        bool wasModified() const { return mFlags & WAS_MODIFIED_FLAG; }
+        bool isNew() const { return mFlags & NEW_FLAG; }
 
         void setDelete() { mFlags |= DELETE_FLAG; }
         void setModified() { mFlags |= MODIFIED_FLAG; }
-        void setWasModified() { mFlags |= WAS_MODIFIED_FLAG; }
+        void setNew() { mFlags |= NEW_FLAG; }
 
         void clearDelete() { mFlags ^= DELETE_FLAG; }
         void clearModified() { mFlags ^= MODIFIED_FLAG; }
-        void clearWasModified() { mFlags ^= WAS_MODIFIED_FLAG; }
+        void clearNew() { mFlags ^= NEW_FLAG; }
         void clearFlags() { mFlags = 0; }
 
         Hash id; // Transaction Hash
@@ -214,9 +216,9 @@ namespace BitCoin
         unsigned int mOutputCount;
         OutputReference *mOutputs;
 
-        static const uint8_t DELETE_FLAG       = 0x01;
-        static const uint8_t MODIFIED_FLAG     = 0x02;
-        static const uint8_t WAS_MODIFIED_FLAG = 0x04;
+        static const uint8_t DELETE_FLAG   = 0x01;
+        static const uint8_t MODIFIED_FLAG = 0x02;
+        static const uint8_t NEW_FLAG      = 0x04;
         uint8_t mFlags;
 
         TransactionReference(const TransactionReference &pCopy);
@@ -352,6 +354,7 @@ namespace BitCoin
         // Pull all transactions from the file created at or after the specified block height
         //   Returns count of transactions found
         unsigned int pullBlocks(unsigned int pBlockHeight, bool pUnspentOnly = true);
+        unsigned int loadCache(unsigned int pBlockHeight);
 
         unsigned int transactionCount() const { return mTransactionCount; }
         unsigned int outputCount() const { return mOutputCount; }
@@ -371,6 +374,7 @@ namespace BitCoin
 
         // pBlockHeight is the block height below which to drop transactions from memory
         bool save(unsigned int pDropBlockHeight);
+        bool saveCache(unsigned int pBlockHeight);
 
         void clear();
 
@@ -384,6 +388,12 @@ namespace BitCoin
         unsigned int pullLinear(const Hash &pTransactionID);
 
         bool transactionIsCached(const Hash &pTransactionID, unsigned int pBlockHeight);
+
+        // Find offsets into indices that contain the specified transaction ID, based on samples
+        bool findSample(const Hash &pTransactionID, ArcMist::stream_size &pBegin, ArcMist::stream_size &pEnd);
+
+        TransactionReference *pullTransactionHeader(ArcMist::stream_size pDataOffset);
+        bool loadSample(unsigned int pSampleOffset);
 
         // File is sorted transaction references with offsets to output data in output file
         // mCache contains transactions added since last "save"
@@ -404,7 +414,7 @@ namespace BitCoin
         SampleEntry *mSamples;
         bool mSamplesLoaded;
 
-        void loadSamples();
+        void initializeSamples();
 
     };
 
@@ -451,6 +461,7 @@ namespace BitCoin
         // Pull all transactions from the files created at or after the specified block height
         //   Returns count of transactions found
         unsigned int pullBlocks(unsigned int pBlockHeight);
+        unsigned int loadCache(unsigned int pBlockHeight);
 
         // Height of last block
         int blockHeight() const { return mNextBlockHeight - 1; }
@@ -473,6 +484,9 @@ namespace BitCoin
         bool save();
 
         bool convert();
+
+        // Run unit tests
+        static bool test();
 
     private:
 

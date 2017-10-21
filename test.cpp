@@ -40,6 +40,9 @@ int main(int pArgumentCount, char **pArguments)
     if(!BitCoin::Message::test())
         failed++;
 
+    if(!BitCoin::TransactionOutputPool::test())
+        failed++;
+
     if(!BitCoin::Chain::test())
         failed++;
 
