@@ -235,6 +235,7 @@ namespace BitCoin
                                                       const PublicKey &pPublicKey,
                                                       Transaction &pTransaction,
                                                       unsigned int pInputOffset,
+                                                      int64_t pUnspentAmount,
                                                       ArcMist::Buffer &pUnspentScript,
                                                       Signature::HashType pType,
                                                       ArcMist::OutputStream *pOutput,
@@ -247,7 +248,7 @@ namespace BitCoin
         unsigned int previousReadOffset = pUnspentScript.readOffset();
         pUnspentScript.setReadOffset(0);
         digest.setOutputEndian(ArcMist::Endian::LITTLE);
-        pTransaction.writeSignatureData(&digest, pInputOffset, pUnspentScript, pType, pForks);
+        pTransaction.writeSignatureData(&digest, pInputOffset, pUnspentAmount, pUnspentScript, pType, pForks);
         pUnspentScript.setReadOffset(previousReadOffset);
 
         // Get digest result
@@ -873,7 +874,7 @@ namespace BitCoin
 
         // Read the hash type from the stack item
         Signature::HashType hashType = static_cast<Signature::HashType>(pSignature->readByte());
-        if(pForks.cashRequired() && !(hashType & Signature::FORKID))
+        if(pForks.cashActive() && !(hashType & Signature::FORKID))
         {
             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Signature hash type missing required fork ID flag : %02x", hashType);
@@ -886,7 +887,7 @@ namespace BitCoin
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
         digest.setOutputEndian(ArcMist::Endian::LITTLE);
         Hash signatureHash(32);
-        if(mTransaction->writeSignatureData(&digest, mInputOffset, pCurrentOutputScript, hashType, pForks))
+        if(mTransaction->writeSignatureData(&digest, mInputOffset, mOutputAmount, pCurrentOutputScript, hashType, pForks))
             digest.getResult(&signatureHash); // Get digest result
         else if(hashType & Signature::FORKID)
             signatureHash.zeroize();

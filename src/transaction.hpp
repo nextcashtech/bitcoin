@@ -128,7 +128,7 @@ namespace BitCoin
           uint64_t pBlockHeight, std::vector<unsigned int> &pSpentAges);
 
         bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
-          ArcMist::Buffer &pOutputScript, Signature::HashType pHashType, const Forks &pForks);
+          int64_t pOutputAmount, ArcMist::Buffer &pOutputScript, Signature::HashType pHashType, const Forks &pForks);
 
         // P2PKH only
         bool addP2PKHInput(const Hash &pTransactionID, unsigned int pIndex, Output &pOutput, PrivateKey &pPrivateKey,

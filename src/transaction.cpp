@@ -111,8 +111,8 @@ namespace BitCoin
         newInput->outpoint.index = pIndex;
 
         // Create signature script for unspent
-        if(!ScriptInterpreter::writeP2PKHSignatureScript(pPrivateKey, pPublicKey, *this, inputs.size() - 1, pOutput.script,
-          Signature::ALL, &newInput->script, pForks))
+        if(!ScriptInterpreter::writeP2PKHSignatureScript(pPrivateKey, pPublicKey, *this, inputs.size() - 1, pOutput.amount,
+          pOutput.script, Signature::ALL, &newInput->script, pForks))
         {
             delete newInput;
             return false;
@@ -371,6 +371,7 @@ namespace BitCoin
                 interpreter.setTransaction(this);
                 interpreter.setInputOffset(index);
                 interpreter.setInputSequence((*input)->sequence);
+                interpreter.setOutputAmount(output.amount);
 
                 // Process signature script
                 //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "Input %d script : ", index+1);
@@ -655,7 +656,7 @@ namespace BitCoin
     }
 
     bool Transaction::writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
-      ArcMist::Buffer &pOutputScript, Signature::HashType pHashType, const Forks &pForks)
+      int64_t pOutputAmount, ArcMist::Buffer &pOutputScript, Signature::HashType pHashType, const Forks &pForks)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Transaction Sign Data");
@@ -664,131 +665,224 @@ namespace BitCoin
         // Extract FORKID (0x40) flag from hash type
         bool forkID = hashType & Signature::FORKID;
         if(forkID)
-            hashType = static_cast<Signature::HashType>(hashType ^ Signature::ANYONECANPAY);
+            hashType = static_cast<Signature::HashType>(hashType ^ Signature::FORKID);
         // Extract ANYONECANPAY (0x80) flag from hash type
         bool anyoneCanPay = hashType & Signature::ANYONECANPAY;
         if(anyoneCanPay)
             hashType = static_cast<Signature::HashType>(hashType ^ Signature::ANYONECANPAY);
 
-        // Verify bitcoin cash
-        if(pForks.cashRequired() && !forkID)
+        // Verify bitcoin cash fork ID
+        if(pForks.cashActive())
+        {
+            if(!forkID)
+                return false;
+        }
+        else if(forkID)
             return false;
 
-        // Build subscript from unspent/output script
-        unsigned int offset;
-        ArcMist::Buffer subScript;
-        ScriptInterpreter::removeCodeSeparators(pOutputScript, subScript);
-
-        // Version
-        pStream->writeUnsignedInt(version);
-
-        switch(hashType)
+        if(forkID)
         {
-        default:
-        case Signature::INVALID:
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-              "Unsupported signature hash type : 0x%02x", pHashType);
-        case Signature::ALL:
-        {
-            // Input Count
+            Hash hash(32);
+            ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+            digest.setOutputEndian(ArcMist::Endian::LITTLE);
+
+            // Version
+            pStream->writeUnsignedInt(version);
+
+            // Hash Prev Outs
             if(anyoneCanPay)
-                writeCompactInteger(pStream, 1);
+                hash.zeroize();
             else
-                writeCompactInteger(pStream, inputs.size());
-
-            // Inputs
-            offset = 0;
-            for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
             {
-                if(pInputOffset == offset++)
-                    (*input)->writeSignatureData(pStream, &subScript, false);
-                else if(!anyoneCanPay)
-                    (*input)->writeSignatureData(pStream, NULL, false);
+                // All input outpoints
+                digest.initialize();
+                for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+                    (*input)->outpoint.write(&digest);
+                digest.getResult(&hash);
             }
+            hash.write(pStream);
 
-            // Output Count
-            writeCompactInteger(pStream, outputs.size());
-
-            // Outputs
-            for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
-                (*output)->write(pStream);
-
-            break;
-        }
-        case Signature::NONE:
-        {
-            // Input Count
-            if(anyoneCanPay)
-                writeCompactInteger(pStream, 1);
+            // Hash Sequence
+            if(anyoneCanPay || hashType == Signature::SINGLE || hashType == Signature::NONE)
+                hash.zeroize();
             else
-                writeCompactInteger(pStream, inputs.size());
-
-            // Inputs
-            offset = 0;
-            for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
             {
-                if(pInputOffset == offset++)
-                    (*input)->writeSignatureData(pStream, &subScript, false);
-                else if(!anyoneCanPay)
-                    (*input)->writeSignatureData(pStream, NULL, true);
+                // All input sequences
+                digest.initialize();
+                for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+                    digest.writeUnsignedInt((*input)->sequence);
+                digest.getResult(&hash);
             }
+            hash.write(pStream);
 
-            // Output Count
-            writeCompactInteger(pStream, 0);
-            break;
-        }
-        case Signature::SINGLE:
-        {
-            // Input Count
-            if(anyoneCanPay)
-                writeCompactInteger(pStream, 1);
+            // Outpoint
+            if(pInputOffset < inputs.size())
+                inputs[pInputOffset]->outpoint.write(pStream);
             else
-                writeCompactInteger(pStream, inputs.size());
+                return false;
 
-            // Inputs
-            offset = 0;
-            for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+            // Script Code
+            writeCompactInteger(pStream, pOutputScript.remaining());
+            pStream->writeStream(&pOutputScript, pOutputScript.remaining());
+
+            // Value of Output
+            pStream->writeLong(pOutputAmount);
+
+            // Sequence
+            if(pInputOffset < inputs.size())
+                pStream->writeUnsignedInt(inputs[pInputOffset]->sequence);
+            else
+                return false;
+
+            // Hash Outputs
+            if(hashType == Signature::SINGLE)
             {
-                if(pInputOffset == offset++)
-                    (*input)->writeSignatureData(pStream, &subScript, false);
-                else if(!anyoneCanPay)
-                    (*input)->writeSignatureData(pStream, NULL, true);
-            }
-
-            // Output Count (number of inputs)
-            writeCompactInteger(pStream, pInputOffset + 1);
-
-            // Outputs
-            std::vector<Output *>::iterator output=outputs.begin();
-            for(offset=0;offset<pInputOffset+1;offset++)
-                if(output!=outputs.end())
+                if(pInputOffset < outputs.size())
                 {
-                    if(offset == pInputOffset)
-                        (*output)->write(pStream);
-                    else
-                    {
-                        // Write -1 amount output
-                        pStream->writeLong(-1);
-                        writeCompactInteger(pStream, 0);
-                    }
-                    ++output;
+                    // Only output corresponding to this input
+                    digest.initialize();
+                    outputs[pInputOffset]->write(&digest);
+                    digest.getResult(&hash);
                 }
                 else
-                    return false; // Invalid number of outputs
+                    hash.zeroize();
+            }
+            else if(hashType == Signature::NONE)
+                hash.zeroize();
+            else
+            {
+                // All outputs
+                digest.initialize();
+                for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
+                    (*output)->write(&digest);
+                digest.getResult(&hash);
+            }
+            hash.write(pStream);
 
-            break;
+            // Lock Time
+            pStream->writeUnsignedInt(lockTime);
+
+            // Sig Hash Type
+            pStream->writeUnsignedInt(pHashType); // pHashType << 8
+
+            return true;
         }
-        }
-
-        // Lock Time
-        pStream->writeUnsignedInt(lockTime);
-
-        // Add signature hash type to the end as a 32 bit value
-        if(forkID)
-            pStream->writeUnsignedInt(pHashType << 8);
         else
+        {
+            // Build subscript from unspent/output script
+            unsigned int offset;
+            ArcMist::Buffer subScript;
+            ScriptInterpreter::removeCodeSeparators(pOutputScript, subScript);
+
+            // Version
+            pStream->writeUnsignedInt(version);
+
+            switch(hashType)
+            {
+            default:
+            case Signature::INVALID:
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Unsupported signature hash type : 0x%02x", pHashType);
+            case Signature::ALL:
+            {
+                // Input Count
+                if(anyoneCanPay)
+                    writeCompactInteger(pStream, 1);
+                else
+                    writeCompactInteger(pStream, inputs.size());
+
+                // Inputs
+                offset = 0;
+                for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+                {
+                    if(pInputOffset == offset++)
+                        (*input)->writeSignatureData(pStream, &subScript, false);
+                    else if(!anyoneCanPay)
+                        (*input)->writeSignatureData(pStream, NULL, false);
+                }
+
+                // Output Count
+                writeCompactInteger(pStream, outputs.size());
+
+                // Outputs
+                for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
+                    (*output)->write(pStream);
+
+                break;
+            }
+            case Signature::NONE:
+            {
+                // Input Count
+                if(anyoneCanPay)
+                    writeCompactInteger(pStream, 1);
+                else
+                    writeCompactInteger(pStream, inputs.size());
+
+                // Inputs
+                offset = 0;
+                for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+                {
+                    if(pInputOffset == offset++)
+                        (*input)->writeSignatureData(pStream, &subScript, false);
+                    else if(!anyoneCanPay)
+                        (*input)->writeSignatureData(pStream, NULL, true);
+                }
+
+                // Output Count
+                writeCompactInteger(pStream, 0);
+                break;
+            }
+            case Signature::SINGLE:
+            {
+                // Input Count
+                if(anyoneCanPay)
+                    writeCompactInteger(pStream, 1);
+                else
+                    writeCompactInteger(pStream, inputs.size());
+
+                // Inputs
+                offset = 0;
+                for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+                {
+                    if(pInputOffset == offset++)
+                        (*input)->writeSignatureData(pStream, &subScript, false);
+                    else if(!anyoneCanPay)
+                        (*input)->writeSignatureData(pStream, NULL, true);
+                }
+
+                // Output Count (number of inputs)
+                writeCompactInteger(pStream, pInputOffset + 1);
+
+                // Outputs
+                std::vector<Output *>::iterator output=outputs.begin();
+                for(offset=0;offset<pInputOffset+1;offset++)
+                    if(output!=outputs.end())
+                    {
+                        if(offset == pInputOffset)
+                            (*output)->write(pStream);
+                        else
+                        {
+                            // Write -1 amount output
+                            pStream->writeLong(-1);
+                            writeCompactInteger(pStream, 0);
+                        }
+                        ++output;
+                    }
+                    else
+                        return false; // Invalid number of outputs
+
+                break;
+            }
+            }
+
+            // Lock Time
+            pStream->writeUnsignedInt(lockTime);
+
+            // Sig Hash Type
             pStream->writeUnsignedInt(pHashType);
-        return true;
+
+            return true;
+        }
     }
 
     bool Transaction::read(ArcMist::InputStream *pStream, bool pCalculateHash, bool pBlockFile)
@@ -971,7 +1065,7 @@ namespace BitCoin
         ScriptInterpreter::writeP2PKHPublicKeyScript(publicKey2Hash, &transaction.outputs[0]->script);
 
         // Create signature script
-        ScriptInterpreter::writeP2PKHSignatureScript(privateKey1, publicKey1, transaction, 0, output.script,
+        ScriptInterpreter::writeP2PKHSignatureScript(privateKey1, publicKey1, transaction, 0, output.amount, output.script,
           Signature::ALL, &transaction.inputs[0]->script, forks);
 
         transaction.calculateHash();
@@ -1016,7 +1110,7 @@ namespace BitCoin
 
         // Create signature script
         transaction.inputs[0]->script.clear();
-        ScriptInterpreter::writeP2PKHSignatureScript(privateKey1, publicKey2, transaction, 0, output.script,
+        ScriptInterpreter::writeP2PKHSignatureScript(privateKey1, publicKey2, transaction, 0, output.amount, output.script,
           Signature::ALL, &transaction.inputs[0]->script, forks);
 
         transaction.inputs[0]->script.setReadOffset(0);
@@ -1057,7 +1151,7 @@ namespace BitCoin
 
         // Create signature script
         transaction.inputs[0]->script.clear();
-        ScriptInterpreter::writeP2PKHSignatureScript(privateKey2, publicKey1, transaction, 0, output.script,
+        ScriptInterpreter::writeP2PKHSignatureScript(privateKey2, publicKey1, transaction, 0, output.amount, output.script,
           Signature::ALL, &transaction.inputs[0]->script, forks);
 
         transaction.inputs[0]->script.setReadOffset(0);

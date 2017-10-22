@@ -35,12 +35,21 @@ namespace BitCoin
     {
     public:
 
-        ScriptInterpreter() { mValid = true; mVerified = true; mTransaction = NULL; mInputOffset = 0; mInputSequence = 0xffffffff; }
+        ScriptInterpreter()
+        {
+            mValid = true;
+            mVerified = true;
+            mTransaction = NULL;
+            mInputOffset = 0;
+            mInputSequence = 0xffffffff;
+            mOutputAmount = 0;
+        }
         ~ScriptInterpreter() { clear(); }
 
         void setTransaction(Transaction *pTransaction);
         void setInputOffset(unsigned int pOffset) { mInputOffset = pOffset; }
         void setInputSequence(uint32_t pSequence) { mInputSequence = pSequence; }
+        void setOutputAmount(int64_t pOutputAmount) { mOutputAmount = pOutputAmount; }
 
         // Process script
         bool process(ArcMist::Buffer &pScript, bool pIsSignatureScript, int32_t pBlockVersion,
@@ -91,6 +100,7 @@ namespace BitCoin
             mTransaction = NULL;
             mInputOffset = 0;
             mInputSequence = 0xffffffff;
+            mOutputAmount = 0;
 
             std::list<ArcMist::Buffer *>::iterator iter;
 
@@ -139,6 +149,7 @@ namespace BitCoin
                                               const PublicKey &pPublicKey,
                                               Transaction &pTransaction,
                                               unsigned int pInputOffset,
+                                              int64_t pUnspentAmount,
                                               ArcMist::Buffer &pUnspentScript,
                                               Signature::HashType pType,
                                               ArcMist::OutputStream *pOutput,
@@ -177,6 +188,7 @@ namespace BitCoin
         Transaction *mTransaction;
         unsigned int mInputOffset;
         uint32_t mInputSequence;
+        int64_t mOutputAmount;
 
         void writeSigHashAllData(ArcMist::Buffer &pData, ArcMist::Buffer &pSubScript);
 
