@@ -117,6 +117,7 @@ namespace BitCoin
                 delete[] mOutputs;
         }
 
+        // Read everything except outputs. For sorting purposes
         bool readHeader(ArcMist::InputStream *pStream);
 
         // Read the hash, then if the hash matches read the rest
@@ -127,10 +128,6 @@ namespace BitCoin
 
         bool read(ArcMist::InputStream *pStream);
         bool write(ArcMist::OutputStream *pStream);
-
-        bool writeIndex(ArcMist::OutputStream *pStream);
-
-        bool readOld(ArcMist::InputStream *pHeaderStream, ArcMist::InputStream *pOutputStream);
 
         bool operator == (const TransactionReference &pRight) const
         {
@@ -193,14 +190,17 @@ namespace BitCoin
         bool markedDelete() const { return mFlags & DELETE_FLAG; }
         bool isModified() const { return mFlags & MODIFIED_FLAG; }
         bool isNew() const { return mFlags & NEW_FLAG; }
+        bool wasSpent() const { return mFlags & WAS_SPENT_FLAG; }
 
         void setDelete() { mFlags |= DELETE_FLAG; }
         void setModified() { mFlags |= MODIFIED_FLAG; }
         void setNew() { mFlags |= NEW_FLAG; }
+        void setWasSpent() { mFlags |= WAS_SPENT_FLAG; }
 
         void clearDelete() { mFlags ^= DELETE_FLAG; }
         void clearModified() { mFlags ^= MODIFIED_FLAG; }
         void clearNew() { mFlags ^= NEW_FLAG; }
+        void clearWasSpent() { mFlags ^= WAS_SPENT_FLAG; }
         void clearFlags() { mFlags = 0; }
 
         Hash id; // Transaction Hash
@@ -216,9 +216,10 @@ namespace BitCoin
         unsigned int mOutputCount;
         OutputReference *mOutputs;
 
-        static const uint8_t DELETE_FLAG   = 0x01;
-        static const uint8_t MODIFIED_FLAG = 0x02;
-        static const uint8_t NEW_FLAG      = 0x04;
+        static const uint8_t DELETE_FLAG    = 0x01; // Transaction needs completely removed
+        static const uint8_t MODIFIED_FLAG  = 0x02; // Transaction has been modified since last save
+        static const uint8_t NEW_FLAG       = 0x04; // Transaction has not been saved yet
+        static const uint8_t WAS_SPENT_FLAG = 0x08; // Transaction was previously saved as spent and removed from unspent index
         uint8_t mFlags;
 
         TransactionReference(const TransactionReference &pCopy);
@@ -264,8 +265,6 @@ namespace BitCoin
 
         // Return an iterator to the first matching item in the list
         iterator firstMatching(const Hash &pHash);
-
-        void print(unsigned int pID);
 
     };
 
@@ -370,8 +369,6 @@ namespace BitCoin
               ((unsigned long long)mCacheOutputCount * (unsigned long long)OutputReference::SIZE);
         }
 
-        static bool readOld(TransactionReferenceList &pList, const char *pHeaderFileName, const char *pOutputsFileName);
-
         // pBlockHeight is the block height below which to drop transactions from memory
         bool save(unsigned int pDropBlockHeight);
         bool saveCache(unsigned int pBlockHeight);
@@ -380,7 +377,8 @@ namespace BitCoin
 
     private:
 
-        static const unsigned int HEADER_SIZE = 8; // transaction count and output count
+        static const unsigned int HEADER_SIZE = 8; // Transaction count and output count
+        static const unsigned int INDICE_SET_COUNT = 256; // Number of sets to break indices into when rebuilding
 
         // Pull all transactions with matching IDs from the file and put them in cached.
         //   Returns count of transactions found
@@ -401,7 +399,7 @@ namespace BitCoin
         ArcMist::ReadersLock mLock;
         unsigned int mID;
         ArcMist::String mFilePath;
-        ArcMist::FileInputStream *mIndexFile;
+        ArcMist::FileInputStream *mUnspentFile;
         ArcMist::FileInputStream *mDataFile;
 
         TransactionReferenceList mCache;
