@@ -49,6 +49,13 @@ int main(int pArgumentCount, char **pArguments)
     ArcMist::String printBlock;
     bool nextIsPrintBlock = false;
 
+    if(pArgumentCount < 2)
+    {
+        std::cerr << "Too few arguments" << std::endl;
+        printHelp(path);
+        return 1;
+    }
+
     if(std::strcmp(pArguments[1], "start") == 0)
         start = true;
     else if(std::strcmp(pArguments[1], "stop") == 0)
@@ -61,10 +68,15 @@ int main(int pArgumentCount, char **pArguments)
         listblocks = true;
     else if(std::strcmp(pArguments[1], "printblock") == 0)
         nextIsPrintBlock = true;
-    else //if(std::strcmp(pArguments[1], "help") == 0)
+    else if(std::strcmp(pArguments[1], "help") == 0)
     {
         printHelp(path);
         return 0;
+    }
+    else
+    {
+        printHelp(path);
+        return 1;
     }
 
     for(int i=2;i<pArgumentCount;i++)
@@ -107,7 +119,7 @@ int main(int pArgumentCount, char **pArguments)
         {
             std::cerr << "Unknown command line parameter : " << pArguments[i] << std::endl;
             printHelp(path);
-            return 0;
+            return 1;
         }
 
     if(testnet)
