@@ -49,14 +49,44 @@ namespace BitCoin
 
     bool Chain::updateTargetBits()
     {
+        double adjustFactor;
+        uint32_t lastTargetBits;
+
         if(mBlockStats.height() <= 1)
             mTargetBits = mMaxTargetBits;
         else if(mBlockStats.height() % RETARGET_PERIOD != 0)
-            return true;
+        {
+            if(mForks.cashActive() && mBlockStats.height() > 7)
+            {
+                // Bitcoin Cash EDA (Emergency Difficulty Adjustment)
+                uint32_t mptDiff = mBlockStats.getMedianPastTime(mBlockStats.height()) -
+                  mBlockStats.getMedianPastTime(mBlockStats.height() - 6);
+
+                // If more than 12 hours on the last 6 blocks then reduce difficulty by 20%
+                if(mptDiff >= 43200)
+                {
+                    lastTargetBits = mBlockStats.targetBits(mBlockStats.height() - 1);
+                    adjustFactor = 1.25;
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                      "EDA increasing target bits 0x%08x by a factor of %f to reduce difficulty by %.02f%%", lastTargetBits,
+                      adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
+
+                    // Treat targetValue as a 256 bit number and multiply it by adjustFactor
+                    mTargetBits = multiplyTargetBits(lastTargetBits, adjustFactor, mMaxTargetBits);
+
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                      "EDA new target bits for block height %d : 0x%08x", mBlockStats.height(), mTargetBits);
+                }
+                return true;
+            }
+            else
+                return true;
+        }
 
         uint32_t lastBlockTime      = mBlockStats.time(mBlockStats.height() - 1);
         uint32_t lastAdjustmentTime = mBlockStats.time(mBlockStats.height() - RETARGET_PERIOD);
-        uint32_t lastTargetBits     = mBlockStats.targetBits(mBlockStats.height() - 1);
+
+        lastTargetBits = mBlockStats.targetBits(mBlockStats.height() - 1);
 
         // Calculate percent of time actually taken for the last 2016 blocks by the goal time of 2 weeks
         // Adjust factor over 1.0 means the target is going up, which also means the difficulty to
@@ -65,7 +95,7 @@ namespace BitCoin
         //   find a hash under the target goes up
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
           "Time spent on last 2016 blocks %d - %d = %d", lastBlockTime, lastAdjustmentTime, lastBlockTime - lastAdjustmentTime);
-        double adjustFactor = (double)(lastBlockTime - lastAdjustmentTime) / 1209600.0;
+        adjustFactor = (double)(lastBlockTime - lastAdjustmentTime) / 1209600.0;
 
         if(adjustFactor > 1.0)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
@@ -231,7 +261,7 @@ namespace BitCoin
         {
             mPendingLock.writeUnlock();
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-              "Black listed block hash : %s", pBlock->hash.hex().text());
+              "Rejecting black listed block hash : %s", pBlock->hash.hex().text());
             return false;
         }
 
@@ -563,16 +593,6 @@ namespace BitCoin
                 mTargetBits = previousTargetBits;
                 mBlockStats.revert(mNextBlockHeight);
                 mProcessMutex.unlock();
-
-
-                //TODO Remove test code
-                ArcMist::String fileName;
-                fileName.writeFormatted("%s.block", pBlock->hash.hex().text());
-                ArcMist::FileOutputStream file(fileName, true);
-                pBlock->write(&file, true, true);
-
-
-
                 return false;
             }
         }
@@ -752,6 +772,8 @@ namespace BitCoin
                 mBlackListedNodeIDs.push_back(nextPending->requestingNode);
                 // Add hash to blacklist. So it isn't downloaded again.
                 mBlackListBlocks.push_back(new Hash(nextPending->block->hash));
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                  "Added block to black list : %s", pBlock->hash.hex().text());
                 for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
                     delete *pending;
                 mPending.clear();
