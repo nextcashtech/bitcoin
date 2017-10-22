@@ -182,6 +182,8 @@ namespace BitCoin
         //   If pRebuildUnspent then it rebuilds unspent transactions
         bool validate(bool pRebuild);
 
+        std::vector<unsigned int> blackListedNodeIDs();
+
         // Set flag to stop processing
         void requestStop() { mStop = true; }
 
@@ -235,6 +237,9 @@ namespace BitCoin
         // Last BLOCK_STATS_SIZE block's statistics
         Forks mForks;
         BlockStats mBlockStats;
+
+        HashList mBlackListBlocks;
+        std::vector<unsigned int> mBlackListedNodeIDs;
 
         static Chain *sInstance;
 

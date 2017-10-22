@@ -52,7 +52,7 @@ namespace BitCoin
         if(mBlockStats.height() <= 1)
             mTargetBits = mMaxTargetBits;
         else if(mBlockStats.height() % RETARGET_PERIOD != 0)
-            return true; // No adjustment at this height
+            return true;
 
         uint32_t lastBlockTime      = mBlockStats.time(mBlockStats.height() - 1);
         uint32_t lastAdjustmentTime = mBlockStats.time(mBlockStats.height() - RETARGET_PERIOD);
@@ -224,6 +224,14 @@ namespace BitCoin
             else
                 ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
                   "Unknown header : %s", pBlock->hash.hex().text());
+            return false;
+        }
+
+        if(mBlackListBlocks.contains(pBlock->hash))
+        {
+            mPendingLock.writeUnlock();
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "Black listed block hash : %s", pBlock->hash.hex().text());
             return false;
         }
 
@@ -516,6 +524,15 @@ namespace BitCoin
         return false;
     }
 
+    std::vector<unsigned int> Chain::blackListedNodeIDs()
+    {
+        mPendingLock.writeLock("Black Listed Nodes");
+        std::vector<unsigned int> result = mBlackListedNodeIDs;
+        mBlackListedNodeIDs.clear();
+        mPendingLock.writeUnlock();
+        return result;
+    }
+
     bool Chain::processBlock(Block *pBlock)
     {
 #ifdef PROFILER_ON
@@ -546,6 +563,16 @@ namespace BitCoin
                 mTargetBits = previousTargetBits;
                 mBlockStats.revert(mNextBlockHeight);
                 mProcessMutex.unlock();
+
+
+                //TODO Remove test code
+                ArcMist::String fileName;
+                fileName.writeFormatted("%s.block", pBlock->hash.hex().text());
+                ArcMist::FileOutputStream file(fileName, true);
+                pBlock->write(&file, true, true);
+
+
+
                 return false;
             }
         }
@@ -702,36 +729,38 @@ namespace BitCoin
         }
         else
         {
-            //TODO Add hash to blacklist. So it isn't downloaded again.
-
             if(mLastBlockFile != NULL)
             {
                 delete mLastBlockFile;
                 mLastBlockFile = NULL;
             }
 
-            // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Clearing all pending blocks/headers");
+            // if(nextPending->block->size() > 1000000)
+            // {
+                // // Stop daemon
+                // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  // "Stopping daemon because this is currently unrecoverable");
+                // Daemon::instance().requestStop();
+                // mStop = true;
+            // }
+            // else
+            // {
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Clearing all pending blocks/headers");
 
-            // // Clear pending blocks since they assumed this block was good
-            // mPendingLock.readLock();
-            // for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
-                // delete *pending;
-            // mPending.clear();
-            // mLastPendingHash.clear();
-            // mLastFullPendingOffset = 0;
-            // mPendingSize = 0;
-            // mPendingBlocks = 0;
-            // mPendingLock.readUnlock();
-
-            //TODO Black list block hash
-
-            //TODO Figure out how to recover from this
-
-            // Stop daemon
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Stopping daemon because this is currently unrecoverable");
-            Daemon::instance().requestStop();
-            mStop = true;
+                // Clear pending blocks since they assumed this block was good
+                mPendingLock.writeLock("Clear Pending");
+                mBlackListedNodeIDs.push_back(nextPending->requestingNode);
+                // Add hash to blacklist. So it isn't downloaded again.
+                mBlackListBlocks.push_back(new Hash(nextPending->block->hash));
+                for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
+                    delete *pending;
+                mPending.clear();
+                mLastPendingHash.clear();
+                mLastFullPendingOffset = 0;
+                mPendingSize = 0;
+                mPendingBlocks = 0;
+                mPendingLock.writeUnlock();
+            // }
         }
     }
 
@@ -1675,13 +1704,13 @@ namespace BitCoin
 
     void Chain::tempTest()
     {
+        // setNetwork(MAINNET);
+        // Info::instance().setPath("/var/bitcoin/mainnet");
         // TransactionOutputPool outputs;
         // // BlockStats blockStats;
         // // Forks softForks;
 
         // // ArcMist::Log::setOutputFile("convert.log");
-        // setNetwork(MAINNET);
-        // Info::instance().setPath("/var/bitcoin/mainnet");
 
         // // blockStats.load();
         // // softForks.load();
@@ -1689,7 +1718,7 @@ namespace BitCoin
         // // // outputs.revert(388700, true);
         // // // outputs.save();
 
-        // outputs.convert();
+        // // outputs.convert();
 
 
         // ArcMist::FileInputStream file("/var/bitcoin/mainnet/pending");

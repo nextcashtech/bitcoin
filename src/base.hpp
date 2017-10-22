@@ -450,6 +450,14 @@ namespace BitCoin
             std::vector<Hash *>::clear();
         }
 
+        bool contains(const Hash &pHash)
+        {
+            for(iterator hash=begin();hash!=end();++hash)
+                if(**hash == pHash)
+                    return true;
+            return false;
+        }
+
         // Insert an item into a sorted list and retain sorting
         void insertSorted(const Hash &pHash);
 

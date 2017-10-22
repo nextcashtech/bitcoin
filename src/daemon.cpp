@@ -1007,8 +1007,13 @@ namespace BitCoin
 
     void Daemon::cleanNodes()
     {
+        // Check for black listed nodes
+        std::vector<unsigned int> blackListedNodeIDs = mChain.blackListedNodeIDs();
+
+
         // Drop all closed nodes
         std::vector<Node *> toDelete;
+        bool dropped;
         mNodeLock.writeLock("Clean Nodes");
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
             if(!(*node)->isOpen())
@@ -1022,7 +1027,27 @@ namespace BitCoin
                 node = mNodes.erase(node);
             }
             else
-                ++node;
+            {
+                dropped = false;
+                for(std::vector<unsigned int>::iterator nodeID=blackListedNodeIDs.begin();nodeID!=blackListedNodeIDs.end();++nodeID)
+                    if(*nodeID == (*node)->id())
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                          "%s Dropping. Black listed", (*node)->name());
+                        dropped = true;
+                        (*node)->close();
+                        --mNodeCount;
+                        if((*node)->isIncoming())
+                            --mIncomingNodes;
+                        else
+                            --mOutgoingNodes;
+                        toDelete.push_back(*node);
+                        node = mNodes.erase(node);
+                    }
+
+                if(!dropped)
+                    ++node;
+            }
         mNodeLock.writeUnlock();
 
         for(std::vector<Node *>::iterator node=toDelete.begin();node!=toDelete.end();++node)
