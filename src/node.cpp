@@ -377,7 +377,7 @@ namespace BitCoin
 
         Info &info = Info::instance();
         Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip,
-          info.port, info.fullMode, mChain->softForks().cashRequired(), mChain->blockHeight(), mChain->isInSync());
+          info.port, info.fullMode, mChain->softForks().cashActive(), mChain->blockHeight(), mChain->isInSync());
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
         return success;
@@ -545,13 +545,15 @@ namespace BitCoin
                 {
                     sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
                       "Full node bit (0x01) required in protocol version");
+                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Missing full node bit");
                     close();
                 }
-                else if(!mIsIncoming && !mIsSeed && mChain->softForks().cashRequired() &&
+                else if(!mIsIncoming && !mIsSeed && mChain->softForks().cashActive() &&
                   !(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT))
                 {
                     sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
                       "Cash node bit (0x20) required in protocol version");
+                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Missing cash node bit");
                     close();
                 }
                 else if(!mIsIncoming && !mIsSeed && !mChain->isInSync() && (mVersionData->startBlockHeight < 0 ||

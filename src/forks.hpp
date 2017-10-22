@@ -155,12 +155,12 @@ namespace BitCoin
 #ifdef DISABLE_CASH
         static const uint32_t CASH_ACTIVATION_TIME = 0;
 #else
-        static const uint32_t CASH_ACTIVATION_TIME = 1501590000;
+        static const uint32_t CASH_ACTIVATION_TIME = 1501590000; // Block height on mainnet 478558
 #endif
         static const unsigned int HARD_MAX_BLOCK_SIZE = 1000000;
         static const unsigned int CASH_START_MAX_BLOCK_SIZE = 8000000;
 
-        bool cashRequired() const { return mCashForkBlockHeight != -1 && mHeight >= mCashForkBlockHeight; }
+        bool cashActive() const { return mCashForkBlockHeight != -1 && mHeight >= mCashForkBlockHeight; }
         int cashForkBlockHeight() const { return mCashForkBlockHeight; }
         unsigned int blockMaxSize() const { return mBlockMaxSize; }
 

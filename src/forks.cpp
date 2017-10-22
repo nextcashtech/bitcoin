@@ -565,7 +565,7 @@ namespace BitCoin
         {
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
               "Cash fork activated at block height %d", pBlockHeight);
-            mCashForkBlockHeight = mHeight;
+            mCashForkBlockHeight = mHeight - 1;
             mBlockMaxSize = CASH_START_MAX_BLOCK_SIZE;
         }
     }
