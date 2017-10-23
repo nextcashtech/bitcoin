@@ -986,11 +986,12 @@ namespace BitCoin
 
     void BlockFile::updateCRC()
     {
-        if(!mModified)
+        if(!mModified || !mValid)
             return;
 
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Block Update CRC");
+        ArcMist::Profiler profiler("Block Update CRC", false);
+        profiler.start();
 #endif
         if(!openFile())
         {
@@ -1005,6 +1006,8 @@ namespace BitCoin
         // Read file into digest
         mInputFile->setReadOffset(HASHES_OFFSET);
         digest.writeStream(mInputFile, mInputFile->remaining());
+
+        // Close input file
         delete mInputFile;
         mInputFile = NULL;
 
@@ -1014,12 +1017,15 @@ namespace BitCoin
         digest.getResult(&crcBuffer);
         unsigned int crc = crcBuffer.readUnsignedInt();
 
-        // Write CRC to file
+        // Open output file
         ArcMist::FileOutputStream *outputFile = new ArcMist::FileOutputStream(mFilePathName);
+
+        // Write CRC to file
         outputFile->setOutputEndian(ArcMist::Endian::LITTLE);
         outputFile->setWriteOffset(CRC_OFFSET);
         outputFile->writeUnsignedInt(crc);
-        outputFile->flush();
+
+        // Close output file
         delete outputFile;
 
         ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
