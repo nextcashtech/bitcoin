@@ -946,7 +946,8 @@ namespace BitCoin
         ArcMist::Profiler updateIndexProfiler("Outputs Save Update Index");
         ArcMist::Profiler indexInsertProfiler("Outputs Save Index Insert", false);
         ArcMist::Profiler dataInsertProfiler("Outputs Save Data Insert", false);
-        ArcMist::Profiler removeProfiler("Outputs Save Remove", false);
+        ArcMist::Profiler removeProfiler("Outputs Save Remove Deleted", false);
+        ArcMist::Profiler removeSpentProfiler("Outputs Save Remove Spent", false);
 #endif
         // Read .index file with all transaction indices
         filePathName.writeFormatted("%s%s%02x.index", mFilePath.text(), ArcMist::PATH_SEPARATOR, mID);
@@ -1032,34 +1033,102 @@ namespace BitCoin
                 else
                 {
 #ifdef PROFILER_ON
-                    removeProfiler.start();
+                    removeSpentProfiler.start();
 #endif
                     // Remove from unspent indices.
-                    // They aren't sorted by file offset so in this scenario a linear search is
-                    //   required since not all headers are read and reading them for a binary
-                    //   search would presumably be more expensive.
-                    found = false;
-                    header = headers.begin();
-                    for(index=indices.begin();index!=indices.end();++index,++header)
-                        if(index->fileOffset == (*item)->fileOffset)
-                        {
-                            indices.erase(index);
-                            headers.erase(header);
-                            found = true;
-                            break;
-                        }
-#ifdef PROFILER_ON
-                    removeProfiler.stop();
-#endif
-
-                    if(!found)
+                    if(indices.size () == 0)
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                          "Failed to find index to remove for file offset %d : %s", (*item)->fileOffset,
+                          "Failed to find index to remove for file offset %d (indices empty) : %s", (*item)->fileOffset,
                           (*item)->id.hex().text());
                         success = false;
                         break;
                     }
+
+                    found = false;
+                    if(indices.front().fileOffset == (*item)->fileOffset)
+                    {
+                        found = true;
+                        indices.erase(indices.begin());
+                        headers.erase(headers.begin());
+                    }
+
+                    if(!found && indices.back().fileOffset == (*item)->fileOffset)
+                    {
+                        found = true;
+                        indices.erase(--indices.end());
+                        headers.erase(--headers.end());
+                    }
+
+                    if(!found)
+                    {
+                        // Binary search for remove
+                        begin = 0;
+                        end = indices.size() - 1;
+                        while(true)
+                        {
+                            // Divide data set in half
+                            current = (begin + end) / 2;
+
+                            // Check for match
+                            if(indices[current].fileOffset == (*item)->fileOffset)
+                            {
+                                // Remove match from indices and headers
+                                index = indices.begin();
+                                index += current;
+                                indices.erase(index);
+
+                                header = headers.begin();
+                                header += current;
+                                headers.erase(header);
+
+                                found = true;
+                                break;
+                            }
+
+                            // Pull "current" entry (if it isn't already)
+                            currentTransaction = headers[current];
+                            if(currentTransaction == NULL)
+                            {
+                                // Fetch transaction data
+                                currentTransaction = pullTransactionHeader(indices[current].fileOffset);
+                                ++readHeadersCount;
+                                if(currentTransaction == NULL)
+                                {
+                                    success = false;
+                                    break;
+                                }
+                                headers[current] = currentTransaction;
+                            }
+
+                            compare = (*item)->compare(*currentTransaction);
+                            if(compare == 0)
+                            {
+                                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                                  "Found matching transaction reference with non-matching file offset. Block height %d : %s",
+                                  (*item)->blockHeight, (*item)->id.hex().text());
+                                success = false;
+                                break;
+                            }
+
+                            if(current == begin)
+                            {
+                                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                                  "Failed to find matching spent transaction reference to remove from index. Block height %d : %s",
+                                  (*item)->blockHeight, (*item)->id.hex().text());
+                                success = false;
+                                break;
+                            }
+
+                            if(compare > 0)
+                                begin = current;
+                            else //if(compare < 0)
+                                end = current;
+                        }
+                    }
+#ifdef PROFILER_ON
+                    removeSpentProfiler.stop();
+#endif
                 }
             }
             else if((*item)->isNew() || (*item)->wasSpent())
