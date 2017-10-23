@@ -123,7 +123,7 @@ namespace BitCoin
 
         TransactionOutputPool &outputs() { return mOutputs; }
         const BlockStats &blockStats() const { return mBlockStats; }
-        const Forks &softForks() const { return mForks; }
+        const Forks &forks() const { return mForks; }
 
         // Chain is up to date with most chains
         bool isInSync() { return false; }

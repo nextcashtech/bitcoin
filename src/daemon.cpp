@@ -214,6 +214,11 @@ namespace BitCoin
             delete mManagerThread;
         mManagerThread = NULL;
 
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Saving data");
+        saveStatistics();
+        mChain.save();
+        Info::destroy();
+
 #ifdef PROFILER_ON
         ArcMist::String profilerTime;
         profilerTime.writeFormattedTime(getTime(), "%Y%m%d.%H%M");
@@ -223,11 +228,6 @@ namespace BitCoin
         ArcMist::FileOutputStream profilerFile(profilerFileName, true);
         ArcMist::ProfilerManager::write(&profilerFile);
 #endif
-
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Saving data");
-        saveStatistics();
-        mChain.save();
-        Info::destroy();
 
         mRunning = false;
         mStopping = false;
@@ -795,7 +795,7 @@ namespace BitCoin
 
             // Wait 60 seconds so hopefully a bunch of nodes are ready to request at the same time to improve staggering
             time = getTime();
-            if(time - lastRequestCheckTime > 60)
+            if(time - lastRequestCheckTime > 60 || (!daemon.mChain.isInSync() && daemon.mChain.pendingBlockCount() == 0))
             {
                 lastRequestCheckTime = time;
                 daemon.sendRequests();
@@ -822,7 +822,7 @@ namespace BitCoin
                 break;
 
             time = getTime();
-            if(daemon.mLastPeerCount < 2000 && time - lastPeerRequestTime > 60)
+            if(daemon.mLastPeerCount > 0 && daemon.mLastPeerCount < 2000 && time - lastPeerRequestTime > 60)
             {
                 lastPeerRequestTime = time;
                 daemon.sendPeerRequest();
@@ -942,12 +942,16 @@ namespace BitCoin
         std::vector<Peer *> peers;
         unsigned int count = 0;
         bool found;
+        uint64_t servicesMask = Message::VersionData::FULL_NODE_BIT;
+
+        if(mChain.forks().cashActive())
+            servicesMask |= Message::VersionData::CASH_NODE_BIT;
 
         // Try peers with good ratings first
-        mInfo.getRandomizedPeers(peers, 5);
+        mInfo.getRandomizedPeers(peers, 5, servicesMask);
         ArcMist::Network::Connection *connection;
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-          "Found %d peers with good ratings", peers.size());
+          "Found %d good peers", peers.size());
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
         {
             // Skip nodes already connected
@@ -974,8 +978,9 @@ namespace BitCoin
         }
 
         peers.clear();
-        mInfo.getRandomizedPeers(peers, -5);
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Found %d peers", peers.size());
+        mInfo.getRandomizedPeers(peers, -5, servicesMask);
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+          "Found %d usable peers", peers.size());
         mLastPeerCount = peers.size();
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
         {
@@ -1010,7 +1015,6 @@ namespace BitCoin
         // Check for black listed nodes
         std::vector<unsigned int> blackListedNodeIDs = mChain.blackListedNodeIDs();
 
-
         // Drop all closed nodes
         std::vector<Node *> toDelete;
         bool dropped;
@@ -1043,6 +1047,7 @@ namespace BitCoin
                             --mOutgoingNodes;
                         toDelete.push_back(*node);
                         node = mNodes.erase(node);
+                        break;
                     }
 
                 if(!dropped)

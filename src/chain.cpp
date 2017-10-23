@@ -773,7 +773,7 @@ namespace BitCoin
                 // Add hash to blacklist. So it isn't downloaded again.
                 mBlackListBlocks.push_back(new Hash(nextPending->block->hash));
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                  "Added block to black list : %s", pBlock->hash.hex().text());
+                  "Added block to black list : %s", nextPending->block->hash.hex().text());
                 for(std::list<PendingData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
                     delete *pending;
                 mPending.clear();

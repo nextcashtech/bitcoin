@@ -310,13 +310,13 @@ namespace BitCoin
         mPeerLock.writeUnlock();
     }
 
-    void Info::getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating)
+    void Info::getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating, uint64_t mServicesRequiredMask)
     {
         pPeers.clear();
 
         mPeerLock.readLock();
         for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
-            if((*peer)->rating >= pMinimumRating)
+            if((*peer)->rating >= pMinimumRating && ((*peer)->services & mServicesRequiredMask) == mServicesRequiredMask)
                 pPeers.push_back(*peer);
         mPeerLock.readUnlock();
 

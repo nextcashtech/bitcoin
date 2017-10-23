@@ -377,7 +377,7 @@ namespace BitCoin
 
         Info &info = Info::instance();
         Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip,
-          info.port, info.fullMode, mChain->softForks().cashActive(), mChain->blockHeight(), mChain->isInSync());
+          info.port, info.fullMode, mChain->forks().cashActive(), mChain->blockHeight(), mChain->isInSync());
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
         return success;
@@ -548,7 +548,7 @@ namespace BitCoin
                     ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Missing full node bit");
                     close();
                 }
-                else if(!mIsIncoming && !mIsSeed && mChain->softForks().cashActive() &&
+                else if(!mIsIncoming && !mIsSeed && mChain->forks().cashActive() &&
                   !(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT))
                 {
                     sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
@@ -643,9 +643,13 @@ namespace BitCoin
                 // Send known peer addresses
                 Message::AddressesData addressData;
                 std::vector<Peer *> peers;
+                uint64_t servicesMask = Message::VersionData::FULL_NODE_BIT;
+
+                if(mChain->forks().cashActive())
+                    servicesMask |= Message::VersionData::CASH_NODE_BIT;
 
                 // Get list of peers
-                Info::instance().getRandomizedPeers(peers, 1);
+                Info::instance().getRandomizedPeers(peers, 1, servicesMask);
 
                 unsigned int count = peers.size();
                 if(count > 1000) // Maximum of 1000
