@@ -795,7 +795,7 @@ namespace BitCoin
 
             // Wait 60 seconds so hopefully a bunch of nodes are ready to request at the same time to improve staggering
             time = getTime();
-            if(time - lastRequestCheckTime > 60 || (!daemon.mChain.isInSync() && daemon.mChain.pendingBlockCount() == 0))
+            if(time - lastRequestCheckTime > 30 || (!daemon.mChain.isInSync() && daemon.mChain.pendingBlockCount() == 0))
             {
                 lastRequestCheckTime = time;
                 daemon.sendRequests();
