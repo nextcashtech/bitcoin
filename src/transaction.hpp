@@ -99,6 +99,7 @@ namespace BitCoin
         bool read(ArcMist::InputStream *pStream, bool pCalculateHash = true, bool pBlockFile = false);
 
         void clear();
+        void clearCache();
 
         // Print human readable version to log
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::VERBOSE);
@@ -145,6 +146,8 @@ namespace BitCoin
 
         int64_t mFee;
         unsigned int mSize;
+
+        Hash mOutpointHash, mSequenceHash, mOutputHash;
 
         Transaction(const Transaction &pCopy);
         Transaction &operator = (const Transaction &pRight);

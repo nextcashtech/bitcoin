@@ -36,6 +36,9 @@ namespace BitCoin
     void Transaction::clear()
     {
         hash.clear();
+        mOutpointHash.clear();
+        mSequenceHash.clear();
+        mOutputHash.clear();
         version = 2;
         mFee = 0;
         lockTime = 0xffffffff;
@@ -46,6 +49,13 @@ namespace BitCoin
         for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
             delete (*output);
         outputs.clear();
+    }
+
+    void Transaction::clearCache()
+    {
+        mOutpointHash.clear();
+        mSequenceHash.clear();
+        mOutputHash.clear();
     }
 
     void Transaction::print(ArcMist::Log::Level pLevel)
@@ -525,6 +535,7 @@ namespace BitCoin
             ++index;
         }
 
+        clearCache();
         return true;
     }
 
@@ -682,6 +693,7 @@ namespace BitCoin
 
         if(forkID)
         {
+            // BIP-0143 Signature Hash Algorithm
             Hash hash(32);
             ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
             digest.setOutputEndian(ArcMist::Endian::LITTLE);
@@ -694,11 +706,17 @@ namespace BitCoin
                 hash.zeroize();
             else
             {
-                // All input outpoints
-                digest.initialize();
-                for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
-                    (*input)->outpoint.write(&digest);
-                digest.getResult(&hash);
+                if(!mOutpointHash.isEmpty())
+                    hash = mOutpointHash;
+                else
+                {
+                    // All input outpoints
+                    digest.initialize();
+                    for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+                        (*input)->outpoint.write(&digest);
+                    digest.getResult(&hash);
+                    mOutpointHash = hash; // Save for next input
+                }
             }
             hash.write(pStream);
 
@@ -707,11 +725,17 @@ namespace BitCoin
                 hash.zeroize();
             else
             {
-                // All input sequences
-                digest.initialize();
-                for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
-                    digest.writeUnsignedInt((*input)->sequence);
-                digest.getResult(&hash);
+                if(!mSequenceHash.isEmpty())
+                    hash = mSequenceHash;
+                else
+                {
+                    // All input sequences
+                    digest.initialize();
+                    for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+                        digest.writeUnsignedInt((*input)->sequence);
+                    digest.getResult(&hash);
+                    mSequenceHash = hash; // Save for next input
+                }
             }
             hash.write(pStream);
 
@@ -751,11 +775,17 @@ namespace BitCoin
                 hash.zeroize();
             else
             {
-                // All outputs
-                digest.initialize();
-                for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
-                    (*output)->write(&digest);
-                digest.getResult(&hash);
+                if(!mOutputHash.isEmpty())
+                    hash = mOutputHash;
+                else
+                {
+                    // All outputs
+                    digest.initialize();
+                    for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
+                        (*output)->write(&digest);
+                    digest.getResult(&hash);
+                    mOutputHash = hash; // Save for next input
+                }
             }
             hash.write(pStream);
 
@@ -763,7 +793,7 @@ namespace BitCoin
             pStream->writeUnsignedInt(lockTime);
 
             // Sig Hash Type
-            pStream->writeUnsignedInt(pHashType); // pHashType << 8
+            pStream->writeUnsignedInt(pHashType);
 
             return true;
         }
