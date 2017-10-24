@@ -108,7 +108,7 @@ namespace BitCoin
             if(pOutputCount > 0)
             {
                 allocateOutputs(pOutputCount);
-                std::memset(mOutputs, 0, OutputReference::SIZE * mOutputCount); // Initialize outputs
+                std::memset(mOutputs, 0, sizeof(OutputReference) * mOutputCount); // Initialize outputs
             }
         }
         ~TransactionReference()
@@ -197,10 +197,10 @@ namespace BitCoin
         void setNew() { mFlags |= NEW_FLAG; }
         void setWasSpent() { mFlags |= WAS_SPENT_FLAG; }
 
-        void clearDelete() { mFlags ^= DELETE_FLAG; }
-        void clearModified() { mFlags ^= MODIFIED_FLAG; }
-        void clearNew() { mFlags ^= NEW_FLAG; }
-        void clearWasSpent() { mFlags ^= WAS_SPENT_FLAG; }
+        void clearDelete() { mFlags &= ~DELETE_FLAG; }
+        void clearModified() { mFlags &= ~MODIFIED_FLAG; }
+        void clearNew() { mFlags &= ~NEW_FLAG; }
+        void clearWasSpent() { mFlags &= ~WAS_SPENT_FLAG; }
         void clearFlags() { mFlags = 0; }
 
         Hash id; // Transaction Hash
@@ -216,9 +216,9 @@ namespace BitCoin
         unsigned int mOutputCount;
         OutputReference *mOutputs;
 
-        static const uint8_t DELETE_FLAG    = 0x01; // Transaction needs completely removed
+        static const uint8_t DELETE_FLAG    = 0x01; // Transaction needs to be completely removed
         static const uint8_t MODIFIED_FLAG  = 0x02; // Transaction has been modified since last save
-        static const uint8_t NEW_FLAG       = 0x04; // Transaction has not been saved yet
+        static const uint8_t NEW_FLAG       = 0x04; // Transaction has never been saved
         static const uint8_t WAS_SPENT_FLAG = 0x08; // Transaction was previously saved as spent and removed from unspent index
         uint8_t mFlags;
 

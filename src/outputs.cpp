@@ -983,6 +983,9 @@ namespace BitCoin
         {
             if((*item)->markedDelete())
             {
+                (*item)->clearNew();
+                (*item)->clearWasSpent();
+
                 // Check that it was previously added to the index and data file.
                 // Otherwise it isn't in current indices and doesn't need removed.
                 if((*item)->fileOffset != ArcMist::INVALID_STREAM_SIZE)
@@ -1029,8 +1032,12 @@ namespace BitCoin
             else if(!(*item)->hasUnspentOutputs())
             {
                 if((*item)->isNew()) // Add to "all" indices (not sorted)
+                {
                     allIndices.push_back(IndexEntry((*item)));
-                else
+                    (*item)->clearNew();
+                    (*item)->clearWasSpent();
+                }
+                else if(!(*item)->wasSpent()) // If it was spent then it won't be in unspent indices
                 {
 #ifdef PROFILER_ON
                     removeSpentProfiler.start();
@@ -1136,8 +1143,8 @@ namespace BitCoin
 #ifdef PROFILER_ON
                 indexInsertProfiler.start();
 #endif
-                // Add to "all" indices (not sorted)
-                allIndices.push_back(IndexEntry((*item)));
+                if((*item)->isNew()) // Add to "all" indices (not sorted)
+                    allIndices.push_back(IndexEntry((*item)));
 
                 // For new transactions perform insert sort into existing unspent indices.
                 // This costs more processor time to do the insert for every new item.
@@ -1150,6 +1157,7 @@ namespace BitCoin
                     (*item)->clearNew();
                     (*item)->clearWasSpent();
                     headers.push_back(*item);
+                    continue;
                 }
 
                 // Check first entry
@@ -1274,6 +1282,7 @@ namespace BitCoin
                             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                               "Failed to insert previously spent index. Already indexed. Block height %d : %s",
                               (*item)->blockHeight, (*item)->id.hex().text());
+                        (*item)->print(ArcMist::Log::ERROR);
                         success = false;
                         break;
                     }
@@ -2314,7 +2323,7 @@ namespace BitCoin
     unsigned int TransactionOutputPool::pullBlocks(unsigned int pBlockHeight)
     {
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-          "Caching unspent transaction outputs after block %d", pBlockHeight);
+          "Pulling block transactions after block %d", pBlockHeight);
 
         uint32_t lastReport = getTime();
         unsigned int itemsAdded = 0;
@@ -2324,7 +2333,7 @@ namespace BitCoin
             if(getTime() - lastReport > 10)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Caching is %2d%% Complete", (int)(((float)i / (float)SET_COUNT) * 100.0f));
+                  "Pulling block transactions is %2d%% Complete", (int)(((float)i / (float)SET_COUNT) * 100.0f));
                 lastReport = getTime();
             }
             itemsAdded += set->pullBlocks(pBlockHeight);
@@ -2453,7 +2462,10 @@ namespace BitCoin
                 lastReport = getTime();
             }
             if(!set->save(cacheBlockHeight()))
+            {
                 success = false;
+                break;
+            }
             ++set;
         }
 
@@ -2580,6 +2592,7 @@ namespace BitCoin
 
         transaction.setNew();
         transaction.setModified();
+        transaction.setWasSpent();
 
         if(transaction.isModified())
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed modified flag");
@@ -2596,6 +2609,34 @@ namespace BitCoin
         else
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed clear modified flag");
+            success = false;
+        }
+
+        if(transaction.wasSpent())
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed was spent flag");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed was spent flag");
+            success = false;
+        }
+
+        transaction.clearWasSpent();
+
+        if(!transaction.wasSpent())
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed clear was spent flag");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed clear was spent flag");
+            success = false;
+        }
+
+        transaction.clearWasSpent();
+
+        if(!transaction.wasSpent())
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed redundant clear was spent flag");
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed redundant clear was spent flag");
             success = false;
         }
 
