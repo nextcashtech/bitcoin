@@ -927,16 +927,15 @@ namespace BitCoin
                         blockCount++;
                         addAnnouncedBlock((*item)->hash);
 
+                        // Clear last header request so it doesn't prevent a new header request
+                        mLastHeaderRequested.clear();
+
                         // Only pay attention to outgoing nodes inventory messages
                         if(!mIsIncoming && !mIsSeed)
                         {
                             hashStatus = mChain->hashStatus((*item)->hash, mID);
                             if(hashStatus & Chain::HASH_STATUS_HEADER_NEEDED_FLAG)
-                            {
-                                // Clear last header request so it doesn't prevent the header request
-                                mLastHeaderRequested.clear();
                                 headersNeeded = true;
-                            }
                             else if(hashStatus & Chain::HASH_STATUS_BLOCK_NEEDED_FLAG)
                                 blockList.push_back(new Hash((*item)->hash));
                             else if(hashStatus & Chain::HASH_STATUS_BLACK_LISTED_FLAG)
@@ -960,8 +959,10 @@ namespace BitCoin
                         }
                         break;
                     case Message::InventoryHash::FILTERED_BLOCK:
+                        // Send specified filtered block
                         break;
                     case Message::InventoryHash::COMPACT_BLOCK:
+                        // Send specified compact block
                         break;
                     default:
                         ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,

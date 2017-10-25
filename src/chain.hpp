@@ -162,6 +162,9 @@ namespace BitCoin
         // Check if a header has been downloaded
         bool headerAvailable(const Hash &pHash);
 
+        // Return true if a header request at the top of the chain is needed
+        bool headersNeeded();
+
         // Number of pending headers/blocks
         unsigned int pendingCount();
         // Number of pending full blocks

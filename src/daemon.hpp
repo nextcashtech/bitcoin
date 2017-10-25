@@ -96,6 +96,7 @@ namespace BitCoin
         Node *nodeWithInventory();
         Node *nodeWithBlock(const Hash &pHash);
         void sendRequests();
+        void sendHeaderRequest();
         void sendPeerRequest();
         unsigned int mLastPeerCount;
         void improvePing();

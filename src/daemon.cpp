@@ -493,6 +493,28 @@ namespace BitCoin
         mNodeLock.readUnlock();
     }
 
+    void Daemon::sendHeaderRequest()
+    {
+        mNodeLock.readLock();
+        std::vector<Node *> nodes = mNodes; // Copy list of nodes
+        std::vector<Node *> requestNodes;
+        sortOutgoingNodesBySpeed(nodes);
+
+        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+        {
+            if((*node)->waitingForRequests())
+                continue;
+
+            if((*node)->requestHeaders(mChain.lastPendingBlockHash()))
+            {
+                mLastHeaderRequestTime = getTime();
+                break;
+            }
+        }
+
+        mNodeLock.readUnlock();
+    }
+
     void Daemon::sendPeerRequest()
     {
         mNodeLock.readLock();
@@ -825,6 +847,9 @@ namespace BitCoin
                 if(daemon.mStopping)
                     break;
             }
+
+            if(daemon.mChain.headersNeeded())
+                daemon.sendHeaderRequest();
 
             time = getTime();
             if(time - lastInfoSaveTime > 600)

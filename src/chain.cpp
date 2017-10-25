@@ -173,7 +173,7 @@ namespace BitCoin
             if((*pendingHeader)->hash == pHash)
             {
                 found = true;
-                if((*pendingHeader)->requestingNode == 0 || getTime() - (*pendingHeader)->requestedTime > 10)
+                if((*pendingHeader)->requestingNode == 0 || getTime() - (*pendingHeader)->requestedTime > 2)
                 {
                     (*pendingHeader)->requestingNode = pNodeID;
                     (*pendingHeader)->requestedTime = getTime();
@@ -343,6 +343,21 @@ namespace BitCoin
             }
         }
         mPendingLock.writeUnlock();
+        return result;
+    }
+
+    bool Chain::headersNeeded()
+    {
+        // Check for pending header with
+        bool result = false;
+        mPendingLock.readLock();
+        for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();++pendingHeader)
+            if((*pendingHeader)->requestingNode == 0 || getTime() - (*pendingHeader)->requestedTime > 2)
+            {
+                result = true;
+                break;
+            }
+        mPendingLock.readUnlock();
         return result;
     }
 
