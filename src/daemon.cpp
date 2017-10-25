@@ -610,7 +610,8 @@ namespace BitCoin
             }
             averagePing += (double)(*node)->pingTime();
         }
-        averageSpeed /= (double)nodesWithSpeed;
+        if(nodesWithSpeed > 0)
+            averageSpeed /= (double)nodesWithSpeed;
         averagePing /= (double)nodes.size();
 
         // Calculate variance
@@ -637,11 +638,12 @@ namespace BitCoin
         double score;
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
         {
-            if((*node)->blockDownloadBytesPerSecond() != 0.0)
+            if((*node)->blockDownloadBytesPerSecond() != 0.0 && speedStandardDeviation > 0.01)
                 score = ((*node)->blockDownloadBytesPerSecond() - averageSpeed) / speedStandardDeviation;
             else
                 score = 0.0;
-            score += ((averagePing - (*node)->pingTime()) / pingStandardDeviation) / 2.0;
+            if(pingStandardDeviation > 0.01)
+                score += ((averagePing - (*node)->pingTime()) / pingStandardDeviation) / 2.0;
             scores.push_back(score);
         }
 
