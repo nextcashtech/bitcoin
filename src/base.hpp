@@ -450,9 +450,9 @@ namespace BitCoin
             std::vector<Hash *>::clear();
         }
 
-        bool contains(const Hash &pHash)
+        bool contains(const Hash &pHash) const
         {
-            for(iterator hash=begin();hash!=end();++hash)
+            for(const_iterator hash=begin();hash!=end();++hash)
                 if(**hash == pHash)
                     return true;
             return false;

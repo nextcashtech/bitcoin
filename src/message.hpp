@@ -95,6 +95,7 @@ namespace BitCoin
                     delete *hash;
                 std::vector<InventoryHash *>::clear();
             }
+            void clearNoDelete() { std::vector<InventoryHash *>::clear(); }
 
         private:
             Inventory(Inventory &pCopy);
@@ -165,7 +166,7 @@ namespace BitCoin
             uint64_t nonce;
             ArcMist::String userAgent;
             int32_t startBlockHeight;
-            uint8_t relay; // Announce new transactions
+            uint8_t relay; // Announce new transactions/blocks
         };
 
         class PingData : public Data

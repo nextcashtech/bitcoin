@@ -702,7 +702,7 @@ namespace BitCoin
 
         if(mCashForkBlockHeight != -1)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-              "Block cash fork height %d, max block size %d", mCashForkBlockHeight, mBlockMaxSize);
+              "Cash fork active since block height %d, max block size %d", mCashForkBlockHeight, mBlockMaxSize);
 
         SoftFork *newSoftFork;
         while(file.remaining())

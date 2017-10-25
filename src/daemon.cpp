@@ -282,7 +282,7 @@ namespace BitCoin
         statStartTime.writeFormattedTime(mStatistics.startTime);
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks", mChain.blockHeight());
+          "Block Chain : %d blocks", mChain.height());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Outputs : %d/%d trans/outputs (%d KiB) (%d KiB cached)", mChain.outputs().transactionCount(),
           mChain.outputs().outputCount(), mChain.outputs().size() / 1024, mChain.outputs().cachedSize() / 1024);
@@ -737,6 +737,22 @@ namespace BitCoin
         mNodeLock.readUnlock();
     }
 
+    void Daemon::announce()
+    {
+        Block *block = mChain.blockToAnnounce();
+        if(block != NULL)
+        {
+            // Announce to all nodes
+            mNodeLock.readLock();
+            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+                (*node)->announceBlock(block);
+            mNodeLock.readUnlock();
+            delete block;
+        }
+
+        //TODO Transaction announcing
+    }
+
     void Daemon::manage()
     {
         Daemon &daemon = Daemon::instance();
@@ -793,16 +809,20 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            // Wait 60 seconds so hopefully a bunch of nodes are ready to request at the same time to improve staggering
-            time = getTime();
-            if(time - lastRequestCheckTime > 30 || (!daemon.mChain.isInSync() && daemon.mChain.pendingBlockCount() == 0))
+            if(!daemon.mChain.isInSync())
             {
-                lastRequestCheckTime = time;
-                daemon.sendRequests();
-            }
+                // Wait 30 seconds so hopefully a bunch of nodes are ready to request at the same time to improve staggering
+                time = getTime();
+                if(time - lastRequestCheckTime > 30 ||
+                  (daemon.mChain.pendingBlockCount() == 0 && time - lastRequestCheckTime > 10))
+                {
+                    lastRequestCheckTime = time;
+                    daemon.sendRequests();
+                }
 
-            if(daemon.mStopping)
-                break;
+                if(daemon.mStopping)
+                    break;
+            }
 
             time = getTime();
             if(time - lastInfoSaveTime > 600)
@@ -841,7 +861,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            ArcMist::Thread::sleep(5000);
+            ArcMist::Thread::sleep(2000);
         }
     }
 
@@ -857,9 +877,16 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
+            if(daemon.mChain.isInSync())
+                daemon.announce();
+
+            if(daemon.mStopping)
+                break;
+
             if(getTime() - lastOutputsPurgeTime > 300)
             {
-                daemon.mChain.outputs().purge();
+                if(!daemon.mChain.outputs().purge())
+                    daemon.requestStop();
                 lastOutputsPurgeTime = getTime();
             }
 

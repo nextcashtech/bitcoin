@@ -51,9 +51,9 @@ namespace BitCoin
                 delete *info;
         }
 
-        bool contains(Hash &pHash)
+        bool contains(const Hash &pHash) const
         {
-            for(iterator info=begin();info!=end();++info)
+            for(const_iterator info=begin();info!=end();++info)
                 if((*info)->hash == pHash)
                     return true;
             return false;
@@ -71,18 +71,38 @@ namespace BitCoin
         BlockSet &operator = (BlockSet &pRight);
     };
 
-    class PendingData
+    class PendingHeaderData
     {
     public:
 
-        PendingData(Block *pBlock)
+        PendingHeaderData(const Hash &pHash, unsigned int pNodeID, uint32_t pTime)
+        {
+            hash = pHash;
+            requestedTime = pTime;
+            requestingNode = pNodeID;
+        }
+
+        Hash hash;
+        uint32_t requestedTime;
+        unsigned int requestingNode;
+
+    private:
+        PendingHeaderData(PendingHeaderData &pCopy);
+        PendingHeaderData &operator = (PendingHeaderData &pRight);
+    };
+
+    class PendingBlockData
+    {
+    public:
+
+        PendingBlockData(Block *pBlock)
         {
             block = pBlock;
             requestedTime = 0;
             updateTime = 0;
             requestingNode = 0;
         }
-        ~PendingData()
+        ~PendingBlockData()
         {
             if(block != NULL)
                 delete block;
@@ -104,8 +124,8 @@ namespace BitCoin
         unsigned int requestingNode;
 
     private:
-        PendingData(PendingData &pCopy);
-        PendingData &operator = (PendingData &pRight);
+        PendingBlockData(PendingBlockData &pCopy);
+        PendingBlockData &operator = (PendingBlockData &pRight);
     };
 
     class Chain
@@ -115,23 +135,32 @@ namespace BitCoin
         Chain();
         ~Chain();
 
-        int blockHeight() const { return mNextBlockHeight - 1; }
+        int height() const { return mNextBlockHeight - 1; }
         const Hash &lastBlockHash() const { return mLastBlockHash; }
-        unsigned int pendingBlockHeight() const { return mNextBlockHeight - 1 + mPending.size(); }
+        unsigned int pendingChainHeight() const { return mNextBlockHeight - 1 + mPendingBlocks.size(); }
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
+
+        static const uint8_t HASH_STATUS_HEADER_NEEDED_FLAG = 0x01;
+        static const uint8_t HASH_STATUS_BLOCK_NEEDED_FLAG  = 0x02;
+        static const uint8_t HASH_STATUS_BLACK_LISTED_FLAG  = 0x04;
+        static const uint8_t HASH_STATUS_WRONG_CHAIN_FLAG   = 0x02;
+
+        // Return the bitfield containing status of the specified block hash
+        uint8_t hashStatus(const Hash &pHash, unsigned int pNodeID);
 
         TransactionOutputPool &outputs() { return mOutputs; }
         const BlockStats &blockStats() const { return mBlockStats; }
         const Forks &forks() const { return mForks; }
 
         // Chain is up to date with most chains
-        bool isInSync() { return false; }
+        bool isInSync() { return mIsInSync; }
+        Block *blockToAnnounce();
 
         // Check if a block is already in the chain
-        bool blockInChain(Hash &pHash) { return mBlockLookup[pHash.lookup16()].contains(pHash); }
+        bool blockInChain(const Hash &pHash) const { return mBlockLookup[pHash.lookup16()].contains(pHash); }
         // Check if a header has been downloaded
-        bool headerAvailable(Hash &pHash);
+        bool headerAvailable(const Hash &pHash);
 
         // Number of pending headers/blocks
         unsigned int pendingCount();
@@ -166,7 +195,7 @@ namespace BitCoin
         bool getBlock(unsigned int pHeight, Block &pBlock);
 
         // Get the block or height for a specific hash
-        int height(const Hash &pHash); // Returns -1 when hash is not found
+        int blockHeight(const Hash &pHash); // Returns -1 when hash is not found
         bool getBlock(const Hash &pHash, Block &pBlock);
         bool getHeader(const Hash &pHash, Block &pBlockHeader);
 
@@ -199,9 +228,9 @@ namespace BitCoin
 
         // Block headers for blocks not yet on chain
         ArcMist::ReadersLock mPendingLock;
-        std::list<PendingData *> mPending;
+        std::list<PendingBlockData *> mPendingBlocks;
         Hash mLastPendingHash;
-        unsigned int mPendingSize, mPendingBlocks, mLastFullPendingOffset;
+        unsigned int mPendingSize, mPendingBlockCount, mLastFullPendingOffset;
         uint32_t mBlockProcessStartTime;
 
         // Save pending data to the file system
@@ -215,6 +244,8 @@ namespace BitCoin
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;
         bool mStop;
+        bool mIsInSync;
+        bool mAnnouncedAdded;
 
         bool processBlock(Block *pBlock);
         //TODO Remove orphaned blocks //bool removeBlock(const Hash &pHash);
@@ -238,8 +269,14 @@ namespace BitCoin
         Forks mForks;
         BlockStats mBlockStats;
 
+        std::list<PendingHeaderData *> mPendingHeaders;
+        HashList mBlocksToAnnounce;
+        Block *mAnnounceBlock;
+
         HashList mBlackListBlocks;
         std::vector<unsigned int> mBlackListedNodeIDs;
+
+        void addBlackListedBlock(const Hash &pHash);
 
         static Chain *sInstance;
 

@@ -100,6 +100,7 @@ namespace BitCoin
                 delete *block;
             std::vector<Block *>::clear();
         }
+        void clearNoDelete() { std::vector<Block *>::clear(); }
 
     private:
         BlockList(BlockList &pCopy);

@@ -67,7 +67,7 @@ namespace BitCoin
         bool requestPeers();
 
         // Send notification of a new block on the chain
-        bool announceBlock(const Hash &pHash);
+        bool announceBlock(Block *pBlock);
 
         // Send notification of a new transaction in the mempool
         //TODO Make this send periodically with a list. Filter list to remove transaction inventory received from node
@@ -120,12 +120,16 @@ namespace BitCoin
         unsigned int mBlockDownloadSize;
         unsigned int mBlockDownloadTime;
 
-        Hash mHeaderRequested;
+        Hash mHeaderRequested, mLastHeaderRequested;
         uint32_t mHeaderRequestTime;
 
         ArcMist::Mutex mBlockRequestMutex;
         HashList mBlocksRequested;
         uint32_t mBlockRequestTime, mBlockReceiveTime;
+
+        ArcMist::Mutex mAnnounceMutex;
+        HashList mAnnounceBlocks;
+        void addAnnouncedBlock(const Hash &pHash);
 
         bool mConnected;
         uint32_t mConnectedTime;

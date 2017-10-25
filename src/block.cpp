@@ -104,6 +104,8 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block read failed : stream too short for transaction count");
             return false;
         }
 
@@ -117,6 +119,8 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block read failed : read previous hash failed");
             return false;
         }
         if(pCalculateHash)
@@ -127,6 +131,8 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block read failed : read merkle hash failed");
             return false;
         }
         if(pCalculateHash)
@@ -172,7 +178,11 @@ namespace BitCoin
         }
 
         if(pStream->remaining() < transactionCount)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block read failed : stream remaining less than transaction count");
             return false;
+        }
 
         // Transactions
         transactions.clear();
@@ -185,6 +195,8 @@ namespace BitCoin
             ++actualCount;
             if(!(*transaction)->read(pStream, true, pBlockFile))
             {
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                  "Block read failed : transaction %d read failed", actualCount);
                 success = false;
                 break;
             }
@@ -917,6 +929,8 @@ namespace BitCoin
         pBlock.clear();
         if(!openFile())
         {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x read block from hash failed : invalid file", mID);
             mValid = false;
             return false;
         }
@@ -928,17 +942,30 @@ namespace BitCoin
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
             if(!hash.read(mInputFile))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                  "Block file %08x read block from hash failed : hash read failed", mID);
                 return false;
+            }
 
             fileOffset = mInputFile->readUnsignedInt();
             if(fileOffset == 0)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                  "Block file %08x read block from hash failed : zero file offset", mID);
                 return false;
+            }
 
             if(hash == pHash)
             {
                 // Read block
                 mInputFile->setReadOffset(fileOffset);
                 bool success = pBlock.read(mInputFile, pIncludeTransactions, pIncludeTransactions, true, true);
+                if(!success)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                      "Block file %08x read block from hash failed : block read failed", mID);
+                }
                 return success;
             }
         }

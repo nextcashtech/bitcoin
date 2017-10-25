@@ -462,7 +462,7 @@ namespace BitCoin
         unsigned int loadCache(unsigned int pBlockHeight);
 
         // Height of last block
-        int blockHeight() const { return mNextBlockHeight - 1; }
+        int height() const { return mNextBlockHeight - 1; }
         unsigned int transactionCount() const;
         unsigned int outputCount() const;
         unsigned long long size() const;

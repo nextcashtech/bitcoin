@@ -936,6 +936,8 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              "Transaction read failed : stream remaining less than 5");
             return false;
         }
 
@@ -952,6 +954,8 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              "Transaction read failed : stream remaining less than input count %d", count);
             return false;
         }
 
@@ -966,6 +970,8 @@ namespace BitCoin
             {
                 if(digest != NULL)
                     delete digest;
+                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Transaction read failed : input read failed");
                 return false;
             }
             else if(pCalculateHash)
@@ -988,6 +994,8 @@ namespace BitCoin
             {
                 if(digest != NULL)
                     delete digest;
+                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Transaction read failed : output read failed");
                 return false;
             }
             else if(pCalculateHash)
@@ -998,6 +1006,8 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              "Transaction read failed : stream remaining less than 4");
             return false;
         }
 

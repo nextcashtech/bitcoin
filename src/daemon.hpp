@@ -101,6 +101,9 @@ namespace BitCoin
         void improvePing();
         void improveSpeed();
 
+        // Announce verified blocks and transactions
+        void announce();
+
         Statistics mStatistics;
         void collectStatistics();
         void saveStatistics();
