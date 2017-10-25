@@ -555,14 +555,21 @@ namespace BitCoin
 
                 mVersionData = (Message::VersionData *)message;
                 dontDeleteMessage = true;
+
                 ArcMist::String timeText;
                 timeText.writeFormattedTime(mVersionData->time);
+                ArcMist::String versionText;
+                versionText.writeFormatted("Version : %s (%d), %d blocks", mVersionData->userAgent.text(),
+                  mVersionData->version, mVersionData->startBlockHeight);
                 if(mVersionData->relay)
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Version : %s (%d), %d blocks, relay on, time %s",
-                      mVersionData->userAgent.text(), mVersionData->version, mVersionData->startBlockHeight, timeText.text());
-                else
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Version : %s (%d), %d blocks, relay off, time %s",
-                      mVersionData->userAgent.text(), mVersionData->version, mVersionData->startBlockHeight, timeText.text());
+                    versionText += ", relay";
+                if(mVersionData->transmittingServices & Message::VersionData::FULL_NODE_BIT)
+                    versionText += ", full";
+                if(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT)
+                    versionText += ", cash";
+                versionText += ", time ";
+                versionText += timeText;
+                ArcMist::Log::add(ArcMist::Log::INFO, mName, versionText);
 
                 std::memcpy(mAddress.ip, mVersionData->transmittingIPv6, 16);
                 mAddress.port = mVersionData->transmittingPort;
