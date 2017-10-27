@@ -261,22 +261,18 @@ namespace BitCoin
 
     void Daemon::printStatistics()
     {
-        unsigned int downloading = 0;
         unsigned int blocksRequestedCount = 0;
-        mNodeLock.readLock();
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+        if(!mChain.isInSync())
         {
-            blocksRequestedCount += (*node)->blocksRequestedCount();
-            if((*node)->waitingForRequests())
-                downloading++;
+            mNodeLock.readLock();
+            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            {
+                blocksRequestedCount += (*node)->blocksRequestedCount();
+            }
+            mNodeLock.readUnlock();
         }
-        mNodeLock.readUnlock();
 
         collectStatistics();
-
-        unsigned int pendingBlocks = mChain.pendingBlockCount();
-        unsigned int pendingCount = mChain.pendingCount();
-        unsigned int pendingSize = mChain.pendingSize();
 
         ArcMist::String statStartTime;
         statStartTime.writeFormattedTime(mStatistics.startTime);
@@ -286,16 +282,25 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Outputs : %d/%d trans/outputs (%d KiB) (%d KiB cached)", mChain.outputs().transactionCount(),
           mChain.outputs().outputCount(), mChain.outputs().size() / 1024, mChain.outputs().cachedSize() / 1024);
-        if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Pending (above threshold) : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks,
-              pendingCount - pendingBlocks, pendingSize / 1024, blocksRequestedCount);
-        else
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Pending : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks, pendingCount - pendingBlocks,
-              pendingSize / 1024, blocksRequestedCount);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Nodes : %d/%d outgoing/incoming (%d downloading)", mOutgoingNodes, mIncomingNodes, downloading);
+          "Mem Pool : %d/%d trans/pending (%d KiB)", mChain.memPool().count(),
+          mChain.memPool().pendingCount(), mChain.memPool().size() / 1024);
+        if(!mChain.isInSync())
+        {
+            unsigned int pendingBlocks = mChain.pendingBlockCount();
+            unsigned int pendingCount = mChain.pendingCount();
+            unsigned int pendingSize = mChain.pendingSize();
+            if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Pending (above threshold) : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks,
+                  pendingCount - pendingBlocks, pendingSize / 1024, blocksRequestedCount);
+            else
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Pending : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks, pendingCount - pendingBlocks,
+                  pendingSize / 1024, blocksRequestedCount);
+        }
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Nodes : %d/%d outgoing/incoming", mOutgoingNodes, mIncomingNodes);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Network : %d/%d KiB received/sent (since %s)", mStatistics.bytesReceived / 1024, mStatistics.bytesSent / 1024,
           statStartTime.text());
@@ -774,7 +779,24 @@ namespace BitCoin
             delete block;
         }
 
-        //TODO Transaction announcing
+        HashList transactionList;
+        Transaction *transaction;
+        mChain.memPool().getToAnnounce(transactionList);
+        if(transactionList.size() > 0)
+        {
+            mNodeLock.readLock();
+            for(HashList::iterator hash=transactionList.begin();hash!=transactionList.end();++hash)
+            {
+                transaction = mChain.memPool().get(**hash);
+                if(transaction != NULL)
+                {
+                    // Announce to all nodes
+                    for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+                        (*node)->announceTransaction(transaction);
+                }
+            }
+            mNodeLock.readUnlock();
+        }
     }
 
     void Daemon::manage()
@@ -847,9 +869,13 @@ namespace BitCoin
                 if(daemon.mStopping)
                     break;
             }
-
-            if(daemon.mChain.headersNeeded())
-                daemon.sendHeaderRequest();
+            else
+            {
+                if(daemon.mChain.headersNeeded())
+                    daemon.sendHeaderRequest();
+                if(daemon.mChain.blocksNeeded())
+                    daemon.sendRequests();
+            }
 
             time = getTime();
             if(time - lastInfoSaveTime > 600)
@@ -896,6 +922,7 @@ namespace BitCoin
     {
         Daemon &daemon = Daemon::instance();
         uint32_t lastOutputsPurgeTime = getTime();
+        uint32_t lastMemPoolCheckPending = getTime();
 
         while(!daemon.mStopping)
         {
@@ -909,6 +936,15 @@ namespace BitCoin
 
             if(daemon.mStopping)
                 break;
+
+            if(getTime() - lastMemPoolCheckPending > 30)
+            {
+                daemon.mChain.memPool().checkPendingTransactions(daemon.mChain.outputs(),
+                  daemon.mChain.blockStats(), daemon.mChain.forks(), daemon.mInfo.minFee);
+                lastMemPoolCheckPending = getTime();
+            }
+
+            daemon.mChain.memPool().process(daemon.mInfo.memPoolThreshold);
 
             if(getTime() - lastOutputsPurgeTime > 300)
             {

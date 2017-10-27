@@ -43,7 +43,7 @@ namespace BitCoin
         bool isIncoming() const { return mIsIncoming; }
         bool isSeed() const { return mIsSeed; }
         // Versions exchanged and initial ping completed
-        bool isReady() const { return mPingRoundTripTime != 0xffffffff; }
+        bool isReady() const { return mPingRoundTripTime != -1; }
         uint32_t pingTime() const { return mPingRoundTripTime; }
         void setPingCutoff(uint32_t pPingCutoff) { mPingCutoff = pPingCutoff; }
         unsigned int blocksDownloadedCount() const { return mBlockDownloadCount; }
@@ -61,6 +61,7 @@ namespace BitCoin
         bool waitingForRequests() { return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty(); }
         bool requestHeaders(const Hash &pStartingHash);
         bool requestBlocks(HashList &pList);
+        bool requestTransactions(HashList &pList);
         unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
         void releaseBlockRequests();
 
@@ -71,7 +72,7 @@ namespace BitCoin
 
         // Send notification of a new transaction in the mempool
         //TODO Make this send periodically with a list. Filter list to remove transaction inventory received from node
-        bool announceTransaction(const Hash &pHash);
+        bool announceTransaction(Transaction *pTransaction);
 
         const IPAddress &address() { return mAddress; }
 
@@ -90,6 +91,7 @@ namespace BitCoin
         bool sendMessage(Message::Data *pData);
         bool sendVersion();
         bool sendPing();
+        bool sendFeeFilter();
         bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
         bool sendBlock(Block &pBlock);
 
@@ -108,13 +110,15 @@ namespace BitCoin
 
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;
-        uint32_t mLastReceiveTime;
-        uint32_t mLastCheckTime;
-        uint32_t mLastPingTime;
-        uint64_t mLastPingNonce;
-        uint32_t mPingRoundTripTime;
-        uint32_t mPingCutoff;
+        int32_t mLastReceiveTime;
+        int32_t mLastCheckTime;
+        int32_t mLastPingTime;
+        int32_t mPingRoundTripTime;
+        int32_t mPingCutoff;
+        int32_t mLastBlackListCheck;
+
         uint64_t mMinimumFeeRate;
+        uint64_t mLastPingNonce;
 
         unsigned int mBlockDownloadCount;
         unsigned int mBlockDownloadSize;
@@ -125,14 +129,16 @@ namespace BitCoin
 
         ArcMist::Mutex mBlockRequestMutex;
         HashList mBlocksRequested;
-        uint32_t mBlockRequestTime, mBlockReceiveTime;
+        int32_t mBlockRequestTime, mBlockReceiveTime;
 
         ArcMist::Mutex mAnnounceMutex;
-        HashList mAnnounceBlocks;
+        HashList mAnnounceBlocks, mAnnounceTransactions;
+
         void addAnnouncedBlock(const Hash &pHash);
+        void addAnnouncedTransaction(const Hash &pHash);
 
         bool mConnected;
-        uint32_t mConnectedTime;
+        int32_t mConnectedTime;
         unsigned int mMessagesReceived;
         unsigned int mPingCount;
 

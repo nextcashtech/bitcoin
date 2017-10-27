@@ -209,6 +209,213 @@ namespace BitCoin
         return true;
     }
 
+    Transaction::ValidateResult Transaction::validate(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
+      HashList &pOutpointsNeeded, bool pCoinBase, uint64_t pBlockHeight, int32_t pBlockVersion,
+      const BlockStats &pBlockStats, const Forks &pForks)
+    {
+        mFee = 0;
+
+        if(inputs.size() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
+            return FORMAT_INVALID;
+        }
+        else if(pCoinBase && inputs.size() != 1)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+              "Coinbase has more than one input : %d", inputs.size());
+            return FORMAT_INVALID;
+        }
+
+        if(outputs.size() == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
+            return FORMAT_INVALID;
+        }
+
+        // Process Inputs
+        ScriptInterpreter interpreter;
+        TransactionReference *reference;
+        Transaction *outpointTransaction;
+        Output output;
+        unsigned int index = 0;
+        for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
+        {
+            if(pCoinBase)
+            {
+                if((*input)->outpoint.index != 0xffffffff)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Coinbase Input %d outpoint index is not 0xffffffff : %08x", index+1, (*input)->outpoint.index);
+                    return FORMAT_INVALID;
+                }
+            }
+            else
+            {
+                // Find unspent transaction for input
+                reference = pOutputs.findUnspent((*input)->outpoint.transactionID, (*input)->outpoint.index);
+                if(reference == NULL)
+                {
+                    outpointTransaction = pMemPoolTransactions.getSorted((*input)->outpoint.transactionID);
+                    if(outpointTransaction != NULL)
+                    {
+                        if(outpointTransaction->outputs.size() <= (*input)->outpoint.index)
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                              "Input %d outpoint index too high : index %d trans %s", index + 1,
+                              (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
+                            return FAIL;
+                        }
+
+                        output = *outpointTransaction->outputs[(*input)->outpoint.index];
+                    }
+                    else
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Input %d outpoint not found : index %d trans %s", index + 1,
+                          (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
+                        pOutpointsNeeded.push_back(new Hash((*input)->outpoint.transactionID));
+                        continue;
+                    }
+                }
+                else if(!BlockFile::readOutput(reference, (*input)->outpoint.index, output))
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d outpoint transaction failed to read : index %d trans %s", index + 1,
+                      (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
+                    reference->print(ArcMist::Log::WARNING);
+                    return FAIL;
+                }
+
+#ifdef PROFILER_ON
+                verifyProfiler.start();
+#endif
+
+                interpreter.clear();
+                interpreter.setTransaction(this);
+                interpreter.setInputOffset(index);
+                interpreter.setInputSequence((*input)->sequence);
+                interpreter.setOutputAmount(output.amount);
+
+                // Process signature script
+                //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "Input %d script : ", index+1);
+                //(*input)->script.setReadOffset(0);
+                //ScriptInterpreter::printScript((*input)->script, ArcMist::Log::DEBUG);
+                (*input)->script.setReadOffset(0);
+                if(!interpreter.process((*input)->script, true, pBlockVersion, pForks))
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d signature script failed : ", index+1);
+                    (*input)->print(ArcMist::Log::WARNING);
+                    if(reference != NULL)
+                        reference->print(ArcMist::Log::WARNING);
+#ifdef PROFILER_ON
+                    verifyProfiler.stop();
+#endif
+                    return SCRIPT_INVALID;
+                }
+
+                // Process unspent transaction output script
+                //ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "UTXO script : ");
+                //output.script.setReadOffset(0);
+                //ScriptInterpreter::printScript(output.script, ArcMist::Log::DEBUG);
+                output.script.setReadOffset(0);
+                if(!interpreter.process(output.script, false, pBlockVersion, pForks))
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d unspent transaction output script failed : ", index + 1);
+                    (*input)->print(ArcMist::Log::WARNING);
+                    if(reference != NULL)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                        reference->print(ArcMist::Log::WARNING);
+                    }
+                    output.print(ArcMist::Log::WARNING);
+#ifdef PROFILER_ON
+                    verifyProfiler.stop();
+#endif
+                    return SCRIPT_INVALID;
+                }
+
+                if(!interpreter.isValid())
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d script is not valid : ", index+1);
+                    (*input)->print(ArcMist::Log::WARNING);
+                    interpreter.printStack("After fail validate");
+                    if(reference != NULL)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                        reference->print(ArcMist::Log::WARNING);
+                    }
+                    output.print(ArcMist::Log::WARNING);
+#ifdef PROFILER_ON
+                    verifyProfiler.stop();
+#endif
+                    return SCRIPT_INVALID;
+                }
+
+                if(!interpreter.isVerified())
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d script did not verify : ", index+1);
+                    (*input)->print(ArcMist::Log::WARNING);
+                    interpreter.printStack("After fail verify");
+                    if(reference != NULL)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                        reference->print(ArcMist::Log::WARNING);
+                    }
+                    output.print(ArcMist::Log::WARNING);
+#ifdef PROFILER_ON
+                    verifyProfiler.stop();
+#endif
+                    return SIGNATURE_INVALID;
+                }
+
+                mFee += output.amount;
+            }
+
+#ifdef PROFILER_ON
+            verifyProfiler.stop();
+#endif
+            ++index;
+        }
+
+        if(pOutpointsNeeded.size() > 0)
+            return OUTPOINT_NOT_FOUND;
+
+#ifdef PROFILER_ON
+        ArcMist::Profiler outputsProfiler("Transaction Outputs");
+#endif
+        // Process Outputs
+        index = 0;
+        for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
+        {
+            if((*output)->amount < 0)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Output %d amount is negative %d : ", index + 1, (*output)->amount);
+                (*output)->print(ArcMist::Log::WARNING);
+                print(ArcMist::Log::VERBOSE);
+                return OUTPUT_INVALID;
+            }
+
+            if(!pCoinBase && (*output)->amount > 0 && (*output)->amount > mFee)
+            {
+                ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "Outputs are more than inputs");
+                print(ArcMist::Log::VERBOSE);
+                return OUTPUT_INVALID;
+            }
+
+            mFee -= (*output)->amount;
+            ++index;
+        }
+
+        clearCache();
+        return SUCCESS;
+    }
+
     bool Transaction::process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
       uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const BlockStats &pBlockStats,
       const Forks &pForks, std::vector<unsigned int> &pSpentAges)
@@ -374,8 +581,6 @@ namespace BitCoin
                 // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   // "Transaction %s Input %d spent transaction output %s index %d", hash.hex().text(), index + 1,
                   // (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
-
-                //TODO If transaction output is in this block then it won't be available through the previous function
 
                 interpreter.clear();
                 interpreter.setTransaction(this);
@@ -568,10 +773,9 @@ namespace BitCoin
         unsigned int currentSize = mSize;
         if(currentSize == 0)
             currentSize = calculatedSize();
-        if(mFee < currentSize)
+        if(mFee == 0)
             return 0;
-        else
-            return currentSize / mFee;
+        return (mFee / (uint64_t)currentSize) * 1000; // Satoshis per KB
     }
 
     void Outpoint::write(ArcMist::OutputStream *pStream)
@@ -1282,5 +1486,175 @@ namespace BitCoin
         }
 
         return success;
+    }
+
+    TransactionList::~TransactionList()
+    {
+        for(std::vector<Transaction *>::iterator item=begin();item!=end();++item)
+            delete *item;
+    }
+
+    Transaction *TransactionList::getSorted(const Hash &pHash)
+    {
+        // Search sorted
+        if(size() == 0 || back()->hash < pHash)
+            return NULL; // Item would be after end
+
+        if(front()->hash > pHash)
+            return NULL; // Item would be before beginning
+
+        int compare;
+        Transaction **bottom = data();
+        Transaction **top    = data() + size() - 1;
+        Transaction **current;
+
+        while(true)
+        {
+            // Break the set in two halves
+            current = bottom + ((top - bottom) / 2);
+            compare = pHash.compare((*current)->hash);
+
+            if(compare == 0) // Item found
+                break;
+
+            if(current == bottom)
+            {
+                if(current != top && (*top)->hash == pHash)
+                {
+                    current = top; // Item found
+                    break;
+                }
+
+                return NULL;
+            }
+
+            // Determine which half the desired item is in
+            if(compare > 0)
+                bottom = current;
+            else //if(compare < 0)
+                top = current;
+        }
+
+        // Current is the matching item
+        return *current;
+    }
+
+    bool TransactionList::insertSorted(Transaction *pTransaction)
+    {
+        // Insert sorted
+        if(size() == 0 || back()->hash < pTransaction->hash)
+        {
+            // Append as last item
+            push_back(pTransaction);
+            return true;
+        }
+
+        if(front()->hash > pTransaction->hash)
+        {
+            // Insert as first item
+            insert(begin(), pTransaction);
+            return true;
+        }
+
+        int compare;
+        Transaction **bottom = data();
+        Transaction **top    = data() + size() - 1;
+        Transaction **current;
+
+        while(true)
+        {
+            // Break the set in two halves
+            current = bottom + ((top - bottom) / 2);
+            compare = pTransaction->hash.compare((*current)->hash);
+
+            if(compare == 0) // Item found
+                return false;
+
+            if(current == bottom)
+            {
+                if(current != top && (*top)->hash > pTransaction->hash)
+                    current = top; // Insert before top
+                else
+                    current = top + 1; // Insert after top
+
+                if((*current)->hash == pTransaction->hash)
+                    return false;
+
+                break;
+            }
+
+            // Determine which half the desired item is in
+            if(compare > 0)
+                bottom = current;
+            else //if(compare < 0)
+                top = current;
+        }
+
+        // Current is the item to insert before
+        iterator after = begin();
+        after += (current - data());
+        insert(after, pTransaction);
+        return true;
+    }
+
+    bool TransactionList::removeSorted(const Hash &pHash)
+    {
+        // Remove sorted
+        if(size() == 0 || back()->hash < pHash)
+            return false; // Item would be after end
+
+        if(front()->hash > pHash)
+            return false; // Item would be before beginning
+
+        int compare;
+        Transaction **bottom = data();
+        Transaction **top    = data() + size() - 1;
+        Transaction **current;
+
+        while(true)
+        {
+            // Break the set in two halves
+            current = bottom + ((top - bottom) / 2);
+            compare = pHash.compare((*current)->hash);
+
+            if(compare == 0) // Item found
+                break;
+
+            if(current == bottom)
+            {
+                if(current != top && (*top)->hash == pHash)
+                {
+                    current = top; // Item found
+                    break;
+                }
+
+                return false;
+            }
+
+            // Determine which half the desired item is in
+            if(compare > 0)
+                bottom = current;
+            else //if(compare < 0)
+                top = current;
+        }
+
+        // Current is the matching item
+        std::vector<Transaction *>::iterator item = begin();
+        item += (current - data());
+        delete *item;
+        erase(item);
+        return true;
+    }
+
+    void TransactionList::clear()
+    {
+        for(std::vector<Transaction *>::iterator item=begin();item!=end();++item)
+            delete *item;
+        std::vector<Transaction *>::clear();
+    }
+
+    void TransactionList::clearNoDelete()
+    {
+        std::vector<Transaction *>::clear();
     }
 }

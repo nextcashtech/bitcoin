@@ -136,64 +136,63 @@ namespace BitCoin
         return true;
     }
 
-    uint8_t Chain::hashStatus(const Hash &pHash, unsigned int pNodeID)
+    Chain::HashStatus Chain::addPendingHash(const Hash &pHash, unsigned int pNodeID)
     {
-        mPendingLock.readLock();
+        mPendingLock.writeLock("Hash Status");
         if(mBlackListBlocks.contains(pHash))
         {
-            mPendingLock.readUnlock();
-            return HASH_STATUS_BLACK_LISTED_FLAG;
+            mPendingLock.writeUnlock();
+            return BLACK_LISTED;
         }
-        mPendingLock.readUnlock();
 
-        bool found = false;
-        if(headerAvailable(pHash))
+        if(blockInChain(pHash))
         {
-            // Check if block is requested
-            mPendingLock.readLock();
-            for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
-                if((*pending)->block->hash == pHash)
-                {
-                    found = true;
-                    if(!(*pending)->isFull() && (*pending)->requestingNode == 0)
-                    {
-                        mPendingLock.readUnlock();
-                        return HASH_STATUS_BLOCK_NEEDED_FLAG;
-                    }
-                    break;
-                }
-            mPendingLock.readUnlock();
-            if(found)
-                return 0;
+            mPendingLock.writeUnlock();
+            return ALREADY_HAVE;
         }
+
+        // Check if block is requested
+        for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
+            if((*pending)->block->hash == pHash)
+            {
+                if(!(*pending)->isFull() && (*pending)->requestingNode == 0)
+                {
+                    mPendingLock.writeUnlock();
+                    return NEED_BLOCK;
+                }
+                else
+                {
+                    mPendingLock.writeUnlock();
+                    return ALREADY_HAVE;
+                }
+                break;
+            }
 
         // Check for a preexisting pending header
-        mPendingLock.readLock();
         for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();++pendingHeader)
             if((*pendingHeader)->hash == pHash)
             {
-                found = true;
                 if((*pendingHeader)->requestingNode == 0 || getTime() - (*pendingHeader)->requestedTime > 2)
                 {
                     (*pendingHeader)->requestingNode = pNodeID;
                     (*pendingHeader)->requestedTime = getTime();
-                    mPendingLock.readUnlock();
-                    return HASH_STATUS_HEADER_NEEDED_FLAG;
+                    mPendingLock.writeUnlock();
+                    return NEED_HEADER;
+                }
+                else
+                {
+                    mPendingLock.writeUnlock();
+                    return ALREADY_HAVE;
                 }
                 break;
             }
-        mPendingLock.readUnlock();
 
-        if(!found)
-        {
-            // Add a new pending header
-            mPendingLock.writeLock("Hash Status");
-            mPendingHeaders.push_back(new PendingHeaderData(pHash, pNodeID, getTime()));
-            mPendingLock.writeUnlock();
-            return HASH_STATUS_HEADER_NEEDED_FLAG;
-        }
-        else
-            return 0;
+        // Add a new pending header
+        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
+          "Adding pending header : %s", pHash.hex().text());
+        mPendingHeaders.push_back(new PendingHeaderData(pHash, pNodeID, getTime()));
+        mPendingLock.writeUnlock();
+        return NEED_HEADER;
     }
 
     bool Chain::headerAvailable(const Hash &pHash)
@@ -346,6 +345,21 @@ namespace BitCoin
         return result;
     }
 
+    bool Chain::blocksNeeded()
+    {
+        // Check for pending header with
+        bool result = false;
+        mPendingLock.readLock();
+        for(std::list<PendingBlockData *>::iterator pendingBlock=mPendingBlocks.begin();pendingBlock!=mPendingBlocks.end();++pendingBlock)
+            if((*pendingBlock)->requestingNode == 0 || getTime() - (*pendingBlock)->requestedTime > 10)
+            {
+                result = true;
+                break;
+            }
+        mPendingLock.readUnlock();
+        return result;
+    }
+
     bool Chain::headersNeeded()
     {
         // Check for pending header with
@@ -354,6 +368,8 @@ namespace BitCoin
         for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();++pendingHeader)
             if((*pendingHeader)->requestingNode == 0 || getTime() - (*pendingHeader)->requestedTime > 2)
             {
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
+                  "Pending header needed : %s", (*pendingHeader)->hash.hex().text());
                 result = true;
                 break;
             }
@@ -372,6 +388,8 @@ namespace BitCoin
         for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();++pendingHeader)
             if((*pendingHeader)->hash == pBlock->hash)
             {
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
+                  "Removed pending header : %s", pBlock->hash.hex().text());
                 foundInPendingHeader = true;
                 mPendingHeaders.erase(pendingHeader);
                 break;
@@ -756,6 +774,8 @@ namespace BitCoin
             mProcessMutex.unlock();
             return false;
         }
+
+        mMemPool.remove(pBlock->transactions);
 
         // Add the block to the chain
         bool success = true;

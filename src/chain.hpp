@@ -14,6 +14,7 @@
 #include "forks.hpp"
 #include "block.hpp"
 #include "outputs.hpp"
+#include "mem_pool.hpp"
 
 #include <list>
 #include <vector>
@@ -141,17 +142,15 @@ namespace BitCoin
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
 
-        static const uint8_t HASH_STATUS_HEADER_NEEDED_FLAG = 0x01;
-        static const uint8_t HASH_STATUS_BLOCK_NEEDED_FLAG  = 0x02;
-        static const uint8_t HASH_STATUS_BLACK_LISTED_FLAG  = 0x04;
-        static const uint8_t HASH_STATUS_WRONG_CHAIN_FLAG   = 0x02;
+        enum HashStatus { ALREADY_HAVE, NEED_HEADER, NEED_BLOCK, BLACK_LISTED };
 
         // Return the bitfield containing status of the specified block hash
-        uint8_t hashStatus(const Hash &pHash, unsigned int pNodeID);
+        HashStatus addPendingHash(const Hash &pHash, unsigned int pNodeID);
 
         TransactionOutputPool &outputs() { return mOutputs; }
         const BlockStats &blockStats() const { return mBlockStats; }
         const Forks &forks() const { return mForks; }
+        MemPool &memPool() { return mMemPool; }
 
         // Chain is up to date with most chains
         bool isInSync() { return mIsInSync; }
@@ -164,6 +163,8 @@ namespace BitCoin
 
         // Return true if a header request at the top of the chain is needed
         bool headersNeeded();
+        // Return true if a block request is needed
+        bool blocksNeeded();
 
         // Number of pending headers/blocks
         unsigned int pendingCount();
@@ -271,6 +272,7 @@ namespace BitCoin
         // Last BLOCK_STATS_SIZE block's statistics
         Forks mForks;
         BlockStats mBlockStats;
+        MemPool mMemPool;
 
         std::list<PendingHeaderData *> mPendingHeaders;
         HashList mBlocksToAnnounce;

@@ -450,13 +450,22 @@ namespace BitCoin
         {
         public:
 
-            TransactionData() : Data(TRANSACTION) { }
+            TransactionData() : Data(TRANSACTION) { transaction = NULL; }
+            ~TransactionData() { if(transaction != NULL) delete transaction; }
 
-            void write(ArcMist::OutputStream *pStream) { transaction.write(pStream); }
+            void write(ArcMist::OutputStream *pStream)
+            {
+                if(transaction != NULL)
+                    transaction->write(pStream);
+            }
             bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
-              { return transaction.read(pStream); }
+            {
+                if(transaction == NULL)
+                    transaction = new Transaction();
+                return transaction->read(pStream);
+            }
 
-            Transaction transaction;
+            Transaction *transaction;
 
         };
 

@@ -82,8 +82,11 @@ namespace BitCoin
         // Block age under which to save unspent transaction outputs in memory
         uint32_t outputsCacheAge;
 
-        // Minimum fee for transaction mem pool
+        // Minimum fee for transaction mem pool (Satoshis per KB)
         uint64_t minFee;
+
+        // The size of the mem pool (unconfirmed transactions) at which they start getting dropped
+        uint32_t memPoolThreshold;
 
         // Return list of peers in random order
         void getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating, uint64_t mServicesRequiredMask = 0);

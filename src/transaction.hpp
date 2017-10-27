@@ -77,6 +77,23 @@ namespace BitCoin
 
     };
 
+    class Transaction;
+
+    class TransactionList : public std::vector<Transaction *>
+    {
+    public:
+
+        ~TransactionList();
+
+        Transaction *getSorted(const Hash &pHash);
+        bool insertSorted(Transaction *pTransaction);
+        bool removeSorted(const Hash &pHash);
+
+        void clear();
+        void clearNoDelete();
+
+    };
+
     class Transaction
     {
     public:
@@ -90,6 +107,7 @@ namespace BitCoin
             mFee = 0;
             lockTime = 0xffffffff;
             mSize = 0;
+            mTime = getTime();
         }
         ~Transaction();
 
@@ -114,16 +132,22 @@ namespace BitCoin
         uint32_t lockTime;
 
         unsigned int size() const { return mSize; }
+        int32_t time() const { return mTime; }
+        int64_t fee() const { return mFee; }
+
         unsigned int calculatedSize();
-        uint64_t feeRate();
-
-        uint64_t fee() const { return mFee; }
-
+        uint64_t feeRate(); // Satoshis per KB
         void calculateHash();
 
         bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const BlockStats &pBlockStats,
           const Forks &pForks, std::vector<unsigned int> &pSpentAges);
+
+        enum ValidateResult { SUCCESS, FORMAT_INVALID, OUTPOINT_NOT_FOUND, SCRIPT_INVALID, FAIL,
+          SIGNATURE_INVALID, OUTPUT_INVALID, MIN_FEE };
+        ValidateResult validate(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
+          HashList &pOutpointsNeeded, bool pCoinBase, uint64_t pBlockHeight, int32_t pBlockVersion,
+          const BlockStats &pBlockStats, const Forks &pForks);
 
         bool updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           uint64_t pBlockHeight, std::vector<unsigned int> &pSpentAges);
@@ -144,6 +168,7 @@ namespace BitCoin
 
     private:
 
+        int32_t mTime;
         int64_t mFee;
         unsigned int mSize;
 

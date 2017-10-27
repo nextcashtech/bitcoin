@@ -2293,6 +2293,7 @@ namespace BitCoin
     void TransactionOutputPool::spend(TransactionReference *pReference, unsigned int pIndex, unsigned int pBlockHeight)
     {
         pReference->spendInternal(pIndex, pBlockHeight);
+        mModified = true;
     }
 
     unsigned int TransactionOutputPool::loadCache(unsigned int pBlockHeight)

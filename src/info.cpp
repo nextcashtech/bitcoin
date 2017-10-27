@@ -131,6 +131,7 @@ namespace BitCoin
         pendingBlocksThreshold = 256;
         outputsThreshold = 536870912; // 512 MiB
         outputsCacheAge = 5000;
+        memPoolThreshold = 536870912; // 512 MiB
 
         if(sPath)
         {
@@ -213,6 +214,8 @@ namespace BitCoin
             outputsThreshold = std::stol(value, NULL, 0);
         else if(std::strcmp(name, "output_cache_age") == 0)
             outputsCacheAge = std::stol(value, NULL, 0);
+        else if(std::strcmp(name, "mem_pool_size") == 0)
+            memPoolThreshold = std::stol(value, NULL, 0);
 
         delete[] name;
         delete[] value;

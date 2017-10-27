@@ -304,6 +304,14 @@ namespace BitCoin
             }
             return 0;
         }
+        bool operator < (const Hash &pRight) const
+        {
+            return compare(pRight) < 0;
+        }
+        bool operator > (const Hash &pRight) const
+        {
+            return compare(pRight) > 0;
+        }
 
         // Set to zero size. Makes hash "empty"
         void clear() { setSize(0); }
@@ -450,6 +458,11 @@ namespace BitCoin
             std::vector<Hash *>::clear();
         }
 
+        void clearNoDelete()
+        {
+            std::vector<Hash *>::clear();
+        }
+
         bool contains(const Hash &pHash) const
         {
             for(const_iterator hash=begin();hash!=end();++hash)
@@ -463,6 +476,13 @@ namespace BitCoin
 
         // Return true if the item exists in a sorted list
         bool containsSorted(const Hash &pHash);
+
+        void copyNoAllocate(const HashList &pOther)
+        {
+            reserve(pOther.size());
+            for(HashList::const_iterator other=pOther.begin();other!=pOther.end();++other)
+                push_back(*other);
+        }
 
     private:
         HashList(HashList &pCopy);
