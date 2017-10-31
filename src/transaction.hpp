@@ -26,7 +26,8 @@ namespace BitCoin
     {
     public:
 
-        Outpoint() : transactionID(32) { index = 0xffffffff; }
+        Outpoint() : transactionID(32) { index = 0xffffffff; output = NULL; signatureStatus = 0; }
+        ~Outpoint() { if(output != NULL) delete output; }
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
@@ -34,11 +35,16 @@ namespace BitCoin
         Hash transactionID; // Double SHA256 of signed transaction that paid the input of this transaction.
         uint32_t index;
 
-    private:
+        // Verification data
+        Output *output;
 
+        static const uint8_t CHECKED  = 0x01;
+        static const uint8_t VERIFIED = 0x02;
+        uint8_t signatureStatus;
+
+    private:
         Outpoint(const Outpoint &pCopy);
         Outpoint &operator = (const Outpoint &pRight);
-
     };
 
     class Input
@@ -71,10 +77,8 @@ namespace BitCoin
         uint32_t sequence;
 
     private:
-
         Input(const Input &pCopy);
         Input &operator = (const Input &pRight);
-
     };
 
     class Transaction;
@@ -108,6 +112,7 @@ namespace BitCoin
             lockTime = 0xffffffff;
             mSize = 0;
             mTime = getTime();
+            mStatus = 0;
         }
         ~Transaction();
 
@@ -134,34 +139,84 @@ namespace BitCoin
         unsigned int size() const { return mSize; }
         int32_t time() const { return mTime; }
         int64_t fee() const { return mFee; }
+        uint64_t feeRate(); // Satoshis per KB
+
+        /***********************************************************************************************
+         * Transaction verification
+         ***********************************************************************************************/
+        // Flags set by calling validate
+        static const uint8_t WAS_CHECKED     = 0x01; // Validate has been run at least once
+        static const uint8_t IS_VALID        = 0x02; // Basic format validity
+        static const uint8_t IS_STANDARD     = 0x04; // Is a "standard" transaction
+        static const uint8_t OUTPOINTS_FOUND = 0x08; // Has valid outpoints
+        static const uint8_t SIGS_VERIFIED   = 0x10; // Has valid signatures
+        uint8_t status() const { return mStatus; }
+
+        // Flag checking operations
+        bool wasChecked() const { return mStatus & WAS_CHECKED; }
+        bool isValid() const { return mStatus & IS_VALID; }
+        bool isStandard() const { return mStatus & IS_STANDARD; }
+        bool hasOutpoints() const { return mStatus & OUTPOINTS_FOUND; }
+        bool isVerfied() const { return mStatus & SIGS_VERIFIED; }
+
+        // Flag masks
+        static const uint8_t STANDARD_VERIFIED = IS_STANDARD | SIGS_VERIFIED;
+        bool isStandardVerified() const { return (mStatus & STANDARD_VERIFIED) == STANDARD_VERIFIED; }
 
         unsigned int calculatedSize();
-        uint64_t feeRate(); // Satoshis per KB
+
         void calculateHash();
 
         bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const BlockStats &pBlockStats,
           const Forks &pForks, std::vector<unsigned int> &pSpentAges);
 
-        enum ValidateResult { SUCCESS, FORMAT_INVALID, OUTPOINT_NOT_FOUND, SCRIPT_INVALID, FAIL,
-          SIGNATURE_INVALID, OUTPUT_INVALID, MIN_FEE };
-        ValidateResult validate(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
-          HashList &pOutpointsNeeded, bool pCoinBase, uint64_t pBlockHeight, int32_t pBlockVersion,
-          const BlockStats &pBlockStats, const Forks &pForks);
+        // Check validity and return status
+        uint8_t check(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
+          HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks);
+
+        // Check that none of the outpoints are spent and return status
+        uint8_t checkOutpoints(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions);
 
         bool updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           uint64_t pBlockHeight, std::vector<unsigned int> &pSpentAges);
 
-        bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
-          int64_t pOutputAmount, ArcMist::Buffer &pOutputScript, Signature::HashType pHashType, const Forks &pForks);
+        bool getSignatureHash(Hash &pHash, unsigned int pInputOffset, ArcMist::Buffer &pOutputScript,
+          int64_t pOutputAmount, Signature::HashType pHashType);
 
-        // P2PKH only
-        bool addP2PKHInput(const Hash &pTransactionID, unsigned int pIndex, Output &pOutput, PrivateKey &pPrivateKey,
-          PublicKey &pPublicKey, const Forks &pForks);
-        bool addP2PKHOutput(Hash pPublicKeyHash, uint64_t pAmount);
+        /***********************************************************************************************
+         * Transaction building
+         *
+         * Steps to building a transaction
+         * 1. Call addInput to add all inputs to be spent.
+         * 2. Call addXXXOutput to add all the outputs to be created.
+         * 3. Call signXXXInput to sign each input and pass in the output being spent.
+         ***********************************************************************************************/
+        bool addInput(const Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence = 0xffffffff);
+        bool addCoinbaseInput(int pBlockHeight);
 
-        // P2SH only
-        bool addP2SHInput(const Hash &pTransactionID, unsigned int pIndex, Output &pOutput, ArcMist::Buffer &pRedeemScript);
+        // P2PKH Pay to Public Key Hash
+        bool signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
+          const PublicKey &pPublicKey, Signature::HashType pType);
+        bool addP2PKHOutput(const Hash &pPublicKeyHash, uint64_t pAmount);
+
+        // P2PK Pay to Public Key (not as secure as P2PKH)
+        bool signP2PKInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
+          const PublicKey &pPublicKey, Signature::HashType pType);
+        bool addP2PKOutput(const PublicKey &pPublicKey, uint64_t pAmount);
+
+        // P2SH Pay to Script Hash
+        bool authorizeP2SHInput(Output &pOutput, unsigned int pInputOffset, ArcMist::Buffer &pRedeemScript);
+        bool addP2SHOutput(const Hash &pScriptHash, uint64_t pAmount);
+
+        // MultiSig
+        bool addMultiSigInputSignature(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
+          const PublicKey &pPublicKey, Signature::HashType pHashType, const Forks &pForks, bool &pSignatureAdded,
+          bool &pTransactionComplete);
+        bool addMultiSigOutput(unsigned int pRequiredSignatureCount, std::vector<PublicKey *> pPublicKeys,
+          uint64_t pAmount);
+
+        static Transaction *createCoinbaseTransaction(int pBlockHeight, int64_t pFees, const Hash &pPublicKeyHash);
 
         // Run unit tests
         static bool test();
@@ -171,8 +226,12 @@ namespace BitCoin
         int32_t mTime;
         int64_t mFee;
         unsigned int mSize;
+        uint8_t mStatus;
 
         Hash mOutpointHash, mSequenceHash, mOutputHash;
+
+        bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
+          ArcMist::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType);
 
         Transaction(const Transaction &pCopy);
         Transaction &operator = (const Transaction &pRight);

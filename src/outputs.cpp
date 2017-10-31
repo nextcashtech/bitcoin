@@ -2346,12 +2346,12 @@ namespace BitCoin
         return itemsAdded;
     }
 
-    bool TransactionOutputPool::load(bool pPreCache)
+    bool TransactionOutputPool::load(unsigned int pCacheAge, bool pPreCache)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Loading transaction outputs");
 
         mValid = true;
-        mCacheAge = Info::instance().outputsCacheAge;
+        mCacheAge = pCacheAge;
         ArcMist::String filePath = Info::instance().path();
         filePath.pathAppend("outputs");
         ArcMist::createDirectory(filePath);
@@ -2410,14 +2410,14 @@ namespace BitCoin
         return mValid;
     }
 
-    bool TransactionOutputPool::purge()
+    bool TransactionOutputPool::purge(const char *pPath, unsigned int pThreshold)
     {
-        if(cachedSize() > Info::instance().outputsThreshold)
-            return save();
+        if(cachedSize() > pThreshold)
+            return save(pPath);
         return true;
     }
 
-    bool TransactionOutputPool::save()
+    bool TransactionOutputPool::save(const char *pPath)
     {
         if(!mValid)
         {
@@ -2437,7 +2437,7 @@ namespace BitCoin
           cachedSize() / 1024);
 
         bool success = true;
-        ArcMist::String filePathName = Info::instance().path();
+        ArcMist::String filePathName = pPath;
         filePathName.pathAppend("outputs");
         filePathName.pathAppend("height");
         ArcMist::FileOutputStream file(filePathName, true);
@@ -2485,13 +2485,13 @@ namespace BitCoin
         return success;
     }
 
-    bool TransactionOutputPool::convert()
+    bool TransactionOutputPool::convert(const char *pPath)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Converting transaction outputs");
 
         // Read all unspent from .index and write into .unspent
         bool success = true;
-        ArcMist::String filePath = Info::instance().path(), filePathName;
+        ArcMist::String filePath = pPath, filePathName;
         filePath.pathAppend("outputs");
         ArcMist::FileInputStream *indexFile, *dataFile;
         ArcMist::FileOutputStream *unspentFile, *newIndexFile;

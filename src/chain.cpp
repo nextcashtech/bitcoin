@@ -1270,14 +1270,14 @@ namespace BitCoin
                                 mOutputs.commit(block.transactions, currentHeight++);
                                 if(getTime() - lastPurgeTime > 300)
                                 {
-                                    mOutputs.purge();
+                                    mOutputs.purge(Info::instance().path(), Info::instance().outputsThreshold);
                                     lastPurgeTime = getTime();
                                 }
                             }
                             else
                             {
                                 mOutputs.revert(currentHeight);
-                                mOutputs.save();
+                                mOutputs.save(Info::instance().path());
                                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                                   "Failed to process block at height %d. At offset %d in block file %08x : %s",
                                   currentHeight, blockOffset, fileID, (*hash)->hex().text());
@@ -1291,7 +1291,7 @@ namespace BitCoin
                               "Failed to read block %d from block file %08x : %s", blockOffset, fileID, (*hash)->hex().text());
                             delete blockFile;
                             BlockFile::unlock(fileID);
-                            mOutputs.save();
+                            mOutputs.save(Info::instance().path());
                             return false;
                         }
                     }
@@ -1310,7 +1310,7 @@ namespace BitCoin
             fileID++;
         }
 
-        mOutputs.save();
+        mOutputs.save(Info::instance().path());
         return mOutputs.height() == height();
     }
 
@@ -1332,7 +1332,7 @@ namespace BitCoin
             success = false;
         if(!savePending())
             success = false;
-        if(!mOutputs.save())
+        if(!mOutputs.save(Info::instance().path()))
             success = false;
         return success;
     }
@@ -1656,7 +1656,7 @@ namespace BitCoin
 
         if(pRebuild)
         {
-            mOutputs.save();
+            mOutputs.save(Info::instance().path());
             if(!mForks.save())
                 return false;
         }
@@ -1837,7 +1837,7 @@ namespace BitCoin
         BlockStats blockStats;
         Forks softForks;
 
-        outputs.load();
+        outputs.load(Info::instance().path());
 
         if(!readBlock.read(&readFile, true, true, true))
         {

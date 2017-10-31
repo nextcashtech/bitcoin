@@ -2004,6 +2004,8 @@ namespace BitCoin
              ***********************************************************************************************/
             TransactionData transactionData;
 
+            transactionData.transaction = new Transaction();
+
             messageBuffer.clear();
             interpreter.write(&transactionData, &messageBuffer);
             messageReceiveData = interpreter.read(&messageBuffer, "Test");

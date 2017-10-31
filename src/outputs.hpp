@@ -44,6 +44,7 @@ namespace BitCoin
         int64_t amount; // Number of Satoshis spent (documentation says this should be signed)
         ArcMist::Buffer script;
 
+        // Collected when reading/writing and used for output references
         unsigned int blockFileOffset;
 
     private:
@@ -476,12 +477,14 @@ namespace BitCoin
                 return 0;
         }
 
-        // Load from/Save to file system
-        bool load(bool pPreCache = true);
-        bool purge();
-        bool save();
+        bool needsPurge(uint32_t pThreshold) const { return cachedSize() > pThreshold; }
 
-        bool convert();
+        // Load from/Save to file system
+        bool load(unsigned int pCacheAge, bool pPreCache = true);
+        bool purge(const char *pPath, unsigned int pThreshold);
+        bool save(const char *pPath);
+
+        bool convert(const char *pPath);
 
         // Run unit tests
         static bool test();

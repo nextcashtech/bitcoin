@@ -41,8 +41,8 @@ namespace BitCoin
             mValid = false;
         }
 
-        bool operator == (PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) == 0; }
-        bool operator != (PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) != 0; }
+        bool operator == (const PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) == 0; }
+        bool operator != (const PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) != 0; }
 
         void set(void *pData) { std::memcpy(mData, pData, 64); mValid = true; }
         ArcMist::String hex() const;
@@ -51,7 +51,7 @@ namespace BitCoin
         bool read(ArcMist::InputStream *pStream);
 
         bool isValid() { return mValid; }
-        void getHash(Hash &pHash);
+        void getHash(Hash &pHash) const;
 
         const uint8_t *value() const { return mData; }
 
@@ -69,11 +69,11 @@ namespace BitCoin
 
         enum HashType
         {
-            INVALID = 0x00,      // Invalid value
-            ALL = 0x01,          // Sign all outputs
-            NONE = 0x02,         // Don't sign any outputs so anyone can modify them (i.e. miners)
-            SINGLE = 0x03,       // Only sign one output so other outputs can be added later
-            FORKID = 0x40,       // Flag for BitCoin Cash only transaction
+            INVALID      = 0x00, // Invalid value
+            ALL          = 0x01, // Sign all outputs
+            NONE         = 0x02, // Don't sign any outputs so anyone can modify them (i.e. miners)
+            SINGLE       = 0x03, // Only sign one output so other outputs can be added later
+            FORKID       = 0x40, // Flag for BitCoin Cash only transaction
             ANYONECANPAY = 0x80  // Only sign this input so that other inputs can be added later
         };
 
@@ -81,12 +81,16 @@ namespace BitCoin
         {
             mContext = Key::context();
             std::memset(mData, 0, 64);
+            mHashType = INVALID;
         }
+
+        HashType hashType() const { return mHashType; }
+        void setHashType(HashType pHashType) { mHashType = pHashType; }
 
         void set(void *pData) { std::memcpy(mData, pData, 64); }
         ArcMist::String hex() const;
 
-        void write(ArcMist::OutputStream *pStream, bool pScriptFormat, HashType pHashType) const;
+        void write(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
         bool read(ArcMist::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly = false);
 
         bool verify(PublicKey &pPublicKey, Hash &pHash) const;
@@ -107,6 +111,7 @@ namespace BitCoin
 
         secp256k1_context *mContext;
         uint8_t mData[64];
+        HashType mHashType;
 
     };
 

@@ -138,10 +138,7 @@ namespace BitCoin
 
         if(!secp256k1_ecdsa_signature_normalize(mContext, (secp256k1_ecdsa_signature *)mData,
           (const secp256k1_ecdsa_signature *)mData))
-        {
-            ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME, "Signature already normalized");
             return false; // Already normalized
-        }
 
         // Try it again with the normalized signature
         if(secp256k1_ecdsa_verify(mContext, (const secp256k1_ecdsa_signature *)mData,
@@ -244,7 +241,7 @@ namespace BitCoin
         return false;
     }
 
-    void PublicKey::getHash(Hash &pHash)
+    void PublicKey::getHash(Hash &pHash) const
     {
         // Calculate hash
         ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
@@ -252,7 +249,7 @@ namespace BitCoin
         digest.getResult(&pHash);
     }
 
-    void Signature::write(ArcMist::OutputStream *pStream, bool pScriptFormat, HashType pHashType) const
+    void Signature::write(ArcMist::OutputStream *pStream, bool pScriptFormat) const
     {
         size_t length = 73;
         uint8_t output[length];
@@ -261,22 +258,23 @@ namespace BitCoin
         if(pScriptFormat)
             ScriptInterpreter::writePushDataSize(length + 1, pStream);
         pStream->write(output, length);
-        pStream->writeByte(pHashType);
+        pStream->writeByte(mHashType);
     }
 
     bool Signature::read(ArcMist::InputStream *pStream, unsigned int pLength, bool pStrictECDSA_DER_Sigs)
     {
         uint8_t input[pLength+2];
-        pStream->read(input, pLength);
+        pStream->read(input, pLength-1);
+        mHashType = static_cast<Signature::HashType>(pStream->readByte());
 
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Signature Read");
 #endif
-        // Hack badly formatted DER signatures
         unsigned int totalLength = pLength;
 
         if(!pStrictECDSA_DER_Sigs)
         {
+            // Hack badly formatted DER signatures
             uint8_t offset = 0;
             uint8_t subLength;
             if(input[offset++] != 0x30) // Compound header byte

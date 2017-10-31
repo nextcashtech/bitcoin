@@ -59,28 +59,27 @@ int main(int pArgumentCount, char **pArguments)
 
 bool addBlock(BitCoin::Chain &pChain, const BitCoin::Hash &pCoinbaseKeyHash, uint32_t pBlockTime, uint32_t pTargetBits)
 {
-    int originalHeight = pChain.blockHeight();
+    int originalHeight = pChain.height();
 
     BitCoin::Block *newBlock = new BitCoin::Block();
     newBlock->time = pBlockTime;
     newBlock->targetBits = pTargetBits;
-    if(pChain.blockHeight() == -1)
+    if(pChain.height() == -1)
         newBlock->previousHash.zeroize();
     else
         newBlock->previousHash = pChain.lastBlockHash();
-    newBlock->transactions.push_back(BitCoin::ScriptInterpreter::createCoinbaseTransaction(pChain.blockHeight() + 1,
-      pCoinbaseKeyHash));
+    newBlock->transactions.push_back(BitCoin::Transaction::createCoinbaseTransaction(pChain.height() + 1, 100000, pCoinbaseKeyHash));
     newBlock->finalize();
 
     if(!pChain.addPendingBlock(newBlock))
     {
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, "Test", "Failed to add pending block %d : %s",
-          pChain.blockHeight() + 1, newBlock->hash.hex().text());
+          pChain.height() + 1, newBlock->hash.hex().text());
         return false;
     }
 
     pChain.process();
-    return originalHeight + 1 == pChain.blockHeight();
+    return originalHeight + 1 == pChain.height();
 }
 
 // Build blocks with zero difficulty and test chain reverts and branch switches

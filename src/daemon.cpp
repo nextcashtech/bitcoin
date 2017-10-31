@@ -274,11 +274,11 @@ namespace BitCoin
 
         collectStatistics();
 
-        ArcMist::String statStartTime;
-        statStartTime.writeFormattedTime(mStatistics.startTime);
+        ArcMist::String timeText;
 
+        timeText.writeFormattedTime(mChain.blockStats().time(mChain.height()));
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks", mChain.height());
+          "Block Chain : %d blocks (last %s)", mChain.height(), timeText.text());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Outputs : %d/%d trans/outputs (%d KiB) (%d KiB cached)", mChain.outputs().transactionCount(),
           mChain.outputs().outputCount(), mChain.outputs().size() / 1024, mChain.outputs().cachedSize() / 1024);
@@ -299,11 +299,14 @@ namespace BitCoin
                   "Pending : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks, pendingCount - pendingBlocks,
                   pendingSize / 1024, blocksRequestedCount);
         }
+
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Nodes : %d/%d outgoing/incoming", mOutgoingNodes, mIncomingNodes);
+
+        timeText.writeFormattedTime(mStatistics.startTime);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Network : %d/%d KiB received/sent (since %s)", mStatistics.bytesReceived / 1024, mStatistics.bytesSent / 1024,
-          statStartTime.text());
+          timeText.text());
     }
 
     void sortOutgoingNodesByPing(std::vector<Node *> &pNodes)
@@ -946,9 +949,10 @@ namespace BitCoin
 
             daemon.mChain.memPool().process(daemon.mInfo.memPoolThreshold);
 
-            if(getTime() - lastOutputsPurgeTime > 300)
+            if((getTime() - lastOutputsPurgeTime > 300 && daemon.mChain.outputs().needsPurge(daemon.mInfo.outputsThreshold)) ||
+              getTime() - lastOutputsPurgeTime > 3600)
             {
-                if(!daemon.mChain.outputs().purge())
+                if(!daemon.mChain.outputs().save(daemon.mInfo.path()))
                     daemon.requestStop();
                 lastOutputsPurgeTime = getTime();
             }
