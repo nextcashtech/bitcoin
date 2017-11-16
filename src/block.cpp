@@ -238,7 +238,7 @@ namespace BitCoin
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Bits          : 0x%08x", targetBits);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Nonce         : 0x%08x", nonce);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Total Fees    : %f", bitcoins(mFees));
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Size (bytes)  : %d", mSize);
+        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Size (KiB)    : %d", mSize / 1024);
         ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "%d Transactions", transactionCount);
 
         if(!pIncludeTransactions)
@@ -392,8 +392,8 @@ namespace BitCoin
         ArcMist::Profiler profiler("Block Process");
 #endif
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Processing block at height %d (%d trans) (%d bytes) : %s", pBlockHeight, transactionCount,
-          size(), hash.hex().text());
+          "Processing block at height %d (%d trans) (%d KiB) : %s", pBlockHeight, transactionCount,
+          size() / 1024, hash.hex().text());
 
         if(transactions.size() == 0)
         {
@@ -433,10 +433,9 @@ namespace BitCoin
             return false;
         }
 
-        //TODO Turn this check back on after reaching a reasonable block height
         // Check that this block doesn't have any duplicate transaction IDs
-        // if(!pOutputs.checkDuplicates(transactions, pBlockHeight, hash))
-            // return false;
+        if(!pOutputs.checkDuplicates(transactions, pBlockHeight, hash))
+            return false;
 
         // Add the transaction outputs from this block to the output pool
         if(!pOutputs.add(transactions, pBlockHeight))
@@ -449,11 +448,13 @@ namespace BitCoin
         std::vector<unsigned int> spentAges;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
+            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
+              // "Processing transaction %d", transactionOffset);
             if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version,
               pBlockStats, pForks, spentAges))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Transaction %d failed",
-                  transactionOffset);
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                  "Transaction %d failed", transactionOffset);
                 return false;
             }
             if(!isCoinBase)
@@ -487,7 +488,7 @@ namespace BitCoin
         return true;
     }
 
-    Block *Block::genesis()
+    Block *Block::genesis(uint32_t pTargetBits)
     {
         Block *result = new Block();
 
@@ -497,13 +498,13 @@ namespace BitCoin
         if(network() == TESTNET)
         {
             result->time = 1296688602;
-            result->targetBits = 0x1d00ffff;
+            result->targetBits = pTargetBits;
             result->nonce = 414098458;
         }
         else
         {
             result->time = 1231006505;
-            result->targetBits = 0x1d00ffff;
+            result->targetBits = pTargetBits;
             result->nonce = 2083236893;
         }
         result->transactionCount = 1;
@@ -539,9 +540,13 @@ namespace BitCoin
         //TODO Update total coinbase amount
 
         transactionCount = transactions.size();
-        nonce = ArcMist::Math::randomLong();
         calculateMerkleHash(merkleHash);
-        calculateHash();
+
+        while(!hasProofOfWork())
+        {
+            nonce = ArcMist::Math::randomLong();
+            calculateHash();
+        }
     }
 
     ArcMist::Mutex BlockFile::mBlockFileMutex("Block File");
@@ -662,7 +667,7 @@ namespace BitCoin
         outputFile->writeUnsignedInt(crc);
         delete outputFile;
 
-        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Block file %08x created with CRC : %08x", pID, crc);
 
         // Create and return block file object
@@ -674,6 +679,13 @@ namespace BitCoin
             delete result;
             return NULL;
         }
+    }
+
+    bool BlockFile::remove(unsigned int pID)
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
+          "Removing block file %08x", pID);
+        return ArcMist::removeFile(fileName(pID));
     }
 
     void BlockFile::getLastCount()
@@ -715,13 +727,43 @@ namespace BitCoin
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Block Add");
 #endif
-        if(!mValid)
+        if(!openFile())
             return false;
 
         unsigned int count = blockCount();
 
         if(count == MAX_BLOCKS)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x is already full", mID);
             return false;
+        }
+
+        // Find offset of after the last block
+        ArcMist::stream_size nextBlockOffset = mInputFile->length();
+
+        if(count > 0)
+        {
+            // Go to location in header where the data offset to the last block is
+            mInputFile->setReadOffset(HASHES_OFFSET + ((count - 1) * HEADER_ITEM_SIZE) + 32);
+            unsigned int offset = mInputFile->readUnsignedInt();
+            if(offset == 0)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                  "Block file %08x offset %d is zero", mID, count - 1);
+                return false;
+            }
+
+            Block block;
+            mInputFile->setReadOffset(offset);
+            if(!block.read(mInputFile, true, true, false, true))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                  "Block file %08x offset %d is zero", mID, count - 1);
+                return false;
+            }
+            nextBlockOffset = mInputFile->readOffset();
+        }
 
         if(mInputFile != NULL)
             delete mInputFile;
@@ -731,6 +773,8 @@ namespace BitCoin
         outputFile->setOutputEndian(ArcMist::Endian::LITTLE);
         if(!outputFile->isValid())
         {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x output file failed to open", mID);
             delete outputFile;
             return false;
         }
@@ -738,10 +782,10 @@ namespace BitCoin
         // Write hash and offset to file
         outputFile->setWriteOffset(HASHES_OFFSET + (count * HEADER_ITEM_SIZE));
         pBlock.hash.write(outputFile);
-        outputFile->writeUnsignedInt(outputFile->length());
+        outputFile->writeUnsignedInt(nextBlockOffset);
 
         // Write block data at end of file
-        outputFile->setWriteOffset(outputFile->length());
+        outputFile->setWriteOffset(nextBlockOffset);
         pBlock.write(outputFile, true, true, true);
         delete outputFile;
 
@@ -751,7 +795,67 @@ namespace BitCoin
         return true;
     }
 
-    // If pStartingHash is empty then start with first hash in file
+    bool BlockFile::removeBlocksAbove(unsigned int pOffset)
+    {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Block Remove Above");
+#endif
+        if(!openFile())
+            return false;
+
+        unsigned int count = blockCount();
+        if(count <= pOffset || pOffset >= (MAX_BLOCKS - 1))
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x offset not above %d", mID, pOffset);
+            return false;
+        }
+
+        if(count == pOffset + 1)
+            return true;
+
+        // Find hash of new last block
+        if(count > 0)
+        {
+            // Go to location in header where the data offset to the last block is
+            mInputFile->setReadOffset(HASHES_OFFSET + (pOffset * HEADER_ITEM_SIZE));
+            if(!mLastHash.read(mInputFile, 32))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                  "Block file %08x failed to read hash at offset %d", mID, pOffset);
+                return false;
+            }
+        }
+
+        if(mInputFile != NULL)
+            delete mInputFile;
+        mInputFile = NULL;
+
+        ArcMist::FileOutputStream *outputFile = new ArcMist::FileOutputStream(mFilePathName);
+        outputFile->setOutputEndian(ArcMist::Endian::LITTLE);
+        if(!outputFile->isValid())
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x output file failed to open", mID);
+            delete outputFile;
+            return false;
+        }
+
+        // Zeroize hashes and offsets above the specified block offset
+        Hash zeroHash(32);
+        outputFile->setWriteOffset(HASHES_OFFSET + ((pOffset + 1) * HEADER_ITEM_SIZE));
+        for(unsigned int i=pOffset+1;i<count;++i)
+        {
+            zeroHash.write(outputFile);
+            outputFile->writeUnsignedInt(0);
+        }
+
+        mCount = INVALID_COUNT;
+        mModified = true;
+        delete outputFile;
+        return false;
+    }
+
     bool BlockFile::readBlockHashes(HashList &pHashes)
     {
         pHashes.clear();
@@ -769,7 +873,11 @@ namespace BitCoin
                 return false;
 
             if(mInputFile->readUnsignedInt() == 0)
+            {
+                mCount = i;
+                mLastHash = hash;
                 return true;
+            }
 
             pHashes.push_back(new Hash(hash));
         }
@@ -1054,8 +1162,9 @@ namespace BitCoin
 
         // Close output file
         delete outputFile;
+        mModified = false;
 
-        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Block file %08x CRC updated : %08x", mID, crc);
     }
 

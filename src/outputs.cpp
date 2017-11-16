@@ -338,6 +338,21 @@ namespace BitCoin
         return false;
     }
 
+    unsigned int TransactionReference::spentBlockHeight() const
+    {
+        unsigned int result = 0;
+        OutputReference *output = mOutputs;
+        for(unsigned int i=0;i<mOutputCount;++i)
+        {
+            if(output->spentBlockHeight == 0)
+                return MAX_BLOCK_HEIGHT;
+            else if(output->spentBlockHeight > result)
+                result = output->spentBlockHeight;
+            ++output;
+        }
+        return result;
+    }
+
     void TransactionReference::commit(std::vector<Output *> &pOutputs)
     {
         if(mOutputs == NULL)
@@ -373,7 +388,7 @@ namespace BitCoin
         bool result = false;
         OutputReference *output = mOutputs;
         for(unsigned int i=0;i<mOutputCount;++i,++output)
-            if(output->spentBlockHeight >= pBlockHeight)
+            if(output->spentBlockHeight > pBlockHeight)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
                   "Unspending transaction output for block %d : index %d - %s",
@@ -411,19 +426,33 @@ namespace BitCoin
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Insert Sorted");
 #endif
-        if(size() == 0 || *back() < *pItem)
+        if(pItem == NULL)
+            return false;
+
+        if(size() == 0)
         {
             push_back(pItem);
             return true;
         }
 
-        if(*front() > *pItem)
+        int compare = back()->compare(*pItem);
+        if(compare == 0)
+            return false;
+        else if(compare < 0)
+        {
+            push_back(pItem);
+            return true;
+        }
+
+        compare = front()->compare(*pItem);
+        if(compare == 0)
+            return false;
+        else if(compare > 0)
         {
             insert(begin(), pItem);
             return true;
         }
 
-        int compare;
         TransactionReference **first = data();
         TransactionReference **bottom = data();
         TransactionReference **top = data() + size() - 1;
@@ -447,7 +476,7 @@ namespace BitCoin
                 else
                     current = top + 1; // Insert after top
 
-                if(**current == *pItem)
+                if(*current != NULL && **current == *pItem)
                     return false;
 
                 break;
@@ -809,7 +838,7 @@ namespace BitCoin
         return result;
     }
 
-    bool OutputSet::save(unsigned int pDropBlockHeight)
+    bool OutputSet::save(unsigned int pDropBlockHeight, unsigned int pPurgeBlockHeight)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Save");
@@ -857,10 +886,10 @@ namespace BitCoin
                     removedOutputCount += (*item)->outputCount();
                 }
             }
-            else if(!(*item)->hasUnspentOutputs())
+            else if(!(*item)->hasUnspentOutputs() && (*item)->spentBlockHeight() < pPurgeBlockHeight)
             {
                 (*item)->write(dataOutFile);
-                if(!(*item)->isNew() && !(*item)->wasSpent())
+                if(!(*item)->isNew() && !(*item)->mightNeedIndexed())
                 {
                     // Needs removed from unspent indices
                     ++spentTransactionCount;
@@ -870,7 +899,7 @@ namespace BitCoin
             else
             {
                 (*item)->write(dataOutFile);
-                if((*item)->isNew() || (*item)->wasSpent())
+                if((*item)->isNew())
                 {
                     // Needs added to unspent indices
                     ++addedTransactionCount;
@@ -976,15 +1005,19 @@ namespace BitCoin
         }
         delete indexInputFile;
 
+        // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
+          // "Starting index 0x%02x count %d, previous/added/spent/removed %d/%d/%d/%d", mID, indices.size(),
+          // mTransactionCount, addedTransactionCount, spentTransactionCount, removedTransactionCount);
+
         unsigned int begin, end, current;
         unsigned int readHeadersCount = 0;//, previousIndices = indices.size();
         bool success = true;
-        for(item=mCache.begin();item!=mCache.end()&&success;++item)
+        for(item=mCache.begin();item!=mCache.end() && success;++item)
         {
             if((*item)->markedDelete())
             {
                 (*item)->clearNew();
-                (*item)->clearWasSpent();
+                (*item)->clearMightNeedIndexed();
 
                 // Check that it was previously added to the index and data file.
                 // Otherwise it isn't in current indices and doesn't need removed.
@@ -1029,28 +1062,23 @@ namespace BitCoin
                     }
                 }
             }
-            else if(!(*item)->hasUnspentOutputs())
+            else if(!(*item)->hasUnspentOutputs() && (*item)->spentBlockHeight() < pPurgeBlockHeight)
             {
+                // Doesn't belong in sorted indices
                 if((*item)->isNew()) // Add to "all" indices (not sorted)
                 {
                     allIndices.push_back(IndexEntry((*item)));
                     (*item)->clearNew();
-                    (*item)->clearWasSpent();
+                    (*item)->clearMightNeedIndexed();
                 }
-                else if(!(*item)->wasSpent()) // If it was spent then it won't be in unspent indices
+                else if(!(*item)->mightNeedIndexed())
                 {
 #ifdef PROFILER_ON
                     removeSpentProfiler.start();
 #endif
                     // Remove from unspent indices.
                     if(indices.size () == 0)
-                    {
-                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                          "Failed to find index to remove for file offset %d (indices empty) : %s", (*item)->fileOffset,
-                          (*item)->id.hex().text());
-                        success = false;
                         break;
-                    }
 
                     found = false;
                     if(indices.front().fileOffset == (*item)->fileOffset)
@@ -1118,12 +1146,10 @@ namespace BitCoin
                                 break;
                             }
 
-                            if(current == begin)
+                            if(current == begin) // Not found
                             {
-                                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                                  "Failed to find matching spent transaction reference to remove from index. Block height %d : %s",
-                                  (*item)->blockHeight, (*item)->id.hex().text());
-                                success = false;
+                                --spentTransactionCount;
+                                spentOutputCount -= (*item)->outputCount();
                                 break;
                             }
 
@@ -1138,7 +1164,7 @@ namespace BitCoin
 #endif
                 }
             }
-            else if((*item)->isNew() || (*item)->wasSpent())
+            else if((*item)->isNew() || (*item)->mightNeedIndexed())
             {
 #ifdef PROFILER_ON
                 indexInsertProfiler.start();
@@ -1154,9 +1180,14 @@ namespace BitCoin
                 {
                     // Add as only item
                     indices.push_back(IndexEntry((*item)));
-                    (*item)->clearNew();
-                    (*item)->clearWasSpent();
                     headers.push_back(*item);
+                    if(!(*item)->isNew())
+                    {
+                        ++addedTransactionCount;
+                        addedOutputCount += (*item)->outputCount();
+                    }
+                    (*item)->clearNew();
+                    (*item)->clearMightNeedIndexed();
                     continue;
                 }
 
@@ -1184,7 +1215,7 @@ namespace BitCoin
                     // Insert as first
                     indices.insert(indices.begin(), IndexEntry((*item)));
                     (*item)->clearNew();
-                    (*item)->clearWasSpent();
+                    (*item)->clearMightNeedIndexed();
                     headers.insert(headers.begin(), *item);
 #ifdef PROFILER_ON
                     indexInsertProfiler.stop();
@@ -1194,14 +1225,20 @@ namespace BitCoin
 
                 if(compare == 0)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Failed to insert index. Item already indexed as first item. Block height %d : %s",
-                      (*item)->blockHeight, (*item)->id.hex().text());
-                    success = false;
+                    // Item already indexed
+                    if((*item)->isNew())
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                          "Failed to insert index. Item already indexed as first item. Block height %d : %s",
+                          (*item)->blockHeight, (*item)->id.hex().text());
+                        success = false;
 #ifdef PROFILER_ON
-                    indexInsertProfiler.stop();
+                        indexInsertProfiler.stop();
 #endif
-                    break;
+                        break;
+                    }
+                    else
+                        continue;
                 }
 
                 // Check last entry
@@ -1228,7 +1265,7 @@ namespace BitCoin
                     // Add to end
                     indices.push_back(IndexEntry((*item)));
                     (*item)->clearNew();
-                    (*item)->clearWasSpent();
+                    (*item)->clearMightNeedIndexed();
                     headers.push_back(*item);
 #ifdef PROFILER_ON
                     indexInsertProfiler.stop();
@@ -1238,14 +1275,20 @@ namespace BitCoin
 
                 if(compare == 0)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Failed to insert index. Item already indexed as last item. Block height %d : %s",
-                      (*item)->blockHeight, (*item)->id.hex().text());
-                    success = false;
+                    // Item already indexed
+                    if((*item)->isNew())
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                          "Failed to insert index. Item already indexed as last item. Block height %d : %s",
+                          (*item)->blockHeight, (*item)->id.hex().text());
+                        success = false;
 #ifdef PROFILER_ON
-                    indexInsertProfiler.stop();
+                        indexInsertProfiler.stop();
 #endif
-                    break;
+                        break;
+                    }
+                    else
+                        continue;
                 }
 
                 // Binary insert sort
@@ -1274,21 +1317,26 @@ namespace BitCoin
                     compare = (*item)->compare(*currentTransaction);
                     if(compare == 0)
                     {
+                        // Item already indexed
                         if((*item)->isNew())
-                            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                              "Failed to insert new index. Already indexed. Block height %d : %s",
-                              (*item)->blockHeight, (*item)->id.hex().text());
-                        else
+                        {
                             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                               "Failed to insert previously spent index. Already indexed. Block height %d : %s",
                               (*item)->blockHeight, (*item)->id.hex().text());
-                        (*item)->print(ArcMist::Log::ERROR);
-                        success = false;
-                        break;
+                            (*item)->print(ArcMist::Log::ERROR);
+                            success = false;
+                        }
+                        break; // Break from binary insert loop
                     }
 
                     if(current == begin)
                     {
+                        if(!(*item)->isNew())
+                        {
+                            ++addedTransactionCount;
+                            addedOutputCount += (*item)->outputCount();
+                        }
+
                         if(compare > 0)
                         {
                             // Insert after current
@@ -1299,7 +1347,7 @@ namespace BitCoin
                             index += current + 1;
                             indices.insert(index, IndexEntry((*item)));
                             (*item)->clearNew();
-                            (*item)->clearWasSpent();
+                            (*item)->clearMightNeedIndexed();
 
                             // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
                               // "Inserted after : %s", headers[current]->id.hex().text());
@@ -1328,7 +1376,7 @@ namespace BitCoin
                             index += current;
                             indices.insert(index, IndexEntry((*item)));
                             (*item)->clearNew();
-                            (*item)->clearWasSpent();
+                            (*item)->clearMightNeedIndexed();
 
                             // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
                               // "Inserted after : %s", headers[current-1]->id.hex().text());
@@ -1430,7 +1478,7 @@ namespace BitCoin
             if(mTransactionCount + addedTransactionCount - removedTransactionCount - spentTransactionCount != indices.size())
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Output set index %02x update counts not adding up. Index %d, Transactions/added/spent/removed %d/%d/%d/%d",
+                  "Output set index %02x update counts not adding up. Current index count %d, previous/added/spent/removed %d/%d/%d/%d",
                   mID, indices.size(), mTransactionCount, addedTransactionCount, spentTransactionCount, removedTransactionCount);
                 success = false;
             }
@@ -1488,12 +1536,12 @@ namespace BitCoin
         {
             index.read(indexInputFile);
             mDataFile->setReadOffset(index.fileOffset);
-            if(nextTransaction->readAboveBlock(pBlockHeight, mDataFile) &&
+            if(nextTransaction->read(mDataFile) &&
+              (nextTransaction->blockHeight >= pBlockHeight || nextTransaction->spentBlockHeight() >= pBlockHeight) &&
               (!pUnspentOnly || nextTransaction->hasUnspentOutputs()) &&
               mCache.insertSorted(nextTransaction))
             {
-                if(!nextTransaction->hasUnspentOutputs())
-                    nextTransaction->setWasSpent();
+                nextTransaction->setMightNeedIndexed();
 
                 ++itemsAdded;
                 mCacheOutputCount += nextTransaction->outputCount();
@@ -1535,6 +1583,7 @@ namespace BitCoin
         Hash hash(32);
         unsigned int itemsAdded;
         bool first = true;
+        unsigned int offset = 0;
 
         mUnspentFile->setReadOffset(HEADER_SIZE);
 
@@ -1554,7 +1603,9 @@ namespace BitCoin
                 break;
             if(hash.getByte(31) == pTransactionID.getByte(31))
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Linear : %s", hash.hex().text());
+                  "Linear %d : %s", offset, hash.hex().text());
+
+            ++offset;
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
@@ -1973,11 +2024,8 @@ namespace BitCoin
                 if((*item)->markedDelete())
                     continue;
 
-                if((*item)->hasUnspentOutputs())
-                {
-                    mLock.readUnlock();
-                    return *item;
-                }
+                mLock.readUnlock();
+                return *item;
             }
             else
                 break;
@@ -1991,33 +2039,11 @@ namespace BitCoin
         // Check first pulled transaction for match
         if(firstPulled != NULL && !firstPulled->markedDelete())
         {
-            if(firstPulled->hasUnspentOutputs())
-            {
-                mLock.writeUnlock();
-                return firstPulled;
-            }
+            mLock.writeUnlock();
+            return firstPulled;
         }
 
-        // Check other pulled transactions for matches
-        if(foundCount > 1)
-        {
-            for(TransactionReferenceList::iterator pulled=mCache.firstMatching(pTransactionID);pulled!=mCache.end();++pulled)
-                if((*pulled)->id == pTransactionID)
-                {
-                    if((*pulled)->markedDelete())
-                        continue;
-
-                    if((*pulled)->hasUnspentOutputs())
-                    {
-                        mLock.writeUnlock();
-                        return *pulled;
-                    }
-                }
-                else
-                    break;
-        }
         mLock.writeUnlock();
-
         return NULL;
     }
 
@@ -2052,12 +2078,12 @@ namespace BitCoin
         ArcMist::Profiler profiler("Outputs Revert");
 #endif
         if(pHard)
-            pullBlocks(pBlockHeight);
+            pullBlocks(pBlockHeight + 1);
 
         mLock.writeLock("Commit");
         for(TransactionReferenceList::iterator item=mCache.begin();item!=mCache.end();++item)
         {
-            if((*item)->blockHeight >= pBlockHeight)
+            if((*item)->blockHeight > pBlockHeight)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
                   "Deleting transaction for block %d : %s", (*item)->blockHeight, (*item)->id.hex().text());
@@ -2241,7 +2267,81 @@ namespace BitCoin
         return true;
     }
 
-    bool TransactionOutputPool::revert(unsigned int pBlockHeight, bool pHard)
+    bool TransactionOutputPool::revert(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
+    {
+        if(!mValid)
+            return false;
+
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Outputs Revert");
+#endif
+        if(mToCommit.size() > 0)
+        {
+            if(pBlockHeight != mNextBlockHeight)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Can't revert non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight);
+                return false;
+            }
+        }
+        else if(pBlockHeight != mNextBlockHeight - 1)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+              "Can't revert non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight - 1);
+            return false;
+        }
+
+        std::vector<Input *>::const_iterator input;
+        TransactionReference *reference;
+        OutputReference *outputReference;
+        bool success = true;
+        for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin()+1;transaction!=pBlockTransactions.end();++transaction)
+        {
+            // Unspend inputs
+            for(input=(*transaction)->inputs.begin();input!=(*transaction)->inputs.end();++input)
+            {
+                reference = find((*input)->outpoint.transactionID);
+                if(reference == NULL)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Transaction not found to revert spend : %s", (*input)->outpoint.transactionID.hex().text());
+                    success = false;
+                    break;
+                }
+
+                outputReference = reference->outputAt((*input)->outpoint.index);
+                if(outputReference == NULL)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Transaction output not found to revert spend : index %d %s", (*input)->outpoint.index,
+                      (*input)->outpoint.transactionID.hex().text());
+                    success = false;
+                    break;
+                }
+
+                outputReference->spentBlockHeight = 0;
+            }
+
+            // Remove transaction
+            reference = find((*input)->outpoint.transactionID);
+            if(reference == NULL)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                  "Transaction not found to remove for revert : %s", (*transaction)->hash.hex().text());
+                success = false;
+                break;
+            }
+
+            reference->setDelete();
+        }
+
+        mToCommit.clearNoDelete();
+        --mNextBlockHeight;
+        mModified = true;
+        return success;
+    }
+
+    bool TransactionOutputPool::bulkRevert(unsigned int pBlockHeight, bool pHard)
     {
         if(!mValid)
             return false;
@@ -2285,6 +2385,19 @@ namespace BitCoin
         ArcMist::Profiler profiler("Find Unspent");
 #endif
         TransactionReference *result = mSets[pTransactionID.lookup8()].find(pTransactionID, pIndex);
+        mModified = true;
+        return result;
+    }
+
+    TransactionReference *TransactionOutputPool::find(const Hash &pTransactionID)
+    {
+        if(!mValid)
+            return NULL;
+
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Find");
+#endif
+        TransactionReference *result = mSets[pTransactionID.lookup8()].find(pTransactionID);
         mModified = true;
         return result;
     }
@@ -2346,13 +2459,15 @@ namespace BitCoin
         return itemsAdded;
     }
 
-    bool TransactionOutputPool::load(unsigned int pCacheAge, bool pPreCache)
+    bool TransactionOutputPool::load(const char *pPath, unsigned int pCacheAge, bool pPreCache)
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Loading transaction outputs");
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+          "Using cache block age %d", pCacheAge);
 
         mValid = true;
         mCacheAge = pCacheAge;
-        ArcMist::String filePath = Info::instance().path();
+        ArcMist::String filePath = pPath;
         filePath.pathAppend("outputs");
         ArcMist::createDirectory(filePath);
 
@@ -2462,7 +2577,7 @@ namespace BitCoin
                   "Save is %2d%% Complete", (int)(((float)i / (float)SET_COUNT) * 100.0f));
                 lastReport = getTime();
             }
-            if(!set->save(cacheBlockHeight()))
+            if(!set->save(cacheBlockHeight(), mNextBlockHeight - 1000))
             {
                 success = false;
                 break;
@@ -2489,16 +2604,10 @@ namespace BitCoin
     {
         ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Converting transaction outputs");
 
-        // Read all unspent from .index and write into .unspent
         bool success = true;
-        ArcMist::String filePath = pPath, filePathName;
-        filePath.pathAppend("outputs");
-        ArcMist::FileInputStream *indexFile, *dataFile;
-        ArcMist::FileOutputStream *unspentFile, *newIndexFile;
         uint32_t lastReport = getTime();
-        unsigned int transactionCount, outputCount, allTransactionCount, allOutputCount, readTransactions;
-        IndexEntry index;
-        TransactionReference transaction;
+        OutputSet *set = mSets;
+        unsigned int pulledCount;
         for(unsigned int setID=0;setID<SET_COUNT && success;setID++)
         {
             if(getTime() - lastReport > 10)
@@ -2508,73 +2617,14 @@ namespace BitCoin
                 lastReport = getTime();
             }
 
-            transactionCount = 0;
-            outputCount = 0;
-            readTransactions = 0;
-
-            filePathName.writeFormatted("%s%s%02x.index", filePath.text(), ArcMist::PATH_SEPARATOR, setID);
-            indexFile = new ArcMist::FileInputStream(filePathName);
-
-            filePathName.writeFormatted("%s%s%02x.data", filePath.text(), ArcMist::PATH_SEPARATOR, setID);
-            dataFile = new ArcMist::FileInputStream(filePathName);
-
-            filePathName.writeFormatted("%s%s%02x.unspent", filePath.text(), ArcMist::PATH_SEPARATOR, setID);
-            unspentFile = new ArcMist::FileOutputStream(filePathName, true);
-
-            filePathName.writeFormatted("%s%s%02x.new_index", filePath.text(), ArcMist::PATH_SEPARATOR, setID);
-            newIndexFile = new ArcMist::FileOutputStream(filePathName, true);
-
-            indexFile->setReadOffset(0);
-            allTransactionCount = indexFile->readUnsignedInt();
-            allOutputCount = indexFile->readUnsignedInt();
-
-            unspentFile->setWriteOffset(0);
-            unspentFile->writeUnsignedInt(transactionCount);
-            unspentFile->writeUnsignedInt(outputCount);
-
-            while(readTransactions < allTransactionCount)
-            {
-                ++readTransactions;
-                index.read(indexFile);
-                index.write(newIndexFile);
-                dataFile->setReadOffset(index.fileOffset);
-                if(!transaction.read(dataFile))
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Failed to read transaction in set %02x", setID);
-                    success = false;
-                    break;
-                }
-
-                if(transaction.hasUnspentOutputs())
-                {
-                    index.write(unspentFile);
-                    ++transactionCount;
-                    outputCount += transaction.outputCount();
-                }
-            }
-
-            // Go back to the beginning and write counts
-            unspentFile->setWriteOffset(0);
-            unspentFile->writeUnsignedInt(transactionCount);
-            unspentFile->writeUnsignedInt(outputCount);
-
+            pulledCount = set->pullBlocks(height() - 1000, false);
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-              "Set %02x has %d/%d unspent transactions and %d/%d unspent outputs", setID,
-              transactionCount, allTransactionCount, outputCount, allOutputCount);
+              "Set %02x pulled %d transactions", setID, pulledCount);
 
-            delete indexFile;
-            delete dataFile;
-            delete unspentFile;
-            delete newIndexFile;
+            ++set;
         }
 
-        // Run in bash
-        // // for i in {0..255}
-        // // do
-          // // command=$(printf "mv outputs/%02x.new_index outputs/%02x.index\n" $i $i)
-          // // $command
-        // // done
+        mModified = true;
 
         return success;
     }
@@ -2593,7 +2643,7 @@ namespace BitCoin
 
         transaction.setNew();
         transaction.setModified();
-        transaction.setWasSpent();
+        transaction.setMightNeedIndexed();
 
         if(transaction.isModified())
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed modified flag");
@@ -2613,31 +2663,31 @@ namespace BitCoin
             success = false;
         }
 
-        if(transaction.wasSpent())
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed was spent flag");
+        if(transaction.mightNeedIndexed())
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed might need indexed flag");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed was spent flag");
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed might need indexed flag");
             success = false;
         }
 
-        transaction.clearWasSpent();
+        transaction.clearMightNeedIndexed();
 
-        if(!transaction.wasSpent())
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed clear was spent flag");
+        if(!transaction.mightNeedIndexed())
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed clear might need indexed flag");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed clear was spent flag");
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed clear might need indexed flag");
             success = false;
         }
 
-        transaction.clearWasSpent();
+        transaction.clearMightNeedIndexed();
 
-        if(!transaction.wasSpent())
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed redundant clear was spent flag");
+        if(!transaction.mightNeedIndexed())
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Passed redundant clear might need indexed flag");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed redundant clear was spent flag");
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Failed redundant clear might need indexed flag");
             success = false;
         }
 

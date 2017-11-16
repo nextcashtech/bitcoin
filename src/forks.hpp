@@ -46,8 +46,8 @@ namespace BitCoin
 
         void revert(unsigned int pBlockHeight)
         {
-            if(size() > pBlockHeight)
-                resize(pBlockHeight);
+            if(size() > pBlockHeight + 1)
+                resize(pBlockHeight + 1);
         }
 
         bool load();

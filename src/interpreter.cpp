@@ -814,7 +814,7 @@ namespace BitCoin
     }
 
     bool ScriptInterpreter::checkSignature(Transaction &pTransaction, unsigned int pInputOffset,
-      unsigned int pOutputAmount, PublicKey &pPublicKey, Signature &pSignature,
+      uint64_t pOutputAmount, const PublicKey &pPublicKey, const Signature &pSignature,
       ArcMist::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset, const Forks &pForks)
     {
         if(pForks.cashActive() && !(pSignature.hashType() & Signature::FORKID))
@@ -832,9 +832,16 @@ namespace BitCoin
 
         // Get signature hash
         Hash signatureHash(32);
-        pTransaction.getSignatureHash(signatureHash, pInputOffset, pCurrentOutputScript, pOutputAmount,
-          pSignature.hashType());
+        ArcMist::stream_size previousOffset = pCurrentOutputScript.readOffset();
+        pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
+        if(!pTransaction.getSignatureHash(signatureHash, pInputOffset, pCurrentOutputScript,
+          pOutputAmount, pSignature.hashType()))
+        {
+            pCurrentOutputScript.setReadOffset(previousOffset);
+            return false;
+        }
 
+        pCurrentOutputScript.setReadOffset(previousOffset);
         return pSignature.verify(pPublicKey, signatureHash);
     }
 
@@ -849,11 +856,6 @@ namespace BitCoin
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
               "    %d (%d bytes) : %s", index, (*i)->length(), (*i)->readHexString((*i)->length()).text());
         }
-    }
-
-    void ScriptInterpreter::setTransaction(Transaction *pTransaction)
-    {
-        mTransaction = pTransaction;
     }
 
     bool ScriptInterpreter::arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue)
@@ -1030,8 +1032,7 @@ namespace BitCoin
         //  pBuffer->readHexString(pBuffer->length()).text());
     }
 
-    bool ScriptInterpreter::process(ArcMist::Buffer &pScript, bool pIsSignatureScript,
-      int32_t pBlockVersion, const Forks &pForks)
+    bool ScriptInterpreter::process(ArcMist::Buffer &pScript, int32_t pBlockVersion, const Forks &pForks)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Interpreter Process");
@@ -1172,13 +1173,6 @@ namespace BitCoin
                     break;
 
                 case OP_VERIFY: // Marks transaction as invalid if top stack value is not true.
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_VERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
 
@@ -1206,13 +1200,6 @@ namespace BitCoin
                 case OP_EQUAL: // Returns 1 if the the top two stack items are exactly equal, 0 otherwise
                 case OP_EQUALVERIFY: // Same as OP_EQUAL, but runs OP_VERIFY afterward.
                 {
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_EQUAL or OP_EQUALVERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
 
@@ -1258,14 +1245,6 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     ArcMist::Profiler profiler("Interpreter RipeMD160");
 #endif
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid op code for signature script : OP_SHA1");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
 
@@ -1293,14 +1272,6 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     ArcMist::Profiler profiler("Interpreter SHA1");
 #endif
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid op code for signature script : OP_SHA1");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
 
@@ -1328,14 +1299,6 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     ArcMist::Profiler profiler("Interpreter SHA256");
 #endif
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid op code for signature script : OP_SHA256");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
 
@@ -1363,13 +1326,6 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     ArcMist::Profiler profiler("Interpreter Hash160");
 #endif
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Invalid op code for signature script : OP_HASH160");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
 
@@ -1396,14 +1352,6 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     ArcMist::Profiler profiler("Interpreter Hash256");
 #endif
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid op code for signature script : OP_HASH256");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
 
@@ -1474,11 +1422,8 @@ namespace BitCoin
                     }
                     else
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Signature check failed");
-                        //ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                        //  "Public key : %s", publicKey.hex().text());
-                        //ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                        //  "Signature : %s", scriptSignature.hex().text());
+                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Signature check failed : 0x%02x - %s", (int)signature.hashType(), signature.hex().text());
                         if(opCode == OP_CHECKSIG)
                             push(); // Push false onto the stack
                         else
@@ -1613,14 +1558,6 @@ namespace BitCoin
                     if(pBlockVersion < 4 || pForks.enabledVersion() < 4)
                         break;
 
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid op code for signature script : OP_CHECKLOCKTIMEVERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
                     if(!ifStackTrue())
                         break;
 
@@ -1690,14 +1627,6 @@ namespace BitCoin
                 {
                     if(pForks.softForkState(SoftFork::BIP0112) != SoftFork::ACTIVE)
                         break;
-
-                    if(pIsSignatureScript)
-                    {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid op code for signature script : OP_CHECKSEQUENCEVERIFY");
-                        mValid = false;
-                        return false;
-                    }
 
                     if(!ifStackTrue())
                         break;

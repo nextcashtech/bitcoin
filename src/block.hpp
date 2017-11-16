@@ -69,7 +69,7 @@ namespace BitCoin
         bool updateOutputs(TransactionOutputPool &pOutputs, int pBlockHeight);
 
         // Create the Genesis block
-        static Block *genesis();
+        static Block *genesis(uint32_t pTargetBits);
 
         // Update coinbase transaction to take all the fees
         void finalize();
@@ -128,6 +128,9 @@ namespace BitCoin
         // Create a new block file. BlockFile objects will be invalid if the block file doesn't already exist
         static BlockFile *create(unsigned int pID);
 
+        // Remove a block file
+        static bool remove(unsigned int pID);
+
         BlockFile(unsigned int pID, bool pValidate = true);
         ~BlockFile() { updateCRC(); if(mInputFile != NULL) delete mInputFile; }
 
@@ -140,7 +143,8 @@ namespace BitCoin
         // Add a block to the file
         bool addBlock(Block &pBlock);
 
-        //TODO Remove blocks from file when they are orphaned
+        // Remove blocks from file above a specific offset in the file
+        bool removeBlocksAbove(unsigned int pOffset);
 
         // Read block at specified offset in file. Return false if the offset is too high.
         bool readHash(unsigned int pOffset, Hash &pHash);

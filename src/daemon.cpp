@@ -411,18 +411,14 @@ namespace BitCoin
 
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
         {
-            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-              // "Sorted Nodes (by speed) : %s - %d bytes/s, %ds ping", (*node)->name(),
-              // (int)(*node)->blockDownloadBytesPerSecond(), (*node)->pingTime());
-
             blocksRequestedCount += (*node)->blocksRequestedCount();
 
             if((*node)->waitingForRequests())
                 continue;
 
             if(!mChain.isInSync() && getTime() - mLastHeaderRequestTime > 60 &&
-              pendingCount < mInfo.pendingBlocksThreshold * 4 &&
-              (*node)->requestHeaders(mChain.lastPendingBlockHash()))
+              pendingCount < mInfo.pendingBlocksThreshold * 8 &&
+              (*node)->requestHeaders())
                 mLastHeaderRequestTime = getTime();
             else
                 requestNodes.push_back(*node);
@@ -513,7 +509,7 @@ namespace BitCoin
             if((*node)->waitingForRequests())
                 continue;
 
-            if((*node)->requestHeaders(mChain.lastPendingBlockHash()))
+            if((*node)->requestHeaders())
             {
                 mLastHeaderRequestTime = getTime();
                 break;
@@ -806,7 +802,7 @@ namespace BitCoin
     {
         Daemon &daemon = Daemon::instance();
 
-        if(!daemon.mChain.load(false))
+        if(!daemon.mChain.load())
         {
             if(daemon.mStopRequested || daemon.mStopping)
                 return;
@@ -949,7 +945,7 @@ namespace BitCoin
 
             daemon.mChain.memPool().process(daemon.mInfo.memPoolThreshold);
 
-            if((getTime() - lastOutputsPurgeTime > 300 && daemon.mChain.outputs().needsPurge(daemon.mInfo.outputsThreshold)) ||
+            if((getTime() - lastOutputsPurgeTime > 30 && daemon.mChain.outputs().needsPurge(daemon.mInfo.outputsThreshold)) ||
               getTime() - lastOutputsPurgeTime > 3600)
             {
                 if(!daemon.mChain.outputs().save(daemon.mInfo.path()))

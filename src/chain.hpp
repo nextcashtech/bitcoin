@@ -26,14 +26,14 @@ namespace BitCoin
     class BlockInfo
     {
     public:
-        BlockInfo(const Hash &pHash, unsigned int pFileID, unsigned int pHeight)
+        BlockInfo(Hash *pHash, unsigned int pFileID, unsigned int pHeight)
         {
-            hash = pHash;
+            hash   = pHash;
             fileID = pFileID;
             height = pHeight;
         }
 
-        Hash hash;
+        Hash        *hash;
         unsigned int fileID;
         unsigned int height;
 
@@ -55,7 +55,7 @@ namespace BitCoin
         bool contains(const Hash &pHash) const
         {
             for(const_iterator info=begin();info!=end();++info)
-                if((*info)->hash == pHash)
+                if(*(*info)->hash == pHash)
                     return true;
             return false;
         }
@@ -65,6 +65,19 @@ namespace BitCoin
             for(iterator info=begin();info!=end();++info)
                 delete *info;
             std::list<BlockInfo *>::clear();
+        }
+
+        bool remove(const Hash &pHash)
+        {
+            for(iterator info=begin();info!=end();++info)
+                if(*(*info)->hash == pHash)
+                {
+                    delete *info;
+                    erase(info);
+                    return true;
+                }
+
+            return false;
         }
 
     private:
@@ -142,11 +155,6 @@ namespace BitCoin
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
 
-        enum HashStatus { ALREADY_HAVE, NEED_HEADER, NEED_BLOCK, BLACK_LISTED };
-
-        // Return the bitfield containing status of the specified block hash
-        HashStatus addPendingHash(const Hash &pHash, unsigned int pNodeID);
-
         TransactionOutputPool &outputs() { return mOutputs; }
         const BlockStats &blockStats() const { return mBlockStats; }
         const Forks &forks() const { return mForks; }
@@ -161,6 +169,9 @@ namespace BitCoin
         // Check if a header has been downloaded
         bool headerAvailable(const Hash &pHash);
 
+        // Branches
+        bool headerInBranch(const Hash &pHash);
+
         // Return true if a header request at the top of the chain is needed
         bool headersNeeded();
         // Return true if a block request is needed
@@ -172,8 +183,12 @@ namespace BitCoin
         unsigned int pendingBlockCount();
         // Bytes used by pending blocks
         unsigned int pendingSize();
-        // Add block header to queue to be requested and downloaded
-        bool addPendingHeader(Block *pBlock);
+
+        enum HashStatus { ALREADY_HAVE, NEED_HEADER, NEED_BLOCK, BLACK_LISTED };
+
+        // Return the status of the specified block hash
+        HashStatus addPendingHash(const Hash &pHash, unsigned int pNodeID);
+
         // Builds a list of blocks that need to be requested and marks them as requested by the node specified
         bool getBlocksNeeded(HashList &pHashes, unsigned int pCount, bool pReduceOnly);
         // Mark that download progress has increased for this block
@@ -189,7 +204,7 @@ namespace BitCoin
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
         bool getBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount);
         // Retrieve list of block hashes starting at top, going down and skipping around 100 between each.
-        void getReverseBlockHashes(HashList &pHashes, unsigned int pCount);
+        bool getReverseBlockHashes(HashList &pHashes, unsigned int pCount);
 
         // Retrieve block headers starting at a specific hash. (empty starting hash for first block)
         bool getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, const Hash &pStoppingHash, unsigned int pCount);
@@ -197,6 +212,7 @@ namespace BitCoin
         // Get block or hash at specific height
         bool getBlockHash(unsigned int pHeight, Hash &pHash);
         bool getBlock(unsigned int pHeight, Block &pBlock);
+        bool getHeader(unsigned int pHeight, Block &pBlockHeader);
 
         // Get the block or height for a specific hash
         int blockHeight(const Hash &pHash); // Returns -1 when hash is not found
@@ -205,7 +221,7 @@ namespace BitCoin
 
         // Load block data from file system
         //   If pList is true then all the block hashes will be output
-        bool load(bool pList, bool pPreCacheOutputs = true);
+        bool load(bool pPreCacheOutputs = true);
         bool save();
 
         // Process pending headers and blocks
@@ -228,6 +244,7 @@ namespace BitCoin
     private:
 
         TransactionOutputPool mOutputs;
+        HashList mBlockHashes;
         BlockSet mBlockLookup[0x10000];
 
         // Block headers for blocks not yet on chain
@@ -252,7 +269,10 @@ namespace BitCoin
         bool mAnnouncedAdded;
 
         bool processBlock(Block *pBlock);
-        //TODO Remove orphaned blocks //bool removeBlock(const Hash &pHash);
+
+        // Revert to a lower height
+        bool revert(int pHeight);
+        bool revertBlockFileHeight(int pHeight);
 
         static const unsigned int INVALID_FILE_ID = 0xffffffff;
         unsigned int blockFileID(const Hash &pHash);
@@ -273,6 +293,7 @@ namespace BitCoin
         Forks mForks;
         BlockStats mBlockStats;
         MemPool mMemPool;
+        uint64_t mAccumulatedProofOfWork;
 
         std::list<PendingHeaderData *> mPendingHeaders;
         HashList mBlocksToAnnounce;
@@ -282,6 +303,35 @@ namespace BitCoin
         std::vector<unsigned int> mBlackListedNodeIDs;
 
         void addBlackListedBlock(const Hash &pHash);
+
+        /* Branches
+         * When a valid header is seen that doesn't link to the top of the current chain it is
+         *   saved and built on.
+         * If it builds to more proof of work than the current chain before it gets too old then
+         *   revert the current chain to the height of the branch and apply the branch. Also, turn
+         *   the previous chain before above the branch into a branch in case it flips back and
+         *   forth.
+         */
+        class Branch
+        {
+        public:
+
+            Branch(unsigned int pHeight) { height = pHeight; }
+            ~Branch();
+
+            void addBlock(Block *pBlock)
+            {
+                pendingBlocks.push_back(new PendingBlockData(pBlock));
+            }
+
+            unsigned int height; // The chain height of the first block in the branch
+            std::list<PendingBlockData *> pendingBlocks;
+        };
+
+        std::vector<Branch *> mBranches;
+
+        // Check if a branch has more accumulated proof of work than the main chain
+        bool checkBranches();
 
         static Chain *sInstance;
 

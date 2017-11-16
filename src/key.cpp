@@ -115,7 +115,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Signature::verify(PublicKey &pPublicKey, Hash &pHash) const
+    bool Signature::verify(const PublicKey &pPublicKey, const Hash &pHash) const
     {
         if(!pPublicKey.isValid())
         {
@@ -263,14 +263,15 @@ namespace BitCoin
 
     bool Signature::read(ArcMist::InputStream *pStream, unsigned int pLength, bool pStrictECDSA_DER_Sigs)
     {
-        uint8_t input[pLength+2];
-        pStream->read(input, pLength-1);
+        uint8_t input[pLength + 2];
+        unsigned int totalLength = pLength - 1;
+
+        pStream->read(input, totalLength);
         mHashType = static_cast<Signature::HashType>(pStream->readByte());
 
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Signature Read");
 #endif
-        unsigned int totalLength = pLength;
 
         if(!pStrictECDSA_DER_Sigs)
         {
@@ -280,9 +281,9 @@ namespace BitCoin
             if(input[offset++] != 0x30) // Compound header byte
             {
                 ArcMist::String hex;
-                hex.writeHex(input, pLength);
+                hex.writeHex(input, totalLength);
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "Invalid compound header byte in signature (%d bytes) : %s", pLength, hex.text());
+                  "Invalid compound header byte in signature (%d bytes) : %s", totalLength, hex.text());
                 return false;
             }
 
@@ -292,8 +293,8 @@ namespace BitCoin
             {
                 if(input[offset] < totalLength - 2)
                 {
-                    ArcMist::String hex;
-                    hex.writeHex(input, pLength);
+                    // ArcMist::String hex;
+                    // hex.writeHex(input, totalLength);
                     // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
                       // "Adjusting parse length %d to match total length in signature %d + 2 (header byte and length byte) : %s",
                       // totalLength, input[offset], hex.text());
@@ -302,9 +303,9 @@ namespace BitCoin
                 else
                 {
                     ArcMist::String hex;
-                    hex.writeHex(input, pLength);
+                    hex.writeHex(input, totalLength);
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                      "Invalid total length byte in signature (%d bytes) : %s", pLength, hex.text());
+                      "Invalid total length byte in signature (%d bytes) : %s", totalLength, hex.text());
                     return false;
                 }
             }
@@ -315,9 +316,9 @@ namespace BitCoin
             if(input[offset++] != 0x02)
             {
                 ArcMist::String hex;
-                hex.writeHex(input, pLength);
+                hex.writeHex(input, totalLength);
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "Invalid R integer header byte in signature (%d bytes) : %s", pLength, hex.text());
+                  "Invalid R integer header byte in signature (%d bytes) : %s", totalLength, hex.text());
                 return false;
             }
 
@@ -326,18 +327,18 @@ namespace BitCoin
             if(subLength + offset > totalLength)
             {
                 ArcMist::String hex;
-                hex.writeHex(input, pLength);
+                hex.writeHex(input, totalLength);
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "R integer length byte too high in signature (%d bytes) : %s", pLength, hex.text());
+                  "R integer length byte too high in signature (%d bytes) : %s", totalLength, hex.text());
                 return false;
             }
 
             while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
             {
-                ArcMist::String hex;
-                hex.writeHex(input, pLength);
+                // ArcMist::String hex;
+                // hex.writeHex(input, totalLength);
                 // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-                  // "Removing extra leading zero byte in R value from signature (%d bytes) : %s", pLength, hex.text());
+                  // "Removing extra leading zero byte in R value from signature (%d bytes) : %s", totalLength, hex.text());
 
                 // Adjust lengths
                 input[offset-1]--;
@@ -352,10 +353,10 @@ namespace BitCoin
 
             if(input[offset] & 0x80)
             {
-                ArcMist::String hex;
-                hex.writeHex(input, pLength);
+                // ArcMist::String hex;
+                // hex.writeHex(input, totalLength);
                 // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-                  // "Adding required leading zero byte in R value to signature (%d bytes) : %s", pLength, hex.text());
+                  // "Adding required leading zero byte in R value to signature (%d bytes) : %s", totalLength, hex.text());
 
                 // Adjust lengths
                 input[offset-1]++;
@@ -375,9 +376,9 @@ namespace BitCoin
             if(input[offset++] != 0x02)
             {
                 ArcMist::String hex;
-                hex.writeHex(input, pLength);
+                hex.writeHex(input, totalLength);
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "Invalid S integer header byte in signature (%d bytes) : %s", pLength, hex.text());
+                  "Invalid S integer header byte in signature (%d bytes) : %s", totalLength, hex.text());
                 return false;
             }
 
@@ -386,18 +387,18 @@ namespace BitCoin
             if(subLength + offset > totalLength)
             {
                 ArcMist::String hex;
-                hex.writeHex(input, pLength);
+                hex.writeHex(input, totalLength);
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "S integer length byte too high in signature (%d bytes) : %s", pLength, hex.text());
+                  "S integer length byte too high in signature (%d bytes) : %s", totalLength, hex.text());
                 return false;
             }
 
             while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
             {
-                ArcMist::String hex;
-                hex.writeHex(input, pLength);
+                // ArcMist::String hex;
+                // hex.writeHex(input, totalLength);
                 // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-                  // "Removing extra leading zero byte in S value to signature (%d bytes) : %s", pLength, hex.text());
+                  // "Removing extra leading zero byte in S value to signature (%d bytes) : %s", totalLength, hex.text());
 
                 // Adjust lengths
                 input[offset-1]--;
@@ -412,10 +413,10 @@ namespace BitCoin
 
             if(input[offset] & 0x80)
             {
-                ArcMist::String hex;
-                hex.writeHex(input, pLength);
+                // ArcMist::String hex;
+                // hex.writeHex(input, totalLength);
                 // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-                  // "Adding required leading zero byte in S value from signature (%d bytes) : %s", pLength, hex.text());
+                  // "Adding required leading zero byte in S value from signature (%d bytes) : %s", totalLength, hex.text());
 
                 // Adjust lengths
                 input[offset-1]++;
@@ -435,7 +436,7 @@ namespace BitCoin
         if(secp256k1_ecdsa_signature_parse_der(mContext, (secp256k1_ecdsa_signature*)mData, input, totalLength))
             return true;
 
-        if(pLength == 64 && !pStrictECDSA_DER_Sigs)
+        if(totalLength == 64 && !pStrictECDSA_DER_Sigs)
         {
             if(secp256k1_ecdsa_signature_parse_compact(mContext, (secp256k1_ecdsa_signature*)mData, input))
                 return true;
@@ -447,9 +448,9 @@ namespace BitCoin
         }
 
         ArcMist::String hex;
-        hex.writeHex(input, pLength);
+        hex.writeHex(input, totalLength);
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-          "Failed to parse signature (%d bytes) : %s", pLength, hex.text());
+          "Failed to parse signature (%d bytes) : %s", totalLength, hex.text());
         return false;
     }
 

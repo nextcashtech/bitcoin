@@ -332,6 +332,9 @@ namespace BitCoin
 #ifdef PROFILER_ON
         ArcMist::Profiler outputsProfiler("Forks Process");
 #endif
+        if(pBlockHeight < 0)
+            return;
+
         unsigned int offset;
 
         if(mRequiredVersion < 4)

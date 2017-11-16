@@ -328,6 +328,13 @@ namespace BitCoin
             return true;
         }
 
+        // Consecutive zero bits at most significant endian
+        unsigned int leadingZeroBits() const;
+
+        // Consecutive zero bytes at most significant endian
+        unsigned int leadingZeroBytes() const;
+        uint64_t shiftBytesDown(unsigned int pByteShift) const;
+
         uint16_t lookup16() const
         {
             if(mSize < 2)
@@ -347,11 +354,8 @@ namespace BitCoin
         // Calculate the SipHash-2-4 "Short ID" and put it in pHash
         bool getShortID(Hash &pHash, const Hash &pHeaderHash);
 
-        void zeroize()
-        {
-            if(mSize > 0)
-                std::memset(mData, 0, mSize);
-        }
+        void zeroize() { if(mSize > 0) std::memset(mData, 0, mSize); }
+        void setMax() { if(mSize > 0) std::memset(mData, 0xff, mSize); }
 
         void randomize()
         {
@@ -458,10 +462,8 @@ namespace BitCoin
             std::vector<Hash *>::clear();
         }
 
-        void clearNoDelete()
-        {
-            std::vector<Hash *>::clear();
-        }
+        // Clear without deleting hashes (if they were reused by something else)
+        void clearNoDelete() { std::vector<Hash *>::clear(); }
 
         bool contains(const Hash &pHash) const
         {
@@ -494,6 +496,16 @@ namespace BitCoin
 
     // Integer value for target
     uint64_t targetValue(uint32_t pTargetBits);
+
+    //TODO This needs more research
+    /* Accumulates a relative difference between left and right "work" (similar to left - right)
+     * Set pDifference and pShift to zero before first call, then it will accumulate with each call.
+     * Work is simplified to be defined as 2 to the power of the leading zero count of the hash. Since
+     *   every zero is twice as hard to get as the previous.
+     * The values are shifted to keep them within a 64 bit value.
+     */
+    static const int64_t MAX_64_SIGN = 0x8fffffffffffffff;
+    bool accumulateWorkDifference(const Hash &pLeft, const Hash &pRight, int64_t &pDifference, unsigned int &pShift);
 
     enum Base58Type { PUBLIC_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY, TEST_PUBLIC_KEY_HASH, TEST_SCRIPT_HASH };
     ArcMist::String base58Encode(Base58Type pType, ArcMist::InputStream *pStream, unsigned int pSize);

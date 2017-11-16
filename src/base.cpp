@@ -151,6 +151,82 @@ namespace BitCoin
         return true;
     }
 
+    unsigned int Hash::leadingZeroBits() const
+    {
+        if(mSize == 0)
+            return 0;
+
+        unsigned int result = 0;
+        uint8_t *byte = mData + mSize - 1;
+
+        for(unsigned int i=0;i<mSize;++i,--byte)
+        {
+            if(*byte == 0)
+                result += 8;
+            else
+            {
+                for(int j=7;j>=0;--j)
+                {
+                    if(*byte >> j != 0)
+                        break;
+                    else
+                        ++result;
+                }
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    unsigned int leadingZeroBits(uint8_t pByte)
+    {
+        unsigned int result = 0;
+        for(int j=7;j>=0;--j)
+        {
+            if(pByte >> j != 0)
+                return result;
+            else
+                ++result;
+        }
+
+        return result;
+    }
+
+    unsigned int Hash::leadingZeroBytes() const
+    {
+        if(mSize == 0)
+            return 0;
+
+        unsigned int result = 0;
+        uint8_t *byte = mData + mSize - 1;
+        for(unsigned int i=0;i<mSize;++i,--byte)
+        {
+            if(*byte == 0)
+                ++result;
+            else
+                break;
+        }
+
+        return result;
+    }
+
+    uint64_t Hash::shiftBytesDown(unsigned int pByteShift) const
+    {
+        if(pByteShift >= mSize)
+            return 0;
+
+        // Get least significant byte of shifted value
+        uint8_t *byte = mData + mSize - pByteShift;
+        uint64_t result = 0;
+
+        // Add all available bytes to value
+        for(unsigned int i=0;i<8 && byte>=mData;++i,--byte)
+            result &= (uint64_t)*byte << (i * 8);
+
+        return result;
+    }
+
     // Set hash to highest possible value that is valid for a header hash proof of work
     void Hash::setDifficulty(uint32_t pBits)
     {
@@ -172,13 +248,6 @@ namespace BitCoin
         mData[length]   = (pBits >> 16) & 0xff;
         mData[length-1] = (pBits >> 8) & 0xff;
         mData[length-2] = pBits & 0xff;
-    }
-
-    uint64_t targetValue(uint32_t pTargetBits)
-    {
-        uint8_t length = (pTargetBits >> 24) & 0xff;
-        uint64_t value = pTargetBits & 0x00ffffff;
-        return value << length;
     }
 
     uint32_t multiplyTargetBits(uint32_t pTargetBits, double pFactor, uint32_t pMax)
@@ -259,6 +328,63 @@ namespace BitCoin
         uint32_t result = length << 24;
         result += value & 0x00ffffff;
         return result;
+    }
+
+    uint64_t targetValue(uint32_t pTargetBits)
+    {
+        uint8_t length = (pTargetBits >> 24) & 0xff;
+        uint64_t value = pTargetBits & 0x00ffffff;
+        return value << length;
+    }
+
+    bool accumulateWorkDifference(const Hash &pLeft, const Hash &pRight, int64_t &pDifference, unsigned int &pShift)
+    {
+        if(pLeft.size() != pRight.size())
+            return false;
+
+        if(pLeft == pRight)
+            return true; // No difference so nothing changes
+
+        unsigned int leftZeroes = pLeft.leadingZeroBits();
+        unsigned int rightZeroes = pRight.leadingZeroBits();
+        unsigned int newShift = pShift;
+
+        // Try to keep bits away from the top with the shift
+        if(leftZeroes - pShift > 60)
+            newShift = leftZeroes - pShift - 60;
+        if(rightZeroes - pShift > 60)
+            newShift = rightZeroes - pShift - 60;
+        if(newShift > pShift)
+        {
+            pDifference <<= (newShift - pShift);
+            pShift = newShift;
+        }
+
+        if(leftZeroes > pShift)
+            pDifference += (1 << (leftZeroes - pShift));
+        if(rightZeroes > pShift)
+            pDifference -= (1 << (rightZeroes - pShift));
+
+        // Check if value needs shifted
+        if(pDifference & 0x8000000000000000) // Negative
+        {
+            if((pDifference & 0x7800000000000000) != 0x7800000000000000) // One of top 4 non sign bits not set
+            {
+                pDifference ^= 0x8000000000000000; // Unset negative bit
+                pDifference >>= 4;
+                pShift += 4;
+                pDifference |= 0xF800000000000000; // Set negative bit and the next 4
+            }
+        }
+        else if(pDifference & 0x7800000000000000) // One of top 4 non sign bits set
+        {
+            pDifference >>= 4;
+            pShift += 4;
+        }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME, "Acc Diff : %lld", pDifference);
+
+        return true;
     }
 
     // Big endian (most significant bytes first, i.e. leading zeroes for block hashes)
@@ -866,6 +992,47 @@ namespace BitCoin
             else
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed hash compare greater than");
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Accumulate work difference
+             ***********************************************************************************************/
+            int64_t difference = 0;
+            unsigned int shift = 0;
+            leftHash.setHex("0000459f3a5cd13f");
+            rightHash.setHex("0000f79f3a5cd1f2");
+            accumulateWorkDifference(leftHash, rightHash, difference, shift);
+
+            if(difference == 65536)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed work diff 65536");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed work diff 65536 : %lld", difference);
+                success = false;
+            }
+
+            leftHash.setHex("0000f59f3a5cd13f");
+            rightHash.setHex("0000479f3a5cd1f2");
+            accumulateWorkDifference(leftHash, rightHash, difference, shift);
+
+            if(difference == 0)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed work diff 0");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed work diff 0 : %lld", difference);
+                success = false;
+            }
+
+            leftHash.setHex("0000f59f3a5cd13f");
+            rightHash.setHex("0000479f3a5cd1f2");
+            accumulateWorkDifference(leftHash, rightHash, difference, shift);
+
+            if(difference == -65536)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed work diff -65536");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed work diff -65536 : %lld", difference);
                 success = false;
             }
 

@@ -27,6 +27,15 @@ namespace BitCoin
     public:
 
         Outpoint() : transactionID(32) { index = 0xffffffff; output = NULL; signatureStatus = 0; }
+        Outpoint(const Outpoint &pCopy)
+        {
+            index = pCopy.index;
+            if(pCopy.output == NULL)
+                output = NULL;
+            else
+                output = new Output(*pCopy.output);
+            signatureStatus = pCopy.signatureStatus;
+        }
         ~Outpoint() { if(output != NULL) delete output; }
 
         void write(ArcMist::OutputStream *pStream);
@@ -43,7 +52,6 @@ namespace BitCoin
         uint8_t signatureStatus;
 
     private:
-        Outpoint(const Outpoint &pCopy);
         Outpoint &operator = (const Outpoint &pRight);
     };
 
@@ -56,6 +64,10 @@ namespace BitCoin
         static const uint32_t SEQUENCE_LOCKTIME_MASK = 0x0000ffff;
 
         Input() { sequence = 0xffffffff; }
+        Input(const Input &pCopy) : outpoint(pCopy.outpoint), script(pCopy.script)
+        {
+            sequence = pCopy.sequence;
+        }
 
         // Outpoint (32 trans id + 4 index), + 4 sequence, + script length size + script length
         unsigned int size() { return 40 + compactIntegerSize(script.length()) + script.length(); }
@@ -77,7 +89,6 @@ namespace BitCoin
         uint32_t sequence;
 
     private:
-        Input(const Input &pCopy);
         Input &operator = (const Input &pRight);
     };
 
@@ -114,6 +125,7 @@ namespace BitCoin
             mTime = getTime();
             mStatus = 0;
         }
+        Transaction(const Transaction &pCopy);
         ~Transaction();
 
         void write(ArcMist::OutputStream *pStream, bool pBlockFile = false);
@@ -233,7 +245,6 @@ namespace BitCoin
         bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
           ArcMist::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType);
 
-        Transaction(const Transaction &pCopy);
         Transaction &operator = (const Transaction &pRight);
 
     };

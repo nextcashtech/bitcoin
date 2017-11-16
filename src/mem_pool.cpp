@@ -185,7 +185,7 @@ namespace BitCoin
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
                   "Adding pending transaction (%d bytes) (%llu fee rate) : %s", (*transaction)->size(),
                   (*transaction)->feeRate(), (*transaction)->hash.hex().text());
-                if(insert(*transaction))
+                if(insert(*transaction, true))
                 {
                     mSize -= (*transaction)->size();
                     transaction = mPendingTransactions.erase(transaction);
@@ -242,7 +242,7 @@ namespace BitCoin
           pTransaction->hash.hex().text());
 
         mLock.writeLock("Add Insert");
-        bool success = insert(pTransaction);
+        bool success = insert(pTransaction, true);
         mLock.writeUnlock();
         return success;
     }
@@ -267,9 +267,35 @@ namespace BitCoin
         mLock.writeUnlock();
     }
 
-    bool MemPool::insert(Transaction *pTransaction)
+    void MemPool::revert(const std::vector<Transaction *> &pTransactions)
     {
-        mToAnnounce.push_back(new Hash(pTransaction->hash));
+        mLock.writeLock("Revert");
+        unsigned int previousSize = mSize;
+        unsigned int previousCount = mTransactions.size() + mPendingTransactions.size();
+        Transaction *newTransaction;
+        for(std::vector<Transaction *>::const_iterator transaction=pTransactions.begin()+1;transaction!=pTransactions.end();++transaction)
+        {
+            newTransaction = new Transaction(**transaction);
+            if(!insert(newTransaction, false))
+                delete newTransaction;
+        }
+        if((mTransactions.size() + mPendingTransactions.size()) == previousCount)
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Mem pool not increased reverting block. %d trans, %d KiB", mTransactions.size() + mPendingTransactions.size(),
+              mSize / 1024);
+        else
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Mem pool increased reverting block by %d trans, %d KiB, %d%% to %d trans, %d KiB",
+              (mTransactions.size() + mPendingTransactions.size()) - previousCount, (mSize - previousSize) / 1024,
+              (int)(((float)(mSize - previousSize) / (float)mSize) * 100.0f), mTransactions.size() + mPendingTransactions.size(),
+              mSize / 1024);
+        mLock.writeUnlock();
+    }
+
+    bool MemPool::insert(Transaction *pTransaction, bool pAnnounce)
+    {
+        if(pAnnounce)
+            mToAnnounce.push_back(new Hash(pTransaction->hash));
 
         // Remove from pending
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)

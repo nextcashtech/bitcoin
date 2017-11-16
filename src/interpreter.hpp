@@ -206,14 +206,16 @@ namespace BitCoin
         }
         ~ScriptInterpreter() { clear(); }
 
-        void setTransaction(Transaction *pTransaction);
-        void setInputOffset(unsigned int pOffset) { mInputOffset = pOffset; }
-        void setInputSequence(uint32_t pSequence) { mInputSequence = pSequence; }
-        void setOutputAmount(int64_t pOutputAmount) { mOutputAmount = pOutputAmount; }
+        void initialize(Transaction *pTransaction, unsigned int pOffset, uint32_t pSequence, int64_t pOutputAmount)
+        {
+            mTransaction = pTransaction;
+            mInputOffset = pOffset;
+            mInputSequence = pSequence;
+            mOutputAmount = pOutputAmount;
+        }
 
         // Process script
-        bool process(ArcMist::Buffer &pScript, bool pIsSignatureScript, int32_t pBlockVersion,
-          const Forks &pForks);
+        bool process(ArcMist::Buffer &pScript, int32_t pBlockVersion, const Forks &pForks);
 
         // No issues processing script
         bool isValid()
@@ -249,10 +251,7 @@ namespace BitCoin
                 return false; // Empty stack
         }
 
-        bool isStandard()
-        {
-            return mStandard;
-        }
+        bool isStandard() { return mStandard; }
 
         void clear()
         {
@@ -263,6 +262,7 @@ namespace BitCoin
             mInputOffset   = 0;
             mInputSequence = 0xffffffff;
             mOutputAmount  = 0;
+            mHash.clear();
 
             std::list<ArcMist::Buffer *>::iterator iter;
             for(iter=mStack.begin();iter!=mStack.end();++iter)
@@ -342,8 +342,8 @@ namespace BitCoin
         static bool arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue);
         static void arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue);
 
-        static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset, unsigned int pOutputAmount,
-          PublicKey &pPublicKey, Signature &pSignature, ArcMist::Buffer &pCurrentOutputScript,
+        static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset, uint64_t pOutputAmount,
+          const PublicKey &pPublicKey, const Signature &pSignature, ArcMist::Buffer &pCurrentOutputScript,
           unsigned int pSignatureStartOffset, const Forks &pForks);
 
         static bool test();
@@ -358,8 +358,6 @@ namespace BitCoin
         unsigned int mInputOffset;
         uint32_t mInputSequence;
         int64_t mOutputAmount;
-
-        void writeSigHashAllData(ArcMist::Buffer &pData, ArcMist::Buffer &pSubScript);
 
         std::list<ArcMist::Buffer *> mStack, mAltStack;
         std::list<bool> mIfStack, mAltIfStack;

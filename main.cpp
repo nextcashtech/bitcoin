@@ -146,7 +146,7 @@ int main(int pArgumentCount, char **pArguments)
         {
             BitCoin::Hash hash;
             BitCoin::Chain chain;
-            chain.load(false, false);
+            chain.load(false);
             ArcMist::Buffer buffer;
             buffer.writeHex(printBlock.text());
             hash.read(&buffer, 32);

@@ -55,7 +55,11 @@ namespace BitCoin
         bool add(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
           const Forks &pForks, uint64_t pMinFeeRate);
 
+        // Remove transactions that have been added to a block
         void remove(const std::vector<Transaction *> &pTransactions);
+
+        // Add transactions back in for a block that is being reverted
+        void revert(const std::vector<Transaction *> &pTransactions);
 
         Transaction *get(const Hash &pHash);
 
@@ -80,7 +84,7 @@ namespace BitCoin
 
     private:
 
-        bool insert(Transaction *pTransaction);
+        bool insert(Transaction *pTransaction, bool pAnnounce);
         bool remove(const Hash &pHash);
 
         // Drop the oldest/lowest fee rate transaction

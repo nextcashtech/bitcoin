@@ -29,6 +29,11 @@ namespace BitCoin
     public:
 
         Output() { blockFileOffset = 0; }
+        Output(const Output &pCopy) : script(pCopy.script)
+        {
+            amount = pCopy.amount;
+            blockFileOffset = pCopy.blockFileOffset;
+        }
 
         Output &operator = (const Output &pRight);
 
@@ -47,8 +52,6 @@ namespace BitCoin
         // Collected when reading/writing and used for output references
         unsigned int blockFileOffset;
 
-    private:
-        Output(const Output &pCopy);
     };
 
     // Reference to transaction output with information to get it quickly
@@ -160,6 +163,8 @@ namespace BitCoin
         }
 
         bool hasUnspentOutputs() const { return mOutputCount > 0 && spentOutputCount() < mOutputCount; }
+        // The highest block that spent this block. Returns MAX_BLOCK_HEIGHT if all outputs are not spent yet
+        unsigned int spentBlockHeight() const;
         unsigned int outputCount() const { return mOutputCount; }
         unsigned int spentOutputCount() const;
 
@@ -180,7 +185,7 @@ namespace BitCoin
         // Update block file offsets in outputs
         void commit(std::vector<Output *> &pOutputs);
 
-        // Unmark any outputs spent at specified block height
+        // Unmark any outputs spent above a specified block height
         bool revert(unsigned int pBlockHeight);
 
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::Level::VERBOSE);
@@ -191,17 +196,17 @@ namespace BitCoin
         bool markedDelete() const { return mFlags & DELETE_FLAG; }
         bool isModified() const { return mFlags & MODIFIED_FLAG; }
         bool isNew() const { return mFlags & NEW_FLAG; }
-        bool wasSpent() const { return mFlags & WAS_SPENT_FLAG; }
+        bool mightNeedIndexed() const { return mFlags & MIGHT_NEED_INDEXED; }
 
         void setDelete() { mFlags |= DELETE_FLAG; }
         void setModified() { mFlags |= MODIFIED_FLAG; }
         void setNew() { mFlags |= NEW_FLAG; }
-        void setWasSpent() { mFlags |= WAS_SPENT_FLAG; }
+        void setMightNeedIndexed() { mFlags |= MIGHT_NEED_INDEXED; }
 
         void clearDelete() { mFlags &= ~DELETE_FLAG; }
         void clearModified() { mFlags &= ~MODIFIED_FLAG; }
         void clearNew() { mFlags &= ~NEW_FLAG; }
-        void clearWasSpent() { mFlags &= ~WAS_SPENT_FLAG; }
+        void clearMightNeedIndexed() { mFlags &= ~MIGHT_NEED_INDEXED; }
         void clearFlags() { mFlags = 0; }
 
         Hash id; // Transaction Hash
@@ -217,10 +222,10 @@ namespace BitCoin
         unsigned int mOutputCount;
         OutputReference *mOutputs;
 
-        static const uint8_t DELETE_FLAG    = 0x01; // Transaction needs to be completely removed
-        static const uint8_t MODIFIED_FLAG  = 0x02; // Transaction has been modified since last save
-        static const uint8_t NEW_FLAG       = 0x04; // Transaction has never been saved
-        static const uint8_t WAS_SPENT_FLAG = 0x08; // Transaction was previously saved as spent and removed from unspent index
+        static const uint8_t NEW_FLAG           = 0x01; // Transaction has never been saved
+        static const uint8_t MODIFIED_FLAG      = 0x02; // Transaction has been modified since last save
+        static const uint8_t DELETE_FLAG        = 0x04; // Transaction needs to be completely removed
+        static const uint8_t MIGHT_NEED_INDEXED = 0x08; // Transaction was pulled from the file and might need added to the index
         uint8_t mFlags;
 
         TransactionReference(const TransactionReference &pCopy);
@@ -348,7 +353,8 @@ namespace BitCoin
         // Add block file offsets to "pending" outputs for a block
         void commit(TransactionReference *pReference, std::vector<Output *> &pOutputs);
 
-        // Remove pending adds and spends (Note: Only reverts changes not written to the file yet)
+        // Remove pending adds and spends above the specified block height
+        //   (Note: Only reverts changes not written to the file yet unless pHard is true)
         void revert(unsigned int pBlockHeight, bool pHard = false);
 
         // Pull all transactions from the file created at or after the specified block height
@@ -370,8 +376,9 @@ namespace BitCoin
               ((unsigned long long)mCacheOutputCount * (unsigned long long)OutputReference::SIZE);
         }
 
-        // pBlockHeight is the block height below which to drop transactions from memory
-        bool save(unsigned int pDropBlockHeight);
+        // pDropBlockHeight is the block height below which to drop transactions from memory
+        // pPurgeBlockHeight is the block height below which to drop spent transactions from the unspent pool
+        bool save(unsigned int pDropBlockHeight, unsigned int pPurgeBlockHeight);
         bool saveCache(unsigned int pBlockHeight);
 
         void clear();
@@ -445,8 +452,8 @@ namespace BitCoin
         // Returns false if one of the transaction IDs is currently unspent BIP-0030
         bool add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
 
-        // Find a spent transaction output
-        TransactionReference *findSpent(const Hash &pTransactionID, uint32_t pIndex);
+        // Find a transaction output
+        TransactionReference *find(const Hash &pTransactionID);
 
         // Mark an output as spent
         void spend(TransactionReference *pReference, unsigned int pIndex, unsigned int pBlockHeight);
@@ -454,8 +461,11 @@ namespace BitCoin
         // Add block file IDs and offsets to the outputs for a block (call after writing the block to the block file)
         bool commit(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
 
+        // Revert a specified block
+        bool revert(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
+
         // Reverts all blocks above a specified block height
-        bool revert(unsigned int pBlockHeight, bool pHard = false);
+        bool bulkRevert(unsigned int pBlockHeight, bool pHard = false);
 
         // Pull all transactions from the files created at or after the specified block height
         //   Returns count of transactions found
@@ -480,7 +490,7 @@ namespace BitCoin
         bool needsPurge(uint32_t pThreshold) const { return cachedSize() > pThreshold; }
 
         // Load from/Save to file system
-        bool load(unsigned int pCacheAge, bool pPreCache = true);
+        bool load(const char *pPath, unsigned int pCacheAge, bool pPreCache = true);
         bool purge(const char *pPath, unsigned int pThreshold);
         bool save(const char *pPath);
 

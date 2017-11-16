@@ -59,7 +59,7 @@ namespace BitCoin
         unsigned int blockHeight() { if(mVersionData == NULL) return 0; else return mVersionData->startBlockHeight; }
 
         bool waitingForRequests() { return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty(); }
-        bool requestHeaders(const Hash &pStartingHash);
+        bool requestHeaders();
         bool requestBlocks(HashList &pList);
         bool requestTransactions(HashList &pList);
         unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
