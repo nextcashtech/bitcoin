@@ -6,4 +6,12 @@ It currently uses Pieter Wuille's secp256k1 implementation. Copyright (c) 2013 P
 
 With it I hope to try performance improvements and to also add security to Bitcoin through more diverse implementations.
 
+Keep in mind it is still in early development and needs many performance improvements, code cleanup, and tests.
+
+Currently it can perform and IBD (Initial Block Download), validate and propagate transactions and blocks,
+and stay in sync with the Bitcoin Cash chain.
+
+There are many features yet to be added including SPV (Simplified Payment Verification) support, RPC (Remote Procedure Call),
+and indexing of addresses for balance/transaction lookups.
+
 Please feel free to send comments.
