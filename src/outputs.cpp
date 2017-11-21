@@ -2295,35 +2295,36 @@ namespace BitCoin
         TransactionReference *reference;
         OutputReference *outputReference;
         bool success = true;
-        for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin()+1;transaction!=pBlockTransactions.end();++transaction)
+        for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
         {
             // Unspend inputs
             for(input=(*transaction)->inputs.begin();input!=(*transaction)->inputs.end();++input)
-            {
-                reference = find((*input)->outpoint.transactionID);
-                if(reference == NULL)
+                if((*input)->outpoint.index != 0xffffffff) // Coinbase input has no outpoint transaction
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Transaction not found to revert spend : %s", (*input)->outpoint.transactionID.hex().text());
-                    success = false;
-                    break;
-                }
+                    reference = find((*input)->outpoint.transactionID);
+                    if(reference == NULL)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                          "Transaction not found to revert spend : %s", (*input)->outpoint.transactionID.hex().text());
+                        success = false;
+                        break;
+                    }
 
-                outputReference = reference->outputAt((*input)->outpoint.index);
-                if(outputReference == NULL)
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Transaction output not found to revert spend : index %d %s", (*input)->outpoint.index,
-                      (*input)->outpoint.transactionID.hex().text());
-                    success = false;
-                    break;
-                }
+                    outputReference = reference->outputAt((*input)->outpoint.index);
+                    if(outputReference == NULL)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                          "Transaction output not found to revert spend : index %d %s", (*input)->outpoint.index,
+                          (*input)->outpoint.transactionID.hex().text());
+                        success = false;
+                        break;
+                    }
 
-                outputReference->spentBlockHeight = 0;
-            }
+                    outputReference->spentBlockHeight = 0;
+                }
 
             // Remove transaction
-            reference = find((*input)->outpoint.transactionID);
+            reference = find((*transaction)->hash);
             if(reference == NULL)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,

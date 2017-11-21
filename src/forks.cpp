@@ -18,11 +18,15 @@
 
 #include <algorithm>
 
-#define BITCOIN_FORKS_LOG_NAME "BitCoin Forks"
-
 
 namespace BitCoin
 {
+    BlockStats::~BlockStats()
+    {
+        for(iterator stat=begin();stat!=end();++stat)
+            delete *stat;
+    }
+
     bool BlockStats::load()
     {
         ArcMist::String filePathName = Info::instance().path();
@@ -44,8 +48,15 @@ namespace BitCoin
             return false;
         }
 
-        resize(file.length() / sizeof(BlockStat));
-        file.read(data(), file.length());
+        BlockStat *newStat;
+        reserve(file.length() / BlockStat::SIZE);
+        while(file.remaining() > 0)
+        {
+            newStat = new BlockStat();
+            newStat->read(&file);
+            push_back(newStat);
+        }
+
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
           "Loaded block statistics at height %d", height());
         mIsValid = true;
@@ -71,7 +82,9 @@ namespace BitCoin
             return false;
         }
 
-        file.write(data(), size() * sizeof(BlockStat));
+        for(iterator stat=begin();stat!=end();++stat)
+            (*stat)->write(&file);
+
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_FORKS_LOG_NAME,
           "Saved block statistics at height %d", height());
         return true;
@@ -81,14 +94,22 @@ namespace BitCoin
     {
         if(pBlockHeight  >= size())
             return 0;
-        return at(pBlockHeight).time;
+        return at(pBlockHeight)->time;
     }
 
     uint32_t BlockStats::targetBits(unsigned int pBlockHeight) const
     {
         if(pBlockHeight >= size())
             return 0;
-        return at(pBlockHeight).targetBits;
+        return at(pBlockHeight)->targetBits;
+    }
+
+    const Hash &BlockStats::accumulatedWork(unsigned int pBlockHeight) const
+    {
+        static Hash zeroHash(32);
+        if(pBlockHeight >= size())
+            return zeroHash;
+        return at(pBlockHeight)->accumulatedWork;
     }
 
     uint32_t BlockStats::getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount) const
@@ -97,16 +118,54 @@ namespace BitCoin
             return 0;
 
         std::vector<uint32_t> times;
-        const BlockStat *stat = data() + pBlockHeight - pMedianCount;
-        const BlockStat *endStat = data() + pBlockHeight;
+        const_iterator stat = begin() + (pBlockHeight - pMedianCount);
+        const_iterator endStat = begin() + pBlockHeight;
         while(stat < endStat)
-            times.push_back(stat++->time);
+        {
+            times.push_back((*stat)->time);
+            ++stat;
+        }
 
         // Sort times
         std::sort(times.begin(), times.end());
 
         // Return the median time
         return times[pMedianCount / 2];
+    }
+
+    bool blockStatLessThan(const BlockStat *pLeft, const BlockStat *pRight)
+    {
+        return *pLeft < *pRight;
+    }
+
+    void BlockStats::getMedianPastTimeAndWork(unsigned int pBlockHeight, uint32_t &pTime, Hash &pAccumulatedWork,
+      unsigned int pMedianCount) const
+    {
+        std::vector<BlockStat *> values;
+        const_iterator stat = begin() + (pBlockHeight - pMedianCount + 1);
+        const_iterator endStat = begin() + (pBlockHeight + 1);
+        unsigned int statHeight = pBlockHeight - pMedianCount + 1;
+        while(stat < endStat)
+        {
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
+              // "Adding stat to median calculate height %d, time %d, diff 0x%08x, work %s", statHeight, (*stat)->time, (*stat)->targetBits,
+              // (*stat)->accumulatedWork.hex().text());
+            values.push_back(*stat);
+            ++stat;
+            ++statHeight;
+        }
+
+        // Sort
+        std::sort(values.begin(), values.end(), blockStatLessThan);
+
+        // for(std::vector<BlockStat *>::iterator item=values.begin();item!=values.end();++item)
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
+              // "Sorted stat median calculate time %d, work %s", (*item)->time, (*item)->accumulatedWork.hex().text());
+
+        pTime = values[pMedianCount / 2]->time;
+        pAccumulatedWork = values[pMedianCount / 2]->accumulatedWork;
+        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
+          // "Using median calculate time %d, work %s", pTime, pAccumulatedWork.hex().text());
     }
 
     void SoftFork::write(ArcMist::OutputStream *pStream)
@@ -336,6 +395,9 @@ namespace BitCoin
             return;
 
         unsigned int offset;
+        BlockStats::const_reverse_iterator topStat = pBlockStats.rbegin();
+
+        topStat -= (pBlockStats.height() - pBlockHeight);
 
         if(mRequiredVersion < 4)
         {
@@ -354,9 +416,9 @@ namespace BitCoin
             int version3OrHigherCount = 0;
             int version2OrHigherCount = 0;
             offset = 0;
-            for(const BlockStat *stat=pBlockStats.data()+pBlockHeight-1;stat!=pBlockStats.data()-1&&offset<totalCount;--stat,++offset)
+            for(BlockStats::const_reverse_iterator stat=topStat;stat!=pBlockStats.rend()&&offset<totalCount;++stat,++offset)
             {
-                switch(stat->version)
+                switch((*stat)->version)
                 {
                 default:
                 case 4:
@@ -498,9 +560,9 @@ namespace BitCoin
 
                         unsigned int support = 0;
                         offset = 0;
-                        for(const BlockStat *stat=pBlockStats.data()+pBlockHeight-1;stat!=pBlockStats.data()-1&&offset<RETARGET_PERIOD;--stat,++offset)
+                        for(BlockStats::const_reverse_iterator stat=topStat;stat!=pBlockStats.rend()&&offset<RETARGET_PERIOD;++stat,++offset)
                         {
-                            if((stat->version & 0xE0000000) == 0x20000000 && (stat->version >> (*softFork)->bit) & 0x01)
+                            if(((*stat)->version & 0xE0000000) == 0x20000000 && ((*stat)->version >> (*softFork)->bit) & 0x01)
                                 ++support;
                         }
 
@@ -542,14 +604,14 @@ namespace BitCoin
                 unknownSupport[i] = 0;
 
             offset = 0;
-            for(const BlockStat *stat=pBlockStats.data()+pBlockHeight-1;stat!=pBlockStats.data()-1&&offset<RETARGET_PERIOD;--stat,++offset)
+            for(BlockStats::const_reverse_iterator stat=topStat;stat!=pBlockStats.rend()&&offset<RETARGET_PERIOD;++stat,++offset)
             {
-                if((stat->version & 0xE0000000) != 0x20000000)
+                if(((*stat)->version & 0xE0000000) != 0x20000000)
                     continue;
-                if((stat->version | compositeValue) != compositeValue)
+                if(((*stat)->version | compositeValue) != compositeValue)
                 {
                     for(i=0;i<29;i++)
-                        if((stat->version & (0x01 << i)) && !(compositeValue & (0x01 << i)))
+                        if(((*stat)->version & (0x01 << i)) && !(compositeValue & (0x01 << i)))
                             ++unknownSupport[i]; // Bit set in version and not in composite
                 }
             }

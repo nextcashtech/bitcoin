@@ -227,27 +227,234 @@ namespace BitCoin
         return result;
     }
 
-    // Set hash to highest possible value that is valid for a header hash proof of work
-    void Hash::setDifficulty(uint32_t pBits)
+    Hash Hash::operator ~() const
     {
-        uint8_t length = ((pBits >> 24) & 0xff) - 1;
+        Hash result(mSize);
+        const uint8_t *byte = mData;
+        uint8_t *resultByte = result.mData;
+
+        for(unsigned int i=0;i<mSize;++i,++byte,++resultByte)
+            *resultByte = ~*byte;
+
+        return result;
+    }
+
+    Hash Hash::operator -() const
+    {
+        Hash result(*this);
+        const uint8_t *byte = mData;
+        uint8_t *resultByte = result.mData;
+
+        for(unsigned int i=0;i<mSize;++i,++byte,++resultByte)
+            *resultByte = ~*byte;
+
+        ++result;
+        return result;
+    }
+
+    Hash &Hash::operator ++()
+    {
+        // Prefix operator
+        unsigned int i = 0;
+        while(++mData[i] == 0 && i < mSize - 1)
+            ++i;
+        return *this;
+    }
+
+    Hash &Hash::operator --()
+    {
+        // Prefix operator
+        unsigned int i = 0;
+        while(--mData[i] == (uint8_t)-1 && i < mSize - 1)
+            ++i;
+        return *this;
+    }
+
+    Hash &Hash::operator +=(const Hash &pValue)
+    {
+        uint64_t carry = 0;
+        uint8_t *byte = mData;
+        const uint8_t *valueByte = pValue.mData;
+
+        if(pValue.mSize != mSize)
+            return *this; // Error
+
+        for(unsigned int i=0;i<mSize;++i,++byte,++valueByte)
+        {
+            uint64_t n = carry + *byte + *valueByte;
+            *byte = n & 0xff;
+            carry = n >> 8;
+        }
+
+        return *this;
+    }
+
+    Hash &Hash::operator *=(const Hash &pValue)
+    {
+        Hash copy = *this;
+        const uint8_t *valueByte;
+        const uint8_t *copyByte = copy.mData;
+
+        if(pValue.mSize != mSize)
+            return *this; // Error
+
+        zeroize();
+
+        for(unsigned int j=0;j<mSize;++j)
+        {
+            uint64_t carry = 0;
+            valueByte = pValue.mData;
+            for(int i=0;i+j<mSize;++i)
+            {
+                uint64_t n = (uint64_t)carry + (uint64_t)mData[i + j] + ((uint64_t)*copyByte * (uint64_t)*valueByte);
+                mData[i + j] = n & 0xff;
+                carry = n >> 8;
+                ++valueByte;
+            }
+            ++copyByte;
+        }
+
+        return *this;
+    }
+
+    Hash &Hash::operator /=(const Hash &pValue)
+    {
+        Hash div(pValue); // make a copy, so we can shift.
+        Hash num(*this); // make a copy, so we can subtract.
+
+        zeroize();
+
+        // The quotient.
+        int numBits = (mSize * 8) - num.leadingZeroBits();
+        int divBits = (mSize * 8) - div.leadingZeroBits();
+
+        if(divBits == 0)
+            return *this; // Divide by zero
+
+        if(divBits > numBits)
+            return *this; // The result is certainly zero
+
+        // Shift so that div and num align.
+        int shift = numBits - divBits;
+        div <<= shift;
+        while(shift >= 0)
+        {
+            if(num.compare(div) >= 0)
+            {
+                num -= div;
+                mData[shift / 8] |= (1 << (shift & 7)); // Set a bit of the result.
+            }
+
+            // Shift back.
+            div >>= 1;
+            shift--;
+        }
+        // num now contains the remainder of the division.
+
+        return *this;
+    }
+
+    Hash &Hash::operator <<=(unsigned int pShiftBits)
+    {
+        Hash copy(*this);
+        int offset = pShiftBits / 8;
+
+        pShiftBits = pShiftBits % 8;
+        zeroize();
+
+        for(unsigned int i=0;i<mSize;++i)
+        {
+            if(i + offset + 1 < mSize && pShiftBits != 0)
+                mData[i + offset + 1] |= (copy.mData[i] >> (8 - pShiftBits));
+            if(i + offset < mSize)
+                mData[i + offset] |= (copy.mData[i] << pShiftBits);
+        }
+
+        return *this;
+    }
+
+    Hash &Hash::operator >>=(unsigned int pShiftBits)
+    {
+        Hash copy(*this);
+        int offset = pShiftBits / 8;
+
+        pShiftBits = pShiftBits % 8;
+        zeroize();
+
+        for(unsigned int i=0;i<mSize;++i)
+        {
+            if((int)i - offset - 1 >= 0 && pShiftBits != 0)
+                mData[(int)i - offset - 1] |= (copy.mData[i] << (8 - pShiftBits));
+            if((int)i - offset >= 0)
+                mData[i - offset] |= (copy.mData[i] >> pShiftBits);
+        }
+
+        return *this;
+    }
+
+    void Hash::setDifficulty(uint32_t pTargetBits)
+    {
+        int length = ((pTargetBits >> 24) & 0xff) - 1;
 
         // Starts with zero so increase
-        if((pBits & 0x00ff0000) == 0)
+        if((pTargetBits & 0x00ff0000) == 0)
         {
             --length;
-            pBits <<= 8;
+            pTargetBits <<= 8;
         }
 
         setSize(32);
         zeroize();
 
-        if(length > 31)
-            return;
+        if(length >= 0 && length < 32)
+            mData[length] = (pTargetBits >> 16) & 0xff;
+        if(length - 1 >= 0 && length - 1 < 32)
+            mData[length-1] = (pTargetBits >> 8) & 0xff;
+        if(length - 2 >= 0 && length - 2 < 32)
+            mData[length-2] = pTargetBits & 0xff;
+    }
 
-        mData[length]   = (pBits >> 16) & 0xff;
-        mData[length-1] = (pBits >> 8) & 0xff;
-        mData[length-2] = pBits & 0xff;
+    void Hash::getDifficulty(uint32_t &pTargetBits, uint32_t pMax)
+    {
+        uint8_t length = mSize - leadingZeroBytes();
+        uint32_t value = 0;
+
+        for(int i=1;i<4;++i)
+        {
+            value <<= 8;
+            if((int)length - i < (int)mSize)
+                value += getByte(length - i);
+        }
+
+        // Apply maximum
+        uint8_t maxLength = (pMax >> 24) & 0xff;
+        uint32_t maxValue = pMax & 0x00ffffff;
+
+        if(maxLength < length || (maxLength == length && maxValue < value))
+        {
+            length = maxLength;
+            value = maxValue;
+        }
+
+        if(value & 0x00800000) // Pad with zero byte so it isn't negative
+        {
+            ++length;
+            value >>= 8;
+        }
+
+        pTargetBits = length << 24;
+        pTargetBits += value & 0x00ffffff;
+    }
+
+    void Hash::getWork(Hash &pWork) const
+    {
+        // We need to compute 2**256 / (bnTarget+1), but we can't represent 2**256
+        // as it's too large for a arith_uint256. However, as 2**256 is at least as
+        // large as bnTarget+1, it is equal to ((2**256 - bnTarget - 1) /
+        // (bnTarget+1)) + 1, or ~bnTarget / (bnTarget+1) + 1.
+        pWork = ~*this;
+        pWork /= (*this + 1);
+        ++pWork;
     }
 
     uint32_t multiplyTargetBits(uint32_t pTargetBits, double pFactor, uint32_t pMax)
@@ -335,56 +542,6 @@ namespace BitCoin
         uint8_t length = (pTargetBits >> 24) & 0xff;
         uint64_t value = pTargetBits & 0x00ffffff;
         return value << length;
-    }
-
-    bool accumulateWorkDifference(const Hash &pLeft, const Hash &pRight, int64_t &pDifference, unsigned int &pShift)
-    {
-        if(pLeft.size() != pRight.size())
-            return false;
-
-        if(pLeft == pRight)
-            return true; // No difference so nothing changes
-
-        unsigned int leftZeroes = pLeft.leadingZeroBits();
-        unsigned int rightZeroes = pRight.leadingZeroBits();
-        unsigned int newShift = pShift;
-
-        // Try to keep bits away from the top with the shift
-        if(leftZeroes - pShift > 60)
-            newShift = leftZeroes - pShift - 60;
-        if(rightZeroes - pShift > 60)
-            newShift = rightZeroes - pShift - 60;
-        if(newShift > pShift)
-        {
-            pDifference <<= (newShift - pShift);
-            pShift = newShift;
-        }
-
-        if(leftZeroes > pShift)
-            pDifference += (1 << (leftZeroes - pShift));
-        if(rightZeroes > pShift)
-            pDifference -= (1 << (rightZeroes - pShift));
-
-        // Check if value needs shifted
-        if(pDifference & 0x8000000000000000) // Negative
-        {
-            if((pDifference & 0x7800000000000000) != 0x7800000000000000) // One of top 4 non sign bits not set
-            {
-                pDifference ^= 0x8000000000000000; // Unset negative bit
-                pDifference >>= 4;
-                pShift += 4;
-                pDifference |= 0xF800000000000000; // Set negative bit and the next 4
-            }
-        }
-        else if(pDifference & 0x7800000000000000) // One of top 4 non sign bits set
-        {
-            pDifference >>= 4;
-            pShift += 4;
-        }
-
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME, "Acc Diff : %lld", pDifference);
-
-        return true;
     }
 
     // Big endian (most significant bytes first, i.e. leading zeroes for block hashes)
@@ -806,6 +963,49 @@ namespace BitCoin
             }
 
             /***********************************************************************************************
+             * Target Bits Encode 0x1b0404cb
+             ***********************************************************************************************/
+            testDifficulty.setDifficulty(0x1b0404cb);
+            uint32_t checkTargetBits;
+            testDifficulty.getDifficulty(checkTargetBits);
+
+            if(checkTargetBits == 0x1b0404cb)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Encode 0x1b0404cb");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Encode 0x1b0404cb : 0x%08x", checkTargetBits);
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Target Bits Encode 0x1d00ffff
+             ***********************************************************************************************/
+            testDifficulty.setDifficulty(0x1d00ffff);
+            testDifficulty.getDifficulty(checkTargetBits);
+
+            if(checkTargetBits == 0x1d00ffff)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Encode 0x1d00ffff");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Encode 0x1d00ffff : 0x%08x", checkTargetBits);
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Target Bits Encode 0x181bc330
+             ***********************************************************************************************/
+            testDifficulty.setDifficulty(0x181bc330);
+            testDifficulty.getDifficulty(checkTargetBits);
+
+            if(checkTargetBits == 0x181bc330)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Encode 0x181bc330");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Encode 0x181bc330 : 0x%08x", checkTargetBits);
+                success = false;
+            }
+
+            /***********************************************************************************************
              * Target Bits Check less than
              ***********************************************************************************************/
             testDifficulty.setDifficulty(486604799); //0x1d00ffff
@@ -996,43 +1196,231 @@ namespace BitCoin
             }
 
             /***********************************************************************************************
-             * Accumulate work difference
+             * Add Hash
              ***********************************************************************************************/
-            int64_t difference = 0;
-            unsigned int shift = 0;
-            leftHash.setHex("0000459f3a5cd13f");
-            rightHash.setHex("0000f79f3a5cd1f2");
-            accumulateWorkDifference(leftHash, rightHash, difference, shift);
+            Hash a(32, 5);
+            Hash b(32, 1000);
+            Hash answer(32, 1005);
 
-            if(difference == 65536)
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed work diff 65536");
+            a += b;
+            if(a == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed add assign hash 1005");
             else
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed work diff 65536 : %lld", difference);
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed add assign hash 1005 : %s",
+                  a.hex().text());
                 success = false;
             }
 
-            leftHash.setHex("0000f59f3a5cd13f");
-            rightHash.setHex("0000479f3a5cd1f2");
-            accumulateWorkDifference(leftHash, rightHash, difference, shift);
-
-            if(difference == 0)
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed work diff 0");
+            a = 5;
+            if(a + b == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed add hash 1005");
             else
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed work diff 0 : %lld", difference);
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed add hash 1005 : %s",
+                  (a + b).hex().text());
                 success = false;
             }
 
-            leftHash.setHex("0000f59f3a5cd13f");
-            rightHash.setHex("0000479f3a5cd1f2");
-            accumulateWorkDifference(leftHash, rightHash, difference, shift);
-
-            if(difference == -65536)
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed work diff -65536");
+            a = 1005;
+            answer = 1010;
+            if(a + 5 == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed add hash 1010");
             else
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed work diff -65536 : %lld", difference);
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed add hash 1010 : %s",
+                  (a + 5).hex().text());
+                success = false;
+            }
+
+            a = 16589;
+            answer = 16590;
+            ++a;
+            if(a == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed increment");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed increment : %s",
+                  a.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Subtract Hash
+             ***********************************************************************************************/
+            a = 1000;
+            b = 5;
+            a -= b;
+            answer = 995;
+            if(a == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed subtract assign hash 995");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed subtract assign hash 995 : %s",
+                  a.hex().text());
+                success = false;
+            }
+
+            a = 1000;
+            if(a - b == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed subtract hash 995");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed subtract hash 995 : %s",
+                  (a - b).hex().text());
+                success = false;
+            }
+
+            a = 16589;
+            answer = 16588;
+            --a;
+            if(a == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed decrement");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed decrement : %s",
+                  a.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Assign negative Hash
+             ***********************************************************************************************/
+            a = -1;
+            answer.setHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+            if(a == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed assign negative");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed assign negative : %s",
+                  a.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Multiply Hash
+             ***********************************************************************************************/
+            a = 100000;
+            b = 1000;
+            answer = 100000000;
+            a *= b;
+            if(a == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed multiply assign 100000000");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed multiply assign 100000000 : %s",
+                  a.hex().text());
+                success = false;
+            }
+
+            a = 100000;
+            a *= 1000;
+            if(a == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed multiply assign int 100000000");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed multiply assign int 100000000 : %s",
+                  a.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Divide Hash
+             ***********************************************************************************************/
+            a = 100000;
+            b = 1000;
+            answer = 100;
+            a /= b;
+            if(a == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed divide assign 100");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed divide assign 100 : %s",
+                  a.hex().text());
+                success = false;
+            }
+
+            a = 100000;
+            a /= 1000;
+            if(a == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed divide assign int 100");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed divide assign int 100 : %s",
+                  a.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Negate Hash
+             ***********************************************************************************************/
+            a.setHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+            b = -a;
+            answer = 1;
+            if(b == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed negate -1 hash");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed negate -1 hash : %s",
+                  b.hex().text());
+                success = false;
+            }
+
+            a.setHex("0000000000000000000000000000000000000000000000000000000000000001");
+            b = -a;
+            answer.setHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+            if(b == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed negate 1 hash");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed negate 1 hash : %s",
+                  b.hex().text());
+                success = false;
+            }
+
+            a = 1950;
+            b = -a;
+            answer.setHex("fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff862");
+            if(b == answer)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed negate 1950 hash");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed negate 1950 hash : %s",
+                  b.hex().text());
+                success = false;
+            }
+
+            /***********************************************************************************************
+             * Hash work
+             ***********************************************************************************************/
+            Hash proofHash("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+            Hash workHash;
+            Hash answerHash("0000000000000000000000000000000000000000000000000000000000000001");
+            for(int i=0;i<8;++i)
+            {
+                proofHash.setByte(31, 0xff >> i);
+                proofHash.getWork(workHash);
+                if(workHash == answerHash)
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME,
+                      "Passed hash work %d zeroes", i);
+                else
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME,
+                      "Failed hash work %d zeroes : %s", i, workHash.hex().text());
+                    success = false;
+                }
+                answerHash <<= 1;
+            }
+
+            proofHash.setHex("0001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+            answerHash.setHex("0000000000000000000000000000000000000000000000000000000000008000");
+            proofHash.getWork(workHash);
+            if(workHash == answerHash)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed hash work 0001");
+            else
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed hash work 0001 : %s",
+                  workHash.hex().text());
                 success = false;
             }
 

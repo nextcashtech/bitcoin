@@ -40,6 +40,7 @@ namespace BitCoin
         mAnnounceBlock = NULL;
         mAccumulatedProofOfWork = 0;
         mBlockHashes.reserve(2048);
+        mPendingAccumulatedWork.setSize(32);
     }
 
     Chain::~Chain()
@@ -74,31 +75,102 @@ namespace BitCoin
         }
         else if(mBlockStats.height() % RETARGET_PERIOD != 0)
         {
-            if(mForks.cashActive() && mBlockStats.height() > 7)
+            if(mForks.cashActive())
             {
-                // Bitcoin Cash EDA (Emergency Difficulty Adjustment)
-                uint32_t mptDiff = mBlockStats.getMedianPastTime(mBlockStats.height()) -
-                  mBlockStats.getMedianPastTime(mBlockStats.height() - 6);
-
-                // If more than 12 hours on the last 6 blocks then reduce difficulty by 20%
-                if(mptDiff >= 43200)
+                if(mBlockStats.getMedianPastTime(mBlockStats.height()) > 1510600000)
                 {
-                    lastTargetBits = mBlockStats.targetBits(mBlockStats.height() - 1);
-                    adjustFactor = 1.25;
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                      "EDA increasing target bits 0x%08x by a factor of %f to reduce difficulty by %.02f%%", lastTargetBits,
-                      adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
+                    if(mBlockStats.height() > 146)
+                    {
+                        // Nov 13th Bitcoin Cash Hard Fork DAA
+                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                          // "Using cash DAA for block height %d", mBlockStats.height());
 
-                    // Treat targetValue as a 256 bit number and multiply it by adjustFactor
-                    mTargetBits = multiplyTargetBits(lastTargetBits, adjustFactor, mMaxTargetBits);
+                        // Get first and last block times and accumulated work
+                        uint32_t lastTime, firstTime;
+                        Hash lastWork, firstWork;
 
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                      "EDA new target bits for block height %d : 0x%08x", mBlockStats.height(), mTargetBits);
+                        mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 1, lastTime, lastWork, 3);
+                        mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 145, firstTime, firstWork, 3);
+
+                        uint32_t timeSpan = lastTime - firstTime;
+                        // ArcMist::String timeText;
+
+                        // timeText.writeFormattedTime(firstTime);
+                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                          // "First time : %d (%s)", firstTime, timeText.text());
+                        // timeText.writeFormattedTime(lastTime);
+                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                          // "Last time  : %d (%s)", lastTime, timeText.text());
+                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                          // "Time Span : %d", timeSpan);
+
+                        // Apply limits
+                        if(timeSpan < 72 * 600)
+                            timeSpan = 72 * 600;
+                        else if(timeSpan > 288 * 600)
+                            timeSpan = 288 * 600;
+
+                        // Let the Work Performed (W) be equal to the difference in chainwork[3] between B_last and B_first.
+                        Hash work = lastWork - firstWork;
+
+                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                          // "First work : %s", firstWork.hex().text());
+                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                          // "Last work  : %s", lastWork.hex().text());
+                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                          // "Work       : %s", work.hex().text());
+
+                        // Let the Projected Work (PW) be equal to (W * 600) / TS.
+                        work *= 600;
+                        work /= timeSpan;
+
+                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                          // "Proj Work  : %s", work.hex().text());
+
+                        // Let Target (T) be equal to the (2^256 - PW) / PW. This is calculated by
+                        //   taking the two’s complement of PW (-PW) and dividing it by PW (-PW / PW).
+                        Hash target = (-work) / work;
+
+                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                          // "Target     : %s", target.hex().text());
+
+                        // The target difficulty for block B_n+1 is then equal to the lesser of T and
+                        //   0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                        static Hash sMaxTarget("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+                        if(target > sMaxTarget)
+                            sMaxTarget.getDifficulty(mTargetBits, mMaxTargetBits);
+                        else
+                            target.getDifficulty(mTargetBits, mMaxTargetBits);
+
+                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                          // "Target Bits : 0x%08x", mTargetBits);
+                    }
                 }
-                return true;
+                else if(mBlockStats.height() > 7)
+                {
+                    // Bitcoin Cash EDA (Emergency Difficulty Adjustment)
+                    uint32_t mptDiff = mBlockStats.getMedianPastTime(mBlockStats.height()) -
+                      mBlockStats.getMedianPastTime(mBlockStats.height() - 6);
+
+                    // If more than 12 hours on the last 6 blocks then reduce difficulty by 20%
+                    if(mptDiff >= 43200)
+                    {
+                        lastTargetBits = mBlockStats.targetBits(mBlockStats.height() - 1);
+                        adjustFactor = 1.25;
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                          "EDA increasing target bits 0x%08x by a factor of %f to reduce difficulty by %.02f%%", lastTargetBits,
+                          adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
+
+                        // Treat targetValue as a 256 bit number and multiply it by adjustFactor
+                        mTargetBits = multiplyTargetBits(lastTargetBits, adjustFactor, mMaxTargetBits);
+
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                          "EDA new target bits for block height %d : 0x%08x", mBlockStats.height(), mTargetBits);
+                    }
+                }
             }
-            else
-                return true;
+
+            return true;
         }
 
         uint32_t lastBlockTime      = mBlockStats.time(mBlockStats.height() - 1);
@@ -357,108 +429,43 @@ namespace BitCoin
         }
 
         // Check each branch to see if it has more "work" than the main chain
-        std::vector<unsigned int> longerBranchOffsets;
-        unsigned int branchOffset = 0;
-        int mainHeight;
-        Hash mainHash(32), branchHash(32);
-        int64_t difference;
-        unsigned int shift;
-        std::list<PendingBlockData *>::iterator branchPending;
+        Branch *longestBranch = NULL;
         for(std::vector<Branch *>::iterator branch=mBranches.begin();branch!=mBranches.end();)
         {
-            // Loop through the blocks side by side accumulating a difference in "work" as it goes
-            //   If the difference is negative then the branch is longer.
-            mainHeight = (*branch)->height;
-            difference = 0;
-            shift = 0;
-            branchPending = (*branch)->pendingBlocks.begin();
-
-            // Loop until reaching the end of both or one is done and less than the other
-            while(mainHeight <= height() || branchPending != (*branch)->pendingBlocks.end())
+            if((*branch)->accumulatedWork < pendingAccumulatedWork())
             {
-                if(mainHeight <= height())
+                if(height() > 100 &&
+                  (*branch)->height + (*branch)->pendingBlocks.size() < (unsigned int)height() - 100)
                 {
-                    if(!getBlockHash(mainHeight, mainHash))
-                    {
-                        mPendingLock.writeUnlock();
-                        return false;
-                    }
-                    ++mainHeight;
+                    // Drop branches that are 100 blocks behind the main chain
+                    delete *branch;
+                    branch = mBranches.erase(branch);
+                    continue;
                 }
-                else
-                    mainHash.setMax();
-
-                if(branchPending != (*branch)->pendingBlocks.end())
-                {
-                    branchHash = (*branchPending)->block->hash;
-                    ++branchPending;
-                }
-                else
-                    branchHash.setMax();
-
-                //TODO Fix issues that happen when on hash is "max" or zero difficulty.
-                //  Maybe add some sort of overflow when the difference exceeds the 64 bit capacity.
-
-                // Calculate the accumulated difference
-                accumulateWorkDifference(mainHash, branchHash, difference, shift);
-
-                if(mainHeight > height() && difference > 0)
-                    break;
-
-                if(branchPending == (*branch)->pendingBlocks.end() && difference < 0)
-                    break;
             }
+            else if(longestBranch == NULL || (*branch)->accumulatedWork > longestBranch->accumulatedWork)
+                longestBranch = *branch;
 
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-              "Branch difference : %08x%08x (%lld)", difference >> 32, difference & 0xffffffff, difference);
-
-            // Positive difference means the branch is longer (comparable to main chain - branch)
-            if(difference > 0)
-            {
-                longerBranchOffsets.push_back(branchOffset);
-                ++branch;
-                ++branchOffset;
-            }
-            else if(height() > 100 &&
-              (*branch)->height + (*branch)->pendingBlocks.size() < (unsigned int)height() - 100)
-            {
-                // Drop branches that are 100 blocks behind the main chain
-                delete *branch;
-                branch = mBranches.erase(branch);
-            }
-            else
-            {
-                ++branch;
-                ++branchOffset;
-            }
+            ++branch;
         }
 
-        if(longerBranchOffsets.size() == 0)
+        if(longestBranch == NULL)
         {
             mPendingLock.writeUnlock();
             return true;
         }
 
-        //TODO Compare between branches until only the longest remains (this will probably never happen).
-        // while(longerBranchOffsets.size() > 1)
-        // {
-
-        // }
-
         // Swap the branch with the most "work" for the main chain.
-        // Branch to be activated
-        Branch *branchToActivate = mBranches[longerBranchOffsets.front()];
-
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-          "Activating branch %d at height %d", longerBranchOffsets.front(), branchToActivate->height);
+          "Activating branch at height %d", longestBranch->height);
 
         // Currently main chain (save in case it switches back)
-        Branch *newBranch = new Branch(branchToActivate->height);
+        Branch *newBranch = new Branch(longestBranch->height, mBlockStats.accumulatedWork(longestBranch->height - 1));
 
         // Read all main chain blocks above branch height and put them in a branch.
         int currentHeight = height();
         Block *block;
-        for(int i=branchToActivate->height;i<currentHeight;++i)
+        for(int i=longestBranch->height;i<currentHeight;++i)
         {
             block = new Block();
             getBlock(i, *block);
@@ -479,16 +486,20 @@ namespace BitCoin
         mLastFullPendingOffset = 0;
         mPendingBlockCount = 0;
         mLastPendingHash.clear();
+        mPendingAccumulatedWork = accumulatedWork();
 
         // Revert the main chain to the before branch height.
-        revert(branchToActivate->height - 1);
+        revert(longestBranch->height - 1);
 
         // Put all the branch pending blocks into the main pending blocks.
         //    Then normal processing will complete and process them.
         unsigned int offset = 0;
-        for(std::list<PendingBlockData *>::iterator pending=branchToActivate->pendingBlocks.begin();pending!=branchToActivate->pendingBlocks.end();++pending)
+        Hash work(32);
+        for(std::list<PendingBlockData *>::iterator pending=longestBranch->pendingBlocks.begin();pending!=longestBranch->pendingBlocks.end();++pending)
         {
             mPendingBlocks.push_back(*pending);
+            (*pending)->block->hash.getWork(work);
+            mPendingAccumulatedWork += work;
             mPendingSize += (*pending)->block->size();
             if((*pending)->isFull())
             {
@@ -497,11 +508,16 @@ namespace BitCoin
             }
             ++offset;
         }
-        branchToActivate->pendingBlocks.clear(); // No deletes necessary since they were reused
+        longestBranch->pendingBlocks.clear(); // No deletes necessary since they were reused
 
         // Delete the branch
-        delete branchToActivate;
-        mBranches.erase(mBranches.begin() + longerBranchOffsets.front());
+        for(std::vector<Branch *>::iterator branch=mBranches.begin();branch!=mBranches.end();++branch)
+            if(*branch == longestBranch)
+            {
+                mBranches.erase(branch);
+                delete longestBranch;
+                break;
+            }
 
         // Add the new branch
         mBranches.push_back(newBranch);
@@ -630,6 +646,9 @@ namespace BitCoin
         {
             // Add to main pending list
             mPendingBlocks.push_back(new PendingBlockData(pBlock));
+            Hash work(32);
+            pBlock->hash.getWork(work);
+            mPendingAccumulatedWork += work;
             mLastPendingHash = pBlock->hash;
             mPendingSize += pBlock->size();
             added = true;
@@ -704,7 +723,7 @@ namespace BitCoin
                 {
                     added = true;
                     branchesUpdated = true;
-                    Branch *newBranch = new Branch(height() + offset + 1 + 1);
+                    Branch *newBranch = new Branch(height() + offset + 1 + 1, mBlockStats.accumulatedWork(height() + offset + 1));
                     newBranch->addBlock(pBlock);
                     mBranches.push_back(newBranch);
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
@@ -739,7 +758,7 @@ namespace BitCoin
                 {
                     added = true;
                     branchesUpdated = true;
-                    Branch *newBranch = new Branch(chainHeight + 1);
+                    Branch *newBranch = new Branch(chainHeight + 1, mBlockStats.accumulatedWork(chainHeight));
                     newBranch->addBlock(pBlock);
                     mBranches.push_back(newBranch);
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
@@ -841,7 +860,9 @@ namespace BitCoin
         mPendingBlocks.clear();
         mPendingSize = 0;
         mPendingBlockCount = 0;
+        mPendingAccumulatedWork = accumulatedWork();
         unsigned int offset = 0;
+        Hash work(32);
 
         // Read pending blocks/headers from file
         while(file.remaining())
@@ -859,6 +880,8 @@ namespace BitCoin
                 if(newBlock->transactionCount > 0)
                     mPendingBlockCount++;
                 mPendingBlocks.push_back(new PendingBlockData(newBlock));
+                newBlock->hash.getWork(work);
+                mPendingAccumulatedWork += work;
                 if(mPendingBlocks.back()->isFull())
                     mLastFullPendingOffset = offset;
                 ++offset;
@@ -879,13 +902,14 @@ namespace BitCoin
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to load pending blocks/headers from the file system");
-            // Clear all pending that was read because it may be invalid
+            // Clear all pending that were read because they may be invalid
             for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
                 delete *pending;
             mPendingBlocks.clear();
             mPendingSize = 0;
             mPendingBlockCount = 0;
             mLastFullPendingOffset = 0;
+            mPendingAccumulatedWork = accumulatedWork();
         }
 
         mPendingLock.writeUnlock();
@@ -971,7 +995,7 @@ namespace BitCoin
         mProcessMutex.lock();
 
         mBlockProcessStartTime = getTime();
-        mBlockStats.push_back(BlockStat(pBlock->version, pBlock->time, pBlock->targetBits));
+        mBlockStats.add(pBlock->version, pBlock->time, pBlock->targetBits);
         uint32_t previousTargetBits = mTargetBits;
 
         // Check target bits
@@ -991,8 +1015,13 @@ namespace BitCoin
                   "Block target bits don't match chain's current target bits : chain %08x != block %08x",
                   mTargetBits, pBlock->targetBits);
                 mTargetBits = previousTargetBits;
-                mBlockStats.revert(mNextBlockHeight);
+                mBlockStats.revert(mNextBlockHeight - 1);
                 mProcessMutex.unlock();
+
+                //TODO Remove
+                // Write to temp file
+                ArcMist::FileOutputStream file(pBlock->hash.hex().text(), true);
+                pBlock->write(&file, true, true, true);
                 return false;
             }
         }
@@ -1003,8 +1032,9 @@ namespace BitCoin
         if(!pBlock->process(mOutputs, mNextBlockHeight, mBlockStats, mForks))
         {
             mOutputs.revert(pBlock->transactions, mNextBlockHeight);
-            mForks.revert(mBlockStats, mNextBlockHeight);
-            mBlockStats.revert(mNextBlockHeight);
+            mForks.revert(mBlockStats, mNextBlockHeight - 1);
+            mBlockStats.revert(mNextBlockHeight - 1);
+            mTargetBits = previousTargetBits;
             mProcessMutex.unlock();
 
             //TODO Remove
@@ -1072,8 +1102,9 @@ namespace BitCoin
               "Failed to commit transaction outputs to pool");
             mMemPool.revert(pBlock->transactions);
             mOutputs.revert(pBlock->transactions, mNextBlockHeight);
-            mForks.revert(mBlockStats, mNextBlockHeight);
-            mBlockStats.revert(mNextBlockHeight);
+            mForks.revert(mBlockStats, mNextBlockHeight - 1);
+            mBlockStats.revert(mNextBlockHeight - 1);
+            mTargetBits = previousTargetBits;
             mProcessMutex.unlock();
             return false;
         }
@@ -1097,8 +1128,9 @@ namespace BitCoin
         else
         {
             mMemPool.revert(pBlock->transactions);
-            mForks.revert(mBlockStats, mNextBlockHeight);
-            mBlockStats.revert(mNextBlockHeight);
+            mForks.revert(mBlockStats, mNextBlockHeight - 1);
+            mBlockStats.revert(mNextBlockHeight - 1);
+            mTargetBits = previousTargetBits;
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
               "Failed to add block to file %08x : %s", mLastFileID, pBlock->hash.hex().text());
         }
@@ -1291,6 +1323,7 @@ namespace BitCoin
                 mPendingSize = 0;
                 mPendingBlockCount = 0;
                 mPendingLock.writeUnlock();
+                mPendingAccumulatedWork = accumulatedWork();
             // }
 
             checkBranches(); // Possibly switch to a branch that is valid
@@ -1745,9 +1778,15 @@ namespace BitCoin
         if(success)
         {
             if(mBlockStats.height() > 0)
+            {
                 mTargetBits = mBlockStats.targetBits(mBlockStats.height());
+                mPendingAccumulatedWork = accumulatedWork();
+            }
             else
+            {
                 mTargetBits = mMaxTargetBits;
+                mPendingAccumulatedWork.zeroize();
+            }
         }
 
         if(mStop)
@@ -1875,7 +1914,7 @@ namespace BitCoin
                     }
 
                     useTestMinDifficulty = network() == TESTNET && block.time - mBlockStats.time(mBlockStats.height() - 1) > 1200;
-                    mBlockStats.push_back(BlockStat(block.version, block.time, block.targetBits));
+                    mBlockStats.add(block.version, block.time, block.targetBits);
                     updateTargetBits();
                     mForks.process(mBlockStats, height);
                     if(mTargetBits != block.targetBits)
@@ -2197,7 +2236,7 @@ namespace BitCoin
         // // outputs.convert(Info::instance().path());
         // // outputs.save(Info::instance().path());
 
-        // ArcMist::FileInputStream file("000000000000000000d0053d59c4b45864a3cdac2b80b0df8e2b421a131134aa");
+        // ArcMist::FileInputStream file("00000000000000000343e9875012f2062554c8752929892c82a0c0743ac7dcfd");
         // Block block;
 
         // // BlockFile::readBlock(386340, block);
@@ -2210,7 +2249,7 @@ namespace BitCoin
 
         // // block.print(ArcMist::Log::VERBOSE, true);
 
-        // if(block.process(chain.outputs(), chain.outputs().height() + 1, chain.blockStats(), chain.forks()))
+        // if(chain.processBlock(&block))
             // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Passed block");
         // else
             // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed block");

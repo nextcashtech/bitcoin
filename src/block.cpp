@@ -905,7 +905,7 @@ namespace BitCoin
                 return true;
 
             // Save location of next block
-            previousOffset = mInputFile->readOffset() + 32; // Add 32 to skip header hash
+            previousOffset = mInputFile->readOffset() + 32;
 
             // Go to location of block in file
             mInputFile->setReadOffset(blockOffset);
@@ -915,7 +915,7 @@ namespace BitCoin
             mInputFile->setReadOffset(mInputFile->readOffset() + 64); // Skip previous and merkle hashes
             time = mInputFile->readUnsignedInt();
             targetBits = mInputFile->readUnsignedInt();
-            pStats.push_back(BlockStat(version, time, targetBits));
+            pStats.add(version, time, targetBits);
 
             // Go back to header in file
             mInputFile->setReadOffset(previousOffset);

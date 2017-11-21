@@ -154,6 +154,8 @@ namespace BitCoin
         unsigned int pendingChainHeight() const { return mNextBlockHeight - 1 + mPendingBlocks.size(); }
         const Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
+        const Hash &accumulatedWork() { return mBlockStats.accumulatedWork(mBlockStats.height()); }
+        const Hash &pendingAccumulatedWork() { return mPendingAccumulatedWork; }
 
         TransactionOutputPool &outputs() { return mOutputs; }
         const BlockStats &blockStats() const { return mBlockStats; }
@@ -250,7 +252,7 @@ namespace BitCoin
         // Block headers for blocks not yet on chain
         ArcMist::ReadersLock mPendingLock;
         std::list<PendingBlockData *> mPendingBlocks;
-        Hash mLastPendingHash;
+        Hash mLastPendingHash, mPendingAccumulatedWork;
         unsigned int mPendingSize, mPendingBlockCount, mLastFullPendingOffset;
         uint32_t mBlockProcessStartTime;
 
@@ -316,16 +318,22 @@ namespace BitCoin
         {
         public:
 
-            Branch(unsigned int pHeight) { height = pHeight; }
+            Branch(unsigned int pHeight, const Hash &pWork) : accumulatedWork(pWork) { height = pHeight; }
             ~Branch();
 
             void addBlock(Block *pBlock)
             {
                 pendingBlocks.push_back(new PendingBlockData(pBlock));
+                Hash work(32);
+                Hash target(32);
+                target.setDifficulty(pBlock->targetBits);
+                target.getWork(work);
+                accumulatedWork += work;
             }
 
             unsigned int height; // The chain height of the first block in the branch
             std::list<PendingBlockData *> pendingBlocks;
+            Hash accumulatedWork;
         };
 
         std::vector<Branch *> mBranches;

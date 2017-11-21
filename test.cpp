@@ -51,6 +51,9 @@ int main(int pArgumentCount, char **pArguments)
     // if(!chainTest())
         // failed++;
 
+    // if(!cashDAATest())
+        // failed++;
+
     if(failed)
         return 1;
     else
@@ -120,6 +123,7 @@ bool chainTest()
         {
             if(addBlock(chain, chain.lastPendingBlockHash(), publicKeyHash, i + 1, time, maxTargetBits).isEmpty())
                 return false;
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
             chain.process();
             time += 605; // a little over 10 minutes to adjust for the 2015 block skew so difficulty doesn't increase
         }
@@ -134,6 +138,7 @@ bool chainTest()
         preBranchHash = branchHash;
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain hash before branch : %s", branchHash.hex().text());
         branchHash = addBlock(chain, branchHash, publicKeyHash, ++branchHeight, time, maxTargetBits);
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
         if(branchHash.isEmpty())
             return false;
         for(unsigned int j=0;j<20;++j)
@@ -147,6 +152,7 @@ bool chainTest()
         for(unsigned int i=0;i<20;++i)
         {
             branchHash = addBlock(chain, branchHash, publicKeyHash, ++branchHeight, time, maxTargetBits);
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
             if(branchHash.isEmpty())
                 return false;
             branchHashes.push_back(branchHash);
@@ -237,3 +243,27 @@ bool chainTest()
     ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed chain test");
     return true;
 }
+
+// bool cashDAATest()
+// {
+    // // Highest target bits = 0x2100ffff
+    // uint32_t maxTargetBits = 0x2100ffff; // Genesis 0x203fffc0 ?
+    // BitCoin::Hash difficulty;
+    // difficulty.setDifficulty(maxTargetBits);
+    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, "Test", "Min difficulty : %s", difficulty.hex().text());
+    // bool success = true;
+
+    // ArcMist::removeDirectory("cash_test");
+    // ArcMist::createDirectory("cash_test");
+    // BitCoin::setNetwork(BitCoin::MAINNET);
+    // BitCoin::Info::instance().setPath("cash_test");
+
+    // BitCoin::Chain chain;
+    // chain.setMaxTargetBits(maxTargetBits); // zero difficulty (all block hashes are valid)
+    // chain.load(true);
+
+
+
+
+    // return true;
+// }

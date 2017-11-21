@@ -836,7 +836,7 @@ namespace BitCoin
             if((*output)->amount <= 0)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Output %d amount is zero of less %d : ", index, (*output)->amount);
+                  "Output %d amount is zero or less : %d", index, (*output)->amount);
                 (*output)->print(ArcMist::Log::WARNING);
                 print(ArcMist::Log::VERBOSE);
                 isValid = false;

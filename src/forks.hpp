@@ -9,11 +9,15 @@
 #define BITCOIN_FORKS_HPP
 
 #include "arcmist/base/string.hpp"
+#include "arcmist/base/log.hpp"
 #include "arcmist/io/stream.hpp"
+#include "base.hpp"
 
 #include <cstdint>
 #include <list>
 #include <vector>
+
+#define BITCOIN_FORKS_LOG_NAME "BitCoin Forks"
 
 
 namespace BitCoin
@@ -21,33 +25,79 @@ namespace BitCoin
     class BlockStat
     {
     public:
-        BlockStat() {}
-        BlockStat(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits)
+        BlockStat() : accumulatedWork(32) {}
+        BlockStat(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits, const Hash &pAccumulatedWork) : accumulatedWork(pAccumulatedWork)
           { version = pVersion; time = pTime; targetBits = pTargetBits; }
+
+        void write(ArcMist::OutputStream *pStream) const
+        {
+            pStream->write(this, 12);
+            accumulatedWork.write(pStream);
+        }
+
+        bool read(ArcMist::InputStream *pStream)
+        {
+            if(pStream->remaining() < 12)
+                return false;
+
+            pStream->read(this, 12);
+
+            if(!accumulatedWork.read(pStream))
+                return false;
+            return true;
+        }
+
+        bool operator <(const BlockStat &pRight) const { return time < pRight.time; }
+
+        static const unsigned int SIZE = 44;
 
         int32_t  version;
         uint32_t time;
         uint32_t targetBits;
+        Hash     accumulatedWork;
     };
 
-    class BlockStats : public std::vector<BlockStat>
+    class BlockStats : public std::vector<BlockStat *>
     {
     public:
 
         BlockStats() { mIsValid = false; }
+        ~BlockStats();
 
         int height() const { return size() - 1; }
 
         uint32_t time(unsigned int pBlockHeight) const;
         uint32_t targetBits(unsigned int pBlockHeight) const;
+        const Hash &accumulatedWork(unsigned int pBlockHeight) const;
 
         // Note : Call after block has been added to stats
         uint32_t getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount = 11) const;
 
+        void getMedianPastTimeAndWork(unsigned int pBlockHeight, uint32_t &pTime, Hash &pAccumulatedWork,
+          unsigned int pMedianCount = 3) const;
+
+        void add(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits)
+        {
+            Hash work(32);
+            Hash target(32);
+            target.setDifficulty(pTargetBits);
+            target.getWork(work);
+            work += accumulatedWork(height());
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
+              // "Block work at height %d : %s", size(), work.hex().text());
+            push_back(new BlockStat(pVersion, pTime, pTargetBits, work));
+        }
+
         void revert(unsigned int pBlockHeight)
         {
-            if(size() > pBlockHeight + 1)
-                resize(pBlockHeight + 1);
+            if(size() <= pBlockHeight + 1)
+                return;
+
+            while(size() > pBlockHeight + 1)
+            {
+                delete back();
+                pop_back();
+            }
         }
 
         bool load();

@@ -235,6 +235,18 @@ namespace BitCoin
 
         Hash() { mSize = 0; mData = NULL; }
         Hash(unsigned int pSize) { mSize = pSize; mData = new uint8_t[mSize]; zeroize(); }
+        Hash(unsigned int pSize, int64_t pValue)
+        {
+            mSize = pSize;
+            mData = new uint8_t[mSize];
+            zeroize();
+            for(unsigned int i=0;i<8&&i<mSize;++i)
+                mData[i] = pValue >> (i * 8);
+
+            if(pValue < 0)
+                for(unsigned int i=8;i<mSize;++i)
+                    mData[i] = 0xff;
+        }
         Hash(const char *pHex);
         Hash(const Hash &pCopy) { mData = NULL; *this = pCopy; }
         ~Hash() { if(mData != NULL) delete[] mData; }
@@ -283,8 +295,6 @@ namespace BitCoin
             return mData[pOffset];
         }
 
-        // Difficulty checks
-        void setDifficulty(uint32_t pBits);
         bool operator <= (const Hash &pRight) const;
 
         int compare(const Hash &pRight) const
@@ -304,14 +314,8 @@ namespace BitCoin
             }
             return 0;
         }
-        bool operator < (const Hash &pRight) const
-        {
-            return compare(pRight) < 0;
-        }
-        bool operator > (const Hash &pRight) const
-        {
-            return compare(pRight) > 0;
-        }
+        bool operator < (const Hash &pRight) const { return compare(pRight) < 0; }
+        bool operator > (const Hash &pRight) const { return compare(pRight) > 0; }
 
         // Set to zero size. Makes hash "empty"
         void clear() { setSize(0); }
@@ -405,6 +409,19 @@ namespace BitCoin
             return *this;
         }
 
+        const Hash &operator = (int64_t pValue)
+        {
+            zeroize();
+            for(unsigned int i=0;i<8&&i<mSize;++i)
+                mData[i] = pValue >> (i * 8);
+
+            if(pValue < 0)
+                for(unsigned int i=8;i<mSize;++i)
+                    mData[i] = 0xff;
+
+            return *this;
+        }
+
         void write(ArcMist::OutputStream *pStream) const
         {
             if(mSize == 0)
@@ -436,6 +453,100 @@ namespace BitCoin
         {
             setSize(pSize);
             std::memcpy(mData, pInput, pSize);
+        }
+
+        void setDifficulty(uint32_t pTargetBits);
+        void getDifficulty(uint32_t &pTargetBits, uint32_t pMax = 0x1d00ffff);
+        void getWork(Hash &pWork) const;
+
+        // Arithmetic
+        Hash operator -() const;
+        Hash operator ~() const;
+        Hash operator +(const Hash &pValue) const
+        {
+            Hash result(*this);
+            result += pValue;
+            return result;
+        }
+        Hash operator -(const Hash &pValue) const
+        {
+            Hash result(*this);
+            result -= pValue;
+            return result;
+        }
+        Hash operator *(const Hash &pValue) const
+        {
+            Hash result(*this);
+            result *= pValue;
+            return result;
+        }
+        Hash operator /(const Hash &pValue) const
+        {
+            Hash result(*this);
+            result /= pValue;
+            return result;
+        }
+
+        Hash &operator ++();
+        Hash &operator +=(const Hash &pValue);
+        Hash &operator --();
+        Hash &operator -=(const Hash &pValue)
+        {
+            *this += -pValue;
+            return *this;
+        }
+        Hash &operator *=(const Hash &pValue);
+        Hash &operator /=(const Hash &pValue);
+        Hash &operator <<=(unsigned int pShiftBits);
+        Hash &operator >>=(unsigned int pShiftBits);
+
+        Hash &operator +=(int64_t pValue)
+        {
+            Hash value(mSize, pValue);
+            *this += value;
+            return *this;
+        }
+        Hash &operator -=(int64_t pValue)
+        {
+            Hash value(mSize, pValue);
+            *this -= value;
+            return *this;
+        }
+        Hash &operator *=(int64_t pValue)
+        {
+            Hash value(mSize, pValue);
+            *this *= value;
+            return *this;
+        }
+        Hash &operator /=(int64_t pValue)
+        {
+            Hash value(mSize, pValue);
+            *this /= value;
+            return *this;
+        }
+        Hash operator +(int64_t pValue) const
+        {
+            Hash result(mSize, pValue);
+            result += *this;
+            return result;
+        }
+        Hash operator -(int64_t pValue) const
+        {
+            Hash result(mSize, pValue);
+            result -= *this;
+            return result;
+        }
+        Hash operator *(int64_t pValue) const
+        {
+            Hash result(mSize, pValue);
+            result *= *this;
+            return result;
+        }
+        Hash operator /(int64_t pValue) const
+        {
+            Hash result(mSize, pValue);
+            result /= *this;
+            return result;
         }
 
     private:
@@ -496,16 +607,6 @@ namespace BitCoin
 
     // Integer value for target
     uint64_t targetValue(uint32_t pTargetBits);
-
-    //TODO This needs more research
-    /* Accumulates a relative difference between left and right "work" (similar to left - right)
-     * Set pDifference and pShift to zero before first call, then it will accumulate with each call.
-     * Work is simplified to be defined as 2 to the power of the leading zero count of the hash. Since
-     *   every zero is twice as hard to get as the previous.
-     * The values are shifted to keep them within a 64 bit value.
-     */
-    static const int64_t MAX_64_SIGN = 0x8fffffffffffffff;
-    bool accumulateWorkDifference(const Hash &pLeft, const Hash &pRight, int64_t &pDifference, unsigned int &pShift);
 
     enum Base58Type { PUBLIC_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY, TEST_PUBLIC_KEY_HASH, TEST_SCRIPT_HASH };
     ArcMist::String base58Encode(Base58Type pType, ArcMist::InputStream *pStream, unsigned int pSize);

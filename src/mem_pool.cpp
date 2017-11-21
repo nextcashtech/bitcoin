@@ -216,6 +216,7 @@ namespace BitCoin
         mLock.readUnlock();
 
         mLock.writeLock("Verify");
+        //TODO Move this outside of write lock
         uint8_t result = check(pTransaction, pOutputs, pBlockStats, pForks, pMinFeeRate);
         if(!(result & Transaction::OUTPOINTS_FOUND))
         {
