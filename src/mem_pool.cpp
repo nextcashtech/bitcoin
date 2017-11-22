@@ -138,26 +138,47 @@ namespace BitCoin
         mLock.writeUnlock();
     }
 
-    uint8_t MemPool::check(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
+    bool MemPool::check(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
       const Forks &pForks, uint64_t pMinFeeRate)
     {
         HashList outpointsNeeded;
-        uint8_t result = pTransaction->check(pOutputs, mTransactions, outpointsNeeded,
-          pForks.requiredVersion(), pBlockStats, pForks);
-
-        if(!(result & Transaction::OUTPOINTS_FOUND))
+        if(!pTransaction->check(pOutputs, mTransactions, outpointsNeeded,
+          pForks.requiredVersion(), pBlockStats, pForks))
         {
-            for(HashList::iterator outpoint=outpointsNeeded.begin();outpoint!=outpointsNeeded.end();++outpoint)
-                addPendingInternal(**outpoint, 0);
-            return result;
+            addBlacklisted(pTransaction->hash);
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Failed to check transaction. (%d bytes) : %s", pTransaction->size(),
+              pTransaction->hash.hex().text());
+            return false;
         }
-        else if((result & Transaction::STANDARD_VERIFIED) != Transaction::STANDARD_VERIFIED)
+
+        if(!(pTransaction->status() & Transaction::IS_VALID))
+        {
+            addBlacklisted(pTransaction->hash);
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Transaction is not valid %02x. (%d bytes) : %s", pTransaction->status(), pTransaction->size(),
+              pTransaction->hash.hex().text());
+            return false;
+        }
+        else if(!(pTransaction->status() & Transaction::STANDARD_VERIFIED))
         {
             // Transaction not standard or has invalid signatures
             addBlacklisted(pTransaction->hash);
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Transaction failed to verify (%d bytes) : %s", pTransaction->size(), pTransaction->hash.hex().text());
-            return result;
+              "Transaction is not standard %02x. (%d bytes) : %s", pTransaction->status(), pTransaction->size(),
+              pTransaction->hash.hex().text());
+            pTransaction->print(ArcMist::Log::VERBOSE);
+            return false;
+        }
+        else if(!(pTransaction->status() & Transaction::OUTPOINTS_FOUND))
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Transaction requires unseen output. Adding to pending. (%d bytes) : %s", pTransaction->size(),
+              pTransaction->hash.hex().text());
+
+            for(HashList::iterator outpoint=outpointsNeeded.begin();outpoint!=outpointsNeeded.end();++outpoint)
+                addPendingInternal(**outpoint, 0);
+            return pTransaction->status();
         }
 
         if(pTransaction->feeRate() < pMinFeeRate)
@@ -166,24 +187,30 @@ namespace BitCoin
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Fee rate below minimum %llu < %llu (%lld fee) (%d bytes) : %s", pTransaction->feeRate(), pMinFeeRate,
               pTransaction->fee(), pTransaction->size(), pTransaction->hash.hex().text());
-            return 0;
+            return false;
         }
 
-        return result;
+        return pTransaction->status();
     }
 
     void MemPool::checkPendingTransactions(TransactionOutputPool &pOutputs,
       const BlockStats &pBlockStats, const Forks &pForks, uint64_t pMinFeeRate)
     {
         mLock.writeLock("Check Pending");
-        uint8_t result;
         for(TransactionList::iterator transaction=mPendingTransactions.begin();transaction!=mPendingTransactions.end();)
         {
-            result = check(*transaction, pOutputs, pBlockStats, pForks, pMinFeeRate);
-            if((result & Transaction::STANDARD_VERIFIED) == Transaction::STANDARD_VERIFIED)
+            if(!check(*transaction, pOutputs, pBlockStats, pForks, pMinFeeRate))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Adding pending transaction (%d bytes) (%llu fee rate) : %s", (*transaction)->size(),
+                  "Failed to check pending transaction. Removing. (%d bytes) (%llu fee rate) : %s", (*transaction)->size(),
+                  (*transaction)->feeRate(), (*transaction)->hash.hex().text());
+                mSize -= (*transaction)->size();
+                transaction = mPendingTransactions.erase(transaction);
+            }
+            else if(((*transaction)->status() & Transaction::STANDARD_VERIFIED) == Transaction::STANDARD_VERIFIED)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                  "Verified pending transaction. (%d bytes) (%llu fee rate) : %s", (*transaction)->size(),
                   (*transaction)->feeRate(), (*transaction)->hash.hex().text());
                 if(insert(*transaction, true))
                 {
@@ -215,37 +242,34 @@ namespace BitCoin
             }
         mLock.readUnlock();
 
-        mLock.writeLock("Verify");
-        //TODO Move this outside of write lock
-        uint8_t result = check(pTransaction, pOutputs, pBlockStats, pForks, pMinFeeRate);
-        if(!(result & Transaction::OUTPOINTS_FOUND))
-        {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Transaction requires unseen output. Adding to pending. (%d bytes) : %s", pTransaction->size(),
-              pTransaction->hash.hex().text());
+        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+          // "Attempting to add transaction. (%d bytes) : %s", pTransaction->size(),
+          // pTransaction->hash.hex().text());
 
-            // Put in pending to wait for outpoint transactions to show up
-            mPendingTransactions.push_back(pTransaction);
+        mLock.writeLock("Verify Insert");
+        //TODO Move this outside of write lock
+        if(!check(pTransaction, pOutputs, pBlockStats, pForks, pMinFeeRate))
+        {
+            mLock.writeUnlock();
+            return false;
+        }
+        else if(!(pTransaction->status() & Transaction::OUTPOINTS_FOUND))
+        {
+            // Put in pending to wait for outpoint transactions
+            mPendingTransactions.insertSorted(pTransaction);
             mSize += pTransaction->size();
             mLock.writeUnlock();
             return true;
         }
-        else if((result & Transaction::STANDARD_VERIFIED) != Transaction::STANDARD_VERIFIED)
-        {
-            // Transaction not standard or has invalid signatures
-            mLock.writeUnlock();
-            return false;
-        }
-        mLock.writeUnlock();
 
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
           "Adding transaction (%d bytes) (%llu fee rate) : %s", pTransaction->size(), pTransaction->feeRate(),
           pTransaction->hash.hex().text());
 
-        mLock.writeLock("Add Insert");
-        bool success = insert(pTransaction, true);
+        insert(pTransaction, true);
+
         mLock.writeUnlock();
-        return success;
+        return true;
     }
 
     void MemPool::remove(const std::vector<Transaction *> &pTransactions)
@@ -387,7 +411,7 @@ namespace BitCoin
 
     void MemPool::expirePending()
     {
-        int32_t expireTime = getTime() - 600;
+        int32_t expireTime = getTime() - 60;
         ArcMist::String timeString;
 
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();)

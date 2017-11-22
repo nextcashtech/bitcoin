@@ -1085,12 +1085,21 @@ namespace BitCoin
     {
         if(!openFile())
         {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to read output. Block file 0x%08x couldn't be opened.", mID);
             mValid = false;
             return false;
         }
 
         mInputFile->setReadOffset(pFileOffset);
-        return pTransactionOutput.read(mInputFile);
+        if(pTransactionOutput.read(mInputFile))
+            return true;
+        else
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to read output. Block file 0x%08x file read failed.", mID);
+            return false;
+        }
     }
 
     unsigned int BlockFile::hashOffset(const Hash &pHash)
@@ -1241,16 +1250,34 @@ namespace BitCoin
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Block Read Output");
 #endif
-        if(pReference == NULL || pReference->outputAt(pIndex)->blockFileOffset == 0)
+        if(pReference == NULL)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to read output. Reference is null.");
             return false;
+        }
+
+        if(pReference->outputAt(pIndex)->blockFileOffset == 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to read output. Block file offset is zero.");
+            return false;
+        }
 
         unsigned int fileID = pReference->blockHeight / MAX_BLOCKS;
 
         lock(fileID);
         BlockFile *blockFile = new BlockFile(fileID, false);
 
-        bool success = blockFile->isValid() &&
-          blockFile->readTransactionOutput(pReference->outputAt(pIndex)->blockFileOffset, pOutput);
+        bool success = true;
+        if(!blockFile->isValid())
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to read output. Block file 0x%08x is invalid.", fileID);
+            success = false;
+        }
+        else if(!blockFile->readTransactionOutput(pReference->outputAt(pIndex)->blockFileOffset, pOutput))
+            success = false;
 
         delete blockFile;
         unlock(fileID);

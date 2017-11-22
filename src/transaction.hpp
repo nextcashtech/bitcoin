@@ -162,9 +162,9 @@ namespace BitCoin
         static const uint8_t IS_STANDARD     = 0x04; // Is a "standard" transaction
         static const uint8_t OUTPOINTS_FOUND = 0x08; // Has valid outpoints
         static const uint8_t SIGS_VERIFIED   = 0x10; // Has valid signatures
-        uint8_t status() const { return mStatus; }
 
         // Flag checking operations
+        uint8_t status() const { return mStatus; }
         bool wasChecked() const { return mStatus & WAS_CHECKED; }
         bool isValid() const { return mStatus & IS_VALID; }
         bool isStandard() const { return mStatus & IS_STANDARD; }
@@ -184,7 +184,7 @@ namespace BitCoin
           const Forks &pForks, std::vector<unsigned int> &pSpentAges);
 
         // Check validity and return status
-        uint8_t check(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
+        bool check(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
           HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks);
 
         // Check that none of the outpoints are spent and return status

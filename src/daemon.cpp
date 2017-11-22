@@ -936,7 +936,7 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(getTime() - lastMemPoolCheckPending > 30)
+            if(getTime() - lastMemPoolCheckPending > 20)
             {
                 daemon.mChain.memPool().checkPendingTransactions(daemon.mChain.outputs(),
                   daemon.mChain.blockStats(), daemon.mChain.forks(), daemon.mInfo.minFee);

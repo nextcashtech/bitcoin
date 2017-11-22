@@ -342,7 +342,7 @@ namespace BitCoin
         static bool arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue);
         static void arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue);
 
-        static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset, uint64_t pOutputAmount,
+        static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset, int64_t pOutputAmount,
           const PublicKey &pPublicKey, const Signature &pSignature, ArcMist::Buffer &pCurrentOutputScript,
           unsigned int pSignatureStartOffset, const Forks &pForks);
 

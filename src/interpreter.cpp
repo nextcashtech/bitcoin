@@ -35,7 +35,7 @@ namespace BitCoin
         while(pScript.remaining() > 0)
         {
             opCode = pScript.readByte();
-            if(pullDataSize(opCode, pScript) == 0)
+            if(opCode != OP_0 && pullDataSize(opCode, pScript) == 0)
                 return false;
         }
 
@@ -814,7 +814,7 @@ namespace BitCoin
     }
 
     bool ScriptInterpreter::checkSignature(Transaction &pTransaction, unsigned int pInputOffset,
-      uint64_t pOutputAmount, const PublicKey &pPublicKey, const Signature &pSignature,
+      int64_t pOutputAmount, const PublicKey &pPublicKey, const Signature &pSignature,
       ArcMist::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset, const Forks &pForks)
     {
         if(pForks.cashActive() && !(pSignature.hashType() & Signature::FORKID))
@@ -837,12 +837,22 @@ namespace BitCoin
         if(!pTransaction.getSignatureHash(signatureHash, pInputOffset, pCurrentOutputScript,
           pOutputAmount, pSignature.hashType()))
         {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to get signature hash : 0x%02x - %s", (int)pSignature.hashType(), pSignature.hex().text());
             pCurrentOutputScript.setReadOffset(previousOffset);
             return false;
         }
 
         pCurrentOutputScript.setReadOffset(previousOffset);
-        return pSignature.verify(pPublicKey, signatureHash);
+        if(pSignature.verify(pPublicKey, signatureHash))
+            return true;
+        else
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Signature check failed : 0x%02x - %s", (int)pSignature.hashType(), pSignature.hex().text());
+            return false;
+        }
+
     }
 
     void ScriptInterpreter::printStack(const char *pText)
@@ -1422,8 +1432,6 @@ namespace BitCoin
                     }
                     else
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Signature check failed : 0x%02x - %s", (int)signature.hashType(), signature.hex().text());
                         if(opCode == OP_CHECKSIG)
                             push(); // Push false onto the stack
                         else

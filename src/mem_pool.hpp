@@ -101,7 +101,7 @@ namespace BitCoin
         Transaction *getInternal(const Hash &pHash);
 
         // Verifies that a transaction is valid
-        uint8_t check(Transaction *pTransaction, TransactionOutputPool &pOutputs,
+        bool check(Transaction *pTransaction, TransactionOutputPool &pOutputs,
           const BlockStats &pBlockStats, const Forks &pForks, uint64_t pMinFeeRate);
 
         ArcMist::ReadersLock mLock;
