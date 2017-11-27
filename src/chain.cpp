@@ -73,105 +73,105 @@ namespace BitCoin
             mTargetBits = mMaxTargetBits;
             return true;
         }
-        else if(mBlockStats.height() % RETARGET_PERIOD != 0)
+
+        if(mForks.cashActive())
         {
-            if(mForks.cashActive())
+            if(mBlockStats.getMedianPastTime(mBlockStats.height()) > 1510600000)
             {
-                if(mBlockStats.getMedianPastTime(mBlockStats.height()) > 1510600000)
+                if(mBlockStats.height() > 146)
                 {
-                    if(mBlockStats.height() > 146)
-                    {
-                        // Nov 13th Bitcoin Cash Hard Fork DAA
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                          // "Using cash DAA for block height %d", mBlockStats.height());
+                    // Nov 13th Bitcoin Cash Hard Fork DAA
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      // "Using cash DAA for block height %d", mBlockStats.height());
 
-                        // Get first and last block times and accumulated work
-                        uint32_t lastTime, firstTime;
-                        Hash lastWork, firstWork;
+                    // Get first and last block times and accumulated work
+                    uint32_t lastTime, firstTime;
+                    Hash lastWork, firstWork;
 
-                        mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 1, lastTime, lastWork, 3);
-                        mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 145, firstTime, firstWork, 3);
+                    mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 1, lastTime, lastWork, 3);
+                    mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 145, firstTime, firstWork, 3);
 
-                        uint32_t timeSpan = lastTime - firstTime;
-                        // ArcMist::String timeText;
+                    uint32_t timeSpan = lastTime - firstTime;
+                    // ArcMist::String timeText;
 
-                        // timeText.writeFormattedTime(firstTime);
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                          // "First time : %d (%s)", firstTime, timeText.text());
-                        // timeText.writeFormattedTime(lastTime);
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                          // "Last time  : %d (%s)", lastTime, timeText.text());
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                          // "Time Span : %d", timeSpan);
+                    // timeText.writeFormattedTime(firstTime);
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      // "First time : %d (%s)", firstTime, timeText.text());
+                    // timeText.writeFormattedTime(lastTime);
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      // "Last time  : %d (%s)", lastTime, timeText.text());
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      // "Time Span : %d", timeSpan);
 
-                        // Apply limits
-                        if(timeSpan < 72 * 600)
-                            timeSpan = 72 * 600;
-                        else if(timeSpan > 288 * 600)
-                            timeSpan = 288 * 600;
+                    // Apply limits
+                    if(timeSpan < 72 * 600)
+                        timeSpan = 72 * 600;
+                    else if(timeSpan > 288 * 600)
+                        timeSpan = 288 * 600;
 
-                        // Let the Work Performed (W) be equal to the difference in chainwork[3] between B_last and B_first.
-                        Hash work = lastWork - firstWork;
+                    // Let the Work Performed (W) be equal to the difference in chainwork[3] between B_last and B_first.
+                    Hash work = lastWork - firstWork;
 
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                          // "First work : %s", firstWork.hex().text());
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                          // "Last work  : %s", lastWork.hex().text());
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                          // "Work       : %s", work.hex().text());
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      // "First work : %s", firstWork.hex().text());
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      // "Last work  : %s", lastWork.hex().text());
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      // "Work       : %s", work.hex().text());
 
-                        // Let the Projected Work (PW) be equal to (W * 600) / TS.
-                        work *= 600;
-                        work /= timeSpan;
+                    // Let the Projected Work (PW) be equal to (W * 600) / TS.
+                    work *= 600;
+                    work /= timeSpan;
 
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                          // "Proj Work  : %s", work.hex().text());
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      // "Proj Work  : %s", work.hex().text());
 
-                        // Let Target (T) be equal to the (2^256 - PW) / PW. This is calculated by
-                        //   taking the two’s complement of PW (-PW) and dividing it by PW (-PW / PW).
-                        Hash target = (-work) / work;
+                    // Let Target (T) be equal to the (2^256 - PW) / PW. This is calculated by
+                    //   taking the two’s complement of PW (-PW) and dividing it by PW (-PW / PW).
+                    Hash target = (-work) / work;
 
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                          // "Target     : %s", target.hex().text());
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      // "Target     : %s", target.hex().text());
 
-                        // The target difficulty for block B_n+1 is then equal to the lesser of T and
-                        //   0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-                        static Hash sMaxTarget("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-                        if(target > sMaxTarget)
-                            sMaxTarget.getDifficulty(mTargetBits, mMaxTargetBits);
-                        else
-                            target.getDifficulty(mTargetBits, mMaxTargetBits);
+                    // The target difficulty for block B_n+1 is then equal to the lesser of T and
+                    //   0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                    static Hash sMaxTarget("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+                    if(target > sMaxTarget)
+                        sMaxTarget.getDifficulty(mTargetBits, mMaxTargetBits);
+                    else
+                        target.getDifficulty(mTargetBits, mMaxTargetBits);
 
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                          // "Target Bits : 0x%08x", mTargetBits);
-                    }
-                }
-                else if(mBlockStats.height() > 7)
-                {
-                    // Bitcoin Cash EDA (Emergency Difficulty Adjustment)
-                    uint32_t mptDiff = mBlockStats.getMedianPastTime(mBlockStats.height()) -
-                      mBlockStats.getMedianPastTime(mBlockStats.height() - 6);
-
-                    // If more than 12 hours on the last 6 blocks then reduce difficulty by 20%
-                    if(mptDiff >= 43200)
-                    {
-                        lastTargetBits = mBlockStats.targetBits(mBlockStats.height() - 1);
-                        adjustFactor = 1.25;
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                          "EDA increasing target bits 0x%08x by a factor of %f to reduce difficulty by %.02f%%", lastTargetBits,
-                          adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
-
-                        // Treat targetValue as a 256 bit number and multiply it by adjustFactor
-                        mTargetBits = multiplyTargetBits(lastTargetBits, adjustFactor, mMaxTargetBits);
-
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                          "EDA new target bits for block height %d : 0x%08x", mBlockStats.height(), mTargetBits);
-                    }
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      // "Target Bits : 0x%08x", mTargetBits);
                 }
             }
+            else if(mBlockStats.height() > 7)
+            {
+                // Bitcoin Cash EDA (Emergency Difficulty Adjustment)
+                uint32_t mptDiff = mBlockStats.getMedianPastTime(mBlockStats.height()) -
+                  mBlockStats.getMedianPastTime(mBlockStats.height() - 6);
 
-            return true;
+                // If more than 12 hours on the last 6 blocks then reduce difficulty by 20%
+                if(mptDiff >= 43200)
+                {
+                    lastTargetBits = mBlockStats.targetBits(mBlockStats.height() - 1);
+                    adjustFactor = 1.25;
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                      "EDA increasing target bits 0x%08x by a factor of %f to reduce difficulty by %.02f%%", lastTargetBits,
+                      adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
+
+                    // Treat targetValue as a 256 bit number and multiply it by adjustFactor
+                    mTargetBits = multiplyTargetBits(lastTargetBits, adjustFactor, mMaxTargetBits);
+
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                      "EDA new target bits for block height %d : 0x%08x", mBlockStats.height(), mTargetBits);
+                }
+            }
         }
+
+        if(mBlockStats.height() % RETARGET_PERIOD != 0 || // Not an original DAA retarget block
+          (mForks.cashActive() && mBlockStats.getMedianPastTime(mBlockStats.height()) > 1510600000)) // Disable original DAA when new Cash DAA becomes active
+            return true;
 
         uint32_t lastBlockTime      = mBlockStats.time(mBlockStats.height() - 1);
         uint32_t lastAdjustmentTime = mBlockStats.time(mBlockStats.height() - RETARGET_PERIOD);
