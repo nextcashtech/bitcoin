@@ -707,11 +707,11 @@ namespace BitCoin
 
             // Command Bytes
             uint64_t commandLength = readCompactInteger(pStream);
-            if(pSize - pStream->readOffset() - startReadOffset < commandLength + 1)
+            if(pStream->readOffset() + commandLength + 1 > startReadOffset + pSize)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
                   "Reject message not big enough for command + code %d/%d", commandLength + 1,
-                  pSize - pStream->readOffset() - startReadOffset);
+                  pStream->readOffset() + pSize - startReadOffset);
                 return false;
             }
 
@@ -723,11 +723,11 @@ namespace BitCoin
 
             // Reason Bytes
             uint64_t reasonLength = readCompactInteger(pStream);
-            if(pSize - pStream->readOffset() - startReadOffset < reasonLength)
+            if(pStream->readOffset() + reasonLength > startReadOffset + pSize)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
-                  "Reject message not big enough for reason %d/%d", reasonLength,
-                  pSize - pStream->readOffset() - startReadOffset);
+                  "Reject message (%s) not big enough for reason %d/%d", command.text(), reasonLength,
+                  pStream->readOffset() + pSize - startReadOffset);
                 return false;
             }
 
@@ -735,7 +735,8 @@ namespace BitCoin
             reason = pStream->readString(reasonLength);
 
             // Extra (remaining payload)
-            pStream->readStream(&extra, pSize - pStream->readOffset() - startReadOffset);
+            if(startReadOffset + pSize > pStream->readOffset())
+                pStream->readStream(&extra, startReadOffset + pSize - pStream->readOffset());
             return true;
         }
 
