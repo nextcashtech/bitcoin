@@ -494,8 +494,6 @@ namespace BitCoin
         bool purge(const char *pPath, unsigned int pThreshold);
         bool save(const char *pPath);
 
-        bool convert(const char *pPath);
-
         // Run unit tests
         static bool test();
 

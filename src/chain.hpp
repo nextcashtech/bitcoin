@@ -142,6 +142,36 @@ namespace BitCoin
         PendingBlockData &operator = (PendingBlockData &pRight);
     };
 
+    /* Branches
+     * When a valid header is seen that doesn't link to the top of the current chain it is
+     *   saved and built on.
+     * If it builds to more proof of work than the current chain before it gets too old then
+     *   revert the current chain to the height of the branch and apply the branch. Also, turn
+     *   the previous chain before above the branch into a branch in case it flips back and
+     *   forth.
+     */
+    class Branch
+    {
+    public:
+
+        Branch(unsigned int pHeight, const Hash &pWork) : accumulatedWork(pWork) { height = pHeight + 1; }
+        ~Branch();
+
+        void addBlock(Block *pBlock)
+        {
+            pendingBlocks.push_back(new PendingBlockData(pBlock));
+            Hash work(32);
+            Hash target(32);
+            target.setDifficulty(pBlock->targetBits);
+            target.getWork(work);
+            accumulatedWork += work;
+        }
+
+        unsigned int height; // The chain height of the first block in the branch
+        std::list<PendingBlockData *> pendingBlocks;
+        Hash accumulatedWork;
+    };
+
     class Chain
     {
     public:
@@ -161,6 +191,15 @@ namespace BitCoin
         const BlockStats &blockStats() const { return mBlockStats; }
         const Forks &forks() const { return mForks; }
         MemPool &memPool() { return mMemPool; }
+
+        unsigned int branchCount() const { return mBranches.size(); }
+        const Branch *branchAt(unsigned int pOffset) const
+        {
+            if(mBranches.size() <= pOffset)
+                return NULL;
+            else
+                return mBranches[pOffset];
+        }
 
         // Chain is up to date with most chains
         bool isInSync() { return mIsInSync; }
@@ -305,36 +344,6 @@ namespace BitCoin
         std::vector<unsigned int> mBlackListedNodeIDs;
 
         void addBlackListedBlock(const Hash &pHash);
-
-        /* Branches
-         * When a valid header is seen that doesn't link to the top of the current chain it is
-         *   saved and built on.
-         * If it builds to more proof of work than the current chain before it gets too old then
-         *   revert the current chain to the height of the branch and apply the branch. Also, turn
-         *   the previous chain before above the branch into a branch in case it flips back and
-         *   forth.
-         */
-        class Branch
-        {
-        public:
-
-            Branch(unsigned int pHeight, const Hash &pWork) : accumulatedWork(pWork) { height = pHeight; }
-            ~Branch();
-
-            void addBlock(Block *pBlock)
-            {
-                pendingBlocks.push_back(new PendingBlockData(pBlock));
-                Hash work(32);
-                Hash target(32);
-                target.setDifficulty(pBlock->targetBits);
-                target.getWork(work);
-                accumulatedWork += work;
-            }
-
-            unsigned int height; // The chain height of the first block in the branch
-            std::list<PendingBlockData *> pendingBlocks;
-            Hash accumulatedWork;
-        };
 
         std::vector<Branch *> mBranches;
 

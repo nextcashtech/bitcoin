@@ -124,6 +124,7 @@ bool chainTest()
             if(addBlock(chain, chain.lastPendingBlockHash(), publicKeyHash, i + 1, time, maxTargetBits).isEmpty())
                 return false;
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
             chain.process();
             time += 605; // a little over 10 minutes to adjust for the 2015 block skew so difficulty doesn't increase
         }
@@ -139,6 +140,16 @@ bool chainTest()
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain hash before branch : %s", branchHash.hex().text());
         branchHash = addBlock(chain, branchHash, publicKeyHash, ++branchHeight, time, maxTargetBits);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
+        const BitCoin::Branch *branch;
+        for(unsigned int i=0;i<chain.branchCount();++i)
+        {
+            branch = chain.branchAt(i);
+            if(branch == NULL)
+                break;
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test",
+              "Branch %d work: %s", i + 1, branch->accumulatedWork.hex().text());
+        }
         if(branchHash.isEmpty())
             return false;
         for(unsigned int j=0;j<20;++j)
@@ -153,6 +164,15 @@ bool chainTest()
         {
             branchHash = addBlock(chain, branchHash, publicKeyHash, ++branchHeight, time, maxTargetBits);
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
+            for(unsigned int i=0;i<chain.branchCount();++i)
+            {
+                branch = chain.branchAt(i);
+                if(branch == NULL)
+                    break;
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test",
+                  "Branch %d work: %s", i + 1, branch->accumulatedWork.hex().text());
+            }
             if(branchHash.isEmpty())
                 return false;
             branchHashes.push_back(branchHash);

@@ -378,6 +378,14 @@ namespace BitCoin
 
     bool TransactionReference::revert(unsigned int pBlockHeight)
     {
+        if(blockHeight > pBlockHeight)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              "Deleting transaction for block %d : %s", blockHeight, id.hex().text());
+            // Created above this block height, so mark for delete on next save
+            setDelete();
+        }
+
         if(mOutputs == NULL)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
@@ -609,8 +617,8 @@ namespace BitCoin
 
     void TransactionReferenceList::drop(unsigned int pBlockHeight, unsigned int &pOutputCount)
     {
-        std::vector<TransactionReference *> items = *this;
-        clearNoDelete();
+        std::vector<TransactionReference *> items;
+        swap(items);
         for(iterator item=items.begin();item!=items.end();++item)
             if((*item)->blockHeight < pBlockHeight || !(*item)->hasUnspentOutputs() || (*item)->markedDelete())
             {
@@ -1950,49 +1958,55 @@ namespace BitCoin
         // Pull from file
         mLock.writeLock("Pull");
         unsigned int foundCount = 0;
+        bool deleted = false;
         TransactionReference *firstPulled = pull(pTransactionID, foundCount);
 
         // Check first pulled transaction for match
-        if(firstPulled != NULL && !firstPulled->markedDelete())
+        if(firstPulled != NULL)
         {
             blockHeight = firstPulled->blockHeight;
-            output = firstPulled->outputAt(pIndex);
-            if(output != NULL)
+
+            if(!firstPulled->markedDelete())
             {
-                if(output->spentBlockHeight == 0)
+                output = firstPulled->outputAt(pIndex);
+                if(output != NULL)
                 {
-                    mLock.writeUnlock();
-                    return firstPulled;
-                }
-                else
-                    outputSpentHeight = output->spentBlockHeight;
-            }
-        }
-
-        // Check other pulled transactions for matches
-        if(foundCount > 1)
-        {
-            for(TransactionReferenceList::iterator pulled=mCache.firstMatching(pTransactionID);pulled!=mCache.end();++pulled)
-                if((*pulled)->id == pTransactionID)
-                {
-                    if((*pulled)->markedDelete())
-                        continue;
-
-                    blockHeight = (*pulled)->blockHeight;
-                    output = (*pulled)->outputAt(pIndex);
-                    if(output != NULL)
+                    if(output->spentBlockHeight == 0)
                     {
-                        if(output->spentBlockHeight == 0)
-                        {
-                            mLock.writeUnlock();
-                            return *pulled;
-                        }
-                        else
-                            outputSpentHeight = output->spentBlockHeight;
+                        mLock.writeUnlock();
+                        return firstPulled;
                     }
+                    else
+                        outputSpentHeight = output->spentBlockHeight;
                 }
-                else
-                    break;
+            }
+            else
+            {
+                deleted = true;
+
+                for(TransactionReferenceList::iterator pulled=mCache.firstMatching(pTransactionID);pulled!=mCache.end();++pulled)
+                    if((*pulled)->id == pTransactionID)
+                    {
+                        blockHeight = (*pulled)->blockHeight;
+
+                        if((*pulled)->markedDelete())
+                            continue;
+
+                        output = (*pulled)->outputAt(pIndex);
+                        if(output != NULL)
+                        {
+                            if(output->spentBlockHeight == 0)
+                            {
+                                mLock.writeUnlock();
+                                return *pulled;
+                            }
+                            else
+                                outputSpentHeight = output->spentBlockHeight;
+                        }
+                    }
+                    else
+                        break;
+            }
         }
 
         mLock.writeUnlock();
@@ -2004,6 +2018,10 @@ namespace BitCoin
         else if(blockHeight != 0xffffffff)
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
               "Transaction found at block height %d, but output not found : index %d - %s", blockHeight,
+              pIndex, pTransactionID.hex().text());
+        else if(deleted)
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+              "Transaction found at block height %d, but was deleted : index %d - %s", blockHeight,
               pIndex, pTransactionID.hex().text());
         else
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME, "Transaction not found : %s",
@@ -2037,10 +2055,26 @@ namespace BitCoin
         TransactionReference *firstPulled = pull(pTransactionID, foundCount);
 
         // Check first pulled transaction for match
-        if(firstPulled != NULL && !firstPulled->markedDelete())
+        if(firstPulled != NULL)
         {
-            mLock.writeUnlock();
-            return firstPulled;
+            if(!firstPulled->markedDelete())
+            {
+                mLock.writeUnlock();
+                return firstPulled;
+            }
+
+            // Check if there is a match that is not marked for delete
+            for(TransactionReferenceList::iterator item=mCache.firstMatching(pTransactionID);item!=mCache.end();++item)
+                if((*item)->id == pTransactionID)
+                {
+                    if((*item)->markedDelete())
+                        continue;
+
+                    mLock.writeUnlock();
+                    return *item;
+                }
+                else
+                    break;
         }
 
         mLock.writeUnlock();
@@ -2078,21 +2112,11 @@ namespace BitCoin
         ArcMist::Profiler profiler("Outputs Revert");
 #endif
         if(pHard)
-            pullBlocks(pBlockHeight + 1);
+            pullBlocks(pBlockHeight, false);
 
         mLock.writeLock("Commit");
         for(TransactionReferenceList::iterator item=mCache.begin();item!=mCache.end();++item)
-        {
-            if((*item)->blockHeight > pBlockHeight)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Deleting transaction for block %d : %s", (*item)->blockHeight, (*item)->id.hex().text());
-                // Created at this block height, so mark for delete on next save
-                (*item)->setDelete();
-            }
-
             (*item)->revert(pBlockHeight);
-        }
         mLock.writeUnlock();
     }
 
@@ -2295,7 +2319,8 @@ namespace BitCoin
         TransactionReference *reference;
         OutputReference *outputReference;
         bool success = true;
-        for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
+        // Process transactions in reverse since they can unspend previous transactions in the same block
+        for(std::vector<Transaction *>::const_reverse_iterator transaction=pBlockTransactions.rbegin();transaction!=pBlockTransactions.rend();++transaction)
         {
             // Unspend inputs
             for(input=(*transaction)->inputs.begin();input!=(*transaction)->inputs.end();++input)
@@ -2337,7 +2362,8 @@ namespace BitCoin
         }
 
         mToCommit.clearNoDelete();
-        --mNextBlockHeight;
+        if(success)
+            --mNextBlockHeight;
         mModified = true;
         return success;
     }
@@ -2347,14 +2373,14 @@ namespace BitCoin
         if(!mValid)
             return false;
 
-        if(!pHard && pBlockHeight != mNextBlockHeight)
+        if(!pHard && pBlockHeight != mNextBlockHeight - 1)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
               "Can't revert non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight - 1);
             return false;
         }
 
-        if(pBlockHeight > mNextBlockHeight)
+        if(pBlockHeight >= mNextBlockHeight)
             return true; // No revert needed
 
 #ifdef PROFILER_ON
@@ -2372,7 +2398,7 @@ namespace BitCoin
         }
 
         mToCommit.clearNoDelete();
-        mNextBlockHeight = pBlockHeight;
+        mNextBlockHeight = pBlockHeight + 1;
         mModified = true;
         return true;
     }
@@ -2597,35 +2623,6 @@ namespace BitCoin
         else
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
               "Failed to save transaction outputs");
-
-        return success;
-    }
-
-    bool TransactionOutputPool::convert(const char *pPath)
-    {
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME, "Converting transaction outputs");
-
-        bool success = true;
-        uint32_t lastReport = getTime();
-        OutputSet *set = mSets;
-        unsigned int pulledCount;
-        for(unsigned int setID=0;setID<SET_COUNT && success;setID++)
-        {
-            if(getTime() - lastReport > 10)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Convert is %2d%% Complete", (int)(((float)setID / (float)SET_COUNT) * 100.0f));
-                lastReport = getTime();
-            }
-
-            pulledCount = set->pullBlocks(height() - 1000, false);
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-              "Set %02x pulled %d transactions", setID, pulledCount);
-
-            ++set;
-        }
-
-        mModified = true;
 
         return success;
     }

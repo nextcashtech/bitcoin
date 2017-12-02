@@ -279,6 +279,19 @@ namespace BitCoin
         timeText.writeFormattedTime(mChain.blockStats().time(mChain.height()));
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Block Chain : %d blocks (last %s)", mChain.height(), timeText.text());
+        const Branch *branch;
+        for(unsigned int i=0;i<mChain.branchCount();++i)
+        {
+            branch = mChain.branchAt(i);
+            if(branch == NULL)
+                break;
+
+            if(branch->pendingBlocks.size() > 0)
+                timeText.writeFormattedTime(branch->pendingBlocks.back()->block->time);
+
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Block Chain Branch %d : %d blocks (last %s)", i + 1, branch->height + branch->pendingBlocks.size() - 1, timeText.text());
+        }
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Outputs : %d/%d trans/outputs (%d KiB) (%d KiB cached)", mChain.outputs().transactionCount(),
           mChain.outputs().outputCount(), mChain.outputs().size() / 1024, mChain.outputs().cachedSize() / 1024);
