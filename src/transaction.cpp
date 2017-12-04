@@ -1401,7 +1401,7 @@ namespace BitCoin
             currentSize = calculatedSize();
         if(mFee == 0)
             return 0;
-        return (mFee / (uint64_t)currentSize) * 1000; // Satoshis per KB
+        return (mFee * 1000) / (uint64_t)currentSize; // Satoshis per KB
     }
 
     void Outpoint::write(ArcMist::OutputStream *pStream)

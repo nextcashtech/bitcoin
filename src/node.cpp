@@ -292,8 +292,12 @@ namespace BitCoin
             mBlockRequestTime = getTime();
             mBlockRequestMutex.unlock();
             mChain->markBlocksForNode(pList, mID);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending request for %d blocks starting at (%d) : %s",
-              pList.size(), mChain->blockHeight(*pList.front()), pList.front()->hex().text());
+            if(pList.size() == 1)
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending request for block at (%d) : %s",
+                  mChain->blockHeight(*pList.front()), pList.front()->hex().text());
+            else
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending request for %d blocks starting at (%d) : %s",
+                  pList.size(), mChain->blockHeight(*pList.front()), pList.front()->hex().text());
         }
         else
         {
@@ -305,6 +309,14 @@ namespace BitCoin
         }
 
         return success;
+    }
+
+    bool Node::hasTransaction(const Hash &pHash)
+    {
+        mAnnounceMutex.lock();
+        bool result = mAnnounceTransactions.contains(pHash);
+        mAnnounceMutex.unlock();
+        return result;
     }
 
     bool Node::requestTransactions(HashList &pList)
@@ -321,8 +333,12 @@ namespace BitCoin
         if(success)
         {
             mChain->memPool().markForNode(pList, mID);
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Sending request for %d transactions starting with %s",
-              pList.size(), pList.front()->hex().text());
+            if(pList.size() == 1)
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Sending request for transaction %s",
+                  pList.front()->hex().text());
+            else
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Sending request for %d transactions starting with %s",
+                  pList.size(), pList.front()->hex().text());
         }
         else
             mChain->memPool().releaseForNode(mID);
@@ -413,11 +429,17 @@ namespace BitCoin
         mAnnounceMutex.unlock();
 
         // Check against minimum fee rate
-        if(pTransaction->feeRate() > mMinimumFeeRate)
+        if(pTransaction->feeRate() < mMinimumFeeRate)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
+              "Not announcing transaction fee rate %d below min rate %d : %s", pTransaction->feeRate(),
+              mMinimumFeeRate, pTransaction->hash.hex().text());
             return false;
+        }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
-          "Announcing transaction : %s", pTransaction->hash.hex().text());
+        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+          // "Announcing transaction with fee rate %d above min rate %d : %s", pTransaction->feeRate(),
+          // mMinimumFeeRate, pTransaction->hash.hex().text());
         Message::InventoryData inventoryData;
         inventoryData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION, pTransaction->hash));
         return sendMessage(&inventoryData);
@@ -757,6 +779,10 @@ namespace BitCoin
                 else
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "Reject %s [%02x] - %s",
                       rejectData->command.text(), rejectData->code, rejectData->reason.text());
+
+                // if(rejectData->code == Message::RejectData::LOW_FEE)
+                //   Possibly look up transaction and set minimum fee filter above rate of
+                //     transaction that was rejected
 
                 // TODO Determine if closing node is necessary
                 break;

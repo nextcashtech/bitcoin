@@ -65,6 +65,8 @@ namespace BitCoin
         unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
         void releaseBlockRequests();
 
+        bool hasTransaction(const Hash &pHash);
+
         bool requestPeers();
 
         // Send notification of a new block on the chain

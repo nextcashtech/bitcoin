@@ -2024,7 +2024,7 @@ namespace BitCoin
               "Transaction found at block height %d, but was deleted : index %d - %s", blockHeight,
               pIndex, pTransactionID.hex().text());
         else
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME, "Transaction not found : %s",
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME, "Transaction not found : %s",
               pTransactionID.hex().text());
         return NULL;
     }

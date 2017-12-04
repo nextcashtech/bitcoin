@@ -1290,7 +1290,7 @@ namespace BitCoin
         {
             mPendingLock.writeLock("Process");
 
-            if(!mIsInSync && mAnnouncedAdded && mPendingBlocks.size() == 1 && getTime() - nextPending->block->time < 600)
+            if(!mIsInSync && mAnnouncedAdded && getTime() - nextPending->block->time < 600)
             {
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Chain is in sync");
                 mIsInSync = true;

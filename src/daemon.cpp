@@ -402,7 +402,7 @@ namespace BitCoin
         }
     }
 
-    class NodeBlockRequests
+    class NodeRequests
     {
     public:
         Node *node;
@@ -477,8 +477,8 @@ namespace BitCoin
         }
 
         // Divided these up (staggered) between available nodes
-        NodeBlockRequests *nodeRequests = new NodeBlockRequests[requestNodes.size()];
-        NodeBlockRequests *nodeRequest = nodeRequests;
+        NodeRequests *nodeRequests = new NodeRequests[requestNodes.size()];
+        NodeRequests *nodeRequest = nodeRequests;
         unsigned int i;
 
         // Assign nodes
@@ -503,6 +503,69 @@ namespace BitCoin
         for(i=0;i<requestNodes.size();++i)
         {
             nodeRequest->node->requestBlocks(nodeRequest->list);
+            ++nodeRequest;
+        }
+
+        delete[] nodeRequests;
+        mNodeLock.readUnlock();
+    }
+
+    void Daemon::sendTransactionRequests()
+    {
+        HashList transactionsToRequest;
+
+        mChain.memPool().getNeeded(transactionsToRequest);
+
+        if(transactionsToRequest.size() == 0)
+            return;
+
+        mNodeLock.readLock();
+        std::vector<Node *> nodes = mNodes; // Copy list of nodes
+        sortOutgoingNodesBySpeed(nodes);
+
+        if(nodes.size() == 0)
+        {
+            mNodeLock.readUnlock();
+            return;
+        }
+
+        NodeRequests *nodeRequests = new NodeRequests[nodes.size()];
+        NodeRequests *nodeRequest = nodeRequests;
+        unsigned int i;
+
+        // Assign nodes
+        nodeRequest = nodeRequests;
+        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+        {
+            nodeRequest->node = *node;
+            ++nodeRequest;
+        }
+
+        // Try to find nodes that have the transactions
+        bool found;
+        for(HashList::iterator hash=transactionsToRequest.begin();hash!=transactionsToRequest.end();++hash)
+        {
+            found = false;
+            nodeRequest = nodeRequests;
+            for(i=0;i<nodes.size();++i)
+            {
+                if(nodeRequest->node->hasTransaction(**hash))
+                {
+                    nodeRequest->list.push_back(new Hash(**hash));
+                    found = true;
+                }
+                ++nodeRequest;
+            }
+
+            if(!found) // Add to first node
+                nodeRequests->list.push_back(new Hash(**hash));
+        }
+
+        // Send requests to nodes
+        nodeRequest = nodeRequests;
+        for(i=0;i<nodes.size();++i)
+        {
+            nodeRequest->node->requestTransactions(nodeRequest->list);
             ++nodeRequest;
         }
 
@@ -580,10 +643,10 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Node ping : average %ds, cutoff %ds", (int)average, cutoff);
 
-        // Always drop some nodes so nodes with lower pings can still be found
-        int minimumDrop = 0;
+        // Regularly drop some nodes to increase diversity
+        int churnDrop = 0;
         if(nodes.size() == MAX_OUTGOING_CONNECTION_COUNT)
-            minimumDrop = nodes.size() / 8;
+            churnDrop = nodes.size() / 8;
 
         // Drop slowest
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
@@ -595,10 +658,10 @@ namespace BitCoin
                   (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
-            else if(minimumDrop > 0)
+            else if(churnDrop > 0)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d KiB/s, %ds ping (dropping because of minimum)", (*node)->name(),
+                  "Sorted Nodes : %s - %d KiB/s, %ds ping (dropping because of churn)", (*node)->name(),
                   (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
@@ -606,7 +669,7 @@ namespace BitCoin
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
                   "Sorted Nodes : %s - %d KiB/s, %ds ping", (*node)->name(),
                   (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
-            --minimumDrop;
+            --churnDrop;
         }
 
         mNodeLock.readUnlock();
@@ -744,9 +807,9 @@ namespace BitCoin
           (int)averageSpeed / 1024, (int)averagePing, (int)(100.0 * dropScore));
 
         // Always drop some nodes so nodes with lower pings can still be found
-        int minimumDrop = 0;
+        int churnDrop = 0;
         if(sortedScores.size() == MAX_OUTGOING_CONNECTION_COUNT)
-            minimumDrop = sortedScores.size() / 8;
+            churnDrop = sortedScores.size() / 8;
 
         // Drop slowest
         nodeScore = sortedScores.begin();
@@ -759,10 +822,10 @@ namespace BitCoin
                   (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
-            else if(minimumDrop > 0)
+            else if(churnDrop > 0)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping (dropping because of minimum)", (*node)->name(),
+                  "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping (dropping because for churn)", (*node)->name(),
                   (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
@@ -771,7 +834,7 @@ namespace BitCoin
                   "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping", (*node)->name(),
                   (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
 
-            --minimumDrop;
+            --churnDrop;
             ++nodeScore;
         }
 
@@ -853,6 +916,7 @@ namespace BitCoin
         uint32_t lastInfoSaveTime = startTime;
         uint32_t lastPeerRequestTime = 0;
         uint32_t lastImprovement = startTime;
+        uint32_t lastTransactionRequest = startTime;
         uint32_t time;
 
         while(!daemon.mStopping)
@@ -887,6 +951,12 @@ namespace BitCoin
                     daemon.sendHeaderRequest();
                 if(daemon.mChain.blocksNeeded())
                     daemon.sendRequests();
+                time = getTime();
+                if(time - lastTransactionRequest > 20)
+                {
+                    lastTransactionRequest = time;
+                    daemon.sendTransactionRequests();
+                }
             }
 
             time = getTime();
