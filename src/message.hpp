@@ -143,7 +143,9 @@ namespace BitCoin
         public:
 
             static const unsigned int FULL_NODE_BIT   = 0x01;
-            static const unsigned int FILTER_NODE_BIT = 0x02;
+            static const unsigned int FILTER_NODE_BIT = 0x02; // BIP-0064
+            static const unsigned int BLOOM_NODE_BIT  = 0x04;
+            static const unsigned int XTHIN_NODE_BIT  = 0x10; // BUIP-0010
             static const unsigned int CASH_NODE_BIT   = 0x20;
 
             VersionData() : Data(VERSION) { }

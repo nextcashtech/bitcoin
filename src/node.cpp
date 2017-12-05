@@ -382,6 +382,8 @@ namespace BitCoin
         }
         mAnnounceMutex.unlock();
 
+        // if(mVersionData->transmittingServices & Message::VersionData::XTHIN_NODE_BIT)
+
         //TODO if(mSendBlocksCompact)
         // {
             // //TODO  Send CompactBlockData
@@ -664,6 +666,10 @@ namespace BitCoin
                     versionText += ", relay";
                 if(mVersionData->transmittingServices & Message::VersionData::FULL_NODE_BIT)
                     versionText += ", full";
+                if(mVersionData->transmittingServices & Message::VersionData::BLOOM_NODE_BIT)
+                    versionText += ", bloom";
+                if(mVersionData->transmittingServices & Message::VersionData::XTHIN_NODE_BIT)
+                    versionText += ", xthin";
                 if(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT)
                     versionText += ", cash";
                 versionText += ", time ";
