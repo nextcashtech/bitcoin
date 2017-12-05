@@ -10,6 +10,7 @@
 
 #include "arcmist/base/mutex.hpp"
 #include "arcmist/base/thread.hpp"
+#include "arcmist/base/hash.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "arcmist/io/network.hpp"
 #include "base.hpp"
@@ -60,12 +61,12 @@ namespace BitCoin
 
         bool waitingForRequests() { return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty(); }
         bool requestHeaders();
-        bool requestBlocks(HashList &pList);
-        bool requestTransactions(HashList &pList);
+        bool requestBlocks(ArcMist::HashList &pList);
+        bool requestTransactions(ArcMist::HashList &pList);
         unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
         void releaseBlockRequests();
 
-        bool hasTransaction(const Hash &pHash);
+        bool hasTransaction(const ArcMist::Hash &pHash);
 
         bool requestPeers();
 
@@ -126,18 +127,18 @@ namespace BitCoin
         unsigned int mBlockDownloadSize;
         unsigned int mBlockDownloadTime;
 
-        Hash mHeaderRequested, mLastHeaderRequested;
+        ArcMist::Hash mHeaderRequested, mLastHeaderRequested;
         uint32_t mHeaderRequestTime;
 
         ArcMist::Mutex mBlockRequestMutex;
-        HashList mBlocksRequested;
+        ArcMist::HashList mBlocksRequested;
         int32_t mBlockRequestTime, mBlockReceiveTime;
 
         ArcMist::Mutex mAnnounceMutex;
-        HashList mAnnounceBlocks, mAnnounceTransactions;
+        ArcMist::HashList mAnnounceBlocks, mAnnounceTransactions;
 
-        void addAnnouncedBlock(const Hash &pHash);
-        void addAnnouncedTransaction(const Hash &pHash);
+        void addAnnouncedBlock(const ArcMist::Hash &pHash);
+        void addAnnouncedTransaction(const ArcMist::Hash &pHash);
 
         bool mConnected;
         int32_t mConnectedTime;

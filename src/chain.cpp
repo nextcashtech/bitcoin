@@ -18,7 +18,7 @@
 #include "info.hpp"
 #include "daemon.hpp"
 
-#define BITCOIN_CHAIN_LOG_NAME "BitCoin Chain"
+#define BITCOIN_CHAIN_LOG_NAME "Chain"
 
 
 namespace BitCoin
@@ -86,7 +86,7 @@ namespace BitCoin
 
                     // Get first and last block times and accumulated work
                     uint32_t lastTime, firstTime;
-                    Hash lastWork, firstWork;
+                    ArcMist::Hash lastWork, firstWork;
 
                     mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 1, lastTime, lastWork, 3);
                     mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 145, firstTime, firstWork, 3);
@@ -110,7 +110,7 @@ namespace BitCoin
                         timeSpan = 288 * 600;
 
                     // Let the Work Performed (W) be equal to the difference in chainwork[3] between B_last and B_first.
-                    Hash work = lastWork - firstWork;
+                    ArcMist::Hash work = lastWork - firstWork;
 
                     // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                       // "First work : %s", firstWork.hex().text());
@@ -128,14 +128,14 @@ namespace BitCoin
 
                     // Let Target (T) be equal to the (2^256 - PW) / PW. This is calculated by
                     //   taking the two’s complement of PW (-PW) and dividing it by PW (-PW / PW).
-                    Hash target = (-work) / work;
+                    ArcMist::Hash target = (-work) / work;
 
                     // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                       // "Target     : %s", target.hex().text());
 
                     // The target difficulty for block B_n+1 is then equal to the lesser of T and
                     //   0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-                    static Hash sMaxTarget("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+                    static ArcMist::Hash sMaxTarget("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
                     if(target > sMaxTarget)
                         sMaxTarget.getDifficulty(mTargetBits, mMaxTargetBits);
                     else
@@ -221,7 +221,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Chain::headerAvailable(const Hash &pHash)
+    bool Chain::headerAvailable(const ArcMist::Hash &pHash)
     {
         if(blockInChain(pHash))
             return true;
@@ -238,7 +238,7 @@ namespace BitCoin
         return found;
     }
 
-    unsigned int Chain::blockFileID(const Hash &pHash)
+    unsigned int Chain::blockFileID(const ArcMist::Hash &pHash)
     {
         if(pHash.isEmpty())
             return 0; // Empty hash means start from the beginning
@@ -258,7 +258,7 @@ namespace BitCoin
         return result;
     }
 
-    int Chain::blockHeight(const Hash &pHash)
+    int Chain::blockHeight(const ArcMist::Hash &pHash)
     {
         int result = -1;
         if(pHash.isEmpty())
@@ -327,7 +327,7 @@ namespace BitCoin
         return result;
     }
 
-    void Chain::addBlackListedBlock(const Hash &pHash)
+    void Chain::addBlackListedBlock(const ArcMist::Hash &pHash)
     {
         if(!mBlackListBlocks.contains(pHash))
         {
@@ -336,14 +336,14 @@ namespace BitCoin
             // Keep list at 1024 or less
             if(mBlackListBlocks.size() > 1024)
                 mBlackListBlocks.erase(mBlackListBlocks.begin());
-            mBlackListBlocks.push_back(new Hash(pHash));
+            mBlackListBlocks.push_back(new ArcMist::Hash(pHash));
         }
     }
 
     Block *Chain::blockToAnnounce()
     {
         Block *result = NULL;
-        Hash hash;
+        ArcMist::Hash hash;
         mPendingLock.writeLock("Announce");
         if(mBlocksToAnnounce.size() > 0)
         {
@@ -401,7 +401,7 @@ namespace BitCoin
         return result;
     }
 
-    bool Chain::headerInBranch(const Hash &pHash)
+    bool Chain::headerInBranch(const ArcMist::Hash &pHash)
     {
         // Loop through all branches
         mPendingLock.readLock();
@@ -508,8 +508,8 @@ namespace BitCoin
         // Put all the branch pending blocks into the main pending blocks.
         //    Then normal processing will complete and process them.
         offset = 0;
-        Hash work(32);
-        Hash target(32);
+        ArcMist::Hash work(32);
+        ArcMist::Hash target(32);
         for(std::list<PendingBlockData *>::iterator pending=longestBranch->pendingBlocks.begin();pending!=longestBranch->pendingBlocks.end();++pending)
         {
             mPendingBlocks.push_back(*pending);
@@ -542,7 +542,7 @@ namespace BitCoin
         return true;
     }
 
-    Chain::HashStatus Chain::addPendingHash(const Hash &pHash, unsigned int pNodeID)
+    Chain::HashStatus Chain::addPendingHash(const ArcMist::Hash &pHash, unsigned int pNodeID)
     {
         mPendingLock.readLock();
         if(mBlackListBlocks.contains(pHash))
@@ -629,7 +629,7 @@ namespace BitCoin
         {
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
               "Invalid proof of work : %s", pBlock->hash.hex().text());
-            Hash target;
+            ArcMist::Hash target;
             target.setDifficulty(pBlock->targetBits);
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
               "Target                   : %s", target.hex().text());
@@ -662,8 +662,8 @@ namespace BitCoin
         {
             // Add to main pending list
             mPendingBlocks.push_back(new PendingBlockData(pBlock));
-            Hash work(32);
-            Hash target(32);
+            ArcMist::Hash work(32);
+            ArcMist::Hash target(32);
             target.setDifficulty(pBlock->targetBits);
             target.getWork(work);
             mPendingAccumulatedWork += work;
@@ -770,7 +770,7 @@ namespace BitCoin
         {
             // Check if it fits on one of the last 100 blocks in the chain
             int chainHeight = height();
-            HashList::reverse_iterator hash = mBlockHashes.rbegin();
+            ArcMist::HashList::reverse_iterator hash = mBlockHashes.rbegin();
             for(int i=0;i<100;++i,++hash,--chainHeight)
                 if(**hash == pBlock->previousHash)
                 {
@@ -880,8 +880,8 @@ namespace BitCoin
         mPendingBlockCount = 0;
         mPendingAccumulatedWork = accumulatedWork();
         unsigned int offset = 0;
-        Hash work(32);
-        Hash target(32);
+        ArcMist::Hash work(32);
+        ArcMist::Hash target(32);
 
         // Read pending blocks/headers from file
         while(file.remaining())
@@ -936,7 +936,7 @@ namespace BitCoin
         return success;
     }
 
-    void Chain::updateBlockProgress(const Hash &pHash, unsigned int pNodeID, uint32_t pTime)
+    void Chain::updateBlockProgress(const ArcMist::Hash &pHash, unsigned int pNodeID, uint32_t pTime)
     {
         mPendingLock.readLock();
         for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
@@ -949,11 +949,11 @@ namespace BitCoin
         mPendingLock.readUnlock();
     }
 
-    void Chain::markBlocksForNode(HashList &pHashes, unsigned int pNodeID)
+    void Chain::markBlocksForNode(ArcMist::HashList &pHashes, unsigned int pNodeID)
     {
         mPendingLock.readLock();
         uint32_t time = getTime();
-        for(HashList::iterator hash=pHashes.begin();hash!=pHashes.end();++hash)
+        for(ArcMist::HashList::iterator hash=pHashes.begin();hash!=pHashes.end();++hash)
             for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
                 if((*pending)->block->hash == **hash)
                 {
@@ -982,7 +982,7 @@ namespace BitCoin
         mPendingLock.readUnlock();
     }
 
-    bool Chain::getBlocksNeeded(HashList &pHashes, unsigned int pCount, bool pReduceOnly)
+    bool Chain::getBlocksNeeded(ArcMist::HashList &pHashes, unsigned int pCount, bool pReduceOnly)
     {
         pHashes.clear();
 
@@ -997,7 +997,7 @@ namespace BitCoin
 
             if(!(*pending)->isFull() && (*pending)->requestingNode == 0)
             {
-                pHashes.push_back(new Hash((*pending)->block->hash));
+                pHashes.push_back(new ArcMist::Hash((*pending)->block->hash));
                 if(pHashes.size() >= pCount)
                     break;
             }
@@ -1133,7 +1133,7 @@ namespace BitCoin
         {
             BlockSet &blockSet = mBlockLookup[pBlock->hash.lookup16()];
             blockSet.lock();
-            mBlockHashes.push_back(new Hash(pBlock->hash));
+            mBlockHashes.push_back(new ArcMist::Hash(pBlock->hash));
             blockSet.push_back(new BlockInfo(mBlockHashes.back(), mLastFileID, mNextBlockHeight));
             blockSet.unlock();
 
@@ -1301,7 +1301,7 @@ namespace BitCoin
 
             if(isInSync())
             {
-                mBlocksToAnnounce.push_back(new Hash(nextPending->block->hash));
+                mBlocksToAnnounce.push_back(new ArcMist::Hash(nextPending->block->hash));
                 if(mAnnounceBlock == NULL)
                     mAnnounceBlock = nextPending->block;
                 nextPending->block = NULL;
@@ -1361,7 +1361,7 @@ namespace BitCoin
         }
     }
 
-    bool Chain::getBlockHashes(HashList &pHashes, const Hash &pStartingHash, unsigned int pCount)
+    bool Chain::getBlockHashes(ArcMist::HashList &pHashes, const ArcMist::Hash &pStartingHash, unsigned int pCount)
     {
         int hashHeight;
 
@@ -1377,28 +1377,29 @@ namespace BitCoin
 
         while(pHashes.size() < pCount)
         {
-            pHashes.push_back(new Hash(*mBlockHashes[hashHeight]));
+            pHashes.push_back(new ArcMist::Hash(*mBlockHashes[hashHeight]));
             ++hashHeight;
         }
 
         return pHashes.size() > 0;
     }
 
-    bool Chain::getReverseBlockHashes(HashList &pHashes, unsigned int pCount)
+    bool Chain::getReverseBlockHashes(ArcMist::HashList &pHashes, unsigned int pCount)
     {
         pHashes.clear();
         mProcessMutex.lock();
         int height = mBlockHashes.size();
-        for(HashList::reverse_iterator hash=mBlockHashes.rbegin();hash!=mBlockHashes.rend() && pHashes.size() < pCount && height > 0;hash+=100,height-=100)
-            pHashes.push_back(new Hash(**hash));
+        for(ArcMist::HashList::reverse_iterator hash=mBlockHashes.rbegin();hash!=mBlockHashes.rend() && pHashes.size() < pCount && height > 0;hash+=100,height-=100)
+            pHashes.push_back(new ArcMist::Hash(**hash));
         mProcessMutex.unlock();
         return true;
     }
 
-    bool Chain::getBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash, const Hash &pStoppingHash, unsigned int pCount)
+    bool Chain::getBlockHeaders(BlockList &pBlockHeaders, const ArcMist::Hash &pStartingHash, const ArcMist::Hash &pStoppingHash,
+      unsigned int pCount)
     {
         BlockFile *blockFile;
-        Hash hash = pStartingHash;
+        ArcMist::Hash hash = pStartingHash;
         unsigned int fileID = blockFileID(hash);
         bool found = false;
         unsigned int previousCount;
@@ -1443,7 +1444,7 @@ namespace BitCoin
         return found;
     }
 
-    bool Chain::getBlockHash(unsigned int pHeight, Hash &pHash)
+    bool Chain::getBlockHash(unsigned int pHeight, ArcMist::Hash &pHash)
     {
         if(pHeight >= mBlockHashes.size())
         {
@@ -1479,7 +1480,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Chain::getBlock(const Hash &pHash, Block &pBlock)
+    bool Chain::getBlock(const ArcMist::Hash &pHash, Block &pBlock)
     {
         int thisBlockHeight = blockHeight(pHash);
         if(thisBlockHeight == -1)
@@ -1515,7 +1516,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Chain::getHeader(const Hash &pHash, Block &pBlockHeader)
+    bool Chain::getHeader(const ArcMist::Hash &pHash, Block &pBlockHeader)
     {
         int thisBlockHeight = blockHeight(pHash);
         if(thisBlockHeight == -1)
@@ -1659,9 +1660,9 @@ namespace BitCoin
 
         BlockFile *blockFile = NULL;
         ArcMist::String filePathName;
-        HashList hashes;
+        ArcMist::HashList hashes;
         bool success = true;
-        Hash emptyHash;
+        ArcMist::Hash emptyHash;
         unsigned int fileID;
 
         mProcessMutex.lock();
@@ -1699,7 +1700,7 @@ namespace BitCoin
                 BlockFile::unlock(fileID);
 
                 mLastFileID = fileID;
-                for(HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                for(ArcMist::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
                 {
                     BlockSet &blockSet = mBlockLookup[(*hash)->lookup16()];
                     blockSet.lock();
@@ -1870,7 +1871,7 @@ namespace BitCoin
     bool Chain::validate(bool pRebuild)
     {
         BlockFile *blockFile;
-        Hash previousHash(32), merkleHash;
+        ArcMist::Hash previousHash(32), merkleHash;
         Block block;
         unsigned int i, height = 0;
         bool useTestMinDifficulty;
@@ -1990,7 +1991,7 @@ namespace BitCoin
 
         bool success = true;
         ArcMist::Buffer checkData;
-        Hash checkHash(32);
+        ArcMist::Hash checkHash(32);
         Block *genesis = Block::genesis(0x1d00ffff);
 
         //genesis->print(ArcMist::Log::INFO);
@@ -2265,7 +2266,7 @@ namespace BitCoin
             // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME, "Failed block");
 
 
-        // Hash hash("ffff5d1293ae9fa73bcd3aa9f4620e29f8a8f46d8e41a55767e12fa30592bc7e");
+        // ArcMist::Hash hash("ffff5d1293ae9fa73bcd3aa9f4620e29f8a8f46d8e41a55767e12fa30592bc7e");
         // unsigned int index = 0;
 
         // // // // Load transactions from block

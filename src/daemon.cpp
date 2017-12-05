@@ -21,7 +21,7 @@
 #include <csignal>
 #include <algorithm>
 
-#define BITCOIN_DAEMON_LOG_NAME "BitCoin Daemon"
+#define BITCOIN_DAEMON_LOG_NAME "Daemon"
 
 
 namespace BitCoin
@@ -406,7 +406,7 @@ namespace BitCoin
     {
     public:
         Node *node;
-        HashList list;
+        ArcMist::HashList list;
     };
 
     void Daemon::sendRequests()
@@ -465,7 +465,7 @@ namespace BitCoin
             return;
         }
 
-        HashList blocksToRequest;
+        ArcMist::HashList blocksToRequest;
         mChain.getBlocksNeeded(blocksToRequest, blocksToRequestCount, reduceOnly);
 
         if(blocksToRequest.size() == 0)
@@ -491,9 +491,9 @@ namespace BitCoin
 
         // Stagger out block requests
         unsigned int requestNodeOffset = 0;
-        for(HashList::iterator hash=blocksToRequest.begin();hash!=blocksToRequest.end();++hash)
+        for(ArcMist::HashList::iterator hash=blocksToRequest.begin();hash!=blocksToRequest.end();++hash)
         {
-            nodeRequests[requestNodeOffset].list.push_back(new Hash(**hash));
+            nodeRequests[requestNodeOffset].list.push_back(new ArcMist::Hash(**hash));
             if(++requestNodeOffset >= requestNodes.size())
                 requestNodeOffset = 0;
         }
@@ -512,7 +512,7 @@ namespace BitCoin
 
     void Daemon::sendTransactionRequests()
     {
-        HashList transactionsToRequest;
+        ArcMist::HashList transactionsToRequest;
 
         mChain.memPool().getNeeded(transactionsToRequest);
 
@@ -543,7 +543,7 @@ namespace BitCoin
 
         // Try to find nodes that have the transactions
         bool found;
-        for(HashList::iterator hash=transactionsToRequest.begin();hash!=transactionsToRequest.end();++hash)
+        for(ArcMist::HashList::iterator hash=transactionsToRequest.begin();hash!=transactionsToRequest.end();++hash)
         {
             found = false;
             nodeRequest = nodeRequests;
@@ -551,14 +551,14 @@ namespace BitCoin
             {
                 if(nodeRequest->node->hasTransaction(**hash))
                 {
-                    nodeRequest->list.push_back(new Hash(**hash));
+                    nodeRequest->list.push_back(new ArcMist::Hash(**hash));
                     found = true;
                 }
                 ++nodeRequest;
             }
 
             if(!found) // Add to first node
-                nodeRequests->list.push_back(new Hash(**hash));
+                nodeRequests->list.push_back(new ArcMist::Hash(**hash));
         }
 
         // Send requests to nodes
@@ -854,13 +854,13 @@ namespace BitCoin
             delete block;
         }
 
-        HashList transactionList;
+        ArcMist::HashList transactionList;
         Transaction *transaction;
         mChain.memPool().getToAnnounce(transactionList);
         if(transactionList.size() > 0)
         {
             mNodeLock.readLock();
-            for(HashList::iterator hash=transactionList.begin();hash!=transactionList.end();++hash)
+            for(ArcMist::HashList::iterator hash=transactionList.begin();hash!=transactionList.end();++hash)
             {
                 transaction = mChain.memPool().get(**hash);
                 if(transaction != NULL)

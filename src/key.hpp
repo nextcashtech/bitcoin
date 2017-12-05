@@ -9,6 +9,7 @@
 #define BITCOIN_KEY_HPP
 
 #include "arcmist/base/string.hpp"
+#include "arcmist/base/hash.hpp"
 #include "arcmist/io/stream.hpp"
 #include "base.hpp"
 
@@ -51,7 +52,7 @@ namespace BitCoin
         bool read(ArcMist::InputStream *pStream);
 
         bool isValid() const { return mValid; }
-        void getHash(Hash &pHash) const;
+        void getHash(ArcMist::Hash &pHash) const;
 
         const uint8_t *value() const { return mData; }
 
@@ -93,7 +94,7 @@ namespace BitCoin
         void write(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
         bool read(ArcMist::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly = false);
 
-        bool verify(const PublicKey &pPublicKey, const Hash &pHash) const;
+        bool verify(const PublicKey &pPublicKey, const ArcMist::Hash &pHash) const;
 
         void randomize()
         {
@@ -126,7 +127,7 @@ namespace BitCoin
         bool generatePublicKey(PublicKey &pPublicKey) const;
         ArcMist::String hex() const;
 
-        bool sign(Hash &pHash, Signature &pSignature) const;
+        bool sign(ArcMist::Hash &pHash, Signature &pSignature) const;
 
         void write(ArcMist::OutputStream *pStream) const { pStream->write(mData, 32); }
         bool read(ArcMist::InputStream *pStream)

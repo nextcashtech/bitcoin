@@ -8,6 +8,7 @@
 #ifndef BITCOIN_BLOCK_HPP
 #define BITCOIN_BLOCK_HPP
 
+#include "arcmist/base/hash.hpp"
 #include "arcmist/base/log.hpp"
 #include "arcmist/io/stream.hpp"
 #include "arcmist/io/file_stream.hpp"
@@ -42,12 +43,12 @@ namespace BitCoin
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG, bool pIncludeTransactions = true);
 
         // Hash
-        Hash hash;
+        ArcMist::Hash hash;
 
         // Header
         int32_t version;
-        Hash previousHash;
-        Hash merkleHash;
+        ArcMist::Hash previousHash;
+        ArcMist::Hash merkleHash;
         uint32_t time;
         uint32_t targetBits;
         uint32_t nonce;
@@ -61,7 +62,7 @@ namespace BitCoin
         unsigned int size() const { return mSize; }
 
         void calculateHash();
-        void calculateMerkleHash(Hash &pMerkleHash);
+        void calculateMerkleHash(ArcMist::Hash &pMerkleHash);
 
         bool process(TransactionOutputPool &pOutputs, int pBlockHeight, const BlockStats &pBlockStats,
           const Forks &pForks);
@@ -138,7 +139,7 @@ namespace BitCoin
         bool isValid() const { return mValid; }
         bool isFull() { return blockCount() == MAX_BLOCKS; }
         unsigned int blockCount() { getLastCount(); return mCount; }
-        const Hash &lastHash() { getLastCount(); return mLastHash; }
+        const ArcMist::Hash &lastHash() { getLastCount(); return mLastHash; }
 
         // Add a block to the file
         bool addBlock(Block &pBlock);
@@ -147,27 +148,27 @@ namespace BitCoin
         bool removeBlocksAbove(unsigned int pOffset);
 
         // Read block at specified offset in file. Return false if the offset is too high.
-        bool readHash(unsigned int pOffset, Hash &pHash);
+        bool readHash(unsigned int pOffset, ArcMist::Hash &pHash);
         bool readBlock(unsigned int pOffset, Block &pBlock, bool pIncludeTransactions);
 
         // Read list of block hashes from this file. If pStartingHash is empty then start with first block
-        bool readBlockHashes(HashList &pHashes);
+        bool readBlockHashes(ArcMist::HashList &pHashes);
 
         // Append block stats from this file to the list specified
         bool readStats(BlockStats &pStats);
 
         // Read list of block headers from this file. If pStartingHash is empty then start with first block
-        bool readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash,
-          const Hash &pStoppingHash, unsigned int pCount);
+        bool readBlockHeaders(BlockList &pBlockHeaders, const ArcMist::Hash &pStartingHash,
+          const ArcMist::Hash &pStoppingHash, unsigned int pCount);
 
         // Read block for specified hash
-        bool readBlock(const Hash &pHash, Block &pBlock, bool pIncludeTransactions);
+        bool readBlock(const ArcMist::Hash &pHash, Block &pBlock, bool pIncludeTransactions);
 
         // Read transaction output at specified offset in file
         bool readTransactionOutput(unsigned int pFileOffset, Output &pTransactionOutput);
 
         // Give the offset of a specific hash into the file
-        unsigned int hashOffset(const Hash &pHash);
+        unsigned int hashOffset(const ArcMist::Hash &pHash);
 
         void updateCRC();
 
@@ -196,7 +197,7 @@ namespace BitCoin
 
         void getLastCount();
         unsigned int mCount;
-        Hash mLastHash;
+        ArcMist::Hash mLastHash;
 
         static ArcMist::Mutex mBlockFileMutex;
         static std::vector<unsigned int> mLockedBlockFileIDs;

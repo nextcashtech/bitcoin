@@ -9,6 +9,7 @@
 #define BITCOIN_FORKS_HPP
 
 #include "arcmist/base/string.hpp"
+#include "arcmist/base/hash.hpp"
 #include "arcmist/base/log.hpp"
 #include "arcmist/io/stream.hpp"
 #include "base.hpp"
@@ -17,7 +18,7 @@
 #include <list>
 #include <vector>
 
-#define BITCOIN_FORKS_LOG_NAME "BitCoin Forks"
+#define BITCOIN_FORKS_LOG_NAME "Forks"
 
 
 namespace BitCoin
@@ -26,7 +27,8 @@ namespace BitCoin
     {
     public:
         BlockStat() : accumulatedWork(32) {}
-        BlockStat(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits, const Hash &pAccumulatedWork) : accumulatedWork(pAccumulatedWork)
+        BlockStat(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits, const ArcMist::Hash &pAccumulatedWork) :
+          accumulatedWork(pAccumulatedWork)
           { version = pVersion; time = pTime; targetBits = pTargetBits; }
 
         void write(ArcMist::OutputStream *pStream) const
@@ -51,10 +53,10 @@ namespace BitCoin
 
         static const unsigned int SIZE = 44;
 
-        int32_t  version;
-        uint32_t time;
-        uint32_t targetBits;
-        Hash     accumulatedWork;
+        int32_t       version;
+        uint32_t      time;
+        uint32_t      targetBits;
+        ArcMist::Hash accumulatedWork;
     };
 
     class BlockStats : public std::vector<BlockStat *>
@@ -68,18 +70,18 @@ namespace BitCoin
 
         uint32_t time(unsigned int pBlockHeight) const;
         uint32_t targetBits(unsigned int pBlockHeight) const;
-        const Hash &accumulatedWork(unsigned int pBlockHeight) const;
+        const ArcMist::Hash &accumulatedWork(unsigned int pBlockHeight) const;
 
         // Note : Call after block has been added to stats
         uint32_t getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount = 11) const;
 
-        void getMedianPastTimeAndWork(unsigned int pBlockHeight, uint32_t &pTime, Hash &pAccumulatedWork,
+        void getMedianPastTimeAndWork(unsigned int pBlockHeight, uint32_t &pTime, ArcMist::Hash &pAccumulatedWork,
           unsigned int pMedianCount = 3) const;
 
         void add(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits)
         {
-            Hash work(32);
-            Hash target(32);
+            ArcMist::Hash work(32);
+            ArcMist::Hash target(32);
             target.setDifficulty(pTargetBits);
             target.getWork(work);
             work += accumulatedWork(height());

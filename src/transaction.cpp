@@ -18,7 +18,7 @@
 #include "interpreter.hpp"
 #include "block.hpp"
 
-#define BITCOIN_TRANSACTION_LOG_NAME "BitCoin Transaction"
+#define BITCOIN_TRANSACTION_LOG_NAME "Transaction"
 
 
 namespace BitCoin
@@ -121,7 +121,7 @@ namespace BitCoin
         ScriptInterpreter::printScript(script, pLevel);
     }
 
-    bool Transaction::addInput(const Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence)
+    bool Transaction::addInput(const ArcMist::Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence)
     {
         // Add input
         Input *newInput = new Input();
@@ -151,14 +151,14 @@ namespace BitCoin
     bool Transaction::signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
       const PublicKey &pPublicKey, Signature::HashType pHashType)
     {
-        Hash outputHash;
+        ArcMist::Hash outputHash;
         if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHash) != ScriptInterpreter::P2PKH)
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2PKH");
             return false;
         }
 
-        Hash publicKeyHash;
+        ArcMist::Hash publicKeyHash;
         pPublicKey.getHash(publicKeyHash);
         if(publicKeyHash != outputHash)
         {
@@ -175,7 +175,7 @@ namespace BitCoin
 
         // Create input script
         // Get signature hash
-        Hash signatureHash;
+        ArcMist::Hash signatureHash;
         pOutput.script.setReadOffset(0);
         if(!getSignatureHash(signatureHash, pInputOffset, pOutput.script, pOutput.amount, pHashType))
             return false;
@@ -199,7 +199,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::addP2PKHOutput(const Hash &pPublicKeyHash, uint64_t pAmount)
+    bool Transaction::addP2PKHOutput(const ArcMist::Hash &pPublicKeyHash, uint64_t pAmount)
     {
         Output *newOutput = new Output();
         newOutput->amount = pAmount;
@@ -228,7 +228,7 @@ namespace BitCoin
     bool Transaction::signP2PKInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
       const PublicKey &pPublicKey, Signature::HashType pHashType)
     {
-        Hash outputHash;
+        ArcMist::Hash outputHash;
         pOutput.script.setReadOffset(0);
         if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHash) != ScriptInterpreter::P2PK)
         {
@@ -267,7 +267,7 @@ namespace BitCoin
 
         // Create input script
         // Get signature hash
-        Hash signatureHash;
+        ArcMist::Hash signatureHash;
         pOutput.script.setReadOffset(0);
         if(!getSignatureHash(signatureHash, pInputOffset, pOutput.script, pOutput.amount, pHashType))
             return false;
@@ -305,7 +305,7 @@ namespace BitCoin
 
     bool Transaction::authorizeP2SHInput(Output &pOutput, unsigned int pInputOffset, ArcMist::Buffer &pRedeemScript)
     {
-        Hash outputHash;
+        ArcMist::Hash outputHash;
         pOutput.script.setReadOffset(0);
         if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHash) != ScriptInterpreter::P2SH)
         {
@@ -317,7 +317,7 @@ namespace BitCoin
         ArcMist::Digest scriptDigest(ArcMist::Digest::SHA256_RIPEMD160);
         pRedeemScript.setReadOffset(0);
         scriptDigest.writeStream(&pRedeemScript, pRedeemScript.length());
-        Hash scriptHash;
+        ArcMist::Hash scriptHash;
         scriptDigest.getResult(&scriptHash);
         if(scriptHash != outputHash)
         {
@@ -341,7 +341,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::addP2SHOutput(const Hash &pScriptHash, uint64_t pAmount)
+    bool Transaction::addP2SHOutput(const ArcMist::Hash &pScriptHash, uint64_t pAmount)
     {
         Output *newOutput = new Output();
         newOutput->amount = pAmount;
@@ -519,7 +519,7 @@ namespace BitCoin
             bool signatureVerified;
             bool publicKeyFound = false;
             int signatureOffset = 0;
-            Hash signatureHash;
+            ArcMist::Hash signatureHash;
 
             while(publicKeyIter!=publicKeys.end())
             {
@@ -650,7 +650,7 @@ namespace BitCoin
     }
 
     Transaction *Transaction::createCoinbaseTransaction(int pBlockHeight, int64_t pFees,
-      const Hash &pPublicKeyHash)
+      const ArcMist::Hash &pPublicKeyHash)
     {
         Transaction *result = new Transaction();
         result->addCoinbaseInput(pBlockHeight);
@@ -778,7 +778,7 @@ namespace BitCoin
     }
 
     bool Transaction::check(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
-      HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks)
+      ArcMist::HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks)
     {
         pOutpointsNeeded.clear();
         mStatus = IS_VALID | IS_STANDARD | WAS_CHECKED;
@@ -841,7 +841,7 @@ namespace BitCoin
         // Check Outputs
         index = 0;
         ScriptInterpreter::ScriptType scriptType;
-        Hash hash;
+        ArcMist::Hash hash;
         for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
         {
             if((*output)->amount < 0)
@@ -926,7 +926,7 @@ namespace BitCoin
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d outpoint not found : index %d trans %s", index,
                           (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
-                        pOutpointsNeeded.push_back(new Hash((*input)->outpoint.transactionID));
+                        pOutpointsNeeded.push_back(new ArcMist::Hash((*input)->outpoint.transactionID));
                         continue;
                     }
                 }
@@ -1515,7 +1515,7 @@ namespace BitCoin
         if(forkID)
         {
             // BIP-0143 Signature Hash Algorithm
-            Hash hash(32);
+            ArcMist::Hash hash(32);
             ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
             digest.setOutputEndian(ArcMist::Endian::LITTLE);
 
@@ -1738,7 +1738,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::getSignatureHash(Hash &pHash, unsigned int pInputOffset,
+    bool Transaction::getSignatureHash(ArcMist::Hash &pHash, unsigned int pInputOffset,
       ArcMist::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType)
     {
         // Write appropriate data to a digest
@@ -1891,7 +1891,7 @@ namespace BitCoin
             delete *item;
     }
 
-    Transaction *TransactionList::getSorted(const Hash &pHash)
+    Transaction *TransactionList::getSorted(const ArcMist::Hash &pHash)
     {
         // Search sorted
         if(size() == 0 || back()->hash < pHash)
@@ -2006,7 +2006,7 @@ namespace BitCoin
         return true;
     }
 
-    bool TransactionList::removeSorted(const Hash &pHash)
+    bool TransactionList::removeSorted(const ArcMist::Hash &pHash)
     {
         // Remove sorted
         if(size() == 0 || back()->hash < pHash)
@@ -2101,7 +2101,7 @@ namespace BitCoin
 
         // Create unspent transaction output (so we can spend it)
         Transaction spendable, transaction;
-        Hash publicKey1Hash;
+        ArcMist::Hash publicKey1Hash;
 
         publicKey1.getHash(publicKey1Hash);
         spendable.addP2PKHOutput(publicKey1Hash, 51000);
@@ -2112,7 +2112,7 @@ namespace BitCoin
          * Process Valid P2PKH Transaction
          ***********************************************************************************************/
         // Create public key script to pay the third public key
-        Hash publicKey2Hash;
+        ArcMist::Hash publicKey2Hash;
         publicKey2.getHash(publicKey2Hash);
 
         // Create Transaction to spend it
@@ -2127,7 +2127,7 @@ namespace BitCoin
 
         transaction.calculateHash();
 
-        Hash checkHash;
+        ArcMist::Hash checkHash;
         if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHash) == ScriptInterpreter::P2PKH)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script");
         else
@@ -2305,7 +2305,7 @@ namespace BitCoin
             redeemScript.writeUnsignedInt(ArcMist::Math::randomInt());
 
         // Create hash of redeemScript
-        Hash redeemHash(20);
+        ArcMist::Hash redeemHash(20);
         ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
         digest.writeStream(&redeemScript, redeemScript.length());
         digest.getResult(&redeemHash);
@@ -2385,7 +2385,7 @@ namespace BitCoin
         transaction.clear();
         spendable.clear();
 
-        Hash testOutHash(20);
+        ArcMist::Hash testOutHash(20);
         std::vector<PublicKey *> publicKeys;
 
         publicKeys.push_back(&publicKey1);

@@ -9,6 +9,7 @@
 #define BITCOIN_OUTPUTS_HPP
 
 #include "arcmist/base/mutex.hpp"
+#include "arcmist/base/hash.hpp"
 #include "arcmist/base/log.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "arcmist/io/file_stream.hpp"
@@ -17,7 +18,7 @@
 #include <vector>
 #include <stdlib.h>
 
-#define BITCOIN_OUTPUTS_LOG_NAME "BitCoin Outputs"
+#define BITCOIN_OUTPUTS_LOG_NAME "Output"
 
 
 namespace BitCoin
@@ -102,7 +103,7 @@ namespace BitCoin
             mFlags       = 0;
             fileOffset   = ArcMist::INVALID_STREAM_SIZE;
         }
-        TransactionReference(const Hash &pID, unsigned int pBlockHeight, unsigned int pOutputCount) : id(pID)
+        TransactionReference(const ArcMist::Hash &pID, unsigned int pBlockHeight, unsigned int pOutputCount) : id(pID)
         {
             blockHeight  = pBlockHeight;
             mOutputCount = 0;
@@ -125,7 +126,7 @@ namespace BitCoin
         bool readHeader(ArcMist::InputStream *pStream);
 
         // Read the hash, then if the hash matches read the rest
-        bool readMatchingID(const Hash &pHash, ArcMist::InputStream *pStream);
+        bool readMatchingID(const ArcMist::Hash &pHash, ArcMist::InputStream *pStream);
 
         // Read the hash, then block height and return false if the block height is equal to or above specified
         bool readAboveBlock(unsigned int pBlockHeight, ArcMist::InputStream *pStream);
@@ -209,7 +210,7 @@ namespace BitCoin
         void clearMightNeedIndexed() { mFlags &= ~MIGHT_NEED_INDEXED; }
         void clearFlags() { mFlags = 0; }
 
-        Hash id; // Transaction Hash
+        ArcMist::Hash id; // Transaction Hash
         unsigned int blockHeight; // Block height of transaction
         ArcMist::stream_size fileOffset; // Offset into file where transaction reference is written
 
@@ -270,7 +271,7 @@ namespace BitCoin
         void drop(unsigned int pBlockHeight, unsigned int &pOutputCount);
 
         // Return an iterator to the first matching item in the list
-        iterator firstMatching(const Hash &pHash);
+        iterator firstMatching(const ArcMist::Hash &pHash);
 
     };
 
@@ -327,7 +328,7 @@ namespace BitCoin
     public:
         SampleEntry() {}
 
-        Hash hash;
+        ArcMist::Hash hash;
         ArcMist::stream_size indexOffset;
     };
 
@@ -342,10 +343,10 @@ namespace BitCoin
         bool setup(unsigned int pID, const char *pFilePath, unsigned int pCacheSize = 4096);
 
         // Find a transaction with an unspent output at the specified index
-        TransactionReference *find(const Hash &pTransactionID, uint32_t pIndex);
+        TransactionReference *find(const ArcMist::Hash &pTransactionID, uint32_t pIndex);
 
         // Find a transaction with any unspent outputs
-        TransactionReference *find(const Hash &pTransactionID);
+        TransactionReference *find(const ArcMist::Hash &pTransactionID);
 
         // Add a new transaction
         void add(TransactionReference *pReference);
@@ -390,13 +391,13 @@ namespace BitCoin
 
         // Pull all transactions with matching IDs from the file and put them in cached.
         //   Returns count of transactions found
-        TransactionReference *pull(const Hash &pTransactionID, unsigned int &pItemsPulled);
-        unsigned int pullLinear(const Hash &pTransactionID);
+        TransactionReference *pull(const ArcMist::Hash &pTransactionID, unsigned int &pItemsPulled);
+        unsigned int pullLinear(const ArcMist::Hash &pTransactionID);
 
-        bool transactionIsCached(const Hash &pTransactionID, unsigned int pBlockHeight);
+        bool transactionIsCached(const ArcMist::Hash &pTransactionID, unsigned int pBlockHeight);
 
         // Find offsets into indices that contain the specified transaction ID, based on samples
-        bool findSample(const Hash &pTransactionID, ArcMist::stream_size &pBegin, ArcMist::stream_size &pEnd);
+        bool findSample(const ArcMist::Hash &pTransactionID, ArcMist::stream_size &pBegin, ArcMist::stream_size &pEnd);
 
         TransactionReference *pullTransactionHeader(ArcMist::stream_size pDataOffset);
         bool loadSample(unsigned int pSampleOffset);
@@ -432,7 +433,7 @@ namespace BitCoin
         static const unsigned int SET_COUNT = 0x100;
         static const unsigned int BIP0030_HASH_COUNT = 2;
         static const unsigned int BIP0030_HEIGHTS[BIP0030_HASH_COUNT];
-        static const Hash BIP0030_HASHES[BIP0030_HASH_COUNT];
+        static const ArcMist::Hash BIP0030_HASHES[BIP0030_HASH_COUNT];
 
         TransactionOutputPool();
         ~TransactionOutputPool() { mToCommit.clearNoDelete(); } // Will be deleted in sets
@@ -440,20 +441,20 @@ namespace BitCoin
         bool isValid() const { return mValid; }
 
         // Find an unspent transaction output
-        TransactionReference *findUnspent(const Hash &pTransactionID, uint32_t pIndex);
+        TransactionReference *findUnspent(const ArcMist::Hash &pTransactionID, uint32_t pIndex);
 
         // BIP-0030 Check if this block's transactions match any existing unspent transaction IDs
         //   This is expensive since it is a negative lookup and has to search a file for every transaction.
         //   Positive lookups can be limited extremely by cacheing transactions from recent (a few thousand) blocks
         bool checkDuplicates(const std::vector<Transaction *> &pBlockTransactions,
-          unsigned int pBlockHeight, const Hash &pBlockHash);
+          unsigned int pBlockHeight, const ArcMist::Hash &pBlockHash);
 
         // Add all the outputs from a block (pending since they have no block file IDs or offsets yet)
         // Returns false if one of the transaction IDs is currently unspent BIP-0030
         bool add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
 
         // Find a transaction output
-        TransactionReference *find(const Hash &pTransactionID);
+        TransactionReference *find(const ArcMist::Hash &pTransactionID);
 
         // Mark an output as spent
         void spend(TransactionReference *pReference, unsigned int pIndex, unsigned int pBlockHeight);

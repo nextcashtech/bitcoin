@@ -9,7 +9,7 @@
 
 #include "arcmist/base/log.hpp"
 
-#define BITCOIN_MEM_POOL_LOG_NAME "BitCoin Mem Pool"
+#define BITCOIN_MEM_POOL_LOG_NAME "MemPool"
 
 
 namespace BitCoin
@@ -27,14 +27,14 @@ namespace BitCoin
         mLock.writeUnlock();
     }
 
-    void MemPool::addBlacklisted(const Hash &pHash)
+    void MemPool::addBlacklisted(const ArcMist::Hash &pHash)
     {
-        mBlackListed.push_back(new Hash(pHash));
+        mBlackListed.push_back(new ArcMist::Hash(pHash));
         while(mBlackListed.size() > 1024)
             mBlackListed.erase(mBlackListed.begin());
     }
 
-    bool MemPool::isBlackListed(const Hash &pHash)
+    bool MemPool::isBlackListed(const ArcMist::Hash &pHash)
     {
         bool result = false;
         mLock.readLock();
@@ -43,12 +43,12 @@ namespace BitCoin
         return result;
     }
 
-    bool MemPool::isBlackListedInternal(const Hash &pHash)
+    bool MemPool::isBlackListedInternal(const ArcMist::Hash &pHash)
     {
         return mBlackListed.contains(pHash);
     }
 
-    MemPool::HashStatus MemPool::addPending(const Hash &pHash, unsigned int pNodeID)
+    MemPool::HashStatus MemPool::addPending(const ArcMist::Hash &pHash, unsigned int pNodeID)
     {
         mLock.writeLock("Add Pending");
         HashStatus result = addPendingInternal(pHash, pNodeID);
@@ -56,7 +56,7 @@ namespace BitCoin
         return result;
     }
 
-    MemPool::HashStatus MemPool::addPendingInternal(const Hash &pHash, unsigned int pNodeID)
+    MemPool::HashStatus MemPool::addPendingInternal(const ArcMist::Hash &pHash, unsigned int pNodeID)
     {
         if(isBlackListedInternal(pHash))
             return BLACK_LISTED;
@@ -81,9 +81,9 @@ namespace BitCoin
         return NEED;
     }
 
-    void MemPool::markForNode(HashList &pList, unsigned int pNodeID)
+    void MemPool::markForNode(ArcMist::HashList &pList, unsigned int pNodeID)
     {
-        HashList remaining;
+        ArcMist::HashList remaining;
         pList.copyNoAllocate(remaining);
         mLock.writeLock("Mark");
 
@@ -93,7 +93,7 @@ namespace BitCoin
             {
                 (*pending)->requestingNode = pNodeID;
                 (*pending)->requestedTime = getTime();
-                for(HashList::iterator hash=remaining.begin();hash!=remaining.end();++hash)
+                for(ArcMist::HashList::iterator hash=remaining.begin();hash!=remaining.end();++hash)
                     if(**hash == (*pending)->hash)
                     {
                         remaining.erase(hash);
@@ -102,7 +102,7 @@ namespace BitCoin
             }
 
         // Add any remaining as new pending
-        for(HashList::iterator hash=remaining.begin();hash!=remaining.end();++hash)
+        for(ArcMist::HashList::iterator hash=remaining.begin();hash!=remaining.end();++hash)
             mPending.push_back(new PendingTransactionData(**hash, pNodeID, getTime()));
 
         remaining.clearNoDelete();
@@ -118,21 +118,21 @@ namespace BitCoin
         mLock.writeUnlock();
     }
 
-    void MemPool::getNeeded(HashList &pList)
+    void MemPool::getNeeded(ArcMist::HashList &pList)
     {
         mLock.writeLock("Get Needed");
         uint32_t time = getTime();
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             if((*pending)->requestingNode == 0 || time - (*pending)->requestedTime > 2)
-                pList.push_back(new Hash((*pending)->hash));
+                pList.push_back(new ArcMist::Hash((*pending)->hash));
         mLock.writeUnlock();
     }
 
-    void MemPool::getToAnnounce(HashList &pList)
+    void MemPool::getToAnnounce(ArcMist::HashList &pList)
     {
         pList.clear();
         mLock.writeLock("Get Announce");
-        for(HashList::iterator hash=mToAnnounce.begin();hash!=mToAnnounce.end();++hash)
+        for(ArcMist::HashList::iterator hash=mToAnnounce.begin();hash!=mToAnnounce.end();++hash)
             pList.push_back(*hash);
         mToAnnounce.clearNoDelete();
         mLock.writeUnlock();
@@ -141,7 +141,7 @@ namespace BitCoin
     bool MemPool::check(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
       const Forks &pForks, uint64_t pMinFeeRate)
     {
-        HashList outpointsNeeded;
+        ArcMist::HashList outpointsNeeded;
         if(!pTransaction->check(pOutputs, mTransactions, outpointsNeeded,
           pForks.requiredVersion(), pBlockStats, pForks))
         {
@@ -176,7 +176,7 @@ namespace BitCoin
               "Transaction requires unseen output. Adding to pending. (%d bytes) : %s", pTransaction->size(),
               pTransaction->hash.hex().text());
 
-            for(HashList::iterator outpoint=outpointsNeeded.begin();outpoint!=outpointsNeeded.end();++outpoint)
+            for(ArcMist::HashList::iterator outpoint=outpointsNeeded.begin();outpoint!=outpointsNeeded.end();++outpoint)
                 addPendingInternal(**outpoint, 0);
             return pTransaction->status();
         }
@@ -320,7 +320,7 @@ namespace BitCoin
     bool MemPool::insert(Transaction *pTransaction, bool pAnnounce)
     {
         if(pAnnounce)
-            mToAnnounce.push_back(new Hash(pTransaction->hash));
+            mToAnnounce.push_back(new ArcMist::Hash(pTransaction->hash));
 
         // Remove from pending
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
@@ -340,7 +340,7 @@ namespace BitCoin
             return false;
     }
 
-    bool MemPool::remove(const Hash &pHash)
+    bool MemPool::remove(const ArcMist::Hash &pHash)
     {
         // Remove from pending
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
@@ -370,7 +370,7 @@ namespace BitCoin
         return false;
     }
 
-    Transaction *MemPool::get(const Hash &pHash)
+    Transaction *MemPool::get(const ArcMist::Hash &pHash)
     {
         mLock.readLock();
         Transaction *result = getInternal(pHash);
@@ -378,7 +378,7 @@ namespace BitCoin
         return result;
     }
 
-    Transaction *MemPool::getInternal(const Hash &pHash)
+    Transaction *MemPool::getInternal(const ArcMist::Hash &pHash)
     {
         return mTransactions.getSorted(pHash);
     }

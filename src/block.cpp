@@ -18,7 +18,7 @@
 #include "interpreter.hpp"
 #include "info.hpp"
 
-#define BITCOIN_BLOCK_LOG_NAME "BitCoin Block"
+#define BITCOIN_BLOCK_LOG_NAME "Block"
 
 
 namespace BitCoin
@@ -32,7 +32,7 @@ namespace BitCoin
 
     bool Block::hasProofOfWork()
     {
-        Hash target;
+        ArcMist::Hash target;
         target.setDifficulty(targetBits);
         return hash <= target;
     }
@@ -269,7 +269,7 @@ namespace BitCoin
         digest.getResult(&hash);
     }
 
-    void concatHash(const Hash *pFirst, const Hash *pSecond, Hash &pResult)
+    void concatHash(const ArcMist::Hash *pFirst, const ArcMist::Hash *pSecond, ArcMist::Hash &pResult)
     {
         ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
         digest.setOutputEndian(ArcMist::Endian::LITTLE);
@@ -278,9 +278,10 @@ namespace BitCoin
         digest.getResult(&pResult);
     }
 
-    void calculateMerkleHashLevel(std::vector<Hash *>::iterator pIter, std::vector<Hash *>::iterator pEnd, Hash &pResult)
+    void calculateMerkleHashLevel(std::vector<ArcMist::Hash *>::iterator pIter, std::vector<ArcMist::Hash *>::iterator pEnd,
+      ArcMist::Hash &pResult)
     {
-        std::vector<Hash *>::iterator next = pIter;
+        std::vector<ArcMist::Hash *>::iterator next = pIter;
         ++next;
         if(next == pEnd)
         {
@@ -289,7 +290,7 @@ namespace BitCoin
             return;
         }
 
-        std::vector<Hash *>::iterator nextNext = next;
+        std::vector<ArcMist::Hash *>::iterator nextNext = next;
         ++nextNext;
         if(nextNext == pEnd)
         {
@@ -299,8 +300,8 @@ namespace BitCoin
         }
 
         // More than two entries. Move up the tree a level.
-        std::vector<Hash *> nextLevel;
-        Hash *one, *two, *newHash;
+        std::vector<ArcMist::Hash *> nextLevel;
+        ArcMist::Hash *one, *two, *newHash;
 
         while(pIter != pEnd)
         {
@@ -314,7 +315,7 @@ namespace BitCoin
                 two = *pIter++;
 
             // Hash these and add to the next level
-            newHash = new Hash(32);
+            newHash = new ArcMist::Hash(32);
             concatHash(one, two, *newHash);
             nextLevel.push_back(newHash);
         }
@@ -323,11 +324,11 @@ namespace BitCoin
         calculateMerkleHashLevel(nextLevel.begin(), nextLevel.end(), pResult);
 
         // Destroy the next level
-        for(std::vector<Hash *>::iterator hash=nextLevel.begin();hash!=nextLevel.end();++hash)
+        for(std::vector<ArcMist::Hash *>::iterator hash=nextLevel.begin();hash!=nextLevel.end();++hash)
             delete *hash;
     }
 
-    void Block::calculateMerkleHash(Hash &pMerkleHash)
+    void Block::calculateMerkleHash(ArcMist::Hash &pMerkleHash)
     {
         pMerkleHash.setSize(32);
         if(transactions.size() == 0)
@@ -340,7 +341,7 @@ namespace BitCoin
         else
         {
             // Collect transaction hashes
-            std::vector<Hash *> hashes;
+            std::vector<ArcMist::Hash *> hashes;
             for(std::vector<Transaction *>::iterator i=transactions.begin();i!=transactions.end();++i)
                 hashes.push_back(&(*i)->hash);
 
@@ -423,7 +424,7 @@ namespace BitCoin
         }
 
         // Validate Merkle Hash
-        Hash calculatedMerkleHash;
+        ArcMist::Hash calculatedMerkleHash;
         calculateMerkleHash(calculatedMerkleHash);
         if(calculatedMerkleHash != merkleHash)
         {
@@ -645,7 +646,7 @@ namespace BitCoin
         // Write zero hashes
         ArcMist::Digest digest(ArcMist::Digest::CRC32);
         digest.setOutputEndian(ArcMist::Endian::LITTLE);
-        Hash zeroHash(32);
+        ArcMist::Hash zeroHash(32);
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
             zeroHash.write(outputFile);
@@ -842,7 +843,7 @@ namespace BitCoin
         }
 
         // Zeroize hashes and offsets above the specified block offset
-        Hash zeroHash(32);
+        ArcMist::Hash zeroHash(32);
         outputFile->setWriteOffset(HASHES_OFFSET + ((pOffset + 1) * HEADER_ITEM_SIZE));
         for(unsigned int i=pOffset+1;i<count;++i)
         {
@@ -856,7 +857,7 @@ namespace BitCoin
         return false;
     }
 
-    bool BlockFile::readBlockHashes(HashList &pHashes)
+    bool BlockFile::readBlockHashes(ArcMist::HashList &pHashes)
     {
         pHashes.clear();
         if(!openFile())
@@ -865,7 +866,7 @@ namespace BitCoin
             return false;
         }
 
-        Hash hash(32);
+        ArcMist::Hash hash(32);
         mInputFile->setReadOffset(HASHES_OFFSET);
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
@@ -879,7 +880,7 @@ namespace BitCoin
                 return true;
             }
 
-            pHashes.push_back(new Hash(hash));
+            pHashes.push_back(new ArcMist::Hash(hash));
         }
 
         return true;
@@ -925,8 +926,8 @@ namespace BitCoin
     }
 
     // If pStartingHash is empty then start with first block in file
-    bool BlockFile::readBlockHeaders(BlockList &pBlockHeaders, const Hash &pStartingHash,
-      const Hash &pStoppingHash, unsigned int pCount)
+    bool BlockFile::readBlockHeaders(BlockList &pBlockHeaders, const ArcMist::Hash &pStartingHash,
+      const ArcMist::Hash &pStoppingHash, unsigned int pCount)
     {
         if(!openFile())
         {
@@ -934,7 +935,7 @@ namespace BitCoin
             return false;
         }
 
-        Hash hash(32);
+        ArcMist::Hash hash(32);
         Block *newBlockHeader;
         unsigned int fileOffset;
         unsigned int fileHashOffset = 0;
@@ -995,7 +996,7 @@ namespace BitCoin
         return pBlockHeaders.size() > 0;
     }
 
-    bool BlockFile::readHash(unsigned int pOffset, Hash &pHash)
+    bool BlockFile::readHash(unsigned int pOffset, ArcMist::Hash &pHash)
     {
         pHash.clear();
         if(!openFile())
@@ -1032,7 +1033,7 @@ namespace BitCoin
         return success;
     }
 
-    bool BlockFile::readBlock(const Hash &pHash, Block &pBlock, bool pIncludeTransactions)
+    bool BlockFile::readBlock(const ArcMist::Hash &pHash, Block &pBlock, bool pIncludeTransactions)
     {
         pBlock.clear();
         if(!openFile())
@@ -1044,7 +1045,7 @@ namespace BitCoin
         }
 
         // Find offset
-        Hash hash(32);
+        ArcMist::Hash hash(32);
         unsigned int fileOffset;
         mInputFile->setReadOffset(HASHES_OFFSET);
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
@@ -1102,7 +1103,7 @@ namespace BitCoin
         }
     }
 
-    unsigned int BlockFile::hashOffset(const Hash &pHash)
+    unsigned int BlockFile::hashOffset(const ArcMist::Hash &pHash)
     {
         if(!openFile())
         {
@@ -1111,7 +1112,7 @@ namespace BitCoin
         }
 
         // Find offset
-        Hash hash(32);
+        ArcMist::Hash hash(32);
         mInputFile->setReadOffset(HASHES_OFFSET);
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {

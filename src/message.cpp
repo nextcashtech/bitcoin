@@ -17,7 +17,7 @@
 
 #include <cstring>
 
-#define BITCOIN_MESSAGE_LOG_NAME "BitCoin Message"
+#define BITCOIN_MESSAGE_LOG_NAME "Message"
 
 
 namespace BitCoin
@@ -1060,8 +1060,8 @@ namespace BitCoin
                 return false;
 
             ArcMist::Digest digest(ArcMist::Digest::SHA256);
-            Hash sha256;
-            Hash *shortID;
+            ArcMist::Hash sha256;
+            ArcMist::Hash *shortID;
             bool found;
 
             // SHA256 of block header and nonce
@@ -1085,7 +1085,7 @@ namespace BitCoin
 
                 // SipHash-2-4 of transaction ID and first two little endian 64 bit integers from header SHA256
                 // Drop 2 most significant bytes from SipHash-2-4 to get to 6 bytes
-                shortID = new Hash();
+                shortID = new ArcMist::Hash();
                 if(!(*trans)->hash.getShortID(*shortID, sha256))
                 {
                     delete shortID;
@@ -1159,7 +1159,7 @@ namespace BitCoin
             writeCompactInteger(pStream, shortIDs.size());
 
             // Short IDs
-            for(HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
+            for(ArcMist::HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
                 (*shortID)->write(pStream);
 
             // Number of prefilled transactions
@@ -1200,9 +1200,9 @@ namespace BitCoin
 
             shortIDs.resize(count);
             unsigned int readCount = 0;
-            for(HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
+            for(ArcMist::HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
             {
-                *shortID = new Hash(6);
+                *shortID = new ArcMist::Hash(6);
 
                 if(!(*shortID)->read(pStream))
                 {

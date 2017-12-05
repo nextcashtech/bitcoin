@@ -11,6 +11,7 @@
 #include "arcmist/io/stream.hpp"
 #include "arcmist/base/thread.hpp"
 #include "arcmist/base/mutex.hpp"
+#include "arcmist/base/hash.hpp"
 #include "base.hpp"
 #include "info.hpp"
 #include "node.hpp"
@@ -94,7 +95,7 @@ namespace BitCoin
         void cleanNodes();
 
         Node *nodeWithInventory();
-        Node *nodeWithBlock(const Hash &pHash);
+        Node *nodeWithBlock(const ArcMist::Hash &pHash);
         void sendRequests();
         void sendHeaderRequest();
         void sendPeerRequest();

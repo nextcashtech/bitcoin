@@ -10,6 +10,7 @@
 
 #include "arcmist/base/math.hpp"
 #include "arcmist/base/string.hpp"
+#include "arcmist/base/hash.hpp"
 #include "arcmist/io/stream.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "arcmist/io/network.hpp"
@@ -63,7 +64,7 @@ namespace BitCoin
             enum Type { UNKNOWN=0x00, TRANSACTION=0x01, BLOCK=0x02, FILTERED_BLOCK=0x03, COMPACT_BLOCK=0x04 };
 
             InventoryHash() : hash(32) { type = UNKNOWN; }
-            InventoryHash(Type pType, const Hash &pHash) { type = pType; hash = pHash; }
+            InventoryHash(Type pType, const ArcMist::Hash &pHash) { type = pType; hash = pHash; }
             InventoryHash(InventoryHash &pCopy) : hash(pCopy.hash) { type = pCopy.type; }
 
             bool operator == (const InventoryHash &pRight) { return type == pRight.type && hash == pRight.hash; }
@@ -73,7 +74,7 @@ namespace BitCoin
             bool read(ArcMist::InputStream *pStream);
 
             Type type;
-            Hash hash;
+            ArcMist::Hash hash;
 
         private:
             InventoryHash &operator = (InventoryHash &pRight);
@@ -132,7 +133,7 @@ namespace BitCoin
             void write(Data *pData, ArcMist::Buffer *pOutput);
 
             int32_t version;
-            Hash pendingBlockHash;
+            ArcMist::Hash pendingBlockHash;
             uint32_t pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
             unsigned int lastPendingBlockSize;
 
@@ -339,9 +340,9 @@ namespace BitCoin
             bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             uint32_t version;
-            std::vector<Hash> blockHeaderHashes; // In reverse order (Highest block first)
+            std::vector<ArcMist::Hash> blockHeaderHashes; // In reverse order (Highest block first)
 
-            Hash stopHeaderHash; // Zeroized to stop at highest block on chain
+            ArcMist::Hash stopHeaderHash; // Zeroized to stop at highest block on chain
 
         };
 
@@ -398,9 +399,9 @@ namespace BitCoin
             // Maybe like every 100th block or something
             // First block in this list that they have they will send you headers for
             //   everything after through the stop header
-            std::vector<Hash> blockHeaderHashes;
+            std::vector<ArcMist::Hash> blockHeaderHashes;
 
-            Hash stopHeaderHash; // Zeroized to stop at highest block on chain
+            ArcMist::Hash stopHeaderHash; // Zeroized to stop at highest block on chain
 
         };
 
@@ -443,7 +444,7 @@ namespace BitCoin
 
             Block block;
             uint32_t transactionCount;
-            std::vector<Hash> hashes;
+            std::vector<ArcMist::Hash> hashes;
             ArcMist::Buffer flags;
 
         };
@@ -548,7 +549,7 @@ namespace BitCoin
 
             Block *block;
             uint64_t nonce;
-            HashList shortIDs;
+            ArcMist::HashList shortIDs;
             std::vector<PrefilledTransaction> prefilledTransactionIDs;
 
             bool deleteBlock;

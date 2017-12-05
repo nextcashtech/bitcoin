@@ -9,6 +9,7 @@
 #define BITCOIN_TRANSACTION_HPP
 
 #include "arcmist/base/log.hpp"
+#include "arcmist/base/hash.hpp"
 #include "arcmist/io/stream.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
@@ -41,7 +42,7 @@ namespace BitCoin
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
-        Hash transactionID; // Double SHA256 of signed transaction that paid the input of this transaction.
+        ArcMist::Hash transactionID; // Double SHA256 of signed transaction that paid the input of this transaction.
         uint32_t index;
 
         // Verification data
@@ -100,9 +101,9 @@ namespace BitCoin
 
         ~TransactionList();
 
-        Transaction *getSorted(const Hash &pHash);
+        Transaction *getSorted(const ArcMist::Hash &pHash);
         bool insertSorted(Transaction *pTransaction);
-        bool removeSorted(const Hash &pHash);
+        bool removeSorted(const ArcMist::Hash &pHash);
 
         void clear();
         void clearNoDelete();
@@ -140,7 +141,7 @@ namespace BitCoin
         void print(ArcMist::Log::Level pLevel = ArcMist::Log::VERBOSE);
 
         // Hash
-        Hash hash;
+        ArcMist::Hash hash;
 
         // Data
         uint32_t version;
@@ -185,7 +186,7 @@ namespace BitCoin
 
         // Check validity and return status
         bool check(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
-          HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks);
+          ArcMist::HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks);
 
         // Check that none of the outpoints are spent and return status
         uint8_t checkOutpoints(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions);
@@ -193,7 +194,7 @@ namespace BitCoin
         bool updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           uint64_t pBlockHeight, std::vector<unsigned int> &pSpentAges);
 
-        bool getSignatureHash(Hash &pHash, unsigned int pInputOffset, ArcMist::Buffer &pOutputScript,
+        bool getSignatureHash(ArcMist::Hash &pHash, unsigned int pInputOffset, ArcMist::Buffer &pOutputScript,
           int64_t pOutputAmount, Signature::HashType pHashType);
 
         /***********************************************************************************************
@@ -204,13 +205,13 @@ namespace BitCoin
          * 2. Call addXXXOutput to add all the outputs to be created.
          * 3. Call signXXXInput to sign each input and pass in the output being spent.
          ***********************************************************************************************/
-        bool addInput(const Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence = 0xffffffff);
+        bool addInput(const ArcMist::Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence = 0xffffffff);
         bool addCoinbaseInput(int pBlockHeight);
 
         // P2PKH Pay to Public Key Hash
         bool signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
           const PublicKey &pPublicKey, Signature::HashType pType);
-        bool addP2PKHOutput(const Hash &pPublicKeyHash, uint64_t pAmount);
+        bool addP2PKHOutput(const ArcMist::Hash &pPublicKeyHash, uint64_t pAmount);
 
         // P2PK Pay to Public Key (not as secure as P2PKH)
         bool signP2PKInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
@@ -219,7 +220,7 @@ namespace BitCoin
 
         // P2SH Pay to Script Hash
         bool authorizeP2SHInput(Output &pOutput, unsigned int pInputOffset, ArcMist::Buffer &pRedeemScript);
-        bool addP2SHOutput(const Hash &pScriptHash, uint64_t pAmount);
+        bool addP2SHOutput(const ArcMist::Hash &pScriptHash, uint64_t pAmount);
 
         // MultiSig
         bool addMultiSigInputSignature(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
@@ -228,7 +229,7 @@ namespace BitCoin
         bool addMultiSigOutput(unsigned int pRequiredSignatureCount, std::vector<PublicKey *> pPublicKeys,
           uint64_t pAmount);
 
-        static Transaction *createCoinbaseTransaction(int pBlockHeight, int64_t pFees, const Hash &pPublicKeyHash);
+        static Transaction *createCoinbaseTransaction(int pBlockHeight, int64_t pFees, const ArcMist::Hash &pPublicKeyHash);
 
         // Run unit tests
         static bool test();
@@ -240,7 +241,7 @@ namespace BitCoin
         unsigned int mSize;
         uint8_t mStatus;
 
-        Hash mOutpointHash, mSequenceHash, mOutputHash;
+        ArcMist::Hash mOutpointHash, mSequenceHash, mOutputHash;
 
         bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
           ArcMist::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType);

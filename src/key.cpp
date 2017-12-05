@@ -17,7 +17,7 @@
 #include "arcmist/crypto/digest.hpp"
 #include "interpreter.hpp"
 
-#define BITCOIN_KEY_LOG_NAME "BitCoin Key"
+#define BITCOIN_KEY_LOG_NAME "Key"
 
 
 namespace BitCoin
@@ -92,7 +92,7 @@ namespace BitCoin
         return true;
     }
 
-    bool PrivateKey::sign(Hash &pHash, Signature &pSignature) const
+    bool PrivateKey::sign(ArcMist::Hash &pHash, Signature &pSignature) const
     {
         if(pHash.size() != 32)
         {
@@ -115,7 +115,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Signature::verify(const PublicKey &pPublicKey, const Hash &pHash) const
+    bool Signature::verify(const PublicKey &pPublicKey, const ArcMist::Hash &pHash) const
     {
         if(!pPublicKey.isValid())
         {
@@ -241,7 +241,7 @@ namespace BitCoin
         return false;
     }
 
-    void PublicKey::getHash(Hash &pHash) const
+    void PublicKey::getHash(ArcMist::Hash &pHash) const
     {
         // Calculate hash
         ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
@@ -513,7 +513,7 @@ namespace BitCoin
         /***********************************************************************************************
          * Sign Hash
          ***********************************************************************************************/
-        Hash hash(32);
+        ArcMist::Hash hash(32);
         Signature signature;
         hash.randomize(); // Generate random hash
 

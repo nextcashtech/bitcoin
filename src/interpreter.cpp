@@ -67,11 +67,11 @@ namespace BitCoin
     }
 
     // Parse output script for standard type and hash
-    ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(ArcMist::Buffer &pScript, Hash &pHash)
+    ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(ArcMist::Buffer &pScript, ArcMist::Hash &pHash)
     {
         uint8_t opCode;
         unsigned int dataSize;
-        Hash tempHash;
+        ArcMist::Hash tempHash;
 
         pHash.clear();
         pScript.setReadOffset(0);
@@ -831,7 +831,7 @@ namespace BitCoin
         }
 
         // Get signature hash
-        Hash signatureHash(32);
+        ArcMist::Hash signatureHash(32);
         ArcMist::stream_size previousOffset = pCurrentOutputScript.readOffset();
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
         if(!pTransaction.getSignatureHash(signatureHash, pInputOffset, pCurrentOutputScript,

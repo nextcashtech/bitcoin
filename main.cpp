@@ -12,6 +12,7 @@
 
 #include "arcmist/base/string.hpp"
 #include "arcmist/base/math.hpp"
+#include "arcmist/base/hash.hpp"
 #include "arcmist/base/log.hpp"
 #include "arcmist/io/file_stream.hpp"
 #include "arcmist/io/buffer.hpp"
@@ -144,7 +145,7 @@ int main(int pArgumentCount, char **pArguments)
 
         if(printBlock.length() == 64)
         {
-            BitCoin::Hash hash;
+            ArcMist::Hash hash;
             BitCoin::Chain chain;
             chain.load(false);
             ArcMist::Buffer buffer;

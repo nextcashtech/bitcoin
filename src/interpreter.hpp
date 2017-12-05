@@ -8,6 +8,7 @@
 #ifndef BITCOIN_INTERPRETER_HPP
 #define BITCOIN_INTERPRETER_HPP
 
+#include "arcmist/base/hash.hpp"
 #include "arcmist/base/log.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
@@ -17,7 +18,7 @@
 
 #include <list>
 
-#define BITCOIN_INTERPRETER_LOG_NAME "BitCoin Interpreter"
+#define BITCOIN_INTERPRETER_LOG_NAME "Interpreter"
 
 
 namespace BitCoin
@@ -323,7 +324,7 @@ namespace BitCoin
         static bool bufferIsZero(ArcMist::Buffer *pBuffer);
 
         static bool isPushOnly(ArcMist::Buffer &pScript);
-        static ScriptType parseOutputScript(ArcMist::Buffer &pScript, Hash &pHash);
+        static ScriptType parseOutputScript(ArcMist::Buffer &pScript, ArcMist::Hash &pHash);
         static bool readFirstDataPush(ArcMist::Buffer &pScript, ArcMist::Buffer &pData);
 
         static bool isSmallInteger(uint8_t pOpCode);
@@ -353,7 +354,7 @@ namespace BitCoin
         bool mValid;
         bool mVerified;
         bool mStandard;
-        Hash mHash;
+        ArcMist::Hash mHash;
         Transaction *mTransaction;
         unsigned int mInputOffset;
         uint32_t mInputSequence;

@@ -136,7 +136,7 @@ namespace BitCoin
         return true;
     }
 
-    bool TransactionReference::readMatchingID(const Hash &pHash, ArcMist::InputStream *pStream)
+    bool TransactionReference::readMatchingID(const ArcMist::Hash &pHash, ArcMist::InputStream *pStream)
     {
         mFlags = 0;
         if(pStream->remaining() < SIZE)
@@ -555,7 +555,7 @@ namespace BitCoin
         pRight.clearNoDelete();
     }
 
-    TransactionReferenceList::iterator TransactionReferenceList::firstMatching(const Hash &pHash)
+    TransactionReferenceList::iterator TransactionReferenceList::firstMatching(const ArcMist::Hash &pHash)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs First Matching");
@@ -1572,7 +1572,7 @@ namespace BitCoin
         return itemsAdded;
     }
 
-    unsigned int OutputSet::pullLinear(const Hash &pTransactionID)
+    unsigned int OutputSet::pullLinear(const ArcMist::Hash &pTransactionID)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Pull Linear");
@@ -1588,7 +1588,7 @@ namespace BitCoin
 
         // Linear search
         IndexEntry index;
-        Hash hash(32);
+        ArcMist::Hash hash(32);
         unsigned int itemsAdded;
         bool first = true;
         unsigned int offset = 0;
@@ -1714,7 +1714,7 @@ namespace BitCoin
         return true;
     }
 
-    bool OutputSet::findSample(const Hash &pTransactionID, ArcMist::stream_size &pBegin, ArcMist::stream_size &pEnd)
+    bool OutputSet::findSample(const ArcMist::Hash &pTransactionID, ArcMist::stream_size &pBegin, ArcMist::stream_size &pEnd)
     {
         if(mSamplesLoaded)
         {
@@ -1793,7 +1793,7 @@ namespace BitCoin
         return true;
     }
 
-    TransactionReference *OutputSet::pull(const Hash &pTransactionID, unsigned int &pItemsPulled)
+    TransactionReference *OutputSet::pull(const ArcMist::Hash &pTransactionID, unsigned int &pItemsPulled)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Pull");
@@ -1803,7 +1803,7 @@ namespace BitCoin
 
         int compare;
         IndexEntry index;
-        Hash hash(32);
+        ArcMist::Hash hash(32);
         ArcMist::stream_size first = HEADER_SIZE, begin, end, current;
 
         if(!mDataFile->isValid())
@@ -1921,7 +1921,7 @@ namespace BitCoin
         return result;
     }
 
-    TransactionReference *OutputSet::find(const Hash &pTransactionID, uint32_t pIndex)
+    TransactionReference *OutputSet::find(const ArcMist::Hash &pTransactionID, uint32_t pIndex)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Find");
@@ -2029,7 +2029,7 @@ namespace BitCoin
         return NULL;
     }
 
-    TransactionReference *OutputSet::find(const Hash &pTransactionID)
+    TransactionReference *OutputSet::find(const ArcMist::Hash &pTransactionID)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Outputs Find ID");
@@ -2176,14 +2176,14 @@ namespace BitCoin
     }
 
     const unsigned int TransactionOutputPool::BIP0030_HEIGHTS[BIP0030_HASH_COUNT] = { 91842, 91880 };
-    const Hash TransactionOutputPool::BIP0030_HASHES[BIP0030_HASH_COUNT] =
+    const ArcMist::Hash TransactionOutputPool::BIP0030_HASHES[BIP0030_HASH_COUNT] =
     {
-        Hash("00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"),
-        Hash("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
+        ArcMist::Hash("00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"),
+        ArcMist::Hash("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
     };
 
     bool TransactionOutputPool::checkDuplicates(const std::vector<Transaction *> &pBlockTransactions,
-      unsigned int pBlockHeight, const Hash &pBlockHash)
+      unsigned int pBlockHeight, const ArcMist::Hash &pBlockHash)
     {
         TransactionReference *transactionReference;
         for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
@@ -2403,7 +2403,7 @@ namespace BitCoin
         return true;
     }
 
-    TransactionReference *TransactionOutputPool::findUnspent(const Hash &pTransactionID, uint32_t pIndex)
+    TransactionReference *TransactionOutputPool::findUnspent(const ArcMist::Hash &pTransactionID, uint32_t pIndex)
     {
         if(!mValid)
             return NULL;
@@ -2416,7 +2416,7 @@ namespace BitCoin
         return result;
     }
 
-    TransactionReference *TransactionOutputPool::find(const Hash &pTransactionID)
+    TransactionReference *TransactionOutputPool::find(const ArcMist::Hash &pTransactionID)
     {
         if(!mValid)
             return NULL;

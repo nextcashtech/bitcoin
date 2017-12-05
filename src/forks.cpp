@@ -104,9 +104,9 @@ namespace BitCoin
         return at(pBlockHeight)->targetBits;
     }
 
-    const Hash &BlockStats::accumulatedWork(unsigned int pBlockHeight) const
+    const ArcMist::Hash &BlockStats::accumulatedWork(unsigned int pBlockHeight) const
     {
-        static Hash zeroHash(32);
+        static ArcMist::Hash zeroHash(32);
         if(pBlockHeight >= size())
             return zeroHash;
         return at(pBlockHeight)->accumulatedWork;
@@ -138,7 +138,7 @@ namespace BitCoin
         return *pLeft < *pRight;
     }
 
-    void BlockStats::getMedianPastTimeAndWork(unsigned int pBlockHeight, uint32_t &pTime, Hash &pAccumulatedWork,
+    void BlockStats::getMedianPastTimeAndWork(unsigned int pBlockHeight, uint32_t &pTime, ArcMist::Hash &pAccumulatedWork,
       unsigned int pMedianCount) const
     {
         std::vector<BlockStat *> values;

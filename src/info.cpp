@@ -18,7 +18,7 @@
 #include <fstream>
 #include <algorithm>
 
-#define BITCOIN_INFO_LOG_NAME "BitCoin Info"
+#define BITCOIN_INFO_LOG_NAME "Info"
 
 
 namespace BitCoin

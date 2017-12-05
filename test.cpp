@@ -60,10 +60,10 @@ int main(int pArgumentCount, char **pArguments)
         return 0;
 }
 
-const BitCoin::Hash &addBlock(BitCoin::Chain &pChain, const BitCoin::Hash &pPreviousHash, const BitCoin::Hash &pCoinbaseKeyHash,
+const ArcMist::Hash &addBlock(BitCoin::Chain &pChain, const ArcMist::Hash &pPreviousHash, const ArcMist::Hash &pCoinbaseKeyHash,
   int pBlockHeight, uint32_t pBlockTime, uint32_t pTargetBits)
 {
-    const static BitCoin::Hash zeroHash;
+    const static ArcMist::Hash zeroHash;
     BitCoin::Block *newBlock = new BitCoin::Block();
     newBlock->time = pBlockTime;
     newBlock->targetBits = pTargetBits;
@@ -89,7 +89,7 @@ bool chainTest()
 {
     // Highest target bits = 0x2100ffff
     uint32_t maxTargetBits = 0x2100ffff; // Genesis 0x203fffc0 ?
-    BitCoin::Hash difficulty;
+    ArcMist::Hash difficulty;
     difficulty.setDifficulty(maxTargetBits);
     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, "Test", "Min difficulty : %s", difficulty.hex().text());
 
@@ -98,9 +98,9 @@ bool chainTest()
     BitCoin::setNetwork(BitCoin::MAINNET);
     BitCoin::Info::instance().setPath("chain_test");
 
-    std::vector<BitCoin::Hash> branchHashes;
+    std::vector<ArcMist::Hash> branchHashes;
     int height = 0;
-    BitCoin::Hash lastHash, preBranchHash;
+    ArcMist::Hash lastHash, preBranchHash;
 
     if(true)
     {
@@ -112,7 +112,7 @@ bool chainTest()
         privateKey.generate();
         BitCoin::PublicKey publicKey;
         privateKey.generatePublicKey(publicKey);
-        BitCoin::Hash publicKeyHash;
+        ArcMist::Hash publicKeyHash;
         publicKey.getHash(publicKeyHash);
 
         // Genesis block time
@@ -134,7 +134,7 @@ bool chainTest()
 
         // Add a branch 5 blocks back
         int branchHeight = chain.height() - 5;
-        BitCoin::Hash branchHash;
+        ArcMist::Hash branchHash;
         chain.getBlockHash(branchHeight, branchHash);
         preBranchHash = branchHash;
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain hash before branch : %s", branchHash.hex().text());
@@ -227,8 +227,8 @@ bool chainTest()
 
     ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed reloaded chain height");
 
-    BitCoin::Hash hash;
-    for(std::vector<BitCoin::Hash>::reverse_iterator branchHash=branchHashes.rbegin();branchHash!=branchHashes.rend();++branchHash)
+    ArcMist::Hash hash;
+    for(std::vector<ArcMist::Hash>::reverse_iterator branchHash=branchHashes.rbegin();branchHash!=branchHashes.rend();++branchHash)
     {
         chain2.getBlockHash(height, hash);
         if(hash != *branchHash)
