@@ -668,6 +668,8 @@ namespace BitCoin
                     versionText += ", full";
                 if(mVersionData->transmittingServices & Message::VersionData::BLOOM_NODE_BIT)
                     versionText += ", bloom";
+                if(mVersionData->transmittingServices & Message::VersionData::WITNESS_NODE_BIT)
+                    versionText += ", witness";
                 if(mVersionData->transmittingServices & Message::VersionData::XTHIN_NODE_BIT)
                     versionText += ", xthin";
                 if(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT)
