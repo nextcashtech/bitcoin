@@ -151,8 +151,8 @@ namespace BitCoin
     bool Transaction::signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
       const PublicKey &pPublicKey, Signature::HashType pHashType)
     {
-        ArcMist::Hash outputHash;
-        if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHash) != ScriptInterpreter::P2PKH)
+        ArcMist::HashList outputHashes;
+        if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHashes) != ScriptInterpreter::P2PKH)
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2PKH");
             return false;
@@ -160,7 +160,7 @@ namespace BitCoin
 
         ArcMist::Hash publicKeyHash;
         pPublicKey.getHash(publicKeyHash);
-        if(publicKeyHash != outputHash)
+        if(outputHashes.size() != 1 || publicKeyHash != *outputHashes.front())
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public key hash doesn't match");
             return false;
@@ -228,11 +228,28 @@ namespace BitCoin
     bool Transaction::signP2PKInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
       const PublicKey &pPublicKey, Signature::HashType pHashType)
     {
-        ArcMist::Hash outputHash;
+        ArcMist::HashList outputHashes;
         pOutput.script.setReadOffset(0);
-        if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHash) != ScriptInterpreter::P2PK)
+        if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHashes) != ScriptInterpreter::P2PK)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2PKH");
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2PK");
+            return false;
+        }
+
+        if(outputHashes.size() != 1)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public keys don't match");
+            return false;
+        }
+
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
+        ArcMist::Hash publicKeyHash(20);
+        pPublicKey.write(&digest, false, false);
+        digest.getResult(&publicKeyHash);
+
+        if(publicKeyHash != *outputHashes.front())
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public key doesn't match");
             return false;
         }
 
@@ -305,9 +322,9 @@ namespace BitCoin
 
     bool Transaction::authorizeP2SHInput(Output &pOutput, unsigned int pInputOffset, ArcMist::Buffer &pRedeemScript)
     {
-        ArcMist::Hash outputHash;
+        ArcMist::HashList outputHashes;
         pOutput.script.setReadOffset(0);
-        if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHash) != ScriptInterpreter::P2SH)
+        if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHashes) != ScriptInterpreter::P2SH)
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2SH");
             return false;
@@ -319,7 +336,7 @@ namespace BitCoin
         scriptDigest.writeStream(&pRedeemScript, pRedeemScript.length());
         ArcMist::Hash scriptHash;
         scriptDigest.getResult(&scriptHash);
-        if(scriptHash != outputHash)
+        if(outputHashes.size() != 1 || scriptHash != *outputHashes.front())
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Non matching script hash");
             return false;
@@ -841,7 +858,7 @@ namespace BitCoin
         // Check Outputs
         index = 0;
         ScriptInterpreter::ScriptType scriptType;
-        ArcMist::Hash hash;
+        ArcMist::HashList hashes;
         for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
         {
             if((*output)->amount < 0)
@@ -855,7 +872,7 @@ namespace BitCoin
             }
 
             // Output script matches allowed patterns
-            scriptType = ScriptInterpreter::parseOutputScript((*output)->script, hash);
+            scriptType = ScriptInterpreter::parseOutputScript((*output)->script, hashes);
             if(scriptType == ScriptInterpreter::NON_STANDARD)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
@@ -948,9 +965,6 @@ namespace BitCoin
                 }
             }
 
-#ifdef PROFILER_ON
-            verifyProfiler.start();
-#endif
             interpreter.clear();
             interpreter.initialize(this, index, (*input)->sequence, (*input)->outpoint.output->amount);
 
@@ -963,9 +977,6 @@ namespace BitCoin
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d signature script is invalid : ", index);
                 (*input)->print(ArcMist::Log::VERBOSE);
-#ifdef PROFILER_ON
-                verifyProfiler.stop();
-#endif
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -984,9 +995,6 @@ namespace BitCoin
                     reference->print(ArcMist::Log::VERBOSE);
                 }
                 (*input)->outpoint.output->print(ArcMist::Log::VERBOSE);
-#ifdef PROFILER_ON
-                verifyProfiler.stop();
-#endif
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -1002,9 +1010,6 @@ namespace BitCoin
                     reference->print(ArcMist::Log::VERBOSE);
                 }
                 (*input)->outpoint.output->print(ArcMist::Log::VERBOSE);
-#ifdef PROFILER_ON
-                verifyProfiler.stop();
-#endif
                 sigsVerified = false;
             }
             else
@@ -1012,9 +1017,6 @@ namespace BitCoin
 
             mFee += (*input)->outpoint.output->amount;
             ++index;
-#ifdef PROFILER_ON
-            verifyProfiler.stop();
-#endif
         }
 
         if(pOutpointsNeeded.size() == 0)
@@ -1130,7 +1132,7 @@ namespace BitCoin
                     for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
                         if(*transaction == this)
                             break; // Only use transactions before this one
-                        else if((*transaction)->hash == reference->id)
+                        else if((*transaction)->hash == (*input)->outpoint.transactionID)
                         {
                             found = true;
                             output = *(*transaction)->outputs.at((*input)->outpoint.index);
@@ -1421,6 +1423,17 @@ namespace BitCoin
         return true;
     }
 
+    bool Outpoint::skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream)
+    {
+        if(pInputStream->remaining() < 36)
+            return false;
+        if(pOutputStream == NULL)
+            pInputStream->setReadOffset(pInputStream->readOffset() + 36);
+        else
+            pInputStream->readStream(pOutputStream, 36);
+        return true;
+    }
+
     void Input::write(ArcMist::OutputStream *pStream)
     {
         outpoint.write(pStream);
@@ -1432,9 +1445,11 @@ namespace BitCoin
 
     bool Input::read(ArcMist::InputStream *pStream)
     {
+        // Outpoint
         if(!outpoint.read(pStream))
             return false;
 
+        // Script
         uint64_t bytes = readCompactInteger(pStream);
         if(pStream->remaining() < bytes)
             return false;
@@ -1442,9 +1457,38 @@ namespace BitCoin
         script.setSize(bytes);
         script.writeStreamCompact(*pStream, bytes);
 
+        // Sequence
         if(pStream->remaining() < 4)
             return false;
         sequence = pStream->readUnsignedInt();
+
+        return true;
+    }
+
+    bool Input::skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream)
+    {
+        // Outpoint
+        if(!Outpoint::skip(pInputStream, pOutputStream))
+            return false;
+
+        // Script
+        uint64_t bytes = readCompactInteger(pInputStream);
+        if(pOutputStream != NULL)
+            writeCompactInteger(pOutputStream, bytes);
+        if(pInputStream->remaining() < bytes)
+            return false;
+        if(pOutputStream == NULL)
+            pInputStream->setReadOffset(pInputStream->readOffset() + bytes);
+        else
+            pInputStream->readStream(pOutputStream, bytes);
+
+        // Sequence
+        if(pInputStream->remaining() < 4)
+            return false;
+        if(pOutputStream == NULL)
+            pInputStream->setReadOffset(pInputStream->readOffset() + 4);
+        else
+            pOutputStream->writeUnsignedInt(pInputStream->readUnsignedInt());
 
         return true;
     }
@@ -1760,6 +1804,89 @@ namespace BitCoin
             pOutputScript.setReadOffset(previousReadOffset);
             return false;
         }
+    }
+
+    bool Transaction::skip(ArcMist::InputStream *pStream)
+    {
+        // Version
+        if(pStream->remaining() < 4)
+            return false;
+        pStream->setReadOffset(pStream->readOffset() + 4);
+
+        // Input Count
+        if(!pStream->remaining())
+            return false;
+        uint64_t count = readCompactInteger(pStream);
+
+        // Inputs
+        for(unsigned int i=0;i<count;++i)
+            if(!Input::skip(pStream))
+                return false;
+
+        // Output Count
+        if(!pStream->remaining())
+            return false;
+        count = readCompactInteger(pStream);
+
+        // Outputs
+        for(unsigned int i=0;i<count;++i)
+            if(!Output::skip(pStream))
+                return false;
+
+        if(pStream->remaining() < 4)
+            return false;
+
+        // Lock Time
+        pStream->setReadOffset(pStream->readOffset() + 4);
+        return true;
+    }
+
+    bool Transaction::readOutput(ArcMist::InputStream *pStream, unsigned int pOutputIndex,
+      ArcMist::Hash &pTransactionID, Output &pOutput, bool pBlockFile)
+    {
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+
+        // Version
+        if(pStream->remaining() < 5)
+            return false;
+        digest.writeUnsignedInt(pStream->readUnsignedInt());
+
+        // Input Count
+        uint64_t count = readCompactInteger(pStream);
+        writeCompactInteger(&digest, count);
+
+        // Inputs
+        for(unsigned int i=0;i<count;++i)
+            if(!Input::skip(pStream, &digest))
+                return false;
+
+        // Output Count
+        if(!pStream->remaining())
+            return false;
+        count = readCompactInteger(pStream);
+        writeCompactInteger(&digest, count);
+
+        // Outputs
+        for(unsigned int i=0;i<count;++i)
+        {
+            if(pOutputIndex == i)
+            {
+                if(!pOutput.read(pStream, pBlockFile))
+                    return false;
+                pOutput.write(&digest);
+            }
+            else if(!Output::skip(pStream, &digest))
+                return false;
+        }
+
+        // Lock Time
+        if(pStream->remaining() < 4)
+            return false;
+        digest.writeUnsignedInt(pStream->readUnsignedInt());
+
+        digest.getResult(&pTransactionID);
+        return true;
     }
 
     bool Transaction::read(ArcMist::InputStream *pStream, bool pCalculateHash, bool pBlockFile)
@@ -2127,8 +2254,8 @@ namespace BitCoin
 
         transaction.calculateHash();
 
-        ArcMist::Hash checkHash;
-        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHash) == ScriptInterpreter::P2PKH)
+        ArcMist::HashList checkHashes;
+        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHashes) == ScriptInterpreter::P2PKH)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script");
         else
         {
@@ -2136,7 +2263,7 @@ namespace BitCoin
             success = false;
         }
 
-        if(checkHash == publicKey1Hash)
+        if(checkHashes.size() != 1 || publicKey1Hash == *checkHashes.front())
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script hash");
         else
         {
@@ -2198,7 +2325,7 @@ namespace BitCoin
 
         transaction.calculateHash();
 
-        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHash) == ScriptInterpreter::P2PKH)
+        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHashes) == ScriptInterpreter::P2PKH)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script bad PK");
         else
         {
@@ -2206,7 +2333,7 @@ namespace BitCoin
             success = false;
         }
 
-        if(checkHash == publicKey1Hash)
+        if(checkHashes.size() != 1 || publicKey1Hash == *checkHashes.front())
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script bad PK hash");
         else
         {
@@ -2332,7 +2459,7 @@ namespace BitCoin
             success = false;
         }
 
-        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHash) == ScriptInterpreter::P2SH)
+        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHashes) == ScriptInterpreter::P2SH)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2SH script");
         else
         {
@@ -2340,7 +2467,7 @@ namespace BitCoin
             success = false;
         }
 
-        if(checkHash == redeemHash)
+        if(checkHashes.size() != 1 || redeemHash == *checkHashes.front())
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2SH script hash");
         else
         {
@@ -2425,11 +2552,20 @@ namespace BitCoin
             success = false;
         }
 
-        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHash) == ScriptInterpreter::MULTI_SIG)
+        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHashes) == ScriptInterpreter::MULTI_SIG)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 1 of 2 script");
         else
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check MULTISIG 1 of 2 script");
+            success = false;
+        }
+
+        if(checkHashes.size() == 2)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 1 of 2 script hash count");
+        else
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+              "Failed check MULTISIG 1 of 2 script hash count : %d", checkHashes.size());
             success = false;
         }
 
@@ -2562,11 +2698,20 @@ namespace BitCoin
             success = false;
         }
 
-        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHash) == ScriptInterpreter::MULTI_SIG)
+        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHashes) == ScriptInterpreter::MULTI_SIG)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 2 of 3 script");
         else
         {
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check MULTISIG 2 of 3 script");
+            success = false;
+        }
+
+        if(checkHashes.size() == 3)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 2 of 3 script hash count");
+        else
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+              "Failed check MULTISIG 2 of 3 script hash count : %d", checkHashes.size());
             success = false;
         }
 

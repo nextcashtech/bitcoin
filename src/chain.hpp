@@ -16,6 +16,7 @@
 #include "block.hpp"
 #include "outputs.hpp"
 #include "mem_pool.hpp"
+#include "addresses.hpp"
 
 #include <list>
 #include <vector>
@@ -192,6 +193,7 @@ namespace BitCoin
         const BlockStats &blockStats() const { return mBlockStats; }
         const Forks &forks() const { return mForks; }
         MemPool &memPool() { return mMemPool; }
+        Addresses &addresses() { return mAddresses; }
 
         unsigned int branchCount() const { return mBranches.size(); }
         const Branch *branchAt(unsigned int pOffset) const
@@ -287,6 +289,7 @@ namespace BitCoin
     private:
 
         TransactionOutputPool mOutputs;
+        Addresses mAddresses;
         ArcMist::HashList mBlockHashes;
         BlockSet mBlockLookup[0x10000];
 
@@ -302,8 +305,11 @@ namespace BitCoin
         // Load pending data from the file system
         bool loadPending();
 
-        // Update the unspent transaction pool for any blocks it is missing
+        // Update the transaction outputs for any blocks it is missing
         bool updateOutputs();
+
+        // Update the transaction addresses for any blocks it is missing
+        bool updateAddresses();
 
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;

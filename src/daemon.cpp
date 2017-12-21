@@ -293,8 +293,8 @@ namespace BitCoin
               "Block Chain Branch %d : %d blocks (last %s)", i + 1, branch->height + branch->pendingBlocks.size() - 1, timeText.text());
         }
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Outputs : %d/%d trans/outputs (%d KiB) (%d KiB cached)", mChain.outputs().transactionCount(),
-          mChain.outputs().outputCount(), mChain.outputs().size() / 1024, mChain.outputs().cachedSize() / 1024);
+          "Outputs : %d trans (%d KiB cached)", mChain.outputs().size(),
+          mChain.outputs().cacheDataSize() / 1024);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Mem Pool : %d/%d trans/pending (%d KiB)", mChain.memPool().count(),
           mChain.memPool().pendingCount(), mChain.memPool().size() / 1024);
@@ -575,6 +575,9 @@ namespace BitCoin
 
     void Daemon::sendHeaderRequest()
     {
+        if(getTime() - mLastHeaderRequestTime < 20)
+            return;
+
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         std::vector<Node *> requestNodes;
@@ -1004,6 +1007,7 @@ namespace BitCoin
     {
         Daemon &daemon = Daemon::instance();
         uint32_t lastOutputsPurgeTime = getTime();
+        uint32_t lastAddressPurgeTime = getTime();
         uint32_t lastMemPoolCheckPending = getTime();
 
         while(!daemon.mStopping)
@@ -1026,14 +1030,31 @@ namespace BitCoin
                 lastMemPoolCheckPending = getTime();
             }
 
+            if(daemon.mStopping)
+                break;
+
             daemon.mChain.memPool().process(daemon.mInfo.memPoolThreshold);
 
-            if((getTime() - lastOutputsPurgeTime > 30 && daemon.mChain.outputs().needsPurge(daemon.mInfo.outputsThreshold)) ||
+            if(daemon.mStopping)
+                break;
+
+            if((getTime() - lastOutputsPurgeTime > 30 && daemon.mChain.outputs().needsPurge()) ||
               getTime() - lastOutputsPurgeTime > 3600)
             {
-                if(!daemon.mChain.outputs().save(daemon.mInfo.path()))
+                if(!daemon.mChain.outputs().save())
                     daemon.requestStop();
                 lastOutputsPurgeTime = getTime();
+            }
+
+            if(daemon.mStopping)
+                break;
+
+            if((getTime() - lastAddressPurgeTime > 30 && daemon.mChain.addresses().needsPurge()) ||
+              getTime() - lastAddressPurgeTime > 3600)
+            {
+                if(!daemon.mChain.addresses().save())
+                    daemon.requestStop();
+                lastAddressPurgeTime = getTime();
             }
 
             if(daemon.mStopping)

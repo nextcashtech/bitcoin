@@ -76,11 +76,11 @@ namespace BitCoin
         uint32_t pendingSizeThreshold;
         uint32_t pendingBlocksThreshold;
 
-        // Amount of memory to use for transaction outputs before saving to file
+        // Amount of memory to use to cache transaction outputs. Will build to double this, then save and reduce cache.
         uint32_t outputsThreshold;
 
-        // Block age under which to save unspent transaction outputs in memory
-        uint32_t outputsCacheAge;
+        // Amount of memory to use for transaction outputs before saving to file
+        uint32_t addressesThreshold;
 
         // Minimum fee for transaction mem pool (Satoshis per KB)
         uint64_t minFee;

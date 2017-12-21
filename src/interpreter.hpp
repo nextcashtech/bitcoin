@@ -324,7 +324,7 @@ namespace BitCoin
         static bool bufferIsZero(ArcMist::Buffer *pBuffer);
 
         static bool isPushOnly(ArcMist::Buffer &pScript);
-        static ScriptType parseOutputScript(ArcMist::Buffer &pScript, ArcMist::Hash &pHash);
+        static ScriptType parseOutputScript(ArcMist::Buffer &pScript, ArcMist::HashList &pHashes);
         static bool readFirstDataPush(ArcMist::Buffer &pScript, ArcMist::Buffer &pData);
 
         static bool isSmallInteger(uint8_t pOpCode);

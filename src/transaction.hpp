@@ -42,6 +42,8 @@ namespace BitCoin
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
+        static bool skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream = NULL);
+
         ArcMist::Hash transactionID; // Double SHA256 of signed transaction that paid the input of this transaction.
         uint32_t index;
 
@@ -75,6 +77,9 @@ namespace BitCoin
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
+
+        // Skip over input in stream (The input stream's read offset must be at the beginning of an input)
+        static bool skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream = NULL);
 
         // BIP-0068 Relative time lock sequence
         bool sequenceDisabled() const { return SEQUENCE_DISABLE & sequence; }
@@ -133,6 +138,13 @@ namespace BitCoin
 
         // pCalculateHash will calculate the hash of the transaction data while it reads it
         bool read(ArcMist::InputStream *pStream, bool pCalculateHash = true, bool pBlockFile = false);
+
+        // Skip over transaction in stream (The input stream's read offset must be at the beginning of a transaction)
+        static bool skip(ArcMist::InputStream *pStream);
+
+        // Read the script of the output at the specified offset (The input stream's read offset must be at the beginning of a transaction)
+        static bool readOutput(ArcMist::InputStream *pStream, unsigned int pOutputIndex,
+          ArcMist::Hash &pTransactionID, Output &pOutput, bool pBlockFile = false);
 
         void clear();
         void clearCache();

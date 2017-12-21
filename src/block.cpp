@@ -854,7 +854,7 @@ namespace BitCoin
         mCount = INVALID_COUNT;
         mModified = true;
         delete outputFile;
-        return false;
+        return true;
     }
 
     bool BlockFile::readBlockHashes(ArcMist::HashList &pHashes)
@@ -1082,6 +1082,86 @@ namespace BitCoin
         return false;
     }
 
+    bool BlockFile::readTransactionOutput(unsigned int pBlockOffset, unsigned int pTransactionOffset,
+      unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput)
+    {
+        if(!openFile())
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to read output. Block file 0x%08x couldn't be opened.", mID);
+            mValid = false;
+            return false;
+        }
+
+        // Go to location in header where the data offset to the block is
+        mInputFile->setReadOffset(HASHES_OFFSET + (pBlockOffset * HEADER_ITEM_SIZE) + 32);
+
+        unsigned int offset = mInputFile->readUnsignedInt();
+        if(offset == 0)
+            return false;
+
+        mInputFile->setReadOffset(offset + 80); // Skip over block header
+
+        uint64_t transactionCount = readCompactInteger(mInputFile);
+
+        if(transactionCount <= pTransactionOffset)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block at offset %d doesn't have enough transactions %d/%d. Block file 0x%08x couldn't be opened.",
+              pBlockOffset, pTransactionOffset, transactionCount, mID);
+            return false;
+        }
+
+        for(int i=0;i<(int)pTransactionOffset-1;++i)
+            if(!Transaction::skip(mInputFile))
+                return false;
+
+        if(!Transaction::readOutput(mInputFile, pOutputIndex, pTransactionID, pOutput, true))
+            return false;
+
+        return true;
+
+    }
+
+    bool BlockFile::readTransaction(unsigned int pBlockOffset, unsigned int pTransactionOffset, Transaction &pTransaction)
+    {
+        if(!openFile())
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to read output. Block file 0x%08x couldn't be opened.", mID);
+            mValid = false;
+            return false;
+        }
+
+        // Go to location in header where the data offset to the block is
+        mInputFile->setReadOffset(HASHES_OFFSET + (pBlockOffset * HEADER_ITEM_SIZE) + 32);
+
+        unsigned int offset = mInputFile->readUnsignedInt();
+        if(offset == 0)
+            return false;
+
+        mInputFile->setReadOffset(offset + 80); // Skip over block header
+
+        uint64_t transactionCount = readCompactInteger(mInputFile);
+
+        if(transactionCount <= pTransactionOffset)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block at offset %d doesn't have enough transactions %d/%d. Block file 0x%08x couldn't be opened.",
+              pBlockOffset, pTransactionOffset, transactionCount, mID);
+            return false;
+        }
+
+        for(int i=0;i<(int)pTransactionOffset-1;++i)
+            if(!Transaction::skip(mInputFile))
+                return false;
+
+        if(!pTransaction.read(mInputFile, true, true))
+            return false;
+
+        return true;
+    }
+
     bool BlockFile::readTransactionOutput(unsigned int pFileOffset, Output &pTransactionOutput)
     {
         if(!openFile())
@@ -1242,6 +1322,37 @@ namespace BitCoin
         BlockFile::lock(fileID);
         blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
         bool success = blockFile->isValid() && blockFile->readBlock(offset, pBlock, true);
+        delete blockFile;
+        BlockFile::unlock(fileID);
+        return success;
+    }
+
+    bool BlockFile::readBlockTransaction(unsigned int pHeight, unsigned int pTransactionOffset, Transaction &pTransaction)
+    {
+        unsigned int fileID = pHeight / 100;
+        unsigned int blockOffset = pHeight - (fileID * 100);
+
+        BlockFile *blockFile;
+        BlockFile::lock(fileID);
+        blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+        bool success = blockFile->isValid() && blockFile->readTransaction(blockOffset, pTransactionOffset, pTransaction);
+        delete blockFile;
+        BlockFile::unlock(fileID);
+        return success;
+    }
+
+    bool BlockFile::readBlockTransactionOutput(unsigned int pHeight, unsigned int pTransactionOffset,
+      unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput)
+    {
+        unsigned int fileID = pHeight / 100;
+        unsigned int blockOffset = pHeight - (fileID * 100);
+
+        BlockFile *blockFile;
+        BlockFile::lock(fileID);
+        blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+        bool success = blockFile->isValid() && blockFile->readTransactionOutput(blockOffset, pTransactionOffset,
+          pOutputIndex, pTransactionID, pOutput);
+        delete blockFile;
         BlockFile::unlock(fileID);
         return success;
     }

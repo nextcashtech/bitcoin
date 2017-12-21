@@ -761,7 +761,8 @@ namespace BitCoin
                     added = true;
                     branchesUpdated = true;
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                      "Added header to branch %d : %s", branchID, pBlock->hash.hex().text());
+                      "Added header to branch %d (%d blocks) : %s", branchID, (*branch)->pendingBlocks.size(),
+                      pBlock->hash.hex().text());
                     break;
                 }
         }
@@ -1066,6 +1067,8 @@ namespace BitCoin
 
         mMemPool.remove(pBlock->transactions);
 
+        mAddresses.add(pBlock->transactions, mNextBlockHeight);
+
         // Add the block to the chain
         bool success = true;
         if(mLastFileID == INVALID_FILE_ID)
@@ -1148,6 +1151,7 @@ namespace BitCoin
         else
         {
             mMemPool.revert(pBlock->transactions);
+            mAddresses.remove(pBlock->transactions, mNextBlockHeight - 1);
             mForks.revert(mBlockStats, mNextBlockHeight - 1);
             mBlockStats.revert(mNextBlockHeight - 1);
             mTargetBits = previousTargetBits;
@@ -1200,6 +1204,9 @@ namespace BitCoin
 
     bool Chain::revert(int pHeight)
     {
+        if(height() == pHeight)
+            return true;
+
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
           "Reverting from height %d to height %d", height(), pHeight);
 
@@ -1230,6 +1237,8 @@ namespace BitCoin
             }
 
             mMemPool.revert(block.transactions);
+
+            mAddresses.remove(block.transactions, height());
 
             // Remove hash
             BlockSet &blockSet = mBlockLookup[block.hash.lookup16()];
@@ -1535,7 +1544,11 @@ namespace BitCoin
             return true;
 
         if(currentHeight > height())
-            return mOutputs.bulkRevert(height(), true);
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Outputs height %d above block height %d", mOutputs.height(), height());
+            return false;
+        }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
           "Updating unspent transaction outputs from block height %d to %d", currentHeight, height());
@@ -1570,33 +1583,23 @@ namespace BitCoin
             {
                 if(blockFile->readBlock(offset, block, true))
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                      "Processing block %d : %s", currentHeight, block.hash.hex().text());
+                    // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                      // "Processing block %d : %s", currentHeight, block.hash.hex().text());
 
                     mBlockProcessStartTime = getTime();
 
                     if(block.updateOutputs(mOutputs, currentHeight))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                          "Processed block (%d trans) (%d KiB) (%d s)", block.transactionCount,
+                          "Processed outputs in block %d (%d trans) (%d KiB) (%d s)", currentHeight, block.transactionCount,
                           block.size() / 1024, getTime() - mBlockProcessStartTime);
 
                         mOutputs.commit(block.transactions, currentHeight);
-                        if(getTime() - lastPurgeTime > 10)
-                        {
-                            if(!mOutputs.purge(Info::instance().path(), Info::instance().outputsThreshold))
-                            {
-                                delete blockFile;
-                                BlockFile::unlock(fileID);
-                                return false;
-                            }
-                            lastPurgeTime = getTime();
-                        }
                     }
                     else
                     {
                         mOutputs.revert(block.transactions, currentHeight);
-                        mOutputs.save(Info::instance().path());
+                        mOutputs.save();
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                           "Failed to process block at height %d. At offset %d in block file %08x : %s",
                           currentHeight, offset, fileID, block.hash.hex().text());
@@ -1611,7 +1614,7 @@ namespace BitCoin
                       "Failed to read block %d from block file %08x", offset, fileID);
                     delete blockFile;
                     BlockFile::unlock(fileID);
-                    mOutputs.save(Info::instance().path());
+                    mOutputs.save();
                     return false;
                 }
 
@@ -1622,12 +1625,128 @@ namespace BitCoin
             delete blockFile;
             BlockFile::unlock(fileID);
 
+            if(getTime() - lastPurgeTime > 10)
+            {
+                if(mOutputs.needsPurge() && !mOutputs.save())
+                {
+                    delete blockFile;
+                    BlockFile::unlock(fileID);
+                    return false;
+                }
+                lastPurgeTime = getTime();
+            }
+
             offset = 0;
             fileID++;
         }
 
-        mOutputs.save(Info::instance().path());
+        mOutputs.save();
         return mOutputs.height() == height();
+    }
+
+    bool Chain::updateAddresses()
+    {
+        int currentHeight = mAddresses.height();
+        if(currentHeight == height())
+            return true;
+
+        if(currentHeight > height())
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Addresses height %d above block height %d", mAddresses.height(), height());
+            return false;
+        }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+          "Updating transaction addresses from block height %d to %d", currentHeight, height());
+
+        ++currentHeight;
+
+        unsigned int fileID = currentHeight / 100;
+        unsigned int offset = currentHeight - (fileID * 100);
+
+        if(fileID > mLastFileID)
+            return false;
+
+        BlockFile *blockFile = NULL;
+        Block block;
+        Forks emptyForks;
+        uint32_t lastPurgeTime = getTime();
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Chain Update Addresses", false);
+#endif
+
+        while(currentHeight <= height() && !mStop)
+        {
+            BlockFile::lock(fileID);
+            blockFile = new BlockFile(fileID);
+            if(!blockFile->isValid())
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                  "Block file %08x is invalid", fileID);
+                delete blockFile;
+                BlockFile::unlock(fileID);
+                return false;
+            }
+
+            while(currentHeight <= height() && offset < BlockFile::MAX_BLOCKS)
+            {
+#ifdef PROFILER_ON
+                profiler.start();
+#endif
+                if(blockFile->readBlock(offset, block, true))
+                {
+                    // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                      // "Processing block %d : %s", currentHeight, block.hash.hex().text());
+
+                    mBlockProcessStartTime = getTime();
+
+                    mAddresses.add(block.transactions, currentHeight);
+
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                      "Processed addresses in block %d (%d trans) (%d KiB) (%d s)", currentHeight, block.transactionCount,
+                      block.size() / 1024, getTime() - mBlockProcessStartTime);
+                }
+                else
+                {
+#ifdef PROFILER_ON
+                    profiler.stop();
+#endif
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                      "Failed to read block %d from block file %08x", offset, fileID);
+                    delete blockFile;
+                    BlockFile::unlock(fileID);
+                    mAddresses.save();
+                    return false;
+                }
+
+#ifdef PROFILER_ON
+                profiler.stop();
+#endif
+                ++currentHeight;
+                ++offset;
+            }
+
+            delete blockFile;
+            BlockFile::unlock(fileID);
+
+            if(getTime() - lastPurgeTime > 10)
+            {
+                if(mAddresses.needsPurge() && !mAddresses.save())
+                {
+                    delete blockFile;
+                    BlockFile::unlock(fileID);
+                    return false;
+                }
+                lastPurgeTime = getTime();
+            }
+
+            offset = 0;
+            fileID++;
+        }
+
+        mAddresses.save();
+        return mAddresses.height() == height();
     }
 
     bool Chain::save()
@@ -1648,7 +1767,9 @@ namespace BitCoin
             success = false;
         if(!savePending())
             success = false;
-        if(!mOutputs.save(Info::instance().path()))
+        if(!mOutputs.save())
+            success = false;
+        if(!mAddresses.save())
             success = false;
         return success;
     }
@@ -1840,11 +1961,20 @@ namespace BitCoin
 
         mProcessMutex.unlock();
 
-        if(mStop)
+        if(mStop || !success)
+            return false;
+
+        // Load transaction addresses
+        success = success && mAddresses.load(Info::instance().path(), 0); // 10485760); // 10 MiB
+
+        // Update transaction addresses if they aren't up to current chain block height
+        success = success && updateAddresses();
+
+        if(mStop || !success)
             return false;
 
         // Load transaction outputs
-        success = success && mOutputs.load(Info::instance().path(), Info::instance().outputsCacheAge, pPreCacheOutputs);
+        success = success && mOutputs.load(Info::instance().path(), Info::instance().outputsThreshold);
 
         // Update transaction outputs if they aren't up to current chain block height
         success = success && updateOutputs();
@@ -1957,6 +2087,13 @@ namespace BitCoin
                         return false;
                     }
 
+                    if(!mAddresses.add(block.transactions, height))
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                          "Block %010d addresses update failed", height);
+                        return false;
+                    }
+
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                       "Block %010d is valid : %6d trans, %d KiB", height, block.transactions.size(), block.size() / 1024);
                     //block.print();
@@ -1974,13 +2111,14 @@ namespace BitCoin
 
         if(pRebuild)
         {
-            mOutputs.save(Info::instance().path());
+            mOutputs.save();
+            mAddresses.save();
             if(!mForks.save())
                 return false;
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Unspent transactions/outputs : %d/%d", mOutputs.transactionCount(), mOutputs.outputCount());
+          "Transactions : %d", mOutputs.size());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Validated block height of %d", height);
         return true;
     }
@@ -2150,12 +2288,13 @@ namespace BitCoin
          ***********************************************************************************************/
         Block readBlock;
         ArcMist::FileInputStream readFile("tests/06128e87be8b1b4dea47a7247d5528d2702c96826c7a648497e773b800000000.pending_block");
-        Info::instance().setPath("../bcc_test");
+        ArcMist::removeDirectory("chain_test");
+        Info::instance().setPath("./chain_test");
         TransactionOutputPool outputs;
         BlockStats blockStats;
         Forks softForks;
 
-        outputs.load(Info::instance().path(), Info::instance().outputsCacheAge);
+        outputs.load(Info::instance().path(), Info::instance().outputsThreshold);
 
         if(!readBlock.read(&readFile, true, true, true))
         {

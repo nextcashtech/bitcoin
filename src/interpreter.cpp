@@ -67,13 +67,17 @@ namespace BitCoin
     }
 
     // Parse output script for standard type and hash
-    ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(ArcMist::Buffer &pScript, ArcMist::Hash &pHash)
+    ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(ArcMist::Buffer &pScript, ArcMist::HashList &pHashes)
     {
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Interpreter Parse Output");
+#endif
         uint8_t opCode;
-        unsigned int dataSize;
         ArcMist::Hash tempHash;
+        ArcMist::Buffer data;
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
 
-        pHash.clear();
+        pHashes.clear();
         pScript.setReadOffset(0);
         opCode = pScript.readByte();
 
@@ -95,7 +99,7 @@ namespace BitCoin
                 return NON_STANDARD;
             if(pScript.readByte() != OP_CHECKSIG)
                 return NON_STANDARD;
-            pHash = tempHash;
+            pHashes.push_back(new ArcMist::Hash(tempHash));
             return P2PKH;
         }
         else if(opCode == OP_HASH160)
@@ -105,16 +109,8 @@ namespace BitCoin
             tempHash.read(&pScript, 20); // Read redeem script hash
             if(pScript.readByte() != OP_EQUAL)
                 return NON_STANDARD;
-            pHash = tempHash;
+            pHashes.push_back(new ArcMist::Hash(tempHash));
             return P2SH;
-        }
-        else if((dataSize = pullDataSize(opCode, pScript)) > 1) // Check for P2PK (starting with data push of public key)
-        {
-            if((dataSize >= 33 || dataSize <= 65) && // Valid size for public key
-              pScript.readByte() == OP_CHECKSIG)
-                return P2PK;
-            else
-                return NON_STANDARD;
         }
         else if(isSmallInteger(opCode))
         {
@@ -143,15 +139,34 @@ namespace BitCoin
                 else
                 {
                     // Public keys
-                    dataSize = pullDataSize(opCode, pScript);
-                    if(dataSize == 0)
+                    if(!pullData(opCode, pScript, data))
                         return NON_STANDARD;
-                    else if(dataSize >= 33 || dataSize <= 65) // Valid size for public key
+                    else if(data.length() >= 33 || data.length() <= 65) // Valid size for public key
+                    {
+                        digest.initialize();
+                        data.readStream(&digest, data.length());
+                        digest.getResult(&tempHash);
+                        pHashes.push_back(new ArcMist::Hash(tempHash));
                         ++publicKeyCount;
+                    }
                     else
                         return NON_STANDARD;
                 }
             }
+        }
+        else if(pullData(opCode, pScript, data)) // Check for P2PK (starting with data push of public key)
+        {
+            if((data.length() >= 33 || data.length() <= 65) && // Valid size for public key
+              pScript.readByte() == OP_CHECKSIG)
+            {
+                digest.initialize();
+                data.readStream(&digest, data.length());
+                digest.getResult(&tempHash);
+                pHashes.push_back(new ArcMist::Hash(tempHash));
+                return P2PK;
+            }
+            else
+                return NON_STANDARD;
         }
 
         return NON_STANDARD;

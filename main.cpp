@@ -290,7 +290,7 @@ int main(int pArgumentCount, char **pArguments)
     }
 
 #ifdef PROFILER_ON
-    ArcMist::Profiler profiler("main"); // Attempt to trigger destroy of profiler instance after daemon instance
+    ArcMist::Profiler profiler("Main"); // Attempt to trigger destroy of profiler instance after daemon instance
 #endif
     BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
 

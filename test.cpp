@@ -40,16 +40,13 @@ int main(int pArgumentCount, char **pArguments)
     if(!BitCoin::Message::test())
         failed++;
 
-    if(!BitCoin::TransactionOutputPool::test())
-        failed++;
-
     if(!BitCoin::Chain::test())
         failed++;
 
     BitCoin::Chain::tempTest();
 
-    // if(!chainTest())
-        // failed++;
+    if(!chainTest())
+        failed++;
 
     // if(!cashDAATest())
         // failed++;
@@ -61,7 +58,7 @@ int main(int pArgumentCount, char **pArguments)
 }
 
 const ArcMist::Hash &addBlock(BitCoin::Chain &pChain, const ArcMist::Hash &pPreviousHash, const ArcMist::Hash &pCoinbaseKeyHash,
-  int pBlockHeight, uint32_t pBlockTime, uint32_t pTargetBits)
+  int pBlockHeight, uint32_t pBlockTime, uint32_t pTargetBits, ArcMist::Hash &pTransactionID)
 {
     const static ArcMist::Hash zeroHash;
     BitCoin::Block *newBlock = new BitCoin::Block();
@@ -72,6 +69,7 @@ const ArcMist::Hash &addBlock(BitCoin::Chain &pChain, const ArcMist::Hash &pPrev
     else
         newBlock->previousHash = pPreviousHash;
     newBlock->transactions.push_back(BitCoin::Transaction::createCoinbaseTransaction(pBlockHeight, 0, pCoinbaseKeyHash));
+    pTransactionID = newBlock->transactions.front()->hash;
     newBlock->finalize();
 
     if(!pChain.addPendingBlock(newBlock))
@@ -100,7 +98,10 @@ bool chainTest()
 
     std::vector<ArcMist::Hash> branchHashes;
     int height = 0;
-    ArcMist::Hash lastHash, preBranchHash;
+    ArcMist::Hash lastHash, preBranchHash, transactionID;
+    ArcMist::HashList transactionHashes;
+    ArcMist::Hash publicKeyHash;
+    std::vector<BitCoin::FullOutputData> coinbaseOutputs;
 
     if(true)
     {
@@ -112,8 +113,9 @@ bool chainTest()
         privateKey.generate();
         BitCoin::PublicKey publicKey;
         privateKey.generatePublicKey(publicKey);
-        ArcMist::Hash publicKeyHash;
         publicKey.getHash(publicKeyHash);
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Using coinbase payment address : %s", publicKeyHash.hex().text());
 
         // Genesis block time
         uint32_t time = chain.blockStats().time(0);
@@ -121,8 +123,9 @@ bool chainTest()
         // Add 2016 blocks
         for(unsigned int i=0;i<2016;++i)
         {
-            if(addBlock(chain, chain.lastPendingBlockHash(), publicKeyHash, i + 1, time, maxTargetBits).isEmpty())
+            if(addBlock(chain, chain.lastPendingBlockHash(), publicKeyHash, i + 1, time, maxTargetBits, transactionID).isEmpty())
                 return false;
+            transactionHashes.push_back(new ArcMist::Hash(transactionID));
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
             chain.process();
@@ -138,7 +141,7 @@ bool chainTest()
         chain.getBlockHash(branchHeight, branchHash);
         preBranchHash = branchHash;
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain hash before branch : %s", branchHash.hex().text());
-        branchHash = addBlock(chain, branchHash, publicKeyHash, ++branchHeight, time, maxTargetBits);
+        branchHash = addBlock(chain, branchHash, publicKeyHash, ++branchHeight, time, maxTargetBits, transactionID);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
         const BitCoin::Branch *branch;
@@ -162,7 +165,7 @@ bool chainTest()
         // Extend the branch
         for(unsigned int i=0;i<20;++i)
         {
-            branchHash = addBlock(chain, branchHash, publicKeyHash, ++branchHeight, time, maxTargetBits);
+            branchHash = addBlock(chain, branchHash, publicKeyHash, ++branchHeight, time, maxTargetBits, transactionID);
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
             for(unsigned int i=0;i<chain.branchCount();++i)
@@ -199,6 +202,42 @@ bool chainTest()
 
         height = chain.height();
         lastHash = chain.lastBlockHash();
+
+        chain.addresses().getOutputs(publicKeyHash, coinbaseOutputs);
+
+        if(coinbaseOutputs.size() == (unsigned int)chain.height())
+            ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed transaction address output count");
+        else
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed transaction address output count : %d != %d",
+              coinbaseOutputs.size(), chain.height());
+            return false;
+        }
+
+        ArcMist::HashList::iterator hashIter = transactionHashes.begin();
+        std::vector<BitCoin::FullOutputData>::iterator fullOutput = coinbaseOutputs.begin();
+
+        for(unsigned int i=0;i<transactionHashes.size();++i)
+        {
+            if(fullOutput->blockHeight != i + 1)
+            {
+               ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed transaction address output block height : %d != %d",
+                 fullOutput->blockHeight, i + 1);
+               return false;
+            }
+
+            if(fullOutput->transactionID != **hashIter)
+            {
+               ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed transaction address output trans ID : %s != %s",
+                 fullOutput->transactionID.hex().text(), (*hashIter)->hex().text());
+               return false;
+            }
+
+            ++fullOutput;
+            ++hashIter;
+        }
+
+        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed transaction address outputs check");
 
         if(!chain.save())
         {
@@ -259,6 +298,37 @@ bool chainTest()
         ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed to save reloaded");
         return false;
     }
+
+    chain2.addresses().getOutputs(publicKeyHash, coinbaseOutputs);
+
+    if(coinbaseOutputs.size() == (unsigned int)chain2.height())
+        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed transaction address output count after save");
+    else
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed transaction address output count after save : %d != %d",
+          coinbaseOutputs.size(), chain2.height());
+        return false;
+    }
+
+    ArcMist::HashList::iterator hashIter = transactionHashes.begin();
+    std::vector<BitCoin::FullOutputData>::iterator fullOutput = coinbaseOutputs.begin();
+
+    for(unsigned int i=0;i<transactionHashes.size();++i)
+    {
+        if(fullOutput->blockHeight < 2000)
+        {
+            if(!transactionHashes.contains(fullOutput->transactionID))
+            {
+               ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed transaction address output trans ID after save : not found %s",
+                 fullOutput->transactionID.hex().text());
+               return false;
+            }
+        }
+
+        ++fullOutput;
+    }
+
+    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed transaction address outputs check after save");
 
     ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed chain test");
     return true;

@@ -123,6 +123,12 @@ namespace BitCoin
         // Get block from appropriate block file
         static bool readBlock(unsigned int pHeight, Block &pBlock);
 
+        // Read transaction from block
+        static bool readBlockTransaction(unsigned int pHeight, unsigned int pTransactionOffset, Transaction &pTransaction);
+
+        static bool readBlockTransactionOutput(unsigned int pHeight, unsigned int pTransactionOffset,
+          unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput);
+
         // Get transaction output from appropriate block file
         static bool readOutput(TransactionReference *pReference, unsigned int pIndex, Output &pOutput);
 
@@ -164,8 +170,14 @@ namespace BitCoin
         // Read block for specified hash
         bool readBlock(const ArcMist::Hash &pHash, Block &pBlock, bool pIncludeTransactions);
 
+        // Read only transaction at specified offset of block
+        bool readTransaction(unsigned int pBlockOffset, unsigned int pTransactionOffset, Transaction &pTransaction);
+
         // Read transaction output at specified offset in file
         bool readTransactionOutput(unsigned int pFileOffset, Output &pTransactionOutput);
+
+        bool readTransactionOutput(unsigned int pBlockOffset, unsigned int pTransactionOffset,
+          unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput);
 
         // Give the offset of a specific hash into the file
         unsigned int hashOffset(const ArcMist::Hash &pHash);

@@ -129,9 +129,9 @@ namespace BitCoin
         mPeersModified = false;
         pendingSizeThreshold = 104857600; // 100 MiB
         pendingBlocksThreshold = 256;
-        outputsThreshold = 536870912; // 512 MiB
-        outputsCacheAge = 5000;
+        outputsThreshold = 1073741824; // 1 GiB
         memPoolThreshold = 536870912; // 512 MiB
+        addressesThreshold = 268435456; // 256 MiB
 
         if(sPath)
         {
@@ -212,10 +212,10 @@ namespace BitCoin
             pendingBlocksThreshold = std::stol(value, NULL, 0);
         else if(std::strcmp(name, "output_threshold") == 0)
             outputsThreshold = std::stol(value, NULL, 0);
-        else if(std::strcmp(name, "output_cache_age") == 0)
-            outputsCacheAge = std::stol(value, NULL, 0);
         else if(std::strcmp(name, "mem_pool_size") == 0)
             memPoolThreshold = std::stol(value, NULL, 0);
+        else if(std::strcmp(name, "address_threshold") == 0)
+            addressesThreshold = std::stol(value, NULL, 0);
 
         delete[] name;
         delete[] value;
