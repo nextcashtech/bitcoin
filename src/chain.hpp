@@ -95,11 +95,13 @@ namespace BitCoin
         {
             hash = pHash;
             requestedTime = pTime;
+            updateTime = pTime;
             requestingNode = pNodeID;
         }
 
         ArcMist::Hash hash;
         uint32_t requestedTime;
+        uint32_t updateTime;
         unsigned int requestingNode;
 
     private:
@@ -228,6 +230,8 @@ namespace BitCoin
         // Bytes used by pending blocks
         unsigned int pendingSize();
 
+        bool getPendingHeaderHashes(ArcMist::HashList &pList);
+
         enum HashStatus { ALREADY_HAVE, NEED_HEADER, NEED_BLOCK, BLACK_LISTED };
 
         // Return the status of the specified block hash
@@ -242,7 +246,7 @@ namespace BitCoin
         // Release all blocks requested by a specified node so they will be requested again
         void releaseBlocksForNode(unsigned int pNodeID);
 
-        // Add block to queue to be processed and added to top of chain
+        // Add block/header to queue to be processed and added to top of chain
         bool addPendingBlock(Block *pBlock);
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)

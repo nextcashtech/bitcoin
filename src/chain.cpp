@@ -583,6 +583,7 @@ namespace BitCoin
                 {
                     (*pendingHeader)->requestingNode = pNodeID;
                     (*pendingHeader)->requestedTime = getTime();
+                    (*pendingHeader)->updateTime = getTime();
                     mPendingLock.writeUnlock();
                     return NEED_HEADER;
                 }
@@ -602,10 +603,33 @@ namespace BitCoin
         return NEED_HEADER;
     }
 
+    bool Chain::getPendingHeaderHashes(ArcMist::HashList &pList)
+    {
+        pList.clear();
+        mPendingLock.readLock();
+        for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();++pendingHeader)
+            pList.push_back(new ArcMist::Hash((*pendingHeader)->hash));
+        mPendingLock.readUnlock();
+        return true;
+    }
+
     // Add block header to queue to be requested and downloaded
     bool Chain::addPendingBlock(Block *pBlock)
     {
         mPendingLock.writeLock("Add");
+
+        // Remove pending header
+        bool foundInPendingHeader = false;
+        for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();++pendingHeader)
+            if((*pendingHeader)->hash == pBlock->hash)
+            {
+                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
+                  // "Removed pending header : %s", pBlock->hash.hex().text());
+                foundInPendingHeader = true;
+                delete *pendingHeader;
+                mPendingHeaders.erase(pendingHeader);
+                break;
+            }
 
         if(mBlackListBlocks.contains(pBlock->hash))
         {
@@ -641,19 +665,7 @@ namespace BitCoin
         bool added = false;
         bool alreadyHave = false;
         bool filled = false;
-        bool foundInPendingHeader = false;
         bool branchesUpdated = false;
-
-        // Remove pending header
-        for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();++pendingHeader)
-            if((*pendingHeader)->hash == pBlock->hash)
-            {
-                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
-                  // "Removed pending header : %s", pBlock->hash.hex().text());
-                foundInPendingHeader = true;
-                mPendingHeaders.erase(pendingHeader);
-                break;
-            }
 
         if((mPendingBlocks.size() == 0 &&
           ((pBlock->previousHash.isZero() && mLastBlockHash.isEmpty()) ||
@@ -1272,6 +1284,20 @@ namespace BitCoin
         mPendingLock.readLock();
         if(mPendingBlocks.size() == 0)
         {
+            // Expire pending headers
+            for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();)
+            {
+                if(getTime() - (*pendingHeader)->updateTime > 120)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      "Expiring pending header : %s", (*pendingHeader)->hash.hex().text());
+                    delete *pendingHeader;
+                    pendingHeader = mPendingHeaders.erase(pendingHeader);
+                }
+                else
+                    ++pendingHeader;
+            }
+
             // No pending blocks or headers
             mPendingLock.readUnlock();
             BlockFile::lock(mLastFileID);
