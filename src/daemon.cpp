@@ -921,6 +921,12 @@ namespace BitCoin
         uint32_t lastImprovement = startTime;
         uint32_t lastTransactionRequest = startTime;
         uint32_t time;
+#ifdef PROFILER_ON
+        uint32_t lastProfilerWrite = startTime;
+        ArcMist::String profilerTime;
+        ArcMist::String profilerFileName;
+        ArcMist::FileOutputStream *profilerFile;
+#endif
 
         while(!daemon.mStopping)
         {
@@ -998,6 +1004,20 @@ namespace BitCoin
 
             if(daemon.mStopping)
                 break;
+
+#ifdef PROFILER_ON
+            time = getTime();
+            if(time - lastProfilerWrite > 3600)
+            {
+                profilerTime.writeFormattedTime(time, "%Y%m%d.%H%M");
+                profilerFileName.writeFormatted("profiler.%s.txt", profilerTime.text());
+                profilerFile = new ArcMist::FileOutputStream(profilerFileName, true);
+                ArcMist::ProfilerManager::write(profilerFile);
+                delete profilerFile;
+                ArcMist::ProfilerManager::reset();
+                lastProfilerWrite = time;
+            }
+#endif
 
             ArcMist::Thread::sleep(2000);
         }
