@@ -412,6 +412,11 @@ namespace BitCoin
     void Daemon::sendRequests()
     {
         unsigned int pendingCount = mChain.pendingCount();
+
+        if(!mChain.isInSync() && getTime() - mLastHeaderRequestTime > 60 &&
+          pendingCount < mInfo.pendingBlocksThreshold * 8)
+            sendHeaderRequest();
+
         unsigned int pendingBlockCount = mChain.pendingBlockCount();
         unsigned int pendingSize = mChain.pendingSize();
         bool reduceOnly = pendingSize >= mInfo.pendingSizeThreshold || pendingBlockCount >= mInfo.pendingBlocksThreshold;
@@ -425,15 +430,7 @@ namespace BitCoin
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
         {
             blocksRequestedCount += (*node)->blocksRequestedCount();
-
-            if((*node)->waitingForRequests())
-                continue;
-
-            if(!mChain.isInSync() && getTime() - mLastHeaderRequestTime > 60 &&
-              pendingCount < mInfo.pendingBlocksThreshold * 8 &&
-              (*node)->requestHeaders())
-                mLastHeaderRequestTime = getTime();
-            else
+            if(!(*node)->waitingForRequests())
                 requestNodes.push_back(*node);
         }
 
@@ -510,6 +507,16 @@ namespace BitCoin
         mNodeLock.readUnlock();
     }
 
+    void randomizeOutgoing(std::vector<Node *> &pNodeList)
+    {
+        for(std::vector<Node *>::iterator node=pNodeList.begin();node!=pNodeList.end();)
+            if((*node)->isIncoming() || !(*node)->isReady() || (*node)->waitingForRequests())
+                node = pNodeList.erase(node);
+            else
+                ++node;
+        std::random_shuffle(pNodeList.begin(), pNodeList.end()); // Sort Randomly
+    }
+
     void Daemon::sendTransactionRequests()
     {
         ArcMist::HashList transactionsToRequest;
@@ -520,14 +527,15 @@ namespace BitCoin
             return;
 
         mNodeLock.readLock();
-        std::vector<Node *> nodes = mNodes; // Copy list of nodes
-        sortOutgoingNodesBySpeed(nodes);
 
-        if(nodes.size() == 0)
+        if(mNodes.size() == 0)
         {
             mNodeLock.readUnlock();
             return;
         }
+
+        std::vector<Node *> nodes = mNodes; // Copy list of nodes
+        randomizeOutgoing(nodes);
 
         NodeRequests *nodeRequests = new NodeRequests[nodes.size()];
         NodeRequests *nodeRequest = nodeRequests;
@@ -580,21 +588,14 @@ namespace BitCoin
 
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
-        std::vector<Node *> requestNodes;
-        sortOutgoingNodesBySpeed(nodes);
-
+        randomizeOutgoing(nodes);
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-        {
-            if((*node)->waitingForRequests())
-                continue;
-
-            if((*node)->requestHeaders())
+            if(!(*node)->isIncoming() && (*node)->isReady() && !(*node)->waitingForRequests() &&
+              (*node)->requestHeaders())
             {
                 mLastHeaderRequestTime = getTime();
                 break;
             }
-        }
-
         mNodeLock.readUnlock();
     }
 
@@ -602,9 +603,9 @@ namespace BitCoin
     {
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
-        std::random_shuffle(nodes.begin(), nodes.end()); // Sort Randomly
+        randomizeOutgoing(nodes);
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if(!(*node)->isIncoming() && (*node)->requestPeers())
+            if(!(*node)->isIncoming() && (*node)->isReady() && (*node)->requestPeers())
                 break;
         mNodeLock.readUnlock();
     }
