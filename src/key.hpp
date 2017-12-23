@@ -31,6 +31,20 @@ namespace BitCoin
         static bool test();
     };
 
+    enum AddressType
+    {
+        PUB_KEY_HASH = 0x00, // Public key hash
+        SCRIPT_HASH  = 0x05, // Script hash
+        PRIVATE_KEY  = 0x80, // Private key
+
+        TEST_PUB_KEY_HASH = 0x6f, // Testnet Public key hash
+        TEST_SCRIPT_HASH  = 0xc4, // Testnet Script hash
+        TEST_PRIVATE_KEY  = 0xef, // Testnet Private key
+    };
+
+    ArcMist::String encodeAddress(const ArcMist::Hash &pHash, AddressType pType);
+    bool decodeAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType);
+
     class PublicKey
     {
     public:
@@ -45,7 +59,7 @@ namespace BitCoin
         bool operator == (const PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) == 0; }
         bool operator != (const PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) != 0; }
 
-        void set(void *pData) { std::memcpy(mData, pData, 64); mValid = true; }
+        void set(const void *pData) { std::memcpy(mData, pData, 64); mValid = true; }
         ArcMist::String hex() const;
 
         void write(ArcMist::OutputStream *pStream, bool pCompressed, bool pScriptFormat) const;
@@ -53,6 +67,8 @@ namespace BitCoin
 
         bool isValid() const { return mValid; }
         void getHash(ArcMist::Hash &pHash) const;
+
+        ArcMist::String address(bool pTest = false);
 
         const uint8_t *value() const { return mData; }
 

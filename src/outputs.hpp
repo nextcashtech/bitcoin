@@ -251,7 +251,7 @@ namespace BitCoin
         int height() const { return mNextBlockHeight - 1; }
         unsigned int transactionCount() const;
 
-        bool needsPurge() { return cacheDataSize() > targetCacheDataSize() * 2; }
+        bool needsPurge() { return cacheDataSize() > (ArcMist::stream_size)((double)targetCacheDataSize() * 1.5); }
 
         bool load(const char *pFilePath, uint64_t pCacheDataTargetSize);
         bool save();

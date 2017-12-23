@@ -19,9 +19,9 @@ namespace BitCoin
 {
     void FullOutputData::print()
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
-          "Transaction output %d for %f from block %d : %s",
-          index, output.amount, blockHeight, transactionID.hex().text());
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
+          "Output %d for %f bitcoins in block %d : %s",
+          index, bitcoins(output.amount), blockHeight, transactionID.hex().text());
     }
 
     bool AddressOutputReference::getFullOutput(FullOutputData &pOutput) const
@@ -54,6 +54,10 @@ namespace BitCoin
         std::vector<FullOutputData>::iterator output = pOutputs.begin();
         while(item && item.hash() == pAddress)
         {
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
+              "Fetching transaction %d output %d from block at height %d",
+              ((AddressOutputReference *)(*item))->transactionOffset,
+              ((AddressOutputReference *)(*item))->outputIndex, ((AddressOutputReference *)(*item))->blockHeight);
             if(!((AddressOutputReference *)(*item))->getFullOutput(*output))
                 return false;
             ++output;

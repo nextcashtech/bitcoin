@@ -204,41 +204,6 @@ namespace BitCoin
         return value << length;
     }
 
-    ArcMist::String base58Encode(Base58Type pType, ArcMist::InputStream *pStream, unsigned int pSize)
-    {
-        uint8_t data[pSize + 1];
-
-        switch(pType)
-        {
-            case PUBLIC_KEY_HASH:
-                data[0] = 0x00;
-                break;
-            case SCRIPT_HASH:
-                data[0] = 0x05;
-                break;
-            case PRIVATE_KEY:
-                data[0] = 0x80;
-                break;
-            case TEST_PUBLIC_KEY_HASH:
-                data[0] = 0x6f;
-                break;
-            case TEST_SCRIPT_HASH:
-                data[0] = 0xc4;
-                break;
-        }
-
-        pStream->read(data + 1, pSize);
-
-        ArcMist::String result;
-        result.writeBase58(data, pSize + 1);
-        return result;
-    }
-
-    //bool base58Decode(ArcMist::String pData, ArcMist::OutputStream *pStream)
-    //{
-    //
-    //}
-
     unsigned int compactIntegerSize(uint64_t pValue)
     {
         if(pValue < 0xfd)

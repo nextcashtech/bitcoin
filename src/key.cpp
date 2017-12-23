@@ -249,6 +249,76 @@ namespace BitCoin
         digest.getResult(&pHash);
     }
 
+    ArcMist::String PublicKey::address(bool pTest)
+    {
+        ArcMist::Hash hash;
+        getHash(hash);
+
+        if(pTest)
+            return encodeAddress(hash, TEST_PUB_KEY_HASH);
+        else
+            return encodeAddress(hash, PUB_KEY_HASH);
+    }
+
+    ArcMist::String encodeAddress(const ArcMist::Hash &pHash, AddressType pType)
+    {
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+        ArcMist::Buffer data, check;
+
+        // Calculate check
+        digest.writeByte(static_cast<uint8_t>(pType));
+        pHash.write(&digest);
+        digest.getResult(&check);
+
+        // Write data for address
+        data.writeByte(static_cast<uint8_t>(pType));
+        pHash.write(&data);
+        data.writeUnsignedInt(check.readUnsignedInt());
+
+        // Encode with base 58
+        ArcMist::String result;
+        result.writeBase58(data.startPointer(), data.length());
+        return result;
+    }
+
+    bool decodeAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType)
+    {
+        ArcMist::Buffer data;
+
+        // Parse address into public key hash
+        data.writeBase58AsBinary(pText);
+
+        if(data.length() < 24 || data.length() > 35)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Invalid address length : %d not within (24, 35)", data.length());
+            return false;
+        }
+
+        pType = static_cast<AddressType>(data.readByte());
+
+        pHash.setSize(data.remaining() - 4);
+        pHash.writeStream(&data, data.remaining() - 4);
+
+        uint32_t check = data.readUnsignedInt();
+
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+        data.setReadOffset(0);
+        data.readStream(&digest, data.length() - 4);
+        ArcMist::Buffer checkHash;
+        digest.getResult(&checkHash);
+
+        uint32_t checkValue = checkHash.readUnsignedInt();
+        if(checkValue != check)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Invalid address check : %08x != %08x", checkValue, check);
+            return false;
+        }
+
+        return true;
+    }
+
     void Signature::write(ArcMist::OutputStream *pStream, bool pScriptFormat) const
     {
         size_t length = 73;
@@ -546,6 +616,84 @@ namespace BitCoin
         {
             success = false;
             ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed Verify Sign Incorrect");
+        }
+
+        /***********************************************************************************************
+         * Encode address
+         ***********************************************************************************************/
+        ArcMist::Buffer data;
+        AddressType addressType;
+        ArcMist::Hash checkHash;
+
+        // for(unsigned int i=0;i<64;i+=4)
+            // data.writeUnsignedInt(ArcMist::Math::randomInt());
+
+        data.writeHex("d7e09f05ef4e2a311b95877749f64a4b4c27576a4b5bea423116d0057825583ea5f6e606a981e223f0d5e55b65cd4a6dfae5241de08dee4c13d9ad67cc1bd224");
+        publicKey.set(data.startPointer());
+        publicKey.getHash(hash);
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Key : %s", publicKey.hex().text());
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Hash : %s", hash.hex().text());
+
+        ArcMist::String address = publicKey.address();
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Address : %s", address.text());
+
+        if(address == "162pwaq8Q269SexzQFQEWmhzRNW3TWFC3J")
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed encode public key hash address");
+        else
+        {
+            success = false;
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed encode public key hash address");
+        }
+
+        if(decodeAddress(address, checkHash, addressType))
+        {
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed decode address");
+
+            if(addressType == PUB_KEY_HASH)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed decode address type");
+            else
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed decode address type : %d",
+                  addressType);
+            }
+
+            if(hash == checkHash)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed decode address hash");
+            else
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed decode address hash : %s",
+                  checkHash.hex().text());
+            }
+        }
+        else
+        {
+            success = false;
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed decode address");
+        }
+
+        /***********************************************************************************************
+         * Decode address
+         ***********************************************************************************************/
+        if(decodeAddress("17VZNX1SN5NtKa8UQFxwQbFeFc3iqRYhem", hash, addressType))
+        {
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed decode address");
+
+            if(addressType == PUB_KEY_HASH)
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed decode address type");
+            else
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed decode address type : %d",
+                  addressType);
+            }
+        }
+        else
+        {
+            success = false;
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed decode address");
         }
 
         return success;

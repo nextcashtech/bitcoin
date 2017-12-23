@@ -62,7 +62,8 @@ namespace BitCoin
 
         // Script
         uint64_t bytes = readCompactInteger(pInputStream);
-        writeCompactInteger(pOutputStream, bytes);
+        if(pOutputStream != NULL)
+            writeCompactInteger(pOutputStream, bytes);
         if(pInputStream->remaining() < bytes)
             return false;
         if(pOutputStream == NULL)

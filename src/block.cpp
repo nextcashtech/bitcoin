@@ -1112,7 +1112,7 @@ namespace BitCoin
             return false;
         }
 
-        for(int i=0;i<(int)pTransactionOffset-1;++i)
+        for(int i=0;i<(int)pTransactionOffset;++i)
             if(!Transaction::skip(mInputFile))
                 return false;
 
@@ -1320,7 +1320,7 @@ namespace BitCoin
 
         BlockFile *blockFile;
         BlockFile::lock(fileID);
-        blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+        blockFile = new BlockFile(fileID);
         bool success = blockFile->isValid() && blockFile->readBlock(offset, pBlock, true);
         delete blockFile;
         BlockFile::unlock(fileID);
@@ -1334,7 +1334,7 @@ namespace BitCoin
 
         BlockFile *blockFile;
         BlockFile::lock(fileID);
-        blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+        blockFile = new BlockFile(fileID);
         bool success = blockFile->isValid() && blockFile->readTransaction(blockOffset, pTransactionOffset, pTransaction);
         delete blockFile;
         BlockFile::unlock(fileID);
@@ -1349,7 +1349,7 @@ namespace BitCoin
 
         BlockFile *blockFile;
         BlockFile::lock(fileID);
-        blockFile = new BlockFile(fileID, BlockFile::fileName(fileID));
+        blockFile = new BlockFile(fileID, false);
         bool success = blockFile->isValid() && blockFile->readTransactionOutput(blockOffset, pTransactionOffset,
           pOutputIndex, pTransactionID, pOutput);
         delete blockFile;

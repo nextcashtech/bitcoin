@@ -45,8 +45,8 @@ int main(int pArgumentCount, char **pArguments)
 
     BitCoin::Chain::tempTest();
 
-    if(!chainTest())
-        failed++;
+    // if(!chainTest())
+        // failed++;
 
     // if(!cashDAATest())
         // failed++;

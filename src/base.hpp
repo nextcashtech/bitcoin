@@ -235,10 +235,6 @@ namespace BitCoin
     // Integer value for target
     uint64_t targetValue(uint32_t pTargetBits);
 
-    enum Base58Type { PUBLIC_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY, TEST_PUBLIC_KEY_HASH, TEST_SCRIPT_HASH };
-    ArcMist::String base58Encode(Base58Type pType, ArcMist::InputStream *pStream, unsigned int pSize);
-    //bool base58Decode(ArcMist::String pData, ArcMist::OutputStream *pStream);
-
     unsigned int compactIntegerSize(uint64_t pValue);
     unsigned int writeCompactInteger(ArcMist::OutputStream *pStream, uint64_t pValue);
     uint64_t readCompactInteger(ArcMist::InputStream *pStream);

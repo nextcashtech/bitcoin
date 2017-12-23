@@ -47,8 +47,9 @@ int main(int pArgumentCount, char **pArguments)
     bool rebuild = false;
     bool listblocks = false;
     bool testnet = false;
-    ArcMist::String printBlock;
+    ArcMist::String printBlock, address;
     bool nextIsPrintBlock = false;
+    bool nextIsAddress = false;
 
     if(pArgumentCount < 2)
     {
@@ -69,6 +70,8 @@ int main(int pArgumentCount, char **pArguments)
         listblocks = true;
     else if(std::strcmp(pArguments[1], "printblock") == 0)
         nextIsPrintBlock = true;
+    else if(std::strcmp(pArguments[1], "address") == 0)
+        nextIsAddress = true;
     else if(std::strcmp(pArguments[1], "help") == 0)
     {
         printHelp(path);
@@ -97,6 +100,11 @@ int main(int pArgumentCount, char **pArguments)
         {
             printBlock = pArguments[i];
             nextIsPrintBlock = false;
+        }
+        else if(nextIsAddress)
+        {
+            address = pArguments[i];
+            nextIsAddress = false;
         }
         else if(std::strcmp(pArguments[i], "-v") == 0)
             ArcMist::Log::setLevel(ArcMist::Log::VERBOSE);
@@ -170,6 +178,83 @@ int main(int pArgumentCount, char **pArguments)
         }
 
         block.print(ArcMist::Log::INFO, false);
+        return 0;
+    }
+
+    if(address)
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
+          "Checking address : %s", address.text());
+
+        ArcMist::Hash keyHash;
+        BitCoin::AddressType addressType;
+
+        if(!BitCoin::decodeAddress(address.text(), keyHash, addressType))
+            return 1;
+
+        if(addressType != BitCoin::PUB_KEY_HASH)
+        {
+            ArcMist::Log::add(ArcMist::Log::INFO, MAIN_LOG_NAME,
+              "Not a public key hash address");
+            return 1;
+        }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
+          "Public key hash : %s", keyHash.hex().text());
+
+        if(!keyHash.isEmpty())
+        {
+            BitCoin::Addresses addresses;
+            BitCoin::TransactionOutputPool outputs;
+            std::vector<BitCoin::FullOutputData> outputList;
+            BitCoin::TransactionOutputPool::Iterator reference;
+            BitCoin::OutputReference *outputReference;
+            uint64_t balance = 0;
+            addresses.load(BitCoin::Info::instance().path(), 0);
+            outputs.load(BitCoin::Info::instance().path(), BitCoin::Info::instance().outputsThreshold);
+
+            if(!addresses.getOutputs(keyHash, outputList))
+                return false;
+
+            // Print addresses
+            for(std::vector<BitCoin::FullOutputData>::iterator output=outputList.begin();output!=outputList.end();++output)
+            {
+                output->print();
+                reference = outputs.get(output->transactionID);
+                if(reference)
+                {
+                    outputReference = ((BitCoin::TransactionReference *)*reference)->outputAt(output->index);
+                    if(outputReference != NULL)
+                    {
+                        if(outputReference->spentBlockHeight == 0)
+                        {
+                            ArcMist::Log::add(ArcMist::Log::INFO, MAIN_LOG_NAME, "Unspent");
+                            balance += output->output.amount;
+                        }
+                        else
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
+                              "Spent at block height %d", outputReference->spentBlockHeight);
+                    }
+                    else
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, MAIN_LOG_NAME,
+                          "Transaction Output Reference not found : index %d - %s", output->index,
+                          output->transactionID.hex().text());
+                        return 1;
+                    }
+                }
+                else
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, MAIN_LOG_NAME,
+                      "Transaction Reference not found : %s", output->transactionID.hex().text());
+                    return 1;
+                }
+            }
+
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
+              "Balance : %f bitcoins", BitCoin::bitcoins(balance));
+        }
+
         return 0;
     }
 
@@ -336,6 +421,7 @@ void printHelp(const char *pPath)
     std::cerr << "    stop                            -> Stop active daemon" << std::endl;
     std::cerr << "    listblocks                      -> List hashes of all blocks" << std::endl;
     std::cerr << "    printblock BLOCKNUM or HASH     -> Display block information" << std::endl;
+    std::cerr << "    address BASE_58_PUBKEYHASH      -> Display address information" << std::endl;
     std::cerr << "    validate                        -> Validate local block chain" << std::endl;
     std::cerr << "    rebuild                         -> Validate and rebuild unspent transactions from block chain" << std::endl;
     std::cerr << "Options :" << std::endl;
