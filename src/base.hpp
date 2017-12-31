@@ -69,46 +69,46 @@ namespace BitCoin
 
         IPAddress()
         {
-            std::memset(ip, 0, 16);
+            std::memset(ip, 0, INET6_ADDRLEN);
             port = 0;
         }
         IPAddress(const IPAddress &pCopy)
         {
-            std::memcpy(ip, pCopy.ip, 16);
+            std::memcpy(ip, pCopy.ip, INET6_ADDRLEN);
             port = pCopy.port;
         }
         IPAddress(uint8_t *pIP, uint16_t pPort)
         {
-            std::memcpy(ip, pIP, 16);
+            std::memcpy(ip, pIP, INET6_ADDRLEN);
             port = pPort;
         }
 
         void write(ArcMist::OutputStream *pStream) const;
         bool read(ArcMist::InputStream *pStream);
 
-        bool matches(const IPAddress &pOther) const { return std::memcmp(ip, pOther.ip, 16) == 0 && port == pOther.port; }
+        bool matches(const IPAddress &pOther) const { return std::memcmp(ip, pOther.ip, INET6_ADDRLEN) == 0 && port == pOther.port; }
 
         bool operator == (const IPAddress &pRight) const
         {
-            return std::memcmp(ip, pRight.ip, 16) == 0 && port == pRight.port;
+            return std::memcmp(ip, pRight.ip, INET6_ADDRLEN) == 0 && port == pRight.port;
         }
 
         bool operator != (const IPAddress &pRight) const
         {
-            return std::memcmp(ip, pRight.ip, 16) != 0 || port != pRight.port;
+            return std::memcmp(ip, pRight.ip, INET6_ADDRLEN) != 0 || port != pRight.port;
         }
 
         void operator = (ArcMist::Network::Connection &pConnection)
         {
             if(pConnection.ipv6Bytes())
-                std::memcpy(ip, pConnection.ipv6Bytes(), 16);
+                std::memcpy(ip, pConnection.ipv6Bytes(), INET6_ADDRLEN);
             port = pConnection.port();
         }
 
         bool isValid() const
         {
             bool zeroes = true;
-            for(int i=0;i<16;i++)
+            for(int i=0;i<INET6_ADDRLEN;i++)
                 if(ip[i] != 0)
                     zeroes = false;
             return !zeroes;
@@ -117,17 +117,17 @@ namespace BitCoin
         const IPAddress &operator = (const IPAddress &pRight)
         {
             port = pRight.port;
-            std::memcpy(ip, pRight.ip, 16);
+            std::memcpy(ip, pRight.ip, INET6_ADDRLEN);
             return *this;
         }
 
         void set(uint8_t *pIP, uint16_t pPort)
         {
-            std::memcpy(ip, pIP, 16);
+            std::memcpy(ip, pIP, INET6_ADDRLEN);
             port = pPort;
         }
 
-        uint8_t ip[16];
+        uint8_t ip[INET6_ADDRLEN];
         uint16_t port;
     };
 

@@ -90,6 +90,25 @@ namespace BitCoin
         unsigned int mNodeCount, mIncomingNodes, mOutgoingNodes;
         unsigned int mMaxIncoming;
 
+        class IPBytes
+        {
+        public:
+
+            IPBytes() { std::memset(bytes, 0, INET6_ADDRLEN); }
+            IPBytes(const IPBytes &pCopy) { std::memcpy(bytes, pCopy.bytes, INET6_ADDRLEN); }
+            IPBytes(const uint8_t *pIP) { std::memcpy(bytes, pIP, INET6_ADDRLEN); }
+            bool operator == (const IPBytes &pRight) const { return std::memcmp(bytes, pRight.bytes, INET6_ADDRLEN) == 0; }
+            bool operator == (const uint8_t *pIP) const { return std::memcmp(bytes, pIP, INET6_ADDRLEN) == 0; }
+            const IPBytes &operator = (const IPBytes &pRight) { std::memcpy(bytes, pRight.bytes, INET6_ADDRLEN); return *this; }
+            const IPBytes &operator = (const uint8_t *pIP) { std::memcpy(bytes, pIP, INET6_ADDRLEN); return *this; }
+
+            uint8_t bytes[INET6_ADDRLEN];
+        };
+
+        std::vector<IPBytes> mRejectedIPs;
+
+        void addRejectedIP(const uint8_t *pIP);
+
         bool addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed = false);
         unsigned int recruitPeers(unsigned int pCount);
         void cleanNodes();

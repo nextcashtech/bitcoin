@@ -78,6 +78,8 @@ namespace BitCoin
         bool announceTransaction(Transaction *pTransaction);
 
         const IPAddress &address() { return mAddress; }
+        const uint8_t *ipv6Bytes() const { return mConnection->ipv6Bytes(); }
+        bool wasRejected() const { return mRejected; }
 
         // Add statistics to collection and clear them
         void collectStatistics(Statistics &pCollection);
@@ -110,6 +112,7 @@ namespace BitCoin
         bool mStop, mStopped;
         bool mIsIncoming, mIsSeed;
         bool mSendBlocksCompact;
+        bool mRejected;
 
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;

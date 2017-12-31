@@ -1084,8 +1084,27 @@ namespace BitCoin
         }
     }
 
+    void Daemon::addRejectedIP(const uint8_t *pIP)
+    {
+        IPBytes ip = pIP;
+        mRejectedIPs.push_back(ip);
+
+        while(mRejectedIPs.size() > 1000)
+            mRejectedIPs.erase(mRejectedIPs.begin());
+    }
+
     bool Daemon::addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed)
     {
+        // Check if IP is on reject list
+        for(std::vector<IPBytes>::iterator ip=mRejectedIPs.begin();ip!=mRejectedIPs.end();++ip)
+            if(*ip == pConnection->ipv6Bytes())
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
+                  "Rejecting connection from IP %s", pConnection->ipv6Address());
+                delete pConnection;
+                return false;
+            }
+
         Node *node;
         try
         {
@@ -1236,6 +1255,8 @@ namespace BitCoin
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
             if(!(*node)->isOpen())
             {
+                if((*node)->wasRejected())
+                    addRejectedIP((*node)->ipv6Bytes());
                 --mNodeCount;
                 if((*node)->isIncoming())
                     --mIncomingNodes;
@@ -1253,6 +1274,7 @@ namespace BitCoin
                         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                           "%s Dropping. Black listed", (*node)->name());
                         dropped = true;
+                        addRejectedIP((*node)->ipv6Bytes());
                         (*node)->close();
                         --mNodeCount;
                         if((*node)->isIncoming())
@@ -1318,10 +1340,7 @@ namespace BitCoin
             else
             {
                 while(!daemon.mStopping && (newConnection = listener->accept()) != NULL)
-                {
-                    daemon.addNode(newConnection, true);
-
-                    if(daemon.mIncomingNodes >= daemon.mMaxIncoming)
+                    if(daemon.addNode(newConnection, true) && daemon.mIncomingNodes >= daemon.mMaxIncoming)
                     {
                         delete listener;
                         listener = NULL;
@@ -1329,7 +1348,6 @@ namespace BitCoin
                           "Stopped listening for incoming connections because of connection limit");
                         break;
                     }
-                }
             }
 
             if(daemon.mStopping)
