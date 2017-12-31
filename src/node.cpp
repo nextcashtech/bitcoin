@@ -691,7 +691,7 @@ namespace BitCoin
                     Info::instance().addPeerFail(mAddress);
                     close();
                 }
-                else if(!mIsIncoming && !mIsSeed && mChain->forks().cashActive() &&
+                else if(mChain->forks().cashActive() &&
                   !(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT))
                 {
                     sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
