@@ -490,7 +490,7 @@ namespace BitCoin
         unsigned int requestNodeOffset = 0;
         for(ArcMist::HashList::iterator hash=blocksToRequest.begin();hash!=blocksToRequest.end();++hash)
         {
-            nodeRequests[requestNodeOffset].list.push_back(new ArcMist::Hash(**hash));
+            nodeRequests[requestNodeOffset].list.push_back(*hash);
             if(++requestNodeOffset >= requestNodes.size())
                 requestNodeOffset = 0;
         }
@@ -557,16 +557,16 @@ namespace BitCoin
             nodeRequest = nodeRequests;
             for(i=0;i<nodes.size();++i)
             {
-                if(nodeRequest->node->hasTransaction(**hash))
+                if(nodeRequest->node->hasTransaction(*hash))
                 {
-                    nodeRequest->list.push_back(new ArcMist::Hash(**hash));
+                    nodeRequest->list.push_back(*hash);
                     found = true;
                 }
                 ++nodeRequest;
             }
 
             if(!found) // Add to first node
-                nodeRequests->list.push_back(new ArcMist::Hash(**hash));
+                nodeRequests->list.push_back(*hash);
         }
 
         // Send requests to nodes
@@ -590,8 +590,7 @@ namespace BitCoin
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         randomizeOutgoing(nodes);
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if(!(*node)->isIncoming() && (*node)->isReady() && !(*node)->waitingForRequests() &&
-              (*node)->requestHeaders())
+            if((*node)->requestHeaders())
             {
                 mLastHeaderRequestTime = getTime();
                 break;
@@ -605,7 +604,7 @@ namespace BitCoin
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         randomizeOutgoing(nodes);
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if(!(*node)->isIncoming() && (*node)->isReady() && (*node)->requestPeers())
+            if((*node)->requestPeers())
                 break;
         mNodeLock.readUnlock();
     }
@@ -665,7 +664,7 @@ namespace BitCoin
             else if(churnDrop > 0)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d KiB/s, %ds ping (dropping because of churn)", (*node)->name(),
+                  "Sorted Nodes : %s - %d KiB/s, %ds ping (dropping for churn)", (*node)->name(),
                   (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
@@ -829,7 +828,7 @@ namespace BitCoin
             else if(churnDrop > 0)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping (dropping because for churn)", (*node)->name(),
+                  "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping (dropping for churn)", (*node)->name(),
                   (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
@@ -866,7 +865,7 @@ namespace BitCoin
             mNodeLock.readLock();
             for(ArcMist::HashList::iterator hash=transactionList.begin();hash!=transactionList.end();++hash)
             {
-                transaction = mChain.memPool().get(**hash);
+                transaction = mChain.memPool().get(*hash);
                 if(transaction != NULL)
                 {
                     // Announce to all nodes

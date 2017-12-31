@@ -104,7 +104,7 @@ namespace BitCoin
         ArcMist::Profiler profiler("Private Key Sign");
 #endif
         secp256k1_ecdsa_signature signature;
-        if(!secp256k1_ecdsa_sign(mContext, &signature, pHash.value(), mData,
+        if(!secp256k1_ecdsa_sign(mContext, &signature, pHash.data(), mData,
           secp256k1_nonce_function_default, NULL))
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to sign hash");
@@ -133,7 +133,7 @@ namespace BitCoin
         ArcMist::Profiler profiler("Signature Verify");
 #endif
         if(secp256k1_ecdsa_verify(mContext, (const secp256k1_ecdsa_signature *)mData,
-          pHash.value(), (const secp256k1_pubkey *)pPublicKey.value()))
+          pHash.data(), (const secp256k1_pubkey *)pPublicKey.data()))
             return true;
 
         if(!secp256k1_ecdsa_signature_normalize(mContext, (secp256k1_ecdsa_signature *)mData,
@@ -142,7 +142,7 @@ namespace BitCoin
 
         // Try it again with the normalized signature
         if(secp256k1_ecdsa_verify(mContext, (const secp256k1_ecdsa_signature *)mData,
-          pHash.value(), (const secp256k1_pubkey *)pPublicKey.value()))
+          pHash.data(), (const secp256k1_pubkey *)pPublicKey.data()))
             return true;
 
         return false;

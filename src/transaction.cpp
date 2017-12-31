@@ -160,7 +160,7 @@ namespace BitCoin
 
         ArcMist::Hash publicKeyHash;
         pPublicKey.getHash(publicKeyHash);
-        if(outputHashes.size() != 1 || publicKeyHash != *outputHashes.front())
+        if(outputHashes.size() != 1 || publicKeyHash != outputHashes.front())
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public key hash doesn't match");
             return false;
@@ -247,7 +247,7 @@ namespace BitCoin
         pPublicKey.write(&digest, false, false);
         digest.getResult(&publicKeyHash);
 
-        if(publicKeyHash != *outputHashes.front())
+        if(publicKeyHash != outputHashes.front())
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public key doesn't match");
             return false;
@@ -336,7 +336,7 @@ namespace BitCoin
         scriptDigest.writeStream(&pRedeemScript, pRedeemScript.length());
         ArcMist::Hash scriptHash;
         scriptDigest.getResult(&scriptHash);
-        if(outputHashes.size() != 1 || scriptHash != *outputHashes.front())
+        if(outputHashes.size() != 1 || scriptHash != outputHashes.front())
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Non matching script hash");
             return false;
@@ -943,7 +943,7 @@ namespace BitCoin
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d outpoint not found : index %d trans %s", index,
                           (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
-                        pOutpointsNeeded.push_back(new ArcMist::Hash((*input)->outpoint.transactionID));
+                        pOutpointsNeeded.push_back((*input)->outpoint.transactionID);
                         continue;
                     }
                 }
@@ -2263,7 +2263,7 @@ namespace BitCoin
             success = false;
         }
 
-        if(checkHashes.size() != 1 || publicKey1Hash == *checkHashes.front())
+        if(checkHashes.size() != 1 || publicKey1Hash == checkHashes.front())
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script hash");
         else
         {
@@ -2333,7 +2333,7 @@ namespace BitCoin
             success = false;
         }
 
-        if(checkHashes.size() != 1 || publicKey1Hash == *checkHashes.front())
+        if(checkHashes.size() != 1 || publicKey1Hash == checkHashes.front())
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script bad PK hash");
         else
         {
@@ -2467,7 +2467,7 @@ namespace BitCoin
             success = false;
         }
 
-        if(checkHashes.size() != 1 || redeemHash == *checkHashes.front())
+        if(checkHashes.size() != 1 || redeemHash == checkHashes.front())
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2SH script hash");
         else
         {

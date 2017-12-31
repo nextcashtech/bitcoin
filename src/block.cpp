@@ -542,6 +542,7 @@ namespace BitCoin
 
         transactionCount = transactions.size();
         calculateMerkleHash(merkleHash);
+        calculateHash();
 
         while(!hasProofOfWork())
         {
@@ -880,7 +881,7 @@ namespace BitCoin
                 return true;
             }
 
-            pHashes.push_back(new ArcMist::Hash(hash));
+            pHashes.push_back(hash);
         }
 
         return true;

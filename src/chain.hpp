@@ -28,16 +28,16 @@ namespace BitCoin
     class BlockInfo
     {
     public:
-        BlockInfo(ArcMist::Hash *pHash, unsigned int pFileID, unsigned int pHeight)
+        BlockInfo(const ArcMist::Hash &pHash, unsigned int pFileID, unsigned int pHeight)
         {
             hash   = pHash;
             fileID = pFileID;
             height = pHeight;
         }
 
-        ArcMist::Hash *hash;
-        unsigned int   fileID;
-        unsigned int   height;
+        ArcMist::Hash hash;
+        unsigned int  fileID;
+        unsigned int  height;
 
     private:
         BlockInfo(BlockInfo &pCopy);
@@ -57,7 +57,7 @@ namespace BitCoin
         bool contains(const ArcMist::Hash &pHash) const
         {
             for(const_iterator info=begin();info!=end();++info)
-                if(*(*info)->hash == pHash)
+                if((*info)->hash == pHash)
                     return true;
             return false;
         }
@@ -72,7 +72,7 @@ namespace BitCoin
         bool remove(const ArcMist::Hash &pHash)
         {
             for(iterator info=begin();info!=end();++info)
-                if(*(*info)->hash == pHash)
+                if((*info)->hash == pHash)
                 {
                     delete *info;
                     erase(info);

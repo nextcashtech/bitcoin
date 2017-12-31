@@ -99,7 +99,7 @@ namespace BitCoin
                 return NON_STANDARD;
             if(pScript.readByte() != OP_CHECKSIG)
                 return NON_STANDARD;
-            pHashes.push_back(new ArcMist::Hash(tempHash));
+            pHashes.push_back(tempHash);
             return P2PKH;
         }
         else if(opCode == OP_HASH160)
@@ -109,7 +109,7 @@ namespace BitCoin
             tempHash.read(&pScript, 20); // Read redeem script hash
             if(pScript.readByte() != OP_EQUAL)
                 return NON_STANDARD;
-            pHashes.push_back(new ArcMist::Hash(tempHash));
+            pHashes.push_back(tempHash);
             return P2SH;
         }
         else if(isSmallInteger(opCode))
@@ -146,7 +146,7 @@ namespace BitCoin
                         digest.initialize();
                         data.readStream(&digest, data.length());
                         digest.getResult(&tempHash);
-                        pHashes.push_back(new ArcMist::Hash(tempHash));
+                        pHashes.push_back(tempHash);
                         ++publicKeyCount;
                     }
                     else
@@ -162,7 +162,7 @@ namespace BitCoin
                 digest.initialize();
                 data.readStream(&digest, data.length());
                 digest.getResult(&tempHash);
-                pHashes.push_back(new ArcMist::Hash(tempHash));
+                pHashes.push_back(tempHash);
                 return P2PK;
             }
             else

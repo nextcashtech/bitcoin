@@ -29,7 +29,7 @@ namespace BitCoin
 
     void MemPool::addBlacklisted(const ArcMist::Hash &pHash)
     {
-        mBlackListed.push_back(new ArcMist::Hash(pHash));
+        mBlackListed.push_back(pHash);
         while(mBlackListed.size() > 1024)
             mBlackListed.erase(mBlackListed.begin());
     }
@@ -83,8 +83,7 @@ namespace BitCoin
 
     void MemPool::markForNode(ArcMist::HashList &pList, unsigned int pNodeID)
     {
-        ArcMist::HashList remaining;
-        pList.copyNoAllocate(remaining);
+        ArcMist::HashList remaining = pList;
         mLock.writeLock("Mark");
 
         // Mark all existing
@@ -94,7 +93,7 @@ namespace BitCoin
                 (*pending)->requestingNode = pNodeID;
                 (*pending)->requestedTime = getTime();
                 for(ArcMist::HashList::iterator hash=remaining.begin();hash!=remaining.end();++hash)
-                    if(**hash == (*pending)->hash)
+                    if(*hash == (*pending)->hash)
                     {
                         remaining.erase(hash);
                         break;
@@ -103,9 +102,8 @@ namespace BitCoin
 
         // Add any remaining as new pending
         for(ArcMist::HashList::iterator hash=remaining.begin();hash!=remaining.end();++hash)
-            mPending.push_back(new PendingTransactionData(**hash, pNodeID, getTime()));
+            mPending.push_back(new PendingTransactionData(*hash, pNodeID, getTime()));
 
-        remaining.clearNoDelete();
         mLock.writeUnlock();
     }
 
@@ -124,7 +122,7 @@ namespace BitCoin
         uint32_t time = getTime();
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             if((*pending)->requestingNode == 0 || time - (*pending)->requestedTime > 2)
-                pList.push_back(new ArcMist::Hash((*pending)->hash));
+                pList.push_back((*pending)->hash);
         mLock.writeUnlock();
     }
 
@@ -134,7 +132,7 @@ namespace BitCoin
         mLock.writeLock("Get Announce");
         for(ArcMist::HashList::iterator hash=mToAnnounce.begin();hash!=mToAnnounce.end();++hash)
             pList.push_back(*hash);
-        mToAnnounce.clearNoDelete();
+        mToAnnounce.clear();
         mLock.writeUnlock();
     }
 
@@ -177,7 +175,7 @@ namespace BitCoin
               pTransaction->hash.hex().text());
 
             for(ArcMist::HashList::iterator outpoint=outpointsNeeded.begin();outpoint!=outpointsNeeded.end();++outpoint)
-                addPendingInternal(**outpoint, 0);
+                addPendingInternal(*outpoint, 0);
             return pTransaction->status();
         }
 
@@ -320,7 +318,7 @@ namespace BitCoin
     bool MemPool::insert(Transaction *pTransaction, bool pAnnounce)
     {
         if(pAnnounce)
-            mToAnnounce.push_back(new ArcMist::Hash(pTransaction->hash));
+            mToAnnounce.push_back(pTransaction->hash);
 
         // Remove from pending
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)

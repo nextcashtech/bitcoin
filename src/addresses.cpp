@@ -44,7 +44,8 @@ namespace BitCoin
         unsigned int count = 0;
         while(counter && counter.hash() == pAddress)
         {
-            ++count;
+            if(!(*counter)->markedRemove())
+                ++count;
             ++counter;
         }
 
@@ -54,13 +55,16 @@ namespace BitCoin
         std::vector<FullOutputData>::iterator output = pOutputs.begin();
         while(item && item.hash() == pAddress)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
-              "Fetching transaction %d output %d from block at height %d",
-              ((AddressOutputReference *)(*item))->transactionOffset,
-              ((AddressOutputReference *)(*item))->outputIndex, ((AddressOutputReference *)(*item))->blockHeight);
-            if(!((AddressOutputReference *)(*item))->getFullOutput(*output))
-                return false;
-            ++output;
+            if(!(*item)->markedRemove())
+            {
+                // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
+                  // "Fetching transaction %d output %d from block at height %d",
+                  // ((AddressOutputReference *)(*item))->transactionOffset,
+                  // ((AddressOutputReference *)(*item))->outputIndex, ((AddressOutputReference *)(*item))->blockHeight);
+                if(!((AddressOutputReference *)(*item))->getFullOutput(*output))
+                    return false;
+                ++output;
+            }
             ++item;
         }
 
@@ -99,7 +103,7 @@ namespace BitCoin
                         for(ArcMist::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
                         {
                             newAddress = new AddressOutputReference(pBlockHeight, transactionOffset, outputOffset);
-                            if(!insert(**hash, newAddress))
+                            if(!insert(*hash, newAddress))
                             {
                                 delete newAddress;
                                 success = false;
@@ -130,8 +134,12 @@ namespace BitCoin
         ArcMist::HashData *newAddress;
         unsigned int transactionOffset = 0, outputOffset;
         ArcMist::HashList hashes;
+        Iterator item;
+        bool found;
+
         for(std::vector<Transaction *>::const_iterator trans=pBlockTransactions.begin();trans!=pBlockTransactions.end();++trans,++transactionOffset)
         {
+            // Remove addresses added by outputs from this block's transactions
             outputOffset = 0;
             for(std::vector<Output *>::const_iterator output=(*trans)->outputs.begin();output!=(*trans)->outputs.end();++output,++outputOffset)
             {
@@ -146,29 +154,81 @@ namespace BitCoin
                             newAddress = new AddressOutputReference(pBlockHeight, transactionOffset, outputOffset);
 
                             // Check for matching address marked for removal
-                            Iterator item = get(**hash);
+                            item = get(*hash);
+                            found = false;
 
-                            while(item && item.hash() == **hash)
+                            while(item && item.hash() == *hash)
                             {
-                                if(newAddress->valuesMatch(*item) && (*item)->markedRemove())
+                                if(newAddress->valuesMatch(*item) && !(*item)->markedRemove())
                                 {
-                                    // Unmark the matching item for removal
-                                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
-                                      "Reversing removal of transaction address for block height %d : %s", pBlockHeight,
+                                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_ADDRESSES_LOG_NAME,
+                                      "Removing transaction address for block height %d : %s", pBlockHeight,
                                       item.hash().hex().text());
-                                    (*item)->clearRemove();
+                                    (*item)->setRemove();
+                                    found = true;
                                     break;
                                 }
                                 ++item;
                             }
 
                             delete newAddress;
+
+                            if(!found)
+                            {
+                                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
+                                  "Failed to remove transaction address for block height %d : %s", pBlockHeight,
+                                  item.hash().hex().text());
+                                success = false;
+                                break;
+                            }
                         }
                         break;
                     default:
                         break;
                 }
             }
+
+            // Unspend all addresses spent by inputs from this block's transactions
+            // inputOffset = 0;
+            // for(std::vector<Input *>::const_iterator output=(*trans)->inputs.begin();output!=(*trans)->inputs.end();++output,++inputOffset)
+            // {
+                // // Get outpoint
+                // reference = pOutputs.findUnspent()
+
+                // switch(ScriptInterpreter::parseOutputScript((*output)->script, hashes))
+                // {
+                    // case ScriptInterpreter::P2PKH:
+                    // case ScriptInterpreter::P2PK:
+                    // case ScriptInterpreter::P2SH:
+                    // case ScriptInterpreter::MULTI_SIG:
+                        // for(ArcMist::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                        // {
+                            // newAddress = new AddressOutputReference(pBlockHeight, transactionOffset, outputOffset);
+
+                            // // Check for matching address marked for removal
+                            // Iterator item = get(*hash);
+
+                            // while(item && item.hash() == *hash)
+                            // {
+                                // if(newAddress->valuesMatch(*item) && (*item)->markedRemove())
+                                // {
+                                    // // Unmark the matching item for removal
+                                    // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_ADDRESSES_LOG_NAME,
+                                      // "Reversing removal of transaction address for block height %d : %s", pBlockHeight,
+                                      // item.hash().hex().text());
+                                    // (*item)->clearRemove();
+                                    // break;
+                                // }
+                                // ++item;
+                            // }
+
+                            // delete newAddress;
+                        // }
+                        // break;
+                    // default:
+                        // break;
+                // }
+            // }
         }
 
         --mNextBlockHeight;
@@ -206,7 +266,7 @@ namespace BitCoin
         {
             setTargetCacheDataSize(pCacheDataTargetSize);
 
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
               "Loaded %d transaction addresses at block height %d (cached %d KiB)",
               size(), mNextBlockHeight - 1, cacheDataSize() / 1024);
         }

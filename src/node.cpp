@@ -250,7 +250,7 @@ namespace BitCoin
         if(!isOpen() || mIsIncoming || waitingForRequests())
             return false;
 
-        if(mLastHeaderRequested == mChain->lastPendingBlockHash())
+        if(!mLastHeaderRequested.isEmpty() && mLastHeaderRequested == mChain->lastPendingBlockHash())
             return false;
 
         ArcMist::HashList hashes;
@@ -259,14 +259,14 @@ namespace BitCoin
 
         Message::GetHeadersData getHeadersData;
         for(ArcMist::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
-            getHeadersData.blockHeaderHashes.push_back(**hash);
+            getHeadersData.blockHeaderHashes.push_back(*hash);
 
         ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Sending header request");
         bool success = sendMessage(&getHeadersData);
         if(success)
         {
-            mHeaderRequested = *hashes.back();
-            mLastHeaderRequested = *hashes.back();
+            mHeaderRequested = hashes.back();
+            mLastHeaderRequested = hashes.back();
             mHeaderRequestTime = getTime();
         }
         return success;
@@ -280,7 +280,7 @@ namespace BitCoin
         // Put block hashes into block request message
         Message::GetDataData getDataData;
         for(ArcMist::HashList::iterator hash=pList.begin();hash!=pList.end();++hash)
-            getDataData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::BLOCK, **hash));
+            getDataData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::BLOCK, *hash));
 
         bool success = sendMessage(&getDataData);
         if(success)
@@ -288,16 +288,16 @@ namespace BitCoin
             mBlockRequestMutex.lock();
             mBlocksRequested.clear();
             for(ArcMist::HashList::iterator hash=pList.begin();hash!=pList.end();++hash)
-                mBlocksRequested.push_back(new ArcMist::Hash(**hash));
+                mBlocksRequested.push_back(*hash);
             mBlockRequestTime = getTime();
             mBlockRequestMutex.unlock();
             mChain->markBlocksForNode(pList, mID);
             if(pList.size() == 1)
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending request for block at (%d) : %s",
-                  mChain->blockHeight(*pList.front()), pList.front()->hex().text());
+                  mChain->blockHeight(pList.front()), pList.front().hex().text());
             else
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending request for %d blocks starting at (%d) : %s",
-                  pList.size(), mChain->blockHeight(*pList.front()), pList.front()->hex().text());
+                  pList.size(), mChain->blockHeight(pList.front()), pList.front().hex().text());
         }
         else
         {
@@ -327,7 +327,7 @@ namespace BitCoin
         // Put transaction hashes into transaction request message
         Message::GetDataData getDataData;
         for(ArcMist::HashList::iterator hash=pList.begin();hash!=pList.end();++hash)
-            getDataData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION, **hash));
+            getDataData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION, *hash));
 
         bool success = sendMessage(&getDataData);
         if(success)
@@ -335,10 +335,10 @@ namespace BitCoin
             mChain->memPool().markForNode(pList, mID);
             if(pList.size() == 1)
                 ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Sending request for transaction %s",
-                  pList.front()->hex().text());
+                  pList.front().hex().text());
             else
                 ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Sending request for %d transactions starting with %s",
-                  pList.size(), pList.front()->hex().text());
+                  pList.size(), pList.front().hex().text());
         }
         else
             mChain->memPool().releaseForNode(mID);
@@ -533,7 +533,7 @@ namespace BitCoin
             // Keep list at 1024 or less
             if(mAnnounceBlocks.size() > 1024)
                 mAnnounceBlocks.erase(mAnnounceBlocks.begin());
-            mAnnounceBlocks.push_back(new ArcMist::Hash(pHash));
+            mAnnounceBlocks.push_back(pHash);
         }
         mAnnounceMutex.unlock();
     }
@@ -546,7 +546,7 @@ namespace BitCoin
             // Keep list at 1024 or less
             if(mAnnounceTransactions.size() > 1024)
                 mAnnounceTransactions.erase(mAnnounceTransactions.begin());
-            mAnnounceTransactions.push_back(new ArcMist::Hash(pHash));
+            mAnnounceTransactions.push_back(pHash);
         }
         mAnnounceMutex.unlock();
     }
@@ -587,10 +587,10 @@ namespace BitCoin
         {
             mLastBlackListCheck = time;
             for(ArcMist::HashList::iterator hash=mAnnounceTransactions.begin();hash!=mAnnounceTransactions.end();++hash)
-                if(mChain->memPool().isBlackListed(**hash))
+                if(mChain->memPool().isBlackListed(*hash))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,
-                      "Dropping. Detected black listed transaction : %s", (*hash)->hex().text());
+                      "Dropping. Detected black listed transaction : %s", hash->hex().text());
                     Info::instance().addPeerFail(mAddress);
                     close();
                     return;
@@ -904,10 +904,10 @@ namespace BitCoin
                 Message::Inventory::iterator item = inventoryData.inventory.begin();
                 for(ArcMist::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
                 {
-                    *item = new Message::InventoryHash(Message::InventoryHash::BLOCK, **hash);
+                    *item = new Message::InventoryHash(Message::InventoryHash::BLOCK, *hash);
                     ++actualCount;
                     ++item;
-                    if(!dontStop && **hash == getBlocksData->stopHeaderHash)
+                    if(!dontStop && *hash == getBlocksData->stopHeaderHash)
                         break;
                 }
                 inventoryData.inventory.resize(actualCount);
@@ -1069,7 +1069,7 @@ namespace BitCoin
                                     headersNeeded = true;
                                     break;
                                 case Chain::NEED_BLOCK:
-                                    blockList.push_back(new ArcMist::Hash((*item)->hash));
+                                    blockList.push_back((*item)->hash);
                                     break;
                                 case Chain::BLACK_LISTED:
                                     sendReject(Message::nameFor(message->type), Message::RejectData::WRONG_CHAIN,
@@ -1096,7 +1096,7 @@ namespace BitCoin
                             switch(mChain->memPool().addPending((*item)->hash, mID))
                             {
                                 case MemPool::NEED:
-                                    transactionList.push_back(new ArcMist::Hash((*item)->hash));
+                                    transactionList.push_back((*item)->hash);
                                     break;
                                 case MemPool::ALREADY_HAVE:
                                     break;
@@ -1172,7 +1172,7 @@ namespace BitCoin
                             addedCount++;
 
                             if(mChain->isInSync())
-                                blockList.push_back(new ArcMist::Hash((*header)->hash));
+                                blockList.push_back((*header)->hash);
                         }
                         else
                         {
@@ -1204,9 +1204,8 @@ namespace BitCoin
                     time = getTime();
                     mBlockRequestMutex.lock();
                     for(ArcMist::HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
-                        if(**hash == ((Message::BlockData *)message)->block->hash)
+                        if(*hash == ((Message::BlockData *)message)->block->hash)
                         {
-                            delete *hash;
                             mBlocksRequested.erase(hash);
                             mBlockReceiveTime = time;
                             ++mBlockDownloadCount;
@@ -1273,10 +1272,10 @@ namespace BitCoin
                         bool wasRequested = false;
                         mBlockRequestMutex.lock();
                         for(ArcMist::HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
-                            if(**hash == (*item)->hash)
+                            if(*hash == (*item)->hash)
                             {
                                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
-                                  "Block hash returned not found : %s", (*hash)->hex().text());
+                                  "Block hash returned not found : %s", hash->hex().text());
                                 wasRequested = true;
                                 break;
                             }

@@ -70,7 +70,7 @@ namespace BitCoin
 
         ArcMist::String address(bool pTest = false);
 
-        const uint8_t *value() const { return mData; }
+        const uint8_t *data() const { return mData; }
 
     private:
 

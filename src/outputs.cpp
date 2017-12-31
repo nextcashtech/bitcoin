@@ -355,7 +355,7 @@ namespace BitCoin
             if(valid)
             {
                 mToCommit.push_back(transactionReference);
-                mToCommitHashes.push_back(new ArcMist::Hash((*transaction)->hash));
+                mToCommitHashes.push_back((*transaction)->hash);
                 ++count;
             }
             else
@@ -400,7 +400,7 @@ namespace BitCoin
         ArcMist::HashList::iterator hash = mToCommitHashes.begin();
         for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
         {
-            if(**hash == (*transaction)->hash)
+            if(*hash == (*transaction)->hash)
             {
                 (*reference)->commit((*transaction)->outputs);
                 ++reference;

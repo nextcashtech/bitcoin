@@ -248,7 +248,7 @@ namespace BitCoin
 
         blockSet.lock();
         for(BlockSet::iterator i=blockSet.begin();i!=blockSet.end();++i)
-            if(pHash == *(*i)->hash)
+            if(pHash == (*i)->hash)
             {
                 result = (*i)->fileID;
                 blockSet.unlock();
@@ -267,7 +267,7 @@ namespace BitCoin
         BlockSet &blockSet = mBlockLookup[pHash.lookup16()];
         blockSet.lock();
         for(BlockSet::iterator i=blockSet.begin();i!=blockSet.end();++i)
-            if(pHash == *(*i)->hash)
+            if(pHash == (*i)->hash)
             {
                 result = (*i)->height;
                 break;
@@ -336,7 +336,7 @@ namespace BitCoin
             // Keep list at 1024 or less
             if(mBlackListBlocks.size() > 1024)
                 mBlackListBlocks.erase(mBlackListBlocks.begin());
-            mBlackListBlocks.push_back(new ArcMist::Hash(pHash));
+            mBlackListBlocks.push_back(pHash);
         }
     }
 
@@ -347,7 +347,7 @@ namespace BitCoin
         mPendingLock.writeLock("Announce");
         if(mBlocksToAnnounce.size() > 0)
         {
-            hash = *mBlocksToAnnounce.front();
+            hash = mBlocksToAnnounce.front();
             mBlocksToAnnounce.erase(mBlocksToAnnounce.begin());
             if(mAnnounceBlock != NULL && mAnnounceBlock->hash == hash)
             {
@@ -608,7 +608,7 @@ namespace BitCoin
         pList.clear();
         mPendingLock.readLock();
         for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();++pendingHeader)
-            pList.push_back(new ArcMist::Hash((*pendingHeader)->hash));
+            pList.push_back((*pendingHeader)->hash);
         mPendingLock.readUnlock();
         return true;
     }
@@ -785,7 +785,7 @@ namespace BitCoin
             int chainHeight = height();
             ArcMist::HashList::reverse_iterator hash = mBlockHashes.rbegin();
             for(int i=0;i<100;++i,++hash,--chainHeight)
-                if(**hash == pBlock->previousHash)
+                if(*hash == pBlock->previousHash)
                 {
                     added = true;
                     branchesUpdated = true;
@@ -968,7 +968,7 @@ namespace BitCoin
         uint32_t time = getTime();
         for(ArcMist::HashList::iterator hash=pHashes.begin();hash!=pHashes.end();++hash)
             for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
-                if((*pending)->block->hash == **hash)
+                if((*pending)->block->hash == *hash)
                 {
                     (*pending)->requestingNode = pNodeID;
                     (*pending)->requestedTime = time;
@@ -1010,7 +1010,7 @@ namespace BitCoin
 
             if(!(*pending)->isFull() && (*pending)->requestingNode == 0)
             {
-                pHashes.push_back(new ArcMist::Hash((*pending)->block->hash));
+                pHashes.push_back((*pending)->block->hash);
                 if(pHashes.size() >= pCount)
                     break;
             }
@@ -1148,7 +1148,7 @@ namespace BitCoin
         {
             BlockSet &blockSet = mBlockLookup[pBlock->hash.lookup16()];
             blockSet.lock();
-            mBlockHashes.push_back(new ArcMist::Hash(pBlock->hash));
+            mBlockHashes.push_back(pBlock->hash);
             blockSet.push_back(new BlockInfo(mBlockHashes.back(), mLastFileID, mNextBlockHeight));
             blockSet.unlock();
 
@@ -1256,7 +1256,6 @@ namespace BitCoin
             BlockSet &blockSet = mBlockLookup[block.hash.lookup16()];
             blockSet.lock();
             blockSet.remove(block.hash);
-            delete mBlockHashes.back();
             mBlockHashes.erase(mBlockHashes.end() - 1);
             blockSet.unlock();
             --mNextBlockHeight;
@@ -1336,7 +1335,7 @@ namespace BitCoin
 
             if(isInSync())
             {
-                mBlocksToAnnounce.push_back(new ArcMist::Hash(nextPending->block->hash));
+                mBlocksToAnnounce.push_back(nextPending->block->hash);
                 if(mAnnounceBlock == NULL)
                     mAnnounceBlock = nextPending->block;
                 nextPending->block = NULL;
@@ -1412,7 +1411,7 @@ namespace BitCoin
 
         while(pHashes.size() < pCount)
         {
-            pHashes.push_back(new ArcMist::Hash(*mBlockHashes[hashHeight]));
+            pHashes.push_back(mBlockHashes[hashHeight]);
             ++hashHeight;
         }
 
@@ -1425,7 +1424,7 @@ namespace BitCoin
         mProcessMutex.lock();
         int height = mBlockHashes.size();
         for(ArcMist::HashList::reverse_iterator hash=mBlockHashes.rbegin();hash!=mBlockHashes.rend() && pHashes.size() < pCount && height > 0;hash+=100,height-=100)
-            pHashes.push_back(new ArcMist::Hash(**hash));
+            pHashes.push_back(*hash);
         mProcessMutex.unlock();
         return true;
     }
@@ -1487,7 +1486,7 @@ namespace BitCoin
             return false;
         }
 
-        pHash = *mBlockHashes[pHeight];
+        pHash = mBlockHashes[pHeight];
         return true;
     }
 
@@ -1849,14 +1848,13 @@ namespace BitCoin
                 mLastFileID = fileID;
                 for(ArcMist::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
                 {
-                    BlockSet &blockSet = mBlockLookup[(*hash)->lookup16()];
+                    BlockSet &blockSet = mBlockLookup[hash->lookup16()];
                     blockSet.lock();
                     mBlockHashes.push_back(*hash);
                     blockSet.push_back(new BlockInfo(mBlockHashes.back(), fileID, mNextBlockHeight));
                     blockSet.unlock();
                     mNextBlockHeight++;
                 }
-                hashes.clearNoDelete();
             }
             else
             {
@@ -2018,7 +2016,7 @@ namespace BitCoin
                     return false;
             }
 
-            mLastBlockHash = *mBlockHashes.back();
+            mLastBlockHash = mBlockHashes.back();
         }
 
         return success && loadPending();
