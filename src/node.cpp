@@ -667,14 +667,14 @@ namespace BitCoin
                     versionText += ", relay";
                 if(mVersionData->transmittingServices & Message::VersionData::FULL_NODE_BIT)
                     versionText += ", full";
+                if(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT)
+                    versionText += ", cash";
                 if(mVersionData->transmittingServices & Message::VersionData::BLOOM_NODE_BIT)
                     versionText += ", bloom";
                 if(mVersionData->transmittingServices & Message::VersionData::WITNESS_NODE_BIT)
                     versionText += ", witness";
                 if(mVersionData->transmittingServices & Message::VersionData::XTHIN_NODE_BIT)
                     versionText += ", xthin";
-                if(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT)
-                    versionText += ", cash";
                 versionText += ", time ";
                 versionText += timeText;
                 ArcMist::Log::add(ArcMist::Log::INFO, mName, versionText);
@@ -693,7 +693,8 @@ namespace BitCoin
                     close();
                 }
                 else if(mChain->forks().cashActive() &&
-                  !(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT))
+                  !(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT) && // Missing Cash node bit
+                  mVersionData->startBlockHeight >= mChain->forks().cashForkBlockHeight()) // Peer above cash fork height
                 {
                     mRejected = true;
                     sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
