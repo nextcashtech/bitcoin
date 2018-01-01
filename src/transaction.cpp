@@ -724,6 +724,7 @@ namespace BitCoin
     uint8_t Transaction::checkOutpoints(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions)
     {
         TransactionReference *reference;
+        OutputReference *outputReference;
         Transaction *outpointTransaction;
         unsigned int index = 0;
         bool outpointsFound = true;
@@ -731,7 +732,9 @@ namespace BitCoin
         {
             // Find unspent transaction for input
             reference = pOutputs.findUnspent((*input)->outpoint.transactionID, (*input)->outpoint.index);
-            if(reference == NULL)
+            if(reference != NULL)
+                outputReference = reference->outputAt((*input)->outpoint.index);
+            if(reference == NULL || outputReference == NULL || outputReference->blockFileOffset == 0)
             {
                 // Search mempool
                 outpointTransaction = pMemPoolTransactions.getSorted((*input)->outpoint.transactionID);
@@ -768,7 +771,8 @@ namespace BitCoin
             {
                 if((*input)->outpoint.output == NULL)
                     (*input)->outpoint.output = new Output();
-                if(!BlockFile::readOutput(reference, (*input)->outpoint.index, *(*input)->outpoint.output))
+                if(!BlockFile::readOutput(reference->blockHeight, outputReference,
+                  (*input)->outpoint.index, *(*input)->outpoint.output))
                 {
                     //TODO This should be a system failure, not an invalid transaction
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
@@ -908,6 +912,7 @@ namespace BitCoin
         // Find outpoints and check signatures
         ScriptInterpreter interpreter;
         TransactionReference *reference = NULL;
+        OutputReference *outputReference = NULL;
         Transaction *outpointTransaction;
         bool sigsVerified = true;
         index = 0;
@@ -919,7 +924,9 @@ namespace BitCoin
 
                 // Find unspent transaction for input
                 reference = pOutputs.findUnspent((*input)->outpoint.transactionID, (*input)->outpoint.index);
-                if(reference == NULL)
+                if(reference != NULL)
+                    outputReference = reference->outputAt((*input)->outpoint.index);
+                if(reference == NULL || outputReference == NULL || outputReference->blockFileOffset == 0)
                 {
                     // Search mempool
                     outpointTransaction = pMemPoolTransactions.getSorted((*input)->outpoint.transactionID);
@@ -951,7 +958,8 @@ namespace BitCoin
                 {
                     if((*input)->outpoint.output == NULL)
                         (*input)->outpoint.output = new Output();
-                    if(!BlockFile::readOutput(reference, (*input)->outpoint.index, *(*input)->outpoint.output))
+                    if(!BlockFile::readOutput(reference->blockHeight, outputReference,
+                      (*input)->outpoint.index, *(*input)->outpoint.output))
                     {
                         delete (*input)->outpoint.output;
                         (*input)->outpoint.output = NULL;
@@ -1070,6 +1078,7 @@ namespace BitCoin
         // Process Inputs
         ScriptInterpreter interpreter;
         TransactionReference *reference;
+        OutputReference *outputReference = NULL;
         Output output;
         unsigned int index = 0;
         bool sequenceFound = false;
@@ -1122,12 +1131,22 @@ namespace BitCoin
                       (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
                     return false;
                 }
+                else
+                    outputReference = reference->outputAt((*input)->outpoint.index);
+
+                if(outputReference == NULL)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d outpoint output index not found : index %d trans %s", index,
+                      (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
+                    return false;
+                }
 
                 pSpentAges.push_back(pBlockHeight - reference->blockHeight);
 
                 if(reference->blockHeight == pBlockHeight)
                 {
-                    // Get output from this block
+                    // Get output from this block since it hasn't been written to a block file yet
                     bool found = false;
                     for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
                         if(*transaction == this)
@@ -1148,7 +1167,7 @@ namespace BitCoin
                         return false;
                     }
                 }
-                else if(!BlockFile::readOutput(reference, (*input)->outpoint.index, output))
+                else if(!BlockFile::readOutput(reference->blockHeight, outputReference, (*input)->outpoint.index, output))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction failed to read : index %d trans %s", index,

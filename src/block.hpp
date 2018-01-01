@@ -130,7 +130,7 @@ namespace BitCoin
           unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput);
 
         // Get transaction output from appropriate block file
-        static bool readOutput(TransactionReference *pReference, unsigned int pIndex, Output &pOutput);
+        static bool readOutput(unsigned int pBlockHeight, OutputReference *pReference, unsigned int pIndex, Output &pOutput);
 
         // Create a new block file. BlockFile objects will be invalid if the block file doesn't already exist
         static BlockFile *create(unsigned int pID);

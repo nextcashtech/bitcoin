@@ -1358,7 +1358,7 @@ namespace BitCoin
         return success;
     }
 
-    bool BlockFile::readOutput(TransactionReference *pReference, unsigned int pIndex, Output &pOutput)
+    bool BlockFile::readOutput(unsigned int pBlockHeight, OutputReference *pReference, unsigned int pIndex, Output &pOutput)
     {
 #ifdef PROFILER_ON
         ArcMist::Profiler profiler("Block Read Output");
@@ -1370,14 +1370,14 @@ namespace BitCoin
             return false;
         }
 
-        if(pReference->outputAt(pIndex)->blockFileOffset == 0)
+        if(pReference->blockFileOffset == 0)
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Failed to read output. Block file offset is zero.");
             return false;
         }
 
-        unsigned int fileID = pReference->blockHeight / MAX_BLOCKS;
+        unsigned int fileID = pBlockHeight / MAX_BLOCKS;
 
         lock(fileID);
         BlockFile *blockFile = new BlockFile(fileID, false);
@@ -1389,7 +1389,7 @@ namespace BitCoin
               "Failed to read output. Block file 0x%08x is invalid.", fileID);
             success = false;
         }
-        else if(!blockFile->readTransactionOutput(pReference->outputAt(pIndex)->blockFileOffset, pOutput))
+        else if(!blockFile->readTransactionOutput(pReference->blockFileOffset, pOutput))
             success = false;
 
         delete blockFile;
