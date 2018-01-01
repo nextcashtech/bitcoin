@@ -255,7 +255,7 @@ namespace BitCoin
             return false;
 
         ArcMist::HashList hashes;
-        if(!mChain->getReverseBlockHashes(hashes, 5))
+        if(!mChain->getReverseBlockHashes(hashes, 16))
             return false;
 
         Message::GetHeadersData getHeadersData;
@@ -1067,6 +1067,7 @@ namespace BitCoin
                             {
                                 case Chain::NEED_HEADER:
                                     headersNeeded = true;
+                                    mLastBlockAnnounced = (*item)->hash;
                                     break;
                                 case Chain::NEED_BLOCK:
                                     blockList.push_back((*item)->hash);
@@ -1130,7 +1131,6 @@ namespace BitCoin
 
                     if(transactionList.size() > 0)
                         requestTransactions(transactionList);
-
                 }
                 break;
             case Message::HEADERS:
@@ -1139,6 +1139,7 @@ namespace BitCoin
                     Message::HeadersData *headersData = (Message::HeadersData *)message;
                     unsigned int addedCount = 0;
                     ArcMist::HashList blockList;
+                    bool lastAnnouncedHeaderFound = mLastBlockAnnounced.isEmpty() || mChain->headerAvailable(mLastBlockAnnounced);
 
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
                       "Received %d block headers", headersData->headers.size());
@@ -1148,6 +1149,9 @@ namespace BitCoin
 
                     for(std::vector<Block *>::iterator header=headersData->headers.begin();header!=headersData->headers.end();)
                     {
+                        if(!mLastBlockAnnounced.isEmpty() && mLastBlockAnnounced == (*header)->hash)
+                            lastAnnouncedHeaderFound = true;
+
                         if(mChain->addPendingBlock(*header))
                         {
                             ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Added Header : %s",
@@ -1159,9 +1163,9 @@ namespace BitCoin
                             if(mChain->isInSync())
                                 blockList.push_back((*header)->hash);
                         }
-                        else
+                        else if(mChain->headerAvailable((*header)->hash))
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Didn't add Header : %s",
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Rejected Header : %s",
                               (*header)->hash.hex().text());
                             ++header;
                         }
@@ -1169,9 +1173,19 @@ namespace BitCoin
 
                     if(blockList.size() > 0)
                         requestBlocks(blockList);
+                    else if(!lastAnnouncedHeaderFound)
+                    {
+                        mRejected = true;
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                          "Dropping. Announced block for which they didn't provide header : %s", mLastBlockAnnounced.hex().text());
+                        Info::instance().addPeerFail(mAddress, 5);
+                        close();
+                    }
 
                     if(addedCount > 0 && !mIsSeed && mVersionData != NULL)
                         Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
+
+                    mLastBlockAnnounced.clear();
 
                     ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Added %d pending headers", addedCount);
                 }

@@ -130,7 +130,7 @@ namespace BitCoin
         unsigned int mBlockDownloadSize;
         unsigned int mBlockDownloadTime;
 
-        ArcMist::Hash mHeaderRequested, mLastHeaderRequested;
+        ArcMist::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested;
         uint32_t mHeaderRequestTime;
 
         ArcMist::Mutex mBlockRequestMutex;

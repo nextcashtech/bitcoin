@@ -781,10 +781,10 @@ namespace BitCoin
 
         if(!alreadyHave && !added && !filled)
         {
-            // Check if it fits on one of the last 100 blocks in the chain
+            // Check if it fits on one of the last 5000 blocks in the chain
             int chainHeight = height();
             ArcMist::HashList::reverse_iterator hash = mBlockHashes.rbegin();
-            for(int i=0;i<100;++i,++hash,--chainHeight)
+            for(int i=0;i<5000;++i,++hash,--chainHeight)
                 if(*hash == pBlock->previousHash)
                 {
                     added = true;
@@ -1050,11 +1050,6 @@ namespace BitCoin
                 mTargetBits = previousTargetBits;
                 mBlockStats.revert(mNextBlockHeight - 1);
                 mProcessMutex.unlock();
-
-                //TODO Remove
-                // Write to temp file
-                ArcMist::FileOutputStream file(pBlock->hash.hex().text(), true);
-                pBlock->write(&file, true, true, true);
                 return false;
             }
         }
@@ -1069,11 +1064,6 @@ namespace BitCoin
             mBlockStats.revert(mNextBlockHeight - 1);
             mTargetBits = previousTargetBits;
             mProcessMutex.unlock();
-
-            //TODO Remove
-            // Write to temp file
-            ArcMist::FileOutputStream file(pBlock->hash.hex().text(), true);
-            pBlock->write(&file, true, true, true);
             return false;
         }
 
@@ -1423,7 +1413,8 @@ namespace BitCoin
         pHashes.clear();
         mProcessMutex.lock();
         int height = mBlockHashes.size();
-        for(ArcMist::HashList::reverse_iterator hash=mBlockHashes.rbegin();hash!=mBlockHashes.rend() && pHashes.size() < pCount && height > 0;hash+=100,height-=100)
+        for(ArcMist::HashList::reverse_iterator hash=mBlockHashes.rbegin();
+          hash!=mBlockHashes.rend() && pHashes.size() < pCount && height > 0;hash+=500,height-=500)
             pHashes.push_back(*hash);
         mProcessMutex.unlock();
         return true;
