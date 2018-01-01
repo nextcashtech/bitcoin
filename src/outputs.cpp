@@ -461,16 +461,16 @@ namespace BitCoin
                         if(!((TransactionReference *)(*reference))->markedRemove())
                         {
                             outputReference = ((TransactionReference *)(*reference))->outputAt((*input)->outpoint.index);
-                            if(outputReference == NULL || outputReference->spentBlockHeight == 0)
-                                continue;
-
-                            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
-                              "Reverting spend on input transaction : index %d %s", (*input)->outpoint.index,
-                              (*input)->outpoint.transactionID.hex().text());
-                            outputReference->spentBlockHeight = 0;
-                            reference->setModified();
-                            found = true;
-                            break;
+                            if(outputReference != NULL && outputReference->spentBlockHeight != 0)
+                            {
+                                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
+                                  "Reverting spend on input transaction : index %d %s", (*input)->outpoint.index,
+                                  (*input)->outpoint.transactionID.hex().text());
+                                outputReference->spentBlockHeight = 0;
+                                reference->setModified();
+                                found = true;
+                                break;
+                            }
                         }
 
                         ++reference;
