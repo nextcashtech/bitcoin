@@ -787,6 +787,13 @@ namespace BitCoin
                       rejectData->code, rejectData->reason.text());
                     close();
                 }
+                else if((rejectData->command == "tx" || rejectData->command == "block") && rejectData->extra.length() >= 32)
+                {
+                    ArcMist::Hash hash(32);
+                    hash.read(&rejectData->extra);
+                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "Reject %s [%02x] - %s : %s",
+                      rejectData->command.text(), rejectData->code, rejectData->reason.text(), hash.hex().text());
+                }
                 else
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName, "Reject %s [%02x] - %s",
                       rejectData->command.text(), rejectData->code, rejectData->reason.text());
