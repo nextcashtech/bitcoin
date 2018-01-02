@@ -1177,6 +1177,8 @@ namespace BitCoin
                               (*header)->hash.hex().text());
                             ++header;
                         }
+                        else
+                            ++header;
                     }
 
                     if(blockList.size() > 0)
