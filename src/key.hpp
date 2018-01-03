@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017-2018 ArcMist, LLC                                       *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@arcmist.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
@@ -141,6 +141,8 @@ namespace BitCoin
 
         bool generate();
         bool generatePublicKey(PublicKey &pPublicKey) const;
+
+        void set(void *pData) { std::memcpy(mData, pData, 32); }
         ArcMist::String hex() const;
 
         bool sign(ArcMist::Hash &pHash, Signature &pSignature) const;

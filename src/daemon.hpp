@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017-2018 ArcMist, LLC                                       *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@arcmist.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
@@ -15,6 +15,7 @@
 #include "base.hpp"
 #include "info.hpp"
 #include "node.hpp"
+#include "requests.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -125,6 +126,12 @@ namespace BitCoin
 
         // Announce verified blocks and transactions
         void announce();
+
+        // Request Channels
+        ArcMist::ReadersLock mRequestsLock;
+        std::vector<RequestChannel *> mRequestChannels;
+        bool addRequestChannel(ArcMist::Network::Connection *pConnection);
+        void cleanRequestChannels();
 
         Statistics mStatistics;
         void collectStatistics();

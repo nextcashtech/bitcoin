@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017-2018 ArcMist, LLC                                       *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@arcmist.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
@@ -45,7 +45,7 @@ namespace BitCoin
         Daemon::sInstance = 0;
     }
 
-    Daemon::Daemon() : mInfo(Info::instance()), mNodeLock("Nodes")
+    Daemon::Daemon() : mInfo(Info::instance()), mNodeLock("Nodes"), mRequestsLock("Requests")
     {
         mRunning = false;
         mStopping = false;
@@ -184,6 +184,7 @@ namespace BitCoin
             delete mConnectionThread;
         mConnectionThread = NULL;
 
+        // Stop nodes
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping nodes");
         mNodeLock.readLock();
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
@@ -197,6 +198,21 @@ namespace BitCoin
             delete *node;
         mNodes.clear();
         mNodeLock.writeUnlock();
+
+        // Stop request channels
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping request channels");
+        mRequestsLock.readLock();
+        for(std::vector<RequestChannel *>::iterator requestChannel=mRequestChannels.begin();requestChannel!=mRequestChannels.end();++requestChannel)
+            (*requestChannel)->requestStop();
+        mRequestsLock.readUnlock();
+
+        // Delete request channels
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Deleting request channels");
+        mRequestsLock.writeLock("Destroy");
+        for(std::vector<RequestChannel *>::iterator requestChannel=mRequestChannels.begin();requestChannel!=mRequestChannels.end();++requestChannel)
+            delete *requestChannel;
+        mRequestChannels.clear();
+        mRequestsLock.writeUnlock();
 
         // Tell the chain to stop processing
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping chain");
@@ -1125,7 +1141,7 @@ namespace BitCoin
             return false;
         }
 
-        mNodeLock.writeLock("Add Node");
+        mNodeLock.writeLock("Add");
         mNodes.push_back(node);
         mNodeCount++;
         if(pIncoming)
@@ -1251,7 +1267,7 @@ namespace BitCoin
         // Drop all closed nodes
         std::vector<Node *> toDelete;
         bool dropped;
-        mNodeLock.writeLock("Clean Nodes");
+        mNodeLock.writeLock("Clean");
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
             if(!(*node)->isOpen())
             {
@@ -1298,10 +1314,37 @@ namespace BitCoin
         }
     }
 
+    bool Daemon::addRequestChannel(ArcMist::Network::Connection *pConnection)
+    {
+        mRequestsLock.writeLock("Add");
+        mRequestChannels.push_back(new RequestChannel(pConnection, &mChain));
+        mRequestsLock.writeUnlock();
+        return true;
+    }
+
+    void Daemon::cleanRequestChannels()
+    {
+        // Drop all closed nodes
+        std::vector<RequestChannel *> toDelete;
+        mRequestsLock.writeLock("Clean");
+        for(std::vector<RequestChannel *>::iterator requestChannel=mRequestChannels.begin();requestChannel!=mRequestChannels.end();)
+            if((*requestChannel)->isStopped())
+            {
+                toDelete.push_back(*requestChannel);
+                requestChannel = mRequestChannels.erase(requestChannel);
+            }
+            else
+                ++requestChannel;
+        mRequestsLock.writeUnlock();
+
+        for(std::vector<RequestChannel *>::iterator requestChannel=toDelete.begin();requestChannel!=toDelete.end();++requestChannel)
+            delete *requestChannel;
+    }
+
     void Daemon::handleConnections()
     {
         Daemon &daemon = Daemon::instance();
-        ArcMist::Network::Listener *listener = NULL;
+        ArcMist::Network::Listener *nodeListener = NULL, *requestsListener = NULL;
         ArcMist::Network::Connection *newConnection;
         uint32_t lastFillNodesTime = 0;
         uint32_t lastCleanTime = getTime();
@@ -1313,46 +1356,6 @@ namespace BitCoin
 
         while(!daemon.mStopping)
         {
-            if(getTime() - lastCleanTime > 10)
-            {
-                lastCleanTime = getTime();
-                daemon.cleanNodes();
-            }
-
-            if(listener == NULL)
-            {
-                if(daemon.mIncomingNodes < daemon.mMaxIncoming)
-                {
-                    listener = new ArcMist::Network::Listener(AF_INET6, networkPort(), 5, 1);
-                    if(listener->isValid())
-                    {
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                          "Started listening for connections on port %d", listener->port());
-                    }
-                    else
-                    {
-                        ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create listener");
-                        daemon.requestStop();
-                        break;
-                    }
-                }
-            }
-            else
-            {
-                while(!daemon.mStopping && (newConnection = listener->accept()) != NULL)
-                    if(daemon.addNode(newConnection, true) && daemon.mIncomingNodes >= daemon.mMaxIncoming)
-                    {
-                        delete listener;
-                        listener = NULL;
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                          "Stopped listening for incoming connections because of connection limit");
-                        break;
-                    }
-            }
-
-            if(daemon.mStopping)
-                break;
-
             if(daemon.mSeed)
             {
                 daemon.querySeed(daemon.mSeed);
@@ -1371,10 +1374,88 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            ArcMist::Thread::sleep(5000);
+            if(getTime() - lastCleanTime > 10)
+            {
+                lastCleanTime = getTime();
+                daemon.cleanNodes();
+                daemon.cleanRequestChannels();
+            }
+
+            if(nodeListener == NULL)
+            {
+                if(daemon.mIncomingNodes < daemon.mMaxIncoming)
+                {
+                    nodeListener = new ArcMist::Network::Listener(AF_INET6, networkPort(), 5, 1);
+                    if(nodeListener->isValid())
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                          "Started listening for incoming connections on port %d", nodeListener->port());
+                    }
+                    else
+                    {
+                        ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create incoming listener");
+                        daemon.requestStop();
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                while(!daemon.mStopping && (newConnection = nodeListener->accept()) != NULL)
+                    if(daemon.addNode(newConnection, true) && daemon.mIncomingNodes >= daemon.mMaxIncoming)
+                    {
+                        delete nodeListener;
+                        nodeListener = NULL;
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                          "Stopped listening for incoming connections because of connection limit");
+                        break;
+                    }
+            }
+
+            if(daemon.mStopping)
+                break;
+
+            if(requestsListener == NULL)
+            {
+                if(daemon.mRequestChannels.size() < 8)
+                {
+                    requestsListener = new ArcMist::Network::Listener(AF_INET6, 8666, 5, 1);
+                    if(requestsListener->isValid())
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                          "Started listening for request connections on port %d", requestsListener->port());
+                    }
+                    else
+                    {
+                        ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create requests listener");
+                        daemon.requestStop();
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                while(!daemon.mStopping && (newConnection = requestsListener->accept()) != NULL)
+                    if(daemon.addRequestChannel(newConnection) && daemon.mRequestChannels.size() >= 8)
+                    {
+                        delete requestsListener;
+                        requestsListener = NULL;
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                          "Stopped listening for request connections because of connection limit");
+                        break;
+                    }
+            }
+
+            if(daemon.mStopping)
+                break;
+
+            ArcMist::Thread::sleep(200);
         }
 
-        if(listener != NULL)
-            delete listener;
+        if(nodeListener != NULL)
+            delete nodeListener;
+
+        if(requestsListener != NULL)
+            delete requestsListener;
     }
 }
