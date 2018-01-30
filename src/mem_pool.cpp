@@ -109,31 +109,31 @@ namespace BitCoin
 
     void MemPool::releaseForNode(unsigned int pNodeID)
     {
-        mLock.writeLock("Release");
+        mLock.readLock();
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             if((*pending)->requestingNode == pNodeID)
                 (*pending)->requestingNode = 0;
-        mLock.writeUnlock();
+        mLock.readUnlock();
     }
 
     void MemPool::getNeeded(ArcMist::HashList &pList)
     {
-        mLock.writeLock("Get Needed");
+        mLock.readLock();
         uint32_t time = getTime();
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
             if((*pending)->requestingNode == 0 || time - (*pending)->requestedTime > 2)
                 pList.push_back((*pending)->hash);
-        mLock.writeUnlock();
+        mLock.readUnlock();
     }
 
     void MemPool::getToAnnounce(ArcMist::HashList &pList)
     {
         pList.clear();
-        mLock.writeLock("Get Announce");
+        mLock.readLock();
         for(ArcMist::HashList::iterator hash=mToAnnounce.begin();hash!=mToAnnounce.end();++hash)
             pList.push_back(*hash);
         mToAnnounce.clear();
-        mLock.writeUnlock();
+        mLock.readUnlock();
     }
 
     bool MemPool::check(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
