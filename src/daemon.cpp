@@ -52,6 +52,7 @@ namespace BitCoin
         mStopRequested = false;
         mLoaded = false;
         mConnectionThread = NULL;
+        mRequestsThread = NULL;
         mManagerThread = NULL;
         mProcessThread = NULL;
         previousSigTermChildHandler = NULL;
@@ -213,6 +214,12 @@ namespace BitCoin
             delete *requestChannel;
         mRequestChannels.clear();
         mRequestsLock.writeUnlock();
+
+        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping requests thread");
+        // Wait for requests to finish
+        if(mRequestsThread != NULL)
+            delete mRequestsThread;
+        mRequestsThread = NULL;
 
         // Tell the chain to stop processing
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping chain");
@@ -921,6 +928,17 @@ namespace BitCoin
         if(daemon.mStopping)
             return;
 
+        daemon.mRequestsThread = new ArcMist::Thread("Requests", handleRequests);
+        if(daemon.mRequestsThread == NULL)
+        {
+            daemon.requestStop();
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create requests thread");
+            return;
+        }
+
+        if(daemon.mStopping)
+            return;
+
         daemon.mProcessThread = new ArcMist::Thread("Process", process);
         if(daemon.mProcessThread == NULL)
         {
@@ -1344,7 +1362,7 @@ namespace BitCoin
     void Daemon::handleConnections()
     {
         Daemon &daemon = Daemon::instance();
-        ArcMist::Network::Listener *nodeListener = NULL, *requestsListener = NULL;
+        ArcMist::Network::Listener *nodeListener = NULL;
         ArcMist::Network::Connection *newConnection;
         uint32_t lastFillNodesTime = 0;
         uint32_t lastCleanTime = getTime();
@@ -1378,8 +1396,10 @@ namespace BitCoin
             {
                 lastCleanTime = getTime();
                 daemon.cleanNodes();
-                daemon.cleanRequestChannels();
             }
+
+            if(daemon.mStopping)
+                break;
 
             if(nodeListener == NULL)
             {
@@ -1410,6 +1430,31 @@ namespace BitCoin
                           "Stopped listening for incoming connections because of connection limit");
                         break;
                     }
+            }
+
+            if(daemon.mStopping)
+                break;
+
+            ArcMist::Thread::sleep(500);
+        }
+
+        if(nodeListener != NULL)
+            delete nodeListener;
+    }
+
+    void Daemon::handleRequests()
+    {
+        Daemon &daemon = Daemon::instance();
+        ArcMist::Network::Listener *requestsListener = NULL;
+        ArcMist::Network::Connection *newConnection;
+        uint32_t lastCleanTime = getTime();
+
+        while(!daemon.mStopping)
+        {
+            if(getTime() - lastCleanTime > 10)
+            {
+                lastCleanTime = getTime();
+                daemon.cleanRequestChannels();
             }
 
             if(daemon.mStopping)
@@ -1451,9 +1496,6 @@ namespace BitCoin
 
             ArcMist::Thread::sleep(200);
         }
-
-        if(nodeListener != NULL)
-            delete nodeListener;
 
         if(requestsListener != NULL)
             delete requestsListener;

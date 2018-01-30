@@ -34,6 +34,7 @@ namespace BitCoin
 
         // Threads
         static void handleConnections();
+        static void handleRequests();
         static void manage();
         static void process();
 
@@ -67,6 +68,7 @@ namespace BitCoin
 
         // Threads
         ArcMist::Thread *mConnectionThread;
+        ArcMist::Thread *mRequestsThread;
         ArcMist::Thread *mManagerThread;
         ArcMist::Thread *mProcessThread;
 
