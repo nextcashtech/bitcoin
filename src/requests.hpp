@@ -35,6 +35,8 @@ namespace BitCoin
 
         void process();
 
+        unsigned int mID;
+        ArcMist::String mName;
         ArcMist::Thread *mThread;
         ArcMist::Mutex mConnectionMutex;
         ArcMist::Network::Connection *mConnection;
@@ -45,6 +47,8 @@ namespace BitCoin
         int32_t mConnectedTime;
 
         Chain *mChain;
+
+        static unsigned int mNextID;
 
         RequestChannel(const RequestChannel &pCopy);
         const RequestChannel &operator = (const RequestChannel &pRight);
