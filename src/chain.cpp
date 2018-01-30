@@ -1495,7 +1495,7 @@ namespace BitCoin
         if(fileID == mLastFileID && mLastBlockFile != NULL)
             blockFile = mLastBlockFile;
         else
-            blockFile = new BlockFile(fileID);
+            blockFile = new BlockFile(fileID, false);
 
         bool success = blockFile->isValid() && blockFile->readBlock(offset, pBlock, true);
 

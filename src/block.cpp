@@ -30,6 +30,18 @@ namespace BitCoin
                 delete *transaction;
     }
 
+    uint64_t Block::actualCoinbaseAmount()
+    {
+        if(transactions.size() == 0)
+            return 0;
+
+        uint64_t result = 0;
+        for(std::vector<Output *>::iterator output=transactions.front()->outputs.begin();output!=transactions.front()->outputs.end();++output)
+            result += (*output)->amount;
+
+        return result;
+    }
+
     bool Block::hasProofOfWork()
     {
         ArcMist::Hash target;

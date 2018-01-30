@@ -61,6 +61,8 @@ namespace BitCoin
         uint64_t fees() const { return mFees; }
         unsigned int size() const { return mSize; }
 
+        uint64_t actualCoinbaseAmount(); // Amount from coinbase transaction
+
         void calculateHash();
         void calculateMerkleHash(ArcMist::Hash &pMerkleHash);
 
@@ -138,7 +140,7 @@ namespace BitCoin
         // Remove a block file
         static bool remove(unsigned int pID);
 
-        BlockFile(unsigned int pID, bool pValidate = true);
+        BlockFile(unsigned int pID, bool pValidate = false);
         ~BlockFile() { updateCRC(); if(mInputFile != NULL) delete mInputFile; }
 
         unsigned int id() const { return mID; }
