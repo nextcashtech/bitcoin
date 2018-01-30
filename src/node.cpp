@@ -32,7 +32,6 @@ namespace BitCoin
         mSendHeaders = false;
         mMinimumFeeRate = 0;
         mVersionData = NULL;
-        mID = mNextID++;
         mHeaderRequestTime = 0;
         mBlockRequestTime = 0;
         mBlockReceiveTime = 0;
@@ -1012,7 +1011,7 @@ namespace BitCoin
                     break;
 
                 Message::GetHeadersData *getHeadersData = (Message::GetHeadersData *)message;
-                Message::HeadersData headersData;
+                Message::HeadersData sendHeadersData;
                 int height;
                 bool found = false;
 
@@ -1021,14 +1020,14 @@ namespace BitCoin
                     height = mChain->blockHeight(*hash);
                     if(height != -1)
                     {
-                        if(height < mVersionData->startBlockHeight - 2000)
+                        if(height > 5000 && height < mVersionData->startBlockHeight - 5000)
                         {
                             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
                               "Not sending headers. Header height %d below node's start block height %d : %s",
                               height, mVersionData->startBlockHeight, hash->hex().text());
                             break;
                         }
-                        else if(mChain->getBlockHeaders(headersData.headers, *hash, getHeadersData->stopHeaderHash, 2000))
+                        else if(mChain->getBlockHeaders(sendHeadersData.headers, *hash, getHeadersData->stopHeaderHash, 2000))
                         {
                             found = true;
                             break; // match found
@@ -1038,15 +1037,15 @@ namespace BitCoin
 
                 if(found)
                 {
-                    if(headersData.headers.size() == 0)
+                    if(sendHeadersData.headers.size() == 0)
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
-                          "Sending zero block headers", headersData.headers.size());
+                          "Sending zero block headers", sendHeadersData.headers.size());
                     else
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
-                          "Sending %d block headers starting at height %d", headersData.headers.size(),
-                          mChain->blockHeight(headersData.headers.front()->hash));
-                    if(sendMessage(&headersData))
-                        mStatistics.headersSent += headersData.headers.size();
+                          "Sending %d block headers starting at height %d", sendHeadersData.headers.size(),
+                          mChain->blockHeight(sendHeadersData.headers.front()->hash));
+                    if(sendMessage(&sendHeadersData))
+                        mStatistics.headersSent += sendHeadersData.headers.size();
                 }
                 break;
             }
