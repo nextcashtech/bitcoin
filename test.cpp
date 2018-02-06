@@ -9,12 +9,15 @@
 #include "key.hpp"
 #include "transaction.hpp"
 #include "interpreter.hpp"
+#include "bloom_filter.hpp"
 #include "chain.hpp"
 #include "info.hpp"
 
 #include "arcmist/base/log.hpp"
 
 bool chainTest();
+bool merkleTest1();
+bool merkleTest2();
 
 int main(int pArgumentCount, char **pArguments)
 {
@@ -40,10 +43,19 @@ int main(int pArgumentCount, char **pArguments)
     if(!BitCoin::Message::test())
         failed++;
 
+    if(!BitCoin::BloomFilter::test())
+        failed++;
+
     if(!BitCoin::Chain::test())
         failed++;
 
-    BitCoin::Chain::tempTest();
+    // if(!merkleTest1())
+        // failed++;
+
+    // if(!merkleTest2())
+        // failed++;
+
+    // BitCoin::Chain::tempTest();
 
     // if(!chainTest())
         // failed++;
@@ -55,6 +67,354 @@ int main(int pArgumentCount, char **pArguments)
         return 1;
     else
         return 0;
+}
+
+bool merkleTest1()
+{
+    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "------------- Starting Merkle Tree Test 1 -------------");
+    BitCoin::setNetwork(BitCoin::MAINNET);
+    BitCoin::Info::instance().setPath("/var/bitcoin/mainnet/");
+
+    /***********************************************************************************************
+     * Merkle block (Randomly chosen transaction)
+     ***********************************************************************************************/
+    BitCoin::Block block;
+
+    if(!BitCoin::BlockFile::readBlock(515695, block))
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed read block %d", 515695);
+        return false;
+    }
+
+    // Validate Merkle Hash
+    ArcMist::Hash calculatedMerkleHash;
+    block.calculateMerkleHash(calculatedMerkleHash);
+    if(calculatedMerkleHash != block.merkleHash)
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed match merkle root hash");
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Block Hash : %s", block.merkleHash.hex().text());
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Calc Hash  : %s", calculatedMerkleHash.hex().text());
+        return false;
+    }
+
+    BitCoin::BloomFilter filter(100);
+    ArcMist::Hash addressHash;
+    BitCoin::AddressType addressType;
+
+    ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
+      filter.size(), filter.functionCount());
+
+    if(!BitCoin::decodeAddress("1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX", addressHash, addressType))
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed decode address : %s", "1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX");
+        return false;
+    }
+
+    filter.add(addressHash);
+
+    BitCoin::MerkleNode *merkleTreeRoot = BitCoin::buildMerkleTree(block.transactions, filter);
+
+    //merkleTreeRoot->print();
+
+    if(merkleTreeRoot == NULL)
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed create merkle tree");
+        return false;
+    }
+    else
+        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed create merkle tree");
+
+    if(merkleTreeRoot->hash != block.merkleHash)
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle tree hash");
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Merkle Hash : %s", block.merkleHash.hex().text());
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Merkle Tree : %s", merkleTreeRoot->hash.hex().text());
+        return false;
+    }
+    else
+        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle tree hash");
+
+    if(!merkleTreeRoot->matches)
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle tree match");
+        return false;
+    }
+    else
+        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle tree match");
+
+    ArcMist::Hash transactionHash("98bde91934d6abc038e5162c583204c630e974f7cb9bf03daa8655d92e2d08d1"), foundHash;
+    BitCoin::MerkleNode *node = merkleTreeRoot;
+    bool found = false;
+
+    while(node != NULL)
+    {
+        if(node->transaction != NULL)
+        {
+            foundHash = node->transaction->hash;
+            if(node->transaction->hash == transactionHash)
+                found = true;
+            break;
+        }
+
+        if(node->left->matches)
+            node = node->left;
+        else if(node->right->matches)
+            node = node->right;
+        else
+            break;
+    }
+
+    if(found)
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle tree match found : %s", foundHash.hex().text());
+    else
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle tree match found : %s", foundHash.hex().text());
+        return false;
+    }
+
+    // Check building merkle block message and parsing it
+    std::vector<BitCoin::Transaction *> transactionsToSend;
+    BitCoin::Message::MerkleBlockData merkleBlockMessage(&block, filter, transactionsToSend);
+
+    found = false;
+    for(std::vector<BitCoin::Transaction *>::iterator trans=transactionsToSend.begin();trans!=transactionsToSend.end();++trans)
+        if((*trans)->hash == transactionHash)
+        {
+            found = true;
+            break;
+        }
+
+    if(found)
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message transaction found : %s",
+          transactionHash.hex().text());
+    else
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle block message transaction found : %s",
+          transactionHash.hex().text());
+        return false;
+    }
+
+    BitCoin::Message::Interpreter interpreter;
+    ArcMist::Buffer messageBuffer;
+
+    interpreter.write(&merkleBlockMessage, &messageBuffer);
+
+    BitCoin::Message::Data *messageData = interpreter.read(&messageBuffer, "Test");
+
+    if(messageData == NULL)
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message read");
+        return false;
+    }
+    else if(messageData->type != BitCoin::Message::MERKLE_BLOCK)
+    {
+        delete messageData;
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message read type");
+        return false;
+    }
+
+    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle block message read");
+
+    BitCoin::Message::MerkleBlockData *message = (BitCoin::Message::MerkleBlockData *)messageData;
+
+    ArcMist::HashList confirmedTransactionHashes;
+    if(message->validate(confirmedTransactionHashes))
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message validate : %d trans",
+          confirmedTransactionHashes.size());
+    }
+    else
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message validate");
+        delete messageData;
+        return false;
+    }
+
+    if(confirmedTransactionHashes.contains(transactionHash))
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message transaction confirmed : %s",
+          transactionHash.hex().text());
+    else
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle block message transaction confirmed : %s",
+          transactionHash.hex().text());
+        delete messageData;
+        return false;
+    }
+
+    delete messageData;
+    return true;
+}
+
+bool merkleTest2()
+{
+    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "------------- Starting Merkle Tree Test 2 -------------");
+
+    /***********************************************************************************************
+     * Merkle block (Randomly chosen transaction)
+     ***********************************************************************************************/
+    BitCoin::Block block;
+
+    if(!BitCoin::BlockFile::readBlock(515712, block))
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed read block %d", 515712);
+        return false;
+    }
+
+    // Validate Merkle Hash
+    ArcMist::Hash calculatedMerkleHash;
+    block.calculateMerkleHash(calculatedMerkleHash);
+    if(calculatedMerkleHash != block.merkleHash)
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed match merkle root hash");
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Block Hash : %s", block.merkleHash.hex().text());
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Calc Hash  : %s", calculatedMerkleHash.hex().text());
+        return false;
+    }
+
+    BitCoin::BloomFilter filter(100);
+    ArcMist::Hash addressHash;
+    BitCoin::AddressType addressType;
+
+    ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
+      filter.size(), filter.functionCount());
+
+    if(!BitCoin::decodeAddress("1Ff79dW4CymX2msdyat4SbTupCG1d6imib", addressHash, addressType))
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed decode address : %s", "1Ff79dW4CymX2msdyat4SbTupCG1d6imib");
+        return false;
+    }
+
+    filter.add(addressHash);
+
+    BitCoin::MerkleNode *merkleTreeRoot = BitCoin::buildMerkleTree(block.transactions, filter);
+
+    if(merkleTreeRoot == NULL)
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed create merkle tree");
+        return false;
+    }
+    else
+        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed create merkle tree");
+
+    if(merkleTreeRoot->hash != block.merkleHash)
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle tree hash");
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Merkle Hash : %s", block.merkleHash.hex().text());
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Merkle Tree : %s", merkleTreeRoot->hash.hex().text());
+        return false;
+    }
+    else
+        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle tree hash");
+
+    if(!merkleTreeRoot->matches)
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle tree match");
+        return false;
+    }
+    else
+        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle tree match");
+
+    ArcMist::Hash transactionHash("a13a63717ef85e88973ee54a9d86794e27a913784d45bfa6e3f659cf03db32e6"), foundHash;
+    BitCoin::MerkleNode *node = merkleTreeRoot;
+    bool found = false;
+
+    while(node != NULL)
+    {
+        if(node->transaction != NULL)
+        {
+            foundHash = node->transaction->hash;
+            if(node->transaction->hash == transactionHash)
+                found = true;
+            break;
+        }
+
+        if(node->left->matches)
+            node = node->left;
+        else if(node->right->matches)
+            node = node->right;
+        else
+            break;
+    }
+
+    if(found)
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle tree match found : %s", foundHash.hex().text());
+    else
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle tree match found : %s", foundHash.hex().text());
+        return false;
+    }
+
+    // Check building merkle block message and parsing it
+    std::vector<BitCoin::Transaction *> transactionsToSend;
+    BitCoin::Message::MerkleBlockData merkleBlockMessage(&block, filter, transactionsToSend);
+
+    found = false;
+    for(std::vector<BitCoin::Transaction *>::iterator trans=transactionsToSend.begin();trans!=transactionsToSend.end();++trans)
+        if((*trans)->hash == transactionHash)
+        {
+            found = true;
+            break;
+        }
+
+    if(found)
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message transaction found : %s",
+          transactionHash.hex().text());
+    else
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle block message transaction found : %s",
+          transactionHash.hex().text());
+        return false;
+    }
+
+    BitCoin::Message::Interpreter interpreter;
+    ArcMist::Buffer messageBuffer;
+
+    interpreter.write(&merkleBlockMessage, &messageBuffer);
+
+    BitCoin::Message::Data *messageData = interpreter.read(&messageBuffer, "Test");
+
+    if(messageData == NULL)
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message read");
+        return false;
+    }
+    else if(messageData->type != BitCoin::Message::MERKLE_BLOCK)
+    {
+        delete messageData;
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message read type");
+        return false;
+    }
+
+    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle block message read");
+
+    BitCoin::Message::MerkleBlockData *message = (BitCoin::Message::MerkleBlockData *)messageData;
+
+    ArcMist::HashList confirmedTransactionHashes;
+    if(message->validate(confirmedTransactionHashes))
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message validate : %d trans",
+          confirmedTransactionHashes.size());
+    }
+    else
+    {
+        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message validate");
+        delete messageData;
+        return false;
+    }
+
+    if(confirmedTransactionHashes.contains(transactionHash))
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message transaction confirmed : %s",
+          transactionHash.hex().text());
+    else
+    {
+        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle block message transaction confirmed : %s",
+          transactionHash.hex().text());
+        delete messageData;
+        return false;
+    }
+
+    delete messageData;
+    return true;
 }
 
 const ArcMist::Hash &addBlock(BitCoin::Chain &pChain, const ArcMist::Hash &pPreviousHash, const ArcMist::Hash &pCoinbaseKeyHash,

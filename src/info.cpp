@@ -123,7 +123,7 @@ namespace BitCoin
     {
         ip = 0;
         port = 8333;
-        fullMode = false;
+        spvMode = false;
         maxConnections = 64;
         minFee = 1000; // satoshis per KiB
         mPeersModified = false;
@@ -184,8 +184,8 @@ namespace BitCoin
         pValue.read(value, pValue.length());
         value[pValue.length()] = '\0';
 
-        if(std::strcmp(name, "full_mode") == 0)
-            fullMode = true;
+        if(std::strcmp(name, "spv_mode") == 0)
+            spvMode = true;
         else if(std::strcmp(name, "max_connections") == 0)
         {
             maxConnections = std::stol(value, NULL, 0);

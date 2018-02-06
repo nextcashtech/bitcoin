@@ -12,6 +12,7 @@
 #include "arcmist/base/hash.hpp"
 #include "arcmist/base/mutex.hpp"
 #include "base.hpp"
+#include "message.hpp"
 #include "forks.hpp"
 #include "block.hpp"
 #include "outputs.hpp"
@@ -267,6 +268,13 @@ namespace BitCoin
         int blockHeight(const ArcMist::Hash &pHash); // Returns -1 when hash is not found
         bool getBlock(const ArcMist::Hash &pHash, Block &pBlock);
         bool getHeader(const ArcMist::Hash &pHash, Block &pBlockHeader);
+
+        /*********************** Simple Payment Verification (SPV) Methods ***********************/
+        // Add merkle block to queue to be processed
+        bool addMerkleBlock(Message::MerkleBlockData *pMessage);
+
+        // Release block hash so another node will request it
+        void releaseMerkleRequest(ArcMist::Hash &pBlockHash, unsigned int pNodeID);
 
         // Load block data from file system
         //   If pList is true then all the block hashes will be output

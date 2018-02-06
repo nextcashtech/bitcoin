@@ -67,7 +67,7 @@ namespace BitCoin
 
         uint8_t *ip;
         uint16_t port;
-        bool fullMode;
+        bool spvMode;
 
         // Maximum number of connections incoming and outgoing
         uint32_t maxConnections;

@@ -23,6 +23,8 @@
 
 namespace BitCoin
 {
+    static const uint8_t MAX_SINGLE_BYTE_PUSH_DATA_CODE = 0x4b;
+
     enum OperationCodes
     {
         OP_0                   = 0x00, // An empty array of bytes is pushed to the stack

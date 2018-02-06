@@ -16,6 +16,7 @@
 #include "forks.hpp"
 #include "transaction.hpp"
 #include "outputs.hpp"
+#include "bloom_filter.hpp"
 
 
 namespace BitCoin
@@ -86,6 +87,74 @@ namespace BitCoin
         Block &operator = (Block &pRight);
 
     };
+
+    class MerkleNode
+    {
+    public:
+
+        MerkleNode()
+        {
+            transaction = NULL;
+            left = NULL;
+            right = NULL;
+            matches = false;
+        }
+        MerkleNode(Transaction *pTransaction, bool pMatches) : hash(pTransaction->hash)
+        {
+            transaction = pTransaction;
+            left = NULL;
+            right = NULL;
+            matches = pMatches;
+        }
+        MerkleNode(MerkleNode *pLeft, MerkleNode *pRight, bool pMatches)
+        {
+            transaction = NULL;
+            left = pLeft;
+            right = pRight;
+            matches = pMatches;
+
+            calculateHash();
+        }
+        ~MerkleNode()
+        {
+            if(left != NULL)
+                delete left;
+            if(left != right)
+                delete right;
+        }
+
+        bool calculateHash()
+        {
+            if(left == NULL)
+            {
+                hash.setSize(32);
+                hash.zeroize();
+                return true;
+            }
+
+            if(left->hash.isEmpty() || right->hash.isEmpty())
+                return false;
+
+            ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+            digest.setOutputEndian(ArcMist::Endian::LITTLE);
+            left->hash.write(&digest);
+            right->hash.write(&digest);
+            hash.setSize(32);
+            digest.getResult(&hash);
+            return true;
+        }
+
+        void print(unsigned int pDepth = 0);
+
+        ArcMist::Hash hash;
+        Transaction *transaction;
+        MerkleNode *left, *right;
+        bool matches;
+
+    };
+
+    MerkleNode *buildMerkleTree(std::vector<Transaction *> &pBlockTransactions, BloomFilter &pFilter);
+    MerkleNode *buildEmptyMerkleTree(unsigned int pNodeCount);
 
     class BlockList : public std::vector<Block *>
     {

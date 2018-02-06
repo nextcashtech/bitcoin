@@ -19,6 +19,7 @@
 #include "transaction.hpp"
 #include "block.hpp"
 #include "key.hpp"
+#include "bloom_filter.hpp"
 
 #include <cstdint>
 
@@ -37,13 +38,13 @@ namespace BitCoin
 
             // Data messages
             GET_BLOCKS, BLOCK, GET_DATA, GET_HEADERS, HEADERS, INVENTORY,
-            MERKLE_BLOCK, TRANSACTION,
+            TRANSACTION,
 
             // Version >= 60002
             MEM_POOL, // BIP-0035 Respond with inventory of all transactions in mempool
 
             // Version >= 70001
-            FILTER_ADD, FILTER_CLEAR, FILTER_LOAD, //BIP-0037
+            FILTER_ADD, FILTER_CLEAR, FILTER_LOAD, MERKLE_BLOCK, //BIP-0037
             NOT_FOUND,
 
             // Version >= 70002
@@ -144,11 +145,12 @@ namespace BitCoin
         public:
 
             static const unsigned int FULL_NODE_BIT    = 0x01;
-            static const unsigned int FILTER_NODE_BIT  = 0x02; // BIP-0064
-            static const unsigned int BLOOM_NODE_BIT   = 0x04;
-            static const unsigned int WITNESS_NODE_BIT = 0x08;
+            static const unsigned int GETUTXO_NODE_BIT = 0x02; // BIP-0064
+            static const unsigned int BLOOM_NODE_BIT   = 0x04; // BIP-0111 Supports bloom filters and merkle block requests
+            static const unsigned int WITNESS_NODE_BIT = 0x08; // Segregated Witness
             static const unsigned int XTHIN_NODE_BIT   = 0x10; // BUIP-0010
-            static const unsigned int CASH_NODE_BIT    = 0x20;
+            static const unsigned int CASH_NODE_BIT    = 0x20; // Bitcoin Cash
+            static const unsigned int LIMITED_NODE_BIT = 0x0400; // BIP-0159 "Full" node serving only the last 288 (2 day) blocks
 
             VersionData() : Data(VERSION) { }
             VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort,
@@ -315,7 +317,7 @@ namespace BitCoin
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
-            //TODO Filter Add data
+            ArcMist::Buffer data;
         };
 
         class FilterLoadData : public Data
@@ -327,7 +329,7 @@ namespace BitCoin
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
-            //TODO Filter Load data
+            BloomFilter filter;
         };
 
         // Request block headers
@@ -438,15 +440,32 @@ namespace BitCoin
         {
         public:
 
-            MerkleBlockData() : Data(MERKLE_BLOCK) { transactionCount = 0; }
+            MerkleBlockData() : Data(MERKLE_BLOCK) { block = NULL; blockNeedsDelete = false; }
+            MerkleBlockData(Block *pBlock, BloomFilter &pFilter, std::vector<Transaction *> &pIncludedTransactions);
+            ~MerkleBlockData() { if(blockNeedsDelete) delete block; }
 
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
-            Block block;
-            uint32_t transactionCount;
+            // Validate hashes and get included "confirmed" transaction hashes.
+            // Note: This assumes the block header has already been verified as valid in the most
+            //   proof of work chain.
+            bool validate(ArcMist::HashList &pIncludedTransactionHashes);
+
+            Block *block;
+            bool blockNeedsDelete;
             std::vector<ArcMist::Hash> hashes;
             ArcMist::Buffer flags;
+
+        private:
+
+            // Recursively parse merkle node hashes into a tree
+            bool parse(MerkleNode *pNode, unsigned int pDepth, unsigned int &pHashesOffset, unsigned int &pBitOffset,
+              unsigned char &pByte, ArcMist::HashList &pIncludedTransactionHashes);
+
+            // Recursively parse merkle tree and add hashes and flags for specified node
+            void addNode(MerkleNode *pNode, unsigned int pDepth, unsigned int &pNextBitOffset,
+              unsigned char &pNextByte, std::vector<Transaction *> &pIncludedTransactions);
 
         };
 
