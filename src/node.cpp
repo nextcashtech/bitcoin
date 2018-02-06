@@ -13,6 +13,7 @@
 #include "message.hpp"
 #include "block.hpp"
 #include "chain.hpp"
+#include "interpreter.hpp"
 
 #define BITCOIN_NODE_LOG_NAME "Node"
 
@@ -311,6 +312,13 @@ namespace BitCoin
         return success;
     }
 
+    bool Node::requestFilterBlock(ArcMist::Hash &pHash)
+    {
+        Message::GetDataData message;
+        message.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::FILTERED_BLOCK, pHash));
+        return sendMessage(&message);
+    }
+
     bool Node::hasTransaction(const ArcMist::Hash &pHash)
     {
         mAnnounceMutex.lock();
@@ -325,11 +333,11 @@ namespace BitCoin
             return false;
 
         // Put transaction hashes into transaction request message
-        Message::GetDataData getDataData;
+        Message::GetDataData message;
         for(ArcMist::HashList::iterator hash=pList.begin();hash!=pList.end();++hash)
-            getDataData.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION, *hash));
+            message.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION, *hash));
 
-        bool success = sendMessage(&getDataData);
+        bool success = sendMessage(&message);
         if(success)
         {
             mChain->memPool().markForNode(pList, mID);
@@ -368,9 +376,37 @@ namespace BitCoin
         return success;
     }
 
+    bool Node::sendMerkleBlock(const ArcMist::Hash &pBlockHash)
+    {
+        Block block;
+
+        if(!mChain->getBlock(pBlockHash, block))
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Merkle block not found : %s", pBlockHash.hex().text());
+            return false;
+        }
+
+        std::vector<Transaction *> includedTransactions;
+        Message::MerkleBlockData data(&block, mFilter, includedTransactions);
+        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending merkle block with %d trans : %s",
+          includedTransactions.size(), pBlockHash.hex().text());
+        if(!sendMessage(&data))
+            return false;
+
+        Message::TransactionData transactionData;
+        for(std::vector<Transaction *>::iterator trans=includedTransactions.begin();trans!=includedTransactions.end();++trans)
+        {
+            transactionData.transaction = *trans;
+            if(!sendMessage(&data))
+                return false;
+        }
+
+        return true;
+    }
+
     bool Node::announceBlock(Block *pBlock)
     {
-        if(!isOpen() || mVersionData == NULL || !mVersionData->relay)
+        if(!isOpen() || mVersionData == NULL)
             return false;
 
         mAnnounceMutex.lock();
@@ -418,25 +454,59 @@ namespace BitCoin
 
     bool Node::announceTransaction(Transaction *pTransaction)
     {
-        if(mVersionData == NULL || !mVersionData->relay)
+        if(mVersionData == NULL)
             return false;
 
-        mAnnounceMutex.lock();
-        if(mAnnounceTransactions.contains(pTransaction->hash))
-        {
-            // Don't announce to node that already announced to you
-            mAnnounceMutex.unlock();
+        bool filterContains = mFilter.contains(*pTransaction);
+
+        if(!mVersionData->relay && !filterContains)
             return false;
+
+        if(filterContains)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Bloom filter contains transaction : %s",
+              pTransaction->hash);
+
+            // Update filter
+            if(mFilter.flags() & BloomFilter::UPDATE_MASK)
+            {
+                ScriptInterpreter::ScriptType type;
+                ArcMist::HashList hashes;
+
+                for(std::vector<Output *>::iterator output=pTransaction->outputs.begin();output!=pTransaction->outputs.end();++output)
+                    if(mFilter.containsScript((*output)->script))
+                    {
+                        if(mFilter.flags() & BloomFilter::UPDATE_P2PUBKEY_ONLY)
+                        {
+                            // Don't add unless P2PKH or MultiSig
+                            type = ScriptInterpreter::parseOutputScript((*output)->script, hashes);
+                            if(type != ScriptInterpreter::P2PKH && type != ScriptInterpreter::MULTI_SIG)
+                                continue;
+                        }
+
+                        mFilter.addScript((*output)->script);
+                    }
+            }
         }
-        mAnnounceMutex.unlock();
-
-        // Check against minimum fee rate
-        if(pTransaction->feeRate() < mMinimumFeeRate)
+        else // Full relay mode
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
-              "Not announcing transaction fee rate %d below min rate %d : %s", pTransaction->feeRate(),
-              mMinimumFeeRate, pTransaction->hash.hex().text());
-            return false;
+            mAnnounceMutex.lock();
+            if(mAnnounceTransactions.contains(pTransaction->hash))
+            {
+                // Don't announce to node that already announced to you
+                mAnnounceMutex.unlock();
+                return false;
+            }
+            mAnnounceMutex.unlock();
+
+            // Check against minimum fee rate
+            if(pTransaction->feeRate() < mMinimumFeeRate)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
+                  "Not announcing transaction fee rate %d below min rate %d : %s", pTransaction->feeRate(),
+                  mMinimumFeeRate, pTransaction->hash.hex().text());
+                return false;
+            }
         }
 
         // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
@@ -454,7 +524,7 @@ namespace BitCoin
 
         Info &info = Info::instance();
         Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip,
-          info.port, info.fullMode, mChain->forks().cashActive(), mChain->height(), info.fullMode && (!mIsIncoming && !mIsSeed));
+          info.port, info.spvMode, mChain->forks().cashActive(), mChain->height(), (!mIsIncoming && !mIsSeed));
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
         return success;
@@ -650,7 +720,7 @@ namespace BitCoin
             {
                 if(mVersionData != NULL)
                 {
-                    sendReject(Message::nameFor(message->type), Message::RejectData::DUPLICATE, "");
+                    sendReject(Message::nameFor(message->type), Message::RejectData::DUPLICATE, "More than one version message");
                     break;
                 }
 
@@ -691,7 +761,7 @@ namespace BitCoin
                     Info::instance().addPeerFail(mAddress);
                     close();
                 }
-                else if(mChain->forks().cashActive() &&
+                else if(!mIsIncoming && mChain->forks().cashActive() && //TODO Decide if this only applies to outgoing
                   !(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT) && // Missing Cash node bit
                   mVersionData->startBlockHeight >= mChain->forks().cashForkBlockHeight()) // Peer above cash fork height
                 {
@@ -868,17 +938,25 @@ namespace BitCoin
                 break;
 
             case Message::FILTER_ADD:
-                // TODO Implement FILTER_ADD
+            {
+                // Add data to the bloom filter
+                Message::FilterAddData *filterAddData = (Message::FilterAddData *)message;
+                mFilter.addData(filterAddData->data);
                 break;
-
+            }
             case Message::FILTER_CLEAR:
-                // TODO Implement FILTER_CLEAR
+                mFilter.clear();
                 break;
 
             case Message::FILTER_LOAD:
-                // TODO Implement FILTER_LOAD
+            {
+                // Load a new bloom filter
+                Message::FilterLoadData *filterLoadData = (Message::FilterLoadData *)message;
+                mFilter.assign(filterLoadData->filter);
+                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Bloom filter loaded with %d bytes and %d functions",
+                  mFilter.size(), mFilter.functionCount());
                 break;
-
+            }
             case Message::SEND_HEADERS:
                 mSendHeaders = true;
                 break;
@@ -981,9 +1059,7 @@ namespace BitCoin
                         break;
                     }
                     case Message::InventoryHash::FILTERED_BLOCK:
-                        //TODO Implement GET_DATA filtered blocks (MERKLE_BLOCK)
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Requested Merkle Block (Not implemented) : %s",
-                          (*item)->hash.hex().text());
+                        sendMerkleBlock((*item)->hash);
                         break;
                     case Message::InventoryHash::COMPACT_BLOCK:
                         //TODO Implement GET_DATA compact blocks (COMPACT_BLOCK)
@@ -1056,6 +1132,7 @@ namespace BitCoin
                     unsigned int blockCount = 0;
                     bool headersNeeded = false;
                     ArcMist::HashList blockList, transactionList;
+                    Message::NotFoundData notFound;
 
                     for(Message::Inventory::iterator item=inventoryData->inventory.begin();item!=inventoryData->inventory.end();++item)
                     {
@@ -1112,9 +1189,8 @@ namespace BitCoin
                                     break;
                             }
                             break;
-                        case Message::InventoryHash::FILTERED_BLOCK:
-                            break;
-                        case Message::InventoryHash::COMPACT_BLOCK:
+                        case Message::InventoryHash::FILTERED_BLOCK: // Should never be in an inventory message
+                        case Message::InventoryHash::COMPACT_BLOCK: // Should never be in an inventory message
                             break;
                         default:
                             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,
@@ -1138,6 +1214,9 @@ namespace BitCoin
 
                     if(transactionList.size() > 0)
                         requestTransactions(transactionList);
+
+                    if(notFound.inventory.size() > 0)
+                        sendMessage(&notFound);
                 }
                 break;
             case Message::HEADERS:
@@ -1198,6 +1277,13 @@ namespace BitCoin
 
                     ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Added %d pending headers", addedCount);
                 }
+                else
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                      "Dropping. Incoming node sent %d headers", ((Message::HeadersData *)message)->headers.size());
+                    Info::instance().addPeerFail(mAddress, 5);
+                    close();
+                }
                 break;
             case Message::BLOCK:
                 if(!mIsIncoming && !mIsSeed)
@@ -1239,23 +1325,29 @@ namespace BitCoin
                             Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
                     }
                 }
-                break;
-            case Message::TRANSACTION:
-                if(!mIsIncoming && !mIsSeed)
+                else
                 {
-                    // Verify and add to mem pool
-                    Message::TransactionData *transactionData = (Message::TransactionData *)message;
-                    if(transactionData->transaction != NULL)
-                    {
-                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
-                          "Received transaction (%d bytes) : %s", transactionData->transaction->size(),
-                          transactionData->transaction->hash.hex().text());
-                        if(mChain->memPool().add(transactionData->transaction, mChain->outputs(),
-                          mChain->blockStats(), mChain->forks(), Info::instance().minFee))
-                            transactionData->transaction = NULL; // So it won't be deleted with the message
-                    }
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                      "Dropping. Incoming node sent block : %s", ((Message::BlockData *)message)->block->hash);
+                    Info::instance().addPeerFail(mAddress, 5);
+                    close();
                 }
                 break;
+            case Message::TRANSACTION:
+            {
+                // Verify and add to mem pool
+                Message::TransactionData *transactionData = (Message::TransactionData *)message;
+                if(transactionData->transaction != NULL)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
+                      "Received transaction (%d bytes) : %s", transactionData->transaction->size(),
+                      transactionData->transaction->hash.hex().text());
+                    if(mChain->memPool().add(transactionData->transaction, mChain->outputs(),
+                      mChain->blockStats(), mChain->forks(), Info::instance().minFee))
+                        transactionData->transaction = NULL; // So it won't be deleted with the message
+                }
+                break;
+            }
             case Message::MEM_POOL:
                 // TODO Implement MEM_POOL message
                 // Send Inventory message with all transactions in the mem pool
@@ -1264,10 +1356,14 @@ namespace BitCoin
                 break;
 
             case Message::MERKLE_BLOCK:
-                // TODO Implement MERKLE_BLOCK message
-                ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Merkle block message (Not implemented)");
+                if(!mIsIncoming && !mIsSeed)
+                {
+                    if(mChain->addMerkleBlock((Message::MerkleBlockData *)message))
+                        dontDeleteMessage = true;
+                    else
+                        mChain->releaseMerkleRequest(((Message::MerkleBlockData *)message)->block->hash, mID);
+                }
                 break;
-
             case Message::NOT_FOUND:
             {
                 Message::NotFoundData *notFoundData = (Message::NotFoundData *)message;
@@ -1297,17 +1393,14 @@ namespace BitCoin
                         break;
                     }
                     case Message::InventoryHash::TRANSACTION:
-                        //TODO Implement Transaction not found
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
                           "Transaction hash returned not found : %s", (*item)->hash.hex().text());
                         break;
                     case Message::InventoryHash::FILTERED_BLOCK:
-                        //TODO Implement filtered blocks not found
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
                           "Filtered block hash returned not found : %s", (*item)->hash.hex().text());
                         break;
                     case Message::InventoryHash::COMPACT_BLOCK:
-                        //TODO Implement compact blocks not found
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
                           "Compact block hash returned not found : %s", (*item)->hash.hex().text());
                         break;

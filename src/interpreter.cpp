@@ -14,8 +14,6 @@
 #include "arcmist/crypto/digest.hpp"
 #include "key.hpp"
 
-#define MAX_SINGLE_BYTE_PUSH_DATA_CODE 0x4b
-
 
 namespace BitCoin
 {

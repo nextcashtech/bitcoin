@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <ctime>
 
-#define BITCOIN_USER_AGENT "/ArcMist:0.6.0/" // BIP-0014 Specifies User Agent Format
+#define BITCOIN_USER_AGENT "/ArcMist:0.7.0/" // BIP-0014 Specifies User Agent Format
 #define PROTOCOL_VERSION 70015
 
 

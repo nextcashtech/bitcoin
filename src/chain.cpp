@@ -613,6 +613,17 @@ namespace BitCoin
         return true;
     }
 
+    bool Chain::addMerkleBlock(Message::MerkleBlockData *pMessage)
+    {
+        //TODO
+        return false;
+    }
+
+    void Chain::releaseMerkleRequest(ArcMist::Hash &pBlockHash, unsigned int pNodeID)
+    {
+        //TODO
+    }
+
     // Add block header to queue to be requested and downloaded
     bool Chain::addPendingBlock(Block *pBlock)
     {

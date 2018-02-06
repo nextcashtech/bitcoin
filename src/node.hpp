@@ -16,6 +16,7 @@
 #include "base.hpp"
 #include "message.hpp"
 #include "chain.hpp"
+#include "bloom_filter.hpp"
 
 #include <cstdint>
 #include <list>
@@ -62,6 +63,7 @@ namespace BitCoin
         bool waitingForRequests() { return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty(); }
         bool requestHeaders();
         bool requestBlocks(ArcMist::HashList &pList);
+        bool requestFilterBlock(ArcMist::Hash &pHash);
         bool requestTransactions(ArcMist::HashList &pList);
         unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
         void releaseBlockRequests();
@@ -99,6 +101,7 @@ namespace BitCoin
         bool sendFeeFilter();
         bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
         bool sendBlock(Block &pBlock);
+        bool sendMerkleBlock(const ArcMist::Hash &pBlockHash);
 
         unsigned int mID;
         ArcMist::String mName;
@@ -123,6 +126,7 @@ namespace BitCoin
         int32_t mPingCutoff;
         int32_t mLastBlackListCheck;
 
+        BloomFilter mFilter;
         uint64_t mMinimumFeeRate;
         uint64_t mLastPingNonce;
 

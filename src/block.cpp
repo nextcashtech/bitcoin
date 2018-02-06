@@ -281,63 +281,62 @@ namespace BitCoin
         digest.getResult(&hash);
     }
 
-    void concatHash(const ArcMist::Hash *pFirst, const ArcMist::Hash *pSecond, ArcMist::Hash &pResult)
+    void concatHash(const ArcMist::Hash &pLeft, const ArcMist::Hash &pRight, ArcMist::Hash &pResult)
     {
         ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
         digest.setOutputEndian(ArcMist::Endian::LITTLE);
-        pFirst->write(&digest);
-        pSecond->write(&digest);
+        pLeft.write(&digest);
+        pRight.write(&digest);
+        pResult.setSize(32);
         digest.getResult(&pResult);
     }
 
-    void calculateMerkleHashLevel(std::vector<ArcMist::Hash *>::iterator pIter, std::vector<ArcMist::Hash *>::iterator pEnd,
-      ArcMist::Hash &pResult)
+    void calculateMerkleHashLevel(std::vector<ArcMist::Hash> &pHashes, ArcMist::Hash &pResult)
     {
-        std::vector<ArcMist::Hash *>::iterator next = pIter;
+        std::vector<ArcMist::Hash>::iterator next = pHashes.begin();
         ++next;
-        if(next == pEnd)
+        if(next == pHashes.end())
         {
             // Only one entry. Hash it with itself and return
-            concatHash(*pIter, *pIter, pResult);
+            concatHash(*pHashes.begin(), *pHashes.begin(), pResult);
             return;
         }
 
-        std::vector<ArcMist::Hash *>::iterator nextNext = next;
+        std::vector<ArcMist::Hash>::iterator nextNext = next;
         ++nextNext;
-        if(nextNext == pEnd)
+        if(nextNext == pHashes.end())
         {
             // Two entries. Hash them together and return
-            concatHash(*pIter, *next, pResult);
+            concatHash(*pHashes.begin(), *next, pResult);
             return;
         }
 
         // More than two entries. Move up the tree a level.
-        std::vector<ArcMist::Hash *> nextLevel;
-        ArcMist::Hash *one, *two, *newHash;
+        std::vector<ArcMist::Hash> nextLevel;
+        ArcMist::Hash one, two, newHash;
+        std::vector<ArcMist::Hash>::iterator hash = pHashes.begin();
 
-        while(pIter != pEnd)
+        while(hash != pHashes.end())
         {
             // Get one
-            one = *pIter++;
+            one = *hash++;
 
             // Get two (first one again if no second)
-            if(pIter == pEnd)
+            if(hash == pHashes.end())
                 two = one;
             else
-                two = *pIter++;
+                two = *hash++;
 
             // Hash these and add to the next level
-            newHash = new ArcMist::Hash(32);
-            concatHash(one, two, *newHash);
+            concatHash(one, two, newHash);
             nextLevel.push_back(newHash);
         }
 
-        // Calculate the next level
-        calculateMerkleHashLevel(nextLevel.begin(), nextLevel.end(), pResult);
+        // Clear current level
+        pHashes.clear();
 
-        // Destroy the next level
-        for(std::vector<ArcMist::Hash *>::iterator hash=nextLevel.begin();hash!=nextLevel.end();++hash)
-            delete *hash;
+        // Calculate the next level
+        calculateMerkleHashLevel(nextLevel, pResult);
     }
 
     void Block::calculateMerkleHash(ArcMist::Hash &pMerkleHash)
@@ -346,19 +345,151 @@ namespace BitCoin
         if(transactions.size() == 0)
             pMerkleHash.zeroize();
         else if(transactions.size() == 1)
-        {
-            //concatHash(&transactions.front().hash, &transactions.front().hash, pMerkleHash);
             pMerkleHash = transactions.front()->hash;
-        }
         else
         {
             // Collect transaction hashes
-            std::vector<ArcMist::Hash *> hashes;
-            for(std::vector<Transaction *>::iterator i=transactions.begin();i!=transactions.end();++i)
-                hashes.push_back(&(*i)->hash);
+            std::vector<ArcMist::Hash> hashes;
+            for(std::vector<Transaction *>::iterator trans=transactions.begin();trans!=transactions.end();++trans)
+                hashes.push_back((*trans)->hash);
 
             // Calculate the next level
-            calculateMerkleHashLevel(hashes.begin(), hashes.end(), pMerkleHash);
+            calculateMerkleHashLevel(hashes, pMerkleHash);
+        }
+    }
+
+    MerkleNode *buildMerkleTreeLevel(std::vector<MerkleNode *> pNodes)
+    {
+        std::vector<MerkleNode *>::iterator node = pNodes.begin(), left, right;
+        std::vector<MerkleNode *>::iterator next = pNodes.begin();
+        MerkleNode *newNode;
+
+        ++next;
+        if(next == pNodes.end())
+        {
+            // Only one entry. It is the root.
+            return *pNodes.begin();
+        }
+
+        ++next;
+        if(next == pNodes.end())
+        {
+            // Only two entries. Combine the hash and return it.
+            left = pNodes.begin();
+            right = pNodes.begin();
+            ++right;
+            newNode = new MerkleNode(*left, *right, (*left)->matches || (*right)->matches);
+            return newNode;
+        }
+
+        // Move up the tree a level.
+        std::vector<MerkleNode *> nextLevel;
+
+        while(node != pNodes.end())
+        {
+            // Get left
+            left = node++;
+
+            // Get right, if none remaining use same again
+            if(node == pNodes.end())
+                right = left;
+            else
+                right = node++;
+
+            // Hash these and add to the next level
+            newNode = new MerkleNode(*left, *right, (*left)->matches || (*right)->matches);
+            nextLevel.push_back(newNode);
+        }
+
+        // Clear current level
+        pNodes.clear();
+
+        // Build the next level
+        return buildMerkleTreeLevel(nextLevel);
+    }
+
+    MerkleNode *buildMerkleTree(std::vector<Transaction *> &pBlockTransactions, BloomFilter &pFilter)
+    {
+        if(pBlockTransactions.size() == 0)
+        {
+            MerkleNode *result = new MerkleNode(NULL, NULL, false);
+            return result;
+        }
+        else if(pBlockTransactions.size() == 1)
+        {
+            MerkleNode *result = new MerkleNode(NULL, NULL, pFilter.contains(*pBlockTransactions.front()));
+            result->hash = pBlockTransactions.front()->hash;
+            return result;
+        }
+
+        // Build leaf nodes
+        std::vector<MerkleNode *> nodes;
+        for(std::vector<Transaction *>::iterator trans=pBlockTransactions.begin();trans!=pBlockTransactions.end();++trans)
+            nodes.push_back(new MerkleNode(*trans, pFilter.contains(**trans)));
+
+        // Calculate the next level
+        return buildMerkleTreeLevel(nodes);
+    }
+
+    MerkleNode *buildEmptyMerkleTree(unsigned int pNodeCount)
+    {
+        // Build leaf nodes
+        std::vector<MerkleNode *> nodes;
+        for(unsigned int i=0;i<pNodeCount;++i)
+            nodes.push_back(new MerkleNode());
+
+        return buildMerkleTreeLevel(nodes);
+    }
+
+    // bool MerkleNode::calculateHash()
+    // {
+        // if(!hash.isEmpty())
+            // return true;
+
+        // if(left == NULL || right == NULL)
+            // return false;
+        // if(!left->calculateHash() || !right->calculateHash())
+            // return false;
+        // calculateHashFromChildren();
+    // }
+
+    void MerkleNode::print(unsigned int pDepth)
+    {
+        ArcMist::String padding;
+        for(unsigned int i=0;i<pDepth;i++)
+            padding += "  ";
+
+        if(transaction != NULL)
+        {
+            if(matches)
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sTrans (match) : %s",
+                  padding.text(), hash.hex().text());
+            else
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sTrans (no)    : %s",
+                  padding.text(), hash.hex().text());
+        }
+        else if(matches)
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sHash (match) : %s",
+              padding.text(), hash.hex().text());
+        else
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sHash (no)    : %s",
+              padding.text(), hash.hex().text());
+
+        if(matches && left != NULL)
+        {
+            if(matches)
+                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%s  Left",
+                  padding.text(), hash.hex().text());
+
+            left->print(pDepth + 1);
+
+            if(left != right)
+            {
+                if(matches)
+                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%s  Right",
+                      padding.text(), hash.hex().text());
+                right->print(pDepth + 1);
+            }
         }
     }
 
