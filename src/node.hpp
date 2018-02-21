@@ -17,6 +17,7 @@
 #include "message.hpp"
 #include "chain.hpp"
 #include "bloom_filter.hpp"
+#include "address_block.hpp"
 
 #include <cstdint>
 #include <list>
@@ -28,7 +29,8 @@ namespace BitCoin
     {
     public:
 
-        Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIncoming, bool pIsSeed = false);
+        Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
+          bool pIsSeed, uint64_t pServices, AddressBlock &pAddressBlock);
         ~Node();
 
         static void run();
@@ -63,10 +65,13 @@ namespace BitCoin
         bool waitingForRequests() { return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty(); }
         bool requestHeaders();
         bool requestBlocks(ArcMist::HashList &pList);
-        bool requestFilterBlock(ArcMist::Hash &pHash);
         bool requestTransactions(ArcMist::HashList &pList);
         unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
         void releaseBlockRequests();
+
+        const ArcMist::Hash &lastHeader() const { return mLastHeader; }
+
+        void setAddressBlock(AddressBlock &pAddressBlock);
 
         bool hasTransaction(const ArcMist::Hash &pHash);
 
@@ -95,12 +100,16 @@ namespace BitCoin
         // Check if node should be closed
         void check();
 
+        unsigned int mActiveMerkleRequests;
+        bool requestMerkleBlock(ArcMist::Hash &pHash);
+
         bool sendMessage(Message::Data *pData);
         bool sendVersion();
         bool sendPing();
         bool sendFeeFilter();
         bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
         bool sendBlock(Block &pBlock);
+        bool sendBloomFilter();
         bool sendMerkleBlock(const ArcMist::Hash &pBlockHash);
 
         unsigned int mID;
@@ -108,6 +117,7 @@ namespace BitCoin
         ArcMist::Thread *mThread;
         IPAddress mAddress;
         Chain *mChain;
+        AddressBlock *mAddressBlock;
         ArcMist::Mutex mConnectionMutex;
         ArcMist::Network::Connection *mConnection;
         ArcMist::Buffer mReceiveBuffer;
@@ -125,6 +135,8 @@ namespace BitCoin
         int32_t mPingRoundTripTime;
         int32_t mPingCutoff;
         int32_t mLastBlackListCheck;
+        int32_t mLastMerkleCheck;
+        int32_t mLastMerkleRequest;
 
         BloomFilter mFilter;
         uint64_t mMinimumFeeRate;
@@ -134,7 +146,7 @@ namespace BitCoin
         unsigned int mBlockDownloadSize;
         unsigned int mBlockDownloadTime;
 
-        ArcMist::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested;
+        ArcMist::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested, mLastHeader;
         uint32_t mHeaderRequestTime;
 
         ArcMist::Mutex mBlockRequestMutex;
@@ -145,12 +157,14 @@ namespace BitCoin
         ArcMist::HashList mAnnounceBlocks, mAnnounceTransactions;
 
         void addAnnouncedBlock(const ArcMist::Hash &pHash);
-        void addAnnouncedTransaction(const ArcMist::Hash &pHash);
+        bool addAnnouncedTransaction(const ArcMist::Hash &pHash);
 
         bool mConnected;
         int32_t mConnectedTime;
         unsigned int mMessagesReceived;
         unsigned int mPingCount;
+
+        uint64_t mServices;
 
         static unsigned int mNextID;
 

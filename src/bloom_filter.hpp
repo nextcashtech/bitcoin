@@ -43,9 +43,30 @@ namespace BitCoin
             mIsFull = false;
             mIsEmpty = true;
         }
+        BloomFilter(const BloomFilter &pCopy)
+        {
+            mData = NULL;
+            mDataSize = pCopy.mDataSize;
+            mHashFunctionCount = pCopy.mHashFunctionCount;
+            mTweak = pCopy.mTweak;
+            mFlags = pCopy.mFlags;
+            mIsFull = pCopy.mIsFull;
+            mIsEmpty = pCopy.mIsEmpty;
+
+            if(mDataSize)
+            {
+                mData = new unsigned char[mDataSize];
+                std::memcpy(mData, pCopy.mData, mDataSize);
+            }
+        }
         BloomFilter(unsigned int pElementCount, unsigned int pFlags = UPDATE_ALL,
-          double pFalsePositiveRate = 0.001, unsigned int pTweak = ArcMist::Math::randomInt());
+          double pFalsePositiveRate = 0.0001, unsigned int pTweak = ArcMist::Math::randomInt());
         ~BloomFilter();
+
+        const BloomFilter &operator = (const BloomFilter &pRight);
+
+        void setup(unsigned int pElementCount, unsigned int pFlags = UPDATE_ALL,
+          double pFalsePositiveRate = 0.0001, unsigned int pTweak = ArcMist::Math::randomInt());
 
         bool flags() const { return mFlags; }
         const unsigned char *data() const { return mData; }

@@ -397,7 +397,7 @@ namespace BitCoin
         unsigned int offset;
         BlockStats::const_reverse_iterator topStat = pBlockStats.rbegin();
 
-        topStat -= (pBlockStats.height() - pBlockHeight);
+        topStat += (pBlockStats.height() - pBlockHeight);
 
         if(mRequiredVersion < 4)
         {

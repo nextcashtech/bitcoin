@@ -26,6 +26,8 @@
 
 namespace BitCoin
 {
+    class AddressBlock;
+
     class BlockInfo
     {
     public:
@@ -209,6 +211,7 @@ namespace BitCoin
 
         // Chain is up to date with most chains
         bool isInSync() { return mIsInSync; }
+        void setInSync() { mIsInSync = true; }
         Block *blockToAnnounce();
 
         // Check if a block is already in the chain
@@ -269,13 +272,6 @@ namespace BitCoin
         bool getBlock(const ArcMist::Hash &pHash, Block &pBlock);
         bool getHeader(const ArcMist::Hash &pHash, Block &pBlockHeader);
 
-        /*********************** Simple Payment Verification (SPV) Methods ***********************/
-        // Add merkle block to queue to be processed
-        bool addMerkleBlock(Message::MerkleBlockData *pMessage);
-
-        // Release block hash so another node will request it
-        void releaseMerkleRequest(ArcMist::Hash &pBlockHash, unsigned int pNodeID);
-
         // Load block data from file system
         //   If pList is true then all the block hashes will be output
         bool load(bool pPreCacheOutputs = true);
@@ -298,10 +294,15 @@ namespace BitCoin
         static bool test();
         static void tempTest();
 
+        void setAddressBlock(AddressBlock &pAddressBlock) { mAddressBlock = &pAddressBlock; }
+
     private:
+
+        static ArcMist::Hash sBTCForkBlockHash;
 
         TransactionOutputPool mOutputs;
         Addresses mAddresses;
+        Info &mInfo;
         ArcMist::HashList mBlockHashes;
         BlockSet mBlockLookup[0x10000];
 
@@ -322,6 +323,8 @@ namespace BitCoin
 
         // Update the transaction addresses for any blocks it is missing
         bool updateAddresses();
+
+        AddressBlock *mAddressBlock;
 
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;
@@ -347,8 +350,10 @@ namespace BitCoin
         uint32_t mMaxTargetBits;
         uint32_t mTargetBits; // Current target bits
 
-        // Update target bits based on new block
-        bool updateTargetBits();
+        bool updateTargetBits(); // Update target bits based on new block header
+        bool processHeader(Block *pBlock); // Process header only (SPV mode)
+        bool writeBlock(Block *pBlock); // Write block to block file
+        void addBlockHash(ArcMist::Hash &pHash); // Add a verified block hash to the lookup
 
         // Last BLOCK_STATS_SIZE block's statistics
         Forks mForks;
@@ -369,8 +374,6 @@ namespace BitCoin
 
         // Check if a branch has more accumulated proof of work than the main chain
         bool checkBranches();
-
-        static Chain *sInstance;
 
     };
 }

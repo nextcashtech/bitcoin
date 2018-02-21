@@ -123,26 +123,7 @@ namespace BitCoin
                 delete right;
         }
 
-        bool calculateHash()
-        {
-            if(left == NULL)
-            {
-                hash.setSize(32);
-                hash.zeroize();
-                return true;
-            }
-
-            if(left->hash.isEmpty() || right->hash.isEmpty())
-                return false;
-
-            ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
-            digest.setOutputEndian(ArcMist::Endian::LITTLE);
-            left->hash.write(&digest);
-            right->hash.write(&digest);
-            hash.setSize(32);
-            digest.getResult(&hash);
-            return true;
-        }
+        bool calculateHash();
 
         void print(unsigned int pDepth = 0);
 
@@ -277,6 +258,7 @@ namespace BitCoin
         ArcMist::String mFilePathName;
         bool mValid;
         bool mModified;
+        bool mSPVMode;
 
         void getLastCount();
         unsigned int mCount;

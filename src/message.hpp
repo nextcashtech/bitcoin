@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017-2018 ArcMist, LLC                                       *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@arcmist.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
@@ -153,7 +153,7 @@ namespace BitCoin
             static const unsigned int LIMITED_NODE_BIT = 0x0400; // BIP-0159 "Full" node serving only the last 288 (2 day) blocks
 
             VersionData() : Data(VERSION) { }
-            VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort,
+            VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort, uint64_t pReceivingServices,
                         const uint8_t *pTransmittingIP, uint16_t pTransmittingPort,
                         bool pFullNode, bool pCashNode, uint32_t pStartBlockHeight, bool pRelay);
 
@@ -442,7 +442,7 @@ namespace BitCoin
 
             MerkleBlockData() : Data(MERKLE_BLOCK) { block = NULL; blockNeedsDelete = false; }
             MerkleBlockData(Block *pBlock, BloomFilter &pFilter, std::vector<Transaction *> &pIncludedTransactions);
-            ~MerkleBlockData() { if(blockNeedsDelete) delete block; }
+            ~MerkleBlockData() { if(blockNeedsDelete && block != NULL) delete block; }
 
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion);
@@ -454,7 +454,7 @@ namespace BitCoin
 
             Block *block;
             bool blockNeedsDelete;
-            std::vector<ArcMist::Hash> hashes;
+            ArcMist::HashList hashes;
             ArcMist::Buffer flags;
 
         private:
