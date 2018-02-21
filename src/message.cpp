@@ -485,7 +485,7 @@ namespace BitCoin
             return true;
         }
 
-        VersionData::VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort,
+        VersionData::VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort, uint64_t pReceivingServices,
                                  const uint8_t *pTransmittingIP, uint16_t pTransmittingPort,
                                  bool pSPVNode, bool pCashNode, uint32_t pStartBlockHeight, bool pRelay) : Data(VERSION)
         {
@@ -504,7 +504,7 @@ namespace BitCoin
             time = getTime();
 
             // Receiving
-            receivingServices = 0x01;
+            receivingServices = pReceivingServices;
             std::memcpy(receivingIPv6, pReceivingIP, 16);
             receivingPort = pReceivingPort;
 
@@ -983,7 +983,7 @@ namespace BitCoin
             if(pNode->matches)
             {
                 // Append 1 to flags
-                pNextByte |= (0x01 << (7 - pNextBitOffset++));
+                pNextByte |= (0x01 << pNextBitOffset++);
                 if(pNextBitOffset == 8)
                 {
                     flags.writeByte(pNextByte);
@@ -1043,6 +1043,8 @@ namespace BitCoin
 
             if(nextBitOffset > 0)
                 flags.writeByte(nextByte);
+
+            delete merkleRoot;
         }
 
         void MerkleBlockData::write(ArcMist::OutputStream *pStream)
@@ -1051,7 +1053,7 @@ namespace BitCoin
             block->write(pStream, false, false);
 
             // Transaction Count
-            writeCompactInteger(pStream, block->transactionCount);
+            pStream->writeUnsignedInt(block->transactionCount);
 
             // Hash Count
             writeCompactInteger(pStream, hashes.size());
@@ -1072,7 +1074,7 @@ namespace BitCoin
         {
             unsigned int startReadOffset = pStream->readOffset();
 
-            if(blockNeedsDelete)
+            if(blockNeedsDelete && block != NULL)
                 delete block;
 
             block = new Block();
@@ -1082,11 +1084,11 @@ namespace BitCoin
             if(!block->read(pStream, false, false, true))
                 return false;
 
-            if(pStream->readOffset() + 1 > startReadOffset + pSize)
+            if(pStream->readOffset() + 4 > startReadOffset + pSize)
                 return false;
 
             // Transaction Count
-            block->transactionCount = readCompactInteger(pStream);
+            block->transactionCount = pStream->readUnsignedInt();
 
             if(pStream->readOffset() + 1 > startReadOffset + pSize)
                 return false;
@@ -1135,7 +1137,7 @@ namespace BitCoin
                 }
             }
 
-            bool bitIsSet = (pByte >> (7 - pBitOffset++)) & 0x01;
+            bool bitIsSet = (pByte >> pBitOffset++) & 0x01;
             ArcMist::String padding;
             for(unsigned int i=0;i<pDepth;i++)
                 padding += "  ";
@@ -1195,6 +1197,13 @@ namespace BitCoin
 
         bool MerkleBlockData::validate(ArcMist::HashList &pIncludedTransactionHashes)
         {
+            if(block == NULL || block->transactionCount == 0)
+            {
+                ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                  "Merkle Block has zero transaction count");
+                return false;
+            }
+
             flags.setReadOffset(0);
 
             MerkleNode *merkleRoot = buildEmptyMerkleTree(block->transactionCount);
@@ -1202,12 +1211,16 @@ namespace BitCoin
             unsigned char byte = 0;
 
             if(!parse(merkleRoot, 0, hashesOffset, bitOffset, byte, pIncludedTransactionHashes))
+            {
+                delete merkleRoot;
                 return false;
+            }
 
             if(hashesOffset != hashes.size())
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "Merkle Block failed to consume hashes : %d/%d", hashesOffset, hashes.size());
+                delete merkleRoot;
                 return false; // Not all hashes consumed
             }
 
@@ -1215,6 +1228,7 @@ namespace BitCoin
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "Merkle Block failed to consume flags : %d/%d", flags.length() - flags.remaining(), flags.length());
+                delete merkleRoot;
                 return false; // Not all flags were consumed
             }
 
@@ -1223,9 +1237,11 @@ namespace BitCoin
             {
                 ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "Merkle Block root hash doesn't match");
+                delete merkleRoot;
                 return false;
             }
 
+            delete merkleRoot;
             return true;
         }
 
@@ -1479,7 +1495,7 @@ namespace BitCoin
              ***********************************************************************************************/
             uint8_t rIP[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x04, 0x03, 0x02, 0x01 };
             uint8_t tIP[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x08, 0x07, 0x06, 0x05 };
-            VersionData versionSendData(rIP, 1333, tIP, 1333, false, false, 125, false);
+            VersionData versionSendData(rIP, 1333, 3, tIP, 1333, false, false, 125, false);
             ArcMist::Buffer messageBuffer;
 
             interpreter.write(&versionSendData, &messageBuffer);

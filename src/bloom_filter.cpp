@@ -26,9 +26,33 @@ namespace BitCoin
 
     BloomFilter::BloomFilter(unsigned int pElementCount, unsigned int pFlags, double pFalsePositiveRate, unsigned int pTweak)
     {
-        mDataSize = std::min((unsigned int)(-1 / LN2SQUARED * pElementCount * log(pFalsePositiveRate)), MAX_SIZE * 8) / 8;
-        mData = new unsigned char[mDataSize];
-        mHashFunctionCount = std::min((unsigned int)(mDataSize * 8 / pElementCount * LN2), MAX_FUNCTIONS);
+        mData = NULL;
+        setup(pElementCount, pFlags, pFalsePositiveRate, pTweak);
+    }
+
+    BloomFilter::~BloomFilter()
+    {
+        if(mData != NULL)
+            delete[] mData;
+    }
+
+    void BloomFilter::setup(unsigned int pElementCount, unsigned int pFlags, double pFalsePositiveRate, unsigned int pTweak)
+    {
+        if(mData != NULL)
+            delete[] mData;
+
+        if(pElementCount > 0)
+        {
+            mDataSize = std::min((unsigned int)(-1 / LN2SQUARED * pElementCount * log(pFalsePositiveRate)), MAX_SIZE * 8) / 8;
+            mData = new unsigned char[mDataSize];
+            mHashFunctionCount = std::min((unsigned int)(mDataSize * 8 / pElementCount * LN2), MAX_FUNCTIONS);
+        }
+        else
+        {
+            mDataSize = 0;
+            mData = NULL;
+            mHashFunctionCount = 0;
+        }
         mTweak = pTweak;
         mFlags = pFlags;
         mIsFull = false;
@@ -37,10 +61,25 @@ namespace BitCoin
         std::memset(mData, 0, mDataSize);
     }
 
-    BloomFilter::~BloomFilter()
+    const BloomFilter &BloomFilter::operator = (const BloomFilter &pRight)
     {
         if(mData != NULL)
             delete[] mData;
+        mData = NULL;
+        mDataSize = pRight.mDataSize;
+        mHashFunctionCount = pRight.mHashFunctionCount;
+        mTweak = pRight.mTweak;
+        mFlags = pRight.mFlags;
+        mIsFull = pRight.mIsFull;
+        mIsEmpty = pRight.mIsEmpty;
+
+        if(mDataSize)
+        {
+            mData = new unsigned char[mDataSize];
+            std::memcpy(mData, pRight.mData, mDataSize);
+        }
+
+        return *this;
     }
 
     void BloomFilter::updateStatus()

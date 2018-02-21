@@ -28,6 +28,13 @@ namespace BitCoin
     public:
 
         Outpoint() : transactionID(32) { index = 0xffffffff; output = NULL; signatureStatus = 0; }
+        Outpoint(const ArcMist::Hash &pTransactionID, uint32_t pIndex)
+        {
+            transactionID = pTransactionID;
+            index = pIndex;
+            output = NULL;
+            signatureStatus = 0;
+        }
         Outpoint(const Outpoint &pCopy)
         {
             index = pCopy.index;

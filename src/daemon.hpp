@@ -16,6 +16,7 @@
 #include "info.hpp"
 #include "node.hpp"
 #include "requests.hpp"
+#include "address_block.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -55,7 +56,6 @@ namespace BitCoin
     protected:
 
         static const int MAX_BLOCK_REQUEST = 8;
-        static const int MAX_OUTGOING_CONNECTION_COUNT = 8;
 
         Daemon();
         ~Daemon();
@@ -93,6 +93,8 @@ namespace BitCoin
         unsigned int mNodeCount, mIncomingNodes, mOutgoingNodes;
         unsigned int mMaxIncoming;
 
+        unsigned int outgoingConnectionCountTarget() const { if(mInfo.spvMode) return 16; else return 8; }
+
         class IPBytes
         {
         public:
@@ -112,12 +114,13 @@ namespace BitCoin
 
         void addRejectedIP(const uint8_t *pIP);
 
-        bool addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed = false);
+        bool addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed, uint64_t pServices);
         unsigned int recruitPeers(unsigned int pCount);
         void cleanNodes();
 
         Node *nodeWithInventory();
         Node *nodeWithBlock(const ArcMist::Hash &pHash);
+        void checkSync();
         void sendRequests();
         void sendHeaderRequest();
         void sendPeerRequest();
@@ -128,6 +131,10 @@ namespace BitCoin
 
         // Announce verified blocks and transactions
         void announce();
+
+        AddressBlock mAddressBlock;
+        bool loadAddressBlock();
+        bool saveAddressBlock();
 
         // Request Channels
         ArcMist::ReadersLock mRequestsLock;

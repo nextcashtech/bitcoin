@@ -88,6 +88,13 @@ namespace BitCoin
         // The size of the mem pool (unconfirmed transactions) at which they start getting dropped
         uint32_t memPoolThreshold;
 
+        // Number of merkle blocks for same block header required from different peers to confirm a block's transactions
+        //   More than one required to prevent data withholding.
+        unsigned int merkleBlockCountRequired;
+
+        // Number of peers that an unconfirmed transaction must be announced from before it has zero confirm trust.
+        unsigned int spvMemPoolCountRequired;
+
         // Return list of peers in random order
         void getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating, uint64_t mServicesRequiredMask = 0);
         void updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices);

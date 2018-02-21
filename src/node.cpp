@@ -22,9 +22,12 @@ namespace BitCoin
 {
     unsigned int Node::mNextID = 256;
 
-    Node::Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIncoming, bool pIsSeed) : mID(mNextID++),
-      mConnectionMutex("Node Connection"), mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce")
+    Node::Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
+      bool pIsSeed, uint64_t pServices, AddressBlock &pAddressBlock) : mID(mNextID++), mConnectionMutex("Node Connection"),
+      mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce")
     {
+        Info &info = Info::instance();
+
         mIsIncoming = pIncoming;
         mConnected = false;
         mVersionSent = false;
@@ -56,7 +59,14 @@ namespace BitCoin
         mRejected = false;
         mThread = NULL;
         mSocketID = -1;
-
+        mServices = pServices;
+        if(!pIncoming && !pIsSeed)
+            mAddressBlock = &pAddressBlock;
+        else
+            mAddressBlock = NULL;
+        mActiveMerkleRequests = 0;
+        mLastMerkleCheck = 0;
+        mLastMerkleRequest = 0;
         mChain = pChain;
 
         if(mIsIncoming)
@@ -75,7 +85,7 @@ namespace BitCoin
             mConnectionMutex.unlock();
             mStopped = true;
             if(!mIsSeed && !mIsIncoming)
-                Info::instance().addPeerFail(mAddress);
+                info.addPeerFail(mAddress);
             return;
         }
         mConnected = true;
@@ -135,6 +145,8 @@ namespace BitCoin
             mConnection->close();
         mConnectionMutex.unlock();
         requestStop();
+        if(mAddressBlock != NULL)
+            mAddressBlock->release(mID);
         mChain->releaseBlocksForNode(mID);
         mChain->memPool().releaseForNode(mID);
     }
@@ -262,12 +274,16 @@ namespace BitCoin
         for(ArcMist::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
             getHeadersData.blockHeaderHashes.push_back(*hash);
 
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Sending header request");
+        if(hashes.size() == 0)
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Sending header request for blocks from genesis");
+        else
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+              "Sending header request for blocks after : %s", hashes.front().hex().text());
         bool success = sendMessage(&getHeadersData);
         if(success)
         {
-            mHeaderRequested = hashes.back();
-            mLastHeaderRequested = hashes.back();
+            mHeaderRequested = hashes.front();
+            mLastHeaderRequested = hashes.front();
             mHeaderRequestTime = getTime();
         }
         return success;
@@ -312,7 +328,19 @@ namespace BitCoin
         return success;
     }
 
-    bool Node::requestFilterBlock(ArcMist::Hash &pHash)
+    bool Node::sendBloomFilter()
+    {
+        if(!Info::instance().spvMode || mAddressBlock == NULL)
+            return false;
+
+        Message::FilterLoadData message;
+        mAddressBlock->setupBloomFilter(message.filter);
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Sending bloom filter with %d bytes and %d functions",
+          message.filter.size(), message.filter.functionCount());
+        return sendMessage(&message);
+    }
+
+    bool Node::requestMerkleBlock(ArcMist::Hash &pHash)
     {
         Message::GetDataData message;
         message.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::FILTERED_BLOCK, pHash));
@@ -387,19 +415,23 @@ namespace BitCoin
         }
 
         std::vector<Transaction *> includedTransactions;
-        Message::MerkleBlockData data(&block, mFilter, includedTransactions);
+        Message::MerkleBlockData merkleMessage(&block, mFilter, includedTransactions);
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Sending merkle block with %d trans : %s",
           includedTransactions.size(), pBlockHash.hex().text());
-        if(!sendMessage(&data))
+        if(!sendMessage(&merkleMessage))
             return false;
 
-        Message::TransactionData transactionData;
+        Message::TransactionData transactionMessage;
         for(std::vector<Transaction *>::iterator trans=includedTransactions.begin();trans!=includedTransactions.end();++trans)
         {
-            transactionData.transaction = *trans;
-            if(!sendMessage(&data))
+            transactionMessage.transaction = *trans;
+            if(!sendMessage(&transactionMessage))
+            {
+                transactionMessage.transaction = NULL; // Prevent from being double deleted
                 return false;
+            }
         }
+        transactionMessage.transaction = NULL; // Prevent from being double deleted
 
         return true;
     }
@@ -454,7 +486,7 @@ namespace BitCoin
 
     bool Node::announceTransaction(Transaction *pTransaction)
     {
-        if(mVersionData == NULL)
+        if(!isOpen() || mVersionData == NULL)
             return false;
 
         bool filterContains = mFilter.contains(*pTransaction);
@@ -465,15 +497,19 @@ namespace BitCoin
         if(filterContains)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName, "Bloom filter contains transaction : %s",
-              pTransaction->hash);
+              pTransaction->hash.hex().text());
 
             // Update filter
             if(mFilter.flags() & BloomFilter::UPDATE_MASK)
             {
                 ScriptInterpreter::ScriptType type;
                 ArcMist::HashList hashes;
+                Outpoint outpoint;
 
-                for(std::vector<Output *>::iterator output=pTransaction->outputs.begin();output!=pTransaction->outputs.end();++output)
+                outpoint.transactionID = pTransaction->hash;
+                outpoint.index = 0;
+
+                for(std::vector<Output *>::iterator output=pTransaction->outputs.begin();output!=pTransaction->outputs.end();++output,++outpoint.index)
                     if(mFilter.containsScript((*output)->script))
                     {
                         if(mFilter.flags() & BloomFilter::UPDATE_P2PUBKEY_ONLY)
@@ -484,7 +520,8 @@ namespace BitCoin
                                 continue;
                         }
 
-                        mFilter.addScript((*output)->script);
+                        // Add new UTXO to filter
+                        mFilter.add(outpoint);
                     }
             }
         }
@@ -523,7 +560,7 @@ namespace BitCoin
             return false;
 
         Info &info = Info::instance();
-        Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), info.ip,
+        Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), mServices, info.ip,
           info.port, info.spvMode, mChain->forks().cashActive(), mChain->height(), (!mIsIncoming && !mIsSeed));
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
@@ -608,7 +645,7 @@ namespace BitCoin
         mAnnounceMutex.unlock();
     }
 
-    void Node::addAnnouncedTransaction(const ArcMist::Hash &pHash)
+    bool Node::addAnnouncedTransaction(const ArcMist::Hash &pHash)
     {
         mAnnounceMutex.lock();
         if(!mAnnounceTransactions.contains(pHash))
@@ -619,6 +656,8 @@ namespace BitCoin
             mAnnounceTransactions.push_back(pHash);
         }
         mAnnounceMutex.unlock();
+
+        return mAddressBlock != NULL && mAddressBlock->addTransactionAnnouncement(pHash, mID);
     }
 
     void Node::process()
@@ -626,6 +665,54 @@ namespace BitCoin
         int32_t time = getTime();
         if(time - mLastCheckTime > 10)
             check();
+
+        Info &info = Info::instance();
+
+        if(info.spvMode && mVersionAcknowledged && mVersionData != NULL && !mIsIncoming && !mIsSeed &&
+          mAddressBlock != NULL && time - mLastMerkleCheck > 2)
+        {
+            if(mAddressBlock->needsClose(mID))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                  "Dropping. Inappropriate false positive rate.");
+                close();
+                return;
+            }
+
+            if(mAddressBlock->filterNeedsResend(mID))
+                sendBloomFilter();
+
+            if(mActiveMerkleRequests < 25)
+            {
+                bool fail = false;
+                ArcMist::HashList blockHashes;
+
+                mAddressBlock->getNeededMerkleBlocks(mID, *mChain, blockHashes);
+                for(ArcMist::HashList::iterator hash=blockHashes.begin();hash!=blockHashes.end();++hash)
+                    if(!requestMerkleBlock(*hash))
+                    {
+                        fail = true;
+                        break;
+                    }
+
+                if(!fail && blockHashes.size() > 0)
+                {
+                    mActiveMerkleRequests += blockHashes.size();
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                      "Requested %d merkle blocks", blockHashes.size());
+                    mLastMerkleRequest = getTime();
+                }
+
+                mLastMerkleCheck = time;
+            }
+            else if(time - mLastMerkleCheck > 120)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                  "Dropping. Took too long to return merkle blocks");
+                close();
+                return;
+            }
+        }
 
         mConnectionMutex.lock();
         if(mConnection == NULL)
@@ -708,7 +795,7 @@ namespace BitCoin
 
         ++mMessagesReceived;
 
-        if(mMessagesReceived > 500)
+        if(mMessagesReceived > 2000)
         {
             ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Reached message limit");
             close();
@@ -740,6 +827,8 @@ namespace BitCoin
                     versionText += ", cash";
                 if(mVersionData->transmittingServices & Message::VersionData::BLOOM_NODE_BIT)
                     versionText += ", bloom";
+                if(mVersionData->transmittingServices & Message::VersionData::GETUTXO_NODE_BIT)
+                    versionText += ", get utxo";
                 if(mVersionData->transmittingServices & Message::VersionData::WITNESS_NODE_BIT)
                     versionText += ", witness";
                 if(mVersionData->transmittingServices & Message::VersionData::XTHIN_NODE_BIT)
@@ -761,7 +850,7 @@ namespace BitCoin
                     Info::instance().addPeerFail(mAddress);
                     close();
                 }
-                else if(!mIsIncoming && mChain->forks().cashActive() && //TODO Decide if this only applies to outgoing
+                else if(mChain->forks().cashActive() &&
                   !(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT) && // Missing Cash node bit
                   mVersionData->startBlockHeight >= mChain->forks().cashForkBlockHeight()) // Peer above cash fork height
                 {
@@ -778,6 +867,15 @@ namespace BitCoin
                     ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Low block height");
                     close();
                 }
+                else if(info.spvMode && !mIsSeed && !(mVersionData->transmittingServices & Message::VersionData::BLOOM_NODE_BIT))
+                {
+                    mRejected = true;
+                    sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
+                      "Bloom node bit (0x04) required in protocol version");
+                    ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Missing bloom node bit");
+                    Info::instance().addPeerFail(mAddress);
+                    close();
+                }
                 else
                 {
                     // Send version acknowledge
@@ -789,9 +887,11 @@ namespace BitCoin
                         requestPeers(); // Request addresses from the
                     else if(mVersionAcknowledged)
                     {
-                        if(!mIsIncoming)
-                            sendFeeFilter();
                         sendPing();
+                        if(info.spvMode)
+                            sendBloomFilter();
+                        else if(!mIsIncoming)
+                            sendFeeFilter();
                     }
                 }
                 break;
@@ -800,9 +900,11 @@ namespace BitCoin
                 mVersionAcknowledged = true;
                 if(mVersionData != NULL)
                 {
-                    if(!mIsIncoming)
-                        sendFeeFilter();
                     sendPing();
+                    if(Info::instance().spvMode)
+                        sendBloomFilter();
+                    else if(!mIsIncoming)
+                        sendFeeFilter();
                 }
                 break;
             case Message::PING:
@@ -1171,22 +1273,26 @@ namespace BitCoin
                             ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
                               "Transaction Inventory : %s", (*item)->hash.hex().text());
 
-                            addAnnouncedTransaction((*item)->hash);
+                            if(addAnnouncedTransaction((*item)->hash) && info.spvMode)
+                                transactionList.push_back((*item)->hash);
 
-                            switch(mChain->memPool().addPending((*item)->hash, mID))
+                            if(!info.spvMode)
                             {
-                                case MemPool::NEED:
-                                    transactionList.push_back((*item)->hash);
-                                    break;
-                                case MemPool::ALREADY_HAVE:
-                                    break;
-                                case MemPool::BLACK_LISTED:
-                                    sendReject(Message::nameFor(message->type), Message::RejectData::WRONG_CHAIN,
-                                      "Announced transaction failed verification");
-                                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
-                                      "Dropping. Black listed transaction announced : %s", (*item)->hash.hex().text());
-                                    close();
-                                    break;
+                                switch(mChain->memPool().addPending((*item)->hash, mID))
+                                {
+                                    case MemPool::NEED:
+                                        transactionList.push_back((*item)->hash);
+                                        break;
+                                    case MemPool::ALREADY_HAVE:
+                                        break;
+                                    case MemPool::BLACK_LISTED:
+                                        sendReject(Message::nameFor(message->type), Message::RejectData::WRONG_CHAIN,
+                                          "Announced transaction failed verification");
+                                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                                          "Dropping. Black listed transaction announced : %s", (*item)->hash.hex().text());
+                                        close();
+                                        break;
+                                }
                             }
                             break;
                         case Message::InventoryHash::FILTERED_BLOCK: // Should never be in an inventory message
@@ -1227,6 +1333,14 @@ namespace BitCoin
                     ArcMist::HashList blockList;
                     bool lastAnnouncedHeaderFound = mLastBlockAnnounced.isEmpty() || mChain->headerAvailable(mLastBlockAnnounced);
 
+                    if(headersData->headers.size() == 0)
+                        mLastHeader = mHeaderRequested;
+                    else
+                        mLastHeader = headersData->headers.back()->hash;
+
+                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                      // "Last header set : %s", mLastHeader.hex().text());
+
                     ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
                       "Received %d block headers", headersData->headers.size());
                     mHeaderRequested.clear();
@@ -1240,16 +1354,14 @@ namespace BitCoin
 
                         if(mChain->addPendingBlock(*header))
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Added Header : %s",
-                              (*header)->hash.hex().text());
                             // Memory will be deleted by block chain after it is processed so remove it from this list
                             header = headersData->headers.erase(header);
                             addedCount++;
 
-                            if(mChain->isInSync())
+                            if(!info.spvMode && mChain->isInSync())
                                 blockList.push_back((*header)->hash);
                         }
-                        else if(mChain->headerAvailable((*header)->hash))
+                        else if(!mChain->headerAvailable((*header)->hash))
                         {
                             ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Rejected Header : %s",
                               (*header)->hash.hex().text());
@@ -1271,7 +1383,13 @@ namespace BitCoin
                     }
 
                     if(addedCount > 0 && !mIsSeed && mVersionData != NULL)
-                        Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
+                    {
+                        info.updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
+
+                        // Immediately request more headers if in SPV mode so all the headers come back to back
+                        if(info.spvMode && addedCount > 1000)
+                            requestHeaders();
+                    }
 
                     mLastBlockAnnounced.clear();
 
@@ -1288,41 +1406,51 @@ namespace BitCoin
             case Message::BLOCK:
                 if(!mIsIncoming && !mIsSeed)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
-                      "Received block (height %d) (%d KiB) : %s", mChain->blockHeight(((Message::BlockData *)message)->block->hash),
-                      ((Message::BlockData *)message)->block->size() / 1024, ((Message::BlockData *)message)->block->hash.hex().text());
-                    ++mStatistics.blocksReceived;
-
-                    // Remove from blocks requested
-                    time = getTime();
-                    mBlockRequestMutex.lock();
-                    for(ArcMist::HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
-                        if(*hash == ((Message::BlockData *)message)->block->hash)
-                        {
-                            mBlocksRequested.erase(hash);
-                            mBlockReceiveTime = time;
-                            ++mBlockDownloadCount;
-                            mBlockDownloadTime += time - mMessageInterpreter.pendingBlockStartTime;
-                            mBlockDownloadSize += ((Message::BlockData *)message)->block->size();
-                            break;
-                        }
-                    mBlockRequestMutex.unlock();
-
-                    if(mMessageInterpreter.pendingBlockStartTime != 0 &&
-                      time - mMessageInterpreter.pendingBlockStartTime > 60)
+                    if(info.spvMode)
                     {
-                        // Drop after the block finishes so it doesn't have to be restarted
                         ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
-                          "Dropping. Block download took %ds", time - mMessageInterpreter.pendingBlockStartTime);
+                          "Dropping. Sent block in SPV mode : %s", ((Message::BlockData *)message)->block->hash);
                         Info::instance().addPeerFail(mAddress, 5);
                         close();
                     }
-
-                    if(mChain->addPendingBlock(((Message::BlockData *)message)->block))
+                    else
                     {
-                        ((Message::BlockData *)message)->block = NULL; // Memory has been handed off
-                        if(!mIsSeed && mVersionData != NULL)
-                            Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                          "Received block (height %d) (%d KiB) : %s", mChain->blockHeight(((Message::BlockData *)message)->block->hash),
+                          ((Message::BlockData *)message)->block->size() / 1024, ((Message::BlockData *)message)->block->hash.hex().text());
+                        ++mStatistics.blocksReceived;
+
+                        // Remove from blocks requested
+                        time = getTime();
+                        mBlockRequestMutex.lock();
+                        for(ArcMist::HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
+                            if(*hash == ((Message::BlockData *)message)->block->hash)
+                            {
+                                mBlocksRequested.erase(hash);
+                                mBlockReceiveTime = time;
+                                ++mBlockDownloadCount;
+                                mBlockDownloadTime += time - mMessageInterpreter.pendingBlockStartTime;
+                                mBlockDownloadSize += ((Message::BlockData *)message)->block->size();
+                                break;
+                            }
+                        mBlockRequestMutex.unlock();
+
+                        if(mMessageInterpreter.pendingBlockStartTime != 0 &&
+                          time - mMessageInterpreter.pendingBlockStartTime > 60)
+                        {
+                            // Drop after the block finishes so it doesn't have to be restarted
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                              "Dropping. Block download took %ds", time - mMessageInterpreter.pendingBlockStartTime);
+                            Info::instance().addPeerFail(mAddress, 5);
+                            close();
+                        }
+
+                        if(mChain->addPendingBlock(((Message::BlockData *)message)->block))
+                        {
+                            ((Message::BlockData *)message)->block = NULL; // Memory has been handed off
+                            if(!mIsSeed && mVersionData != NULL)
+                                Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
+                        }
                     }
                 }
                 else
@@ -1342,9 +1470,19 @@ namespace BitCoin
                     ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
                       "Received transaction (%d bytes) : %s", transactionData->transaction->size(),
                       transactionData->transaction->hash.hex().text());
-                    if(mChain->memPool().add(transactionData->transaction, mChain->outputs(),
+                    if(!info.spvMode && mChain->memPool().add(transactionData->transaction, mChain->outputs(),
                       mChain->blockStats(), mChain->forks(), Info::instance().minFee))
-                        transactionData->transaction = NULL; // So it won't be deleted with the message
+                    {
+                        if(mAddressBlock != NULL)
+                        {
+                            transactionData->transaction = new Transaction(*transactionData->transaction);
+                            mAddressBlock->addTransaction(*mChain, transactionData);
+                        }
+                        else
+                            transactionData->transaction = NULL; // So it won't be deleted with the message
+                    }
+                    else if(mAddressBlock != NULL)
+                        mAddressBlock->addTransaction(*mChain, transactionData);
                 }
                 break;
             }
@@ -1356,12 +1494,14 @@ namespace BitCoin
                 break;
 
             case Message::MERKLE_BLOCK:
-                if(!mIsIncoming && !mIsSeed)
+                --mActiveMerkleRequests;
+                if(!mIsIncoming && !mIsSeed && mAddressBlock != NULL &&
+                  !mAddressBlock->addMerkleBlock(*mChain, (Message::MerkleBlockData *)message, mID) &&
+                  !mChain->blockInChain(((Message::MerkleBlockData *)message)->block->hash))
                 {
-                    if(mChain->addMerkleBlock((Message::MerkleBlockData *)message))
-                        dontDeleteMessage = true;
-                    else
-                        mChain->releaseMerkleRequest(((Message::MerkleBlockData *)message)->block->hash, mID);
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                      "Dropping. Invalid Merkle Block : %s", ((Message::MerkleBlockData *)message)->block->hash.hex().text());
+                    close();
                 }
                 break;
             case Message::NOT_FOUND:
@@ -1397,8 +1537,9 @@ namespace BitCoin
                           "Transaction hash returned not found : %s", (*item)->hash.hex().text());
                         break;
                     case Message::InventoryHash::FILTERED_BLOCK:
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
-                          "Filtered block hash returned not found : %s", (*item)->hash.hex().text());
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                          "Dropping. Merkle block hash returned not found : %s", (*item)->hash.hex().text());
+                        close();
                         break;
                     case Message::InventoryHash::COMPACT_BLOCK:
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,

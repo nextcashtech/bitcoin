@@ -358,6 +358,27 @@ namespace BitCoin
         }
     }
 
+    bool MerkleNode::calculateHash()
+    {
+        if(left == NULL)
+        {
+            hash.setSize(32);
+            hash.zeroize();
+            return true;
+        }
+
+        if(left->hash.isEmpty() || right->hash.isEmpty())
+            return false;
+
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        left->hash.write(&digest);
+        right->hash.write(&digest);
+        hash.setSize(32);
+        digest.getResult(&hash);
+        return true;
+    }
+
     MerkleNode *buildMerkleTreeLevel(std::vector<MerkleNode *> pNodes)
     {
         std::vector<MerkleNode *>::iterator node = pNodes.begin(), left, right;
@@ -702,6 +723,7 @@ namespace BitCoin
     {
         mValid = true;
         mFilePathName = fileName(pID);
+        mSPVMode = Info::instance().spvMode;
         mInputFile = NULL;
         mID = pID;
         mModified = false;
@@ -901,10 +923,10 @@ namespace BitCoin
 
             Block block;
             mInputFile->setReadOffset(offset);
-            if(!block.read(mInputFile, true, true, false, true))
+            if(!block.read(mInputFile, !mSPVMode, !mSPVMode, false, true))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-                  "Block file %08x offset %d is zero", mID, count - 1);
+                  "Block file %08x offset %d has invalid block", mID, count - 1);
                 return false;
             }
             nextBlockOffset = mInputFile->readOffset();
@@ -931,7 +953,7 @@ namespace BitCoin
 
         // Write block data at end of file
         outputFile->setWriteOffset(nextBlockOffset);
-        pBlock.write(outputFile, true, true, true);
+        pBlock.write(outputFile, !mSPVMode, !mSPVMode, true);
         delete outputFile;
 
         mLastHash = pBlock.hash;
@@ -1158,6 +1180,13 @@ namespace BitCoin
 
     bool BlockFile::readBlock(unsigned int pOffset, Block &pBlock, bool pIncludeTransactions)
     {
+        if(mSPVMode)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x can't read block in SPV mode", mID);
+            return false;
+        }
+
         pBlock.clear();
         if(!openFile())
         {
@@ -1179,6 +1208,13 @@ namespace BitCoin
 
     bool BlockFile::readBlock(const ArcMist::Hash &pHash, Block &pBlock, bool pIncludeTransactions)
     {
+        if(mSPVMode)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x can't read block in SPV mode", mID);
+            return false;
+        }
+
         pBlock.clear();
         if(!openFile())
         {
@@ -1229,6 +1265,13 @@ namespace BitCoin
     bool BlockFile::readTransactionOutput(unsigned int pBlockOffset, unsigned int pTransactionOffset,
       unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput)
     {
+        if(mSPVMode)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x can't read transaction output in SPV mode", mID);
+            return false;
+        }
+
         if(!openFile())
         {
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
@@ -1269,6 +1312,13 @@ namespace BitCoin
 
     bool BlockFile::readTransaction(unsigned int pBlockOffset, unsigned int pTransactionOffset, Transaction &pTransaction)
     {
+        if(mSPVMode)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x can't read transaction in SPV mode", mID);
+            return false;
+        }
+
         if(!openFile())
         {
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
@@ -1308,6 +1358,13 @@ namespace BitCoin
 
     bool BlockFile::readTransactionOutput(unsigned int pFileOffset, Output &pTransactionOutput)
     {
+        if(mSPVMode)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x can't read transaction output in SPV mode", mID);
+            return false;
+        }
+
         if(!openFile())
         {
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
@@ -1443,8 +1500,12 @@ namespace BitCoin
         if(!mBlockFilePath)
         {
             // Build path
-            mBlockFilePath = Info::instance().path();
-            mBlockFilePath.pathAppend("blocks");
+            Info &info = Info::instance();
+            mBlockFilePath = info.path();
+            if(info.spvMode)
+                mBlockFilePath.pathAppend("headers");
+            else
+                mBlockFilePath.pathAppend("blocks");
         }
         return mBlockFilePath;
     }

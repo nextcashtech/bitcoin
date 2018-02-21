@@ -15,7 +15,6 @@
 #include "arcmist/io/network.hpp"
 #include "info.hpp"
 #include "block.hpp"
-#include "block.hpp"
 #include "chain.hpp"
 
 #include <csignal>
@@ -137,6 +136,11 @@ namespace BitCoin
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Starting %s on %s in %s", BITCOIN_USER_AGENT, networkName(), Info::instance().path().text());
 
+        if(mInfo.spvMode)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in SPV mode");
+        else
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in Full/Bloom mode");
+
         mManagerThread = new ArcMist::Thread("Manager", manage);
         if(mManagerThread == NULL)
         {
@@ -179,66 +183,87 @@ namespace BitCoin
         previousSigTermHandler= NULL;
         previousSigIntHandler = NULL;
 
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping connection thread");
         // Wait for connections to finish
         if(mConnectionThread != NULL)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping connection thread");
             delete mConnectionThread;
-        mConnectionThread = NULL;
+            mConnectionThread = NULL;
+        }
 
         // Stop nodes
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping nodes");
         mNodeLock.readLock();
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
-            (*node)->requestStop();
+        if(mNodes.size() > 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping nodes");
+            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+                (*node)->requestStop();
+        }
         mNodeLock.readUnlock();
 
         // Delete nodes
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Deleting nodes");
         mNodeLock.writeLock("Destroy");
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
-            delete *node;
-        mNodes.clear();
+        if(mNodes.size() > 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Deleting nodes");
+            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+                delete *node;
+            mNodes.clear();
+        }
         mNodeLock.writeUnlock();
 
         // Stop request channels
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping request channels");
         mRequestsLock.readLock();
-        for(std::vector<RequestChannel *>::iterator requestChannel=mRequestChannels.begin();requestChannel!=mRequestChannels.end();++requestChannel)
-            (*requestChannel)->requestStop();
+        if(mRequestChannels.size() > 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping request channels");
+            for(std::vector<RequestChannel *>::iterator requestChannel=mRequestChannels.begin();requestChannel!=mRequestChannels.end();++requestChannel)
+                (*requestChannel)->requestStop();
+        }
         mRequestsLock.readUnlock();
 
         // Delete request channels
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Deleting request channels");
         mRequestsLock.writeLock("Destroy");
-        for(std::vector<RequestChannel *>::iterator requestChannel=mRequestChannels.begin();requestChannel!=mRequestChannels.end();++requestChannel)
-            delete *requestChannel;
-        mRequestChannels.clear();
+        if(mRequestChannels.size() > 0)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Deleting request channels");
+            for(std::vector<RequestChannel *>::iterator requestChannel=mRequestChannels.begin();requestChannel!=mRequestChannels.end();++requestChannel)
+                delete *requestChannel;
+            mRequestChannels.clear();
+        }
         mRequestsLock.writeUnlock();
 
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping requests thread");
         // Wait for requests to finish
         if(mRequestsThread != NULL)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping requests thread");
             delete mRequestsThread;
-        mRequestsThread = NULL;
+            mRequestsThread = NULL;
+        }
 
         // Tell the chain to stop processing
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping chain");
         mChain.requestStop();
 
         // Wait for process thread to finish
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping process thread");
         if(mProcessThread != NULL)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping process thread");
             delete mProcessThread;
-        mProcessThread = NULL;
+            mProcessThread = NULL;
+        }
 
         // Wait for manager to finish
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping manager thread");
         if(mManagerThread != NULL)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping manager thread");
             delete mManagerThread;
-        mManagerThread = NULL;
+            mManagerThread = NULL;
+        }
 
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Saving data");
         saveStatistics();
+        saveAddressBlock();
         mChain.save();
         Info::destroy();
 
@@ -302,6 +327,7 @@ namespace BitCoin
         timeText.writeFormattedTime(mChain.blockStats().time(mChain.height()));
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Block Chain : %d blocks (last %s)", mChain.height(), timeText.text());
+
         const Branch *branch;
         for(unsigned int i=0;i<mChain.branchCount();++i)
         {
@@ -315,34 +341,93 @@ namespace BitCoin
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Block Chain Branch %d : %d blocks (last %s)", i + 1, branch->height + branch->pendingBlocks.size() - 1, timeText.text());
         }
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Outputs : %d trans (%d KiB cached)", mChain.outputs().size(),
-          mChain.outputs().cacheDataSize() / 1024);
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Mem Pool : %d/%d trans/pending (%d KiB)", mChain.memPool().count(),
-          mChain.memPool().pendingCount(), mChain.memPool().size() / 1024);
-        if(!mChain.isInSync())
-        {
-            unsigned int pendingBlocks = mChain.pendingBlockCount();
-            unsigned int pendingCount = mChain.pendingCount();
-            unsigned int pendingSize = mChain.pendingSize();
-            if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Pending (above threshold) : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks,
-                  pendingCount - pendingBlocks, pendingSize / 1024, blocksRequestedCount);
-            else
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Pending : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks, pendingCount - pendingBlocks,
-                  pendingSize / 1024, blocksRequestedCount);
-        }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Nodes : %d/%d outgoing/incoming", mOutgoingNodes, mIncomingNodes);
+        if(mInfo.spvMode)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Nodes : %d outgoing", mOutgoingNodes);
+        else
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Outputs : %d trans (%d KiB cached)", mChain.outputs().size(),
+              mChain.outputs().cacheDataSize() / 1024);
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Mem Pool : %d/%d trans/pending (%d KiB)", mChain.memPool().count(),
+              mChain.memPool().pendingCount(), mChain.memPool().size() / 1024);
+
+            if(!mChain.isInSync())
+            {
+                unsigned int pendingBlocks = mChain.pendingBlockCount();
+                unsigned int pendingCount = mChain.pendingCount();
+                unsigned int pendingSize = mChain.pendingSize();
+                if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                      "Pending (above threshold) : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks,
+                      pendingCount - pendingBlocks, pendingSize / 1024, blocksRequestedCount);
+                else
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                      "Pending : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks, pendingCount - pendingBlocks,
+                      pendingSize / 1024, blocksRequestedCount);
+            }
+
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Nodes : %d/%d outgoing/incoming", mOutgoingNodes, mIncomingNodes);
+        }
 
         timeText.writeFormattedTime(mStatistics.startTime);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Network : %d/%d KiB received/sent (since %s)", mStatistics.bytesReceived / 1024, mStatistics.bytesSent / 1024,
           timeText.text());
+    }
+
+    bool Daemon::loadAddressBlock()
+    {
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("address_block");
+        ArcMist::FileInputStream file(filePathName);
+        if(file.isValid())
+        {
+            if(!mAddressBlock.read(&file))
+            {
+                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Address block failed to load");
+                return false;
+            }
+            else
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Address block loaded with %d addresses and %d transactions", mAddressBlock.size(),
+                  mAddressBlock.transactionCount());
+        }
+        else
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Address block not found to load");
+
+        unsigned int previousSize = mAddressBlock.size();
+
+        filePathName = Info::instance().path();
+        filePathName.pathAppend("address_text");
+        ArcMist::FileInputStream textFile(filePathName);
+        if(textFile.isValid() && !mAddressBlock.loadAddresses(&textFile))
+            return false;
+
+        if(previousSize != mAddressBlock.size())
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Address block added %d addresses", mAddressBlock.size() - previousSize);
+
+        return true;
+    }
+
+    bool Daemon::saveAddressBlock()
+    {
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("address_block");
+        ArcMist::FileOutputStream file(filePathName, true);
+        if(!file.isValid())
+            return false;
+        mAddressBlock.write(&file);
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Address block saved with %d addresses and %d transactions", mAddressBlock.size(),
+          mAddressBlock.transactionCount());
+        return true;
     }
 
     void sortOutgoingNodesByPing(std::vector<Node *> &pNodes)
@@ -434,10 +519,15 @@ namespace BitCoin
 
     void Daemon::sendRequests()
     {
+        if(mInfo.spvMode)
+        {
+            sendHeaderRequest();
+            return;
+        }
+
         unsigned int pendingCount = mChain.pendingCount();
 
-        if(!mChain.isInSync() && getTime() - mLastHeaderRequestTime > 60 &&
-          pendingCount < mInfo.pendingBlocksThreshold * 8)
+        if(!mChain.isInSync() && pendingCount < mInfo.pendingBlocksThreshold * 8)
             sendHeaderRequest();
 
         unsigned int pendingBlockCount = mChain.pendingBlockCount();
@@ -477,6 +567,7 @@ namespace BitCoin
             if(blocksToRequestCount > (int)requestNodes.size() * MAX_BLOCK_REQUEST)
                 blocksToRequestCount = (int)requestNodes.size() * MAX_BLOCK_REQUEST;
         }
+
         if(blocksToRequestCount <= 0)
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
@@ -606,19 +697,59 @@ namespace BitCoin
 
     void Daemon::sendHeaderRequest()
     {
-        if(getTime() - mLastHeaderRequestTime < 20)
+        if(getTime() - mLastHeaderRequestTime < 10)
             return;
 
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         randomizeOutgoing(nodes);
+        bool sent = false;
+
+        // Check for node with empty last header
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if((*node)->requestHeaders())
+            if((*node)->lastHeader().isEmpty() && (*node)->requestHeaders())
             {
+                sent = true;
                 mLastHeaderRequestTime = getTime();
                 break;
             }
+
+        if(!sent)
+        {
+            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+                if((*node)->requestHeaders())
+                {
+                    mLastHeaderRequestTime = getTime();
+                    break;
+                }
+        }
+
         mNodeLock.readUnlock();
+    }
+
+    void Daemon::checkSync()
+    {
+        mNodeLock.readLock();
+        unsigned int count = 0;
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            if(!(*node)->isIncoming())
+            {
+                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                  // "Node [%d] last header : %s", (*node)->id(), (*node)->lastHeader().hex().text());
+                if((*node)->lastHeader() == mChain.lastBlockHash())
+                    ++count;
+            }
+        mNodeLock.readUnlock();
+
+        if(count >= 4)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              "Chain is in sync. %d nodes have matching latest header : %s", count, mChain.lastBlockHash().hex().text());
+            mChain.setInSync();
+        }
+        // else
+            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              // "Chain latest header : %s", mChain.lastBlockHash().hex().text());
     }
 
     void Daemon::sendPeerRequest()
@@ -638,7 +769,7 @@ namespace BitCoin
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         sortOutgoingNodesByPing(nodes);
 
-        if(nodes.size() < MAX_OUTGOING_CONNECTION_COUNT / 2)
+        if(nodes.size() < outgoingConnectionCountTarget() / 2)
         {
             mNodeLock.readUnlock();
             return;
@@ -671,7 +802,7 @@ namespace BitCoin
 
         // Regularly drop some nodes to increase diversity
         int churnDrop = 0;
-        if(nodes.size() == MAX_OUTGOING_CONNECTION_COUNT)
+        if(nodes.size() >= outgoingConnectionCountTarget())
             churnDrop = nodes.size() / 8;
 
         // Drop slowest
@@ -679,14 +810,14 @@ namespace BitCoin
         {
             if((*node)->blockDownloadBytesPerSecond() > cutoff)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Sorted Nodes : %s - %d KiB/s, %ds ping (dropping because of ping)", (*node)->name(),
                   (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
             else if(churnDrop > 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Sorted Nodes : %s - %d KiB/s, %ds ping (dropping for churn)", (*node)->name(),
                   (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
@@ -706,7 +837,7 @@ namespace BitCoin
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
 
-        if(nodes.size() < MAX_OUTGOING_CONNECTION_COUNT / 2)
+        if(nodes.size() < outgoingConnectionCountTarget() / 2)
         {
             mNodeLock.readUnlock();
             return;
@@ -719,7 +850,7 @@ namespace BitCoin
             else
                 ++node;
 
-        if(nodes.size() < MAX_OUTGOING_CONNECTION_COUNT / 2)
+        if(nodes.size() < outgoingConnectionCountTarget() / 2)
         {
             mNodeLock.readUnlock();
             return;
@@ -834,7 +965,7 @@ namespace BitCoin
 
         // Always drop some nodes so nodes with lower pings can still be found
         int churnDrop = 0;
-        if(sortedScores.size() == MAX_OUTGOING_CONNECTION_COUNT)
+        if(sortedScores.size() >= outgoingConnectionCountTarget())
             churnDrop = sortedScores.size() / 8;
 
         // Drop slowest
@@ -843,14 +974,14 @@ namespace BitCoin
         {
             if(*nodeScore < dropScore)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping (dropping because of score)", (*node)->name(),
                   (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
             }
             else if(churnDrop > 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping (dropping for churn)", (*node)->name(),
                   (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
                 (*node)->close();
@@ -912,6 +1043,9 @@ namespace BitCoin
             return;
         }
 
+        if(daemon.loadAddressBlock())
+            daemon.mChain.setAddressBlock(daemon.mAddressBlock);
+
         daemon.mLoaded = true;
 
         if(daemon.mStopping)
@@ -928,16 +1062,19 @@ namespace BitCoin
         if(daemon.mStopping)
             return;
 
-        daemon.mRequestsThread = new ArcMist::Thread("Requests", handleRequests);
-        if(daemon.mRequestsThread == NULL)
+        if(!daemon.mInfo.spvMode)
         {
-            daemon.requestStop();
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create requests thread");
-            return;
-        }
+            daemon.mRequestsThread = new ArcMist::Thread("Requests", handleRequests);
+            if(daemon.mRequestsThread == NULL)
+            {
+                daemon.requestStop();
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create requests thread");
+                return;
+            }
 
-        if(daemon.mStopping)
-            return;
+            if(daemon.mStopping)
+                return;
+        }
 
         daemon.mProcessThread = new ArcMist::Thread("Process", process);
         if(daemon.mProcessThread == NULL)
@@ -982,6 +1119,7 @@ namespace BitCoin
                   (daemon.mChain.pendingBlockCount() == 0 && time - lastRequestCheckTime > 10))
                 {
                     lastRequestCheckTime = time;
+                    daemon.checkSync();
                     daemon.sendRequests();
                 }
 
@@ -994,11 +1132,14 @@ namespace BitCoin
                     daemon.sendHeaderRequest();
                 if(daemon.mChain.blocksNeeded())
                     daemon.sendRequests();
-                time = getTime();
-                if(time - lastTransactionRequest > 20)
+                if(!daemon.mInfo.spvMode)
                 {
-                    lastTransactionRequest = time;
-                    daemon.sendTransactionRequests();
+                    time = getTime();
+                    if(time - lastTransactionRequest > 20)
+                    {
+                        lastTransactionRequest = time;
+                        daemon.sendTransactionRequests();
+                    }
                 }
             }
 
@@ -1007,6 +1148,7 @@ namespace BitCoin
             {
                 lastInfoSaveTime = time;
                 daemon.mInfo.save();
+                daemon.saveAddressBlock();
             }
 
             if(daemon.mStopping)
@@ -1063,6 +1205,8 @@ namespace BitCoin
         uint32_t lastOutputsPurgeTime = getTime();
         uint32_t lastAddressPurgeTime = getTime();
         uint32_t lastMemPoolCheckPending = getTime();
+        uint32_t lastAddressBlockProcess = getTime();
+        ArcMist::Hash lastBlockHash = daemon.mChain.lastBlockHash();
 
         while(!daemon.mStopping)
         {
@@ -1071,48 +1215,64 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(daemon.mChain.isInSync())
-                daemon.announce();
-
-            if(daemon.mStopping)
-                break;
-
-            if(getTime() - lastMemPoolCheckPending > 20)
+            if(daemon.mInfo.spvMode)
             {
-                daemon.mChain.memPool().checkPendingTransactions(daemon.mChain.outputs(),
-                  daemon.mChain.blockStats(), daemon.mChain.forks(), daemon.mInfo.minFee);
-                lastMemPoolCheckPending = getTime();
+                if(lastBlockHash != daemon.mChain.lastBlockHash() ||
+                  getTime() - lastAddressBlockProcess > 2)
+                {
+                    daemon.mAddressBlock.process(daemon.mChain);
+                    lastAddressBlockProcess = getTime();
+                    lastBlockHash = daemon.mChain.lastBlockHash();
+                }
+
+                if(daemon.mStopping)
+                    break;
             }
-
-            if(daemon.mStopping)
-                break;
-
-            daemon.mChain.memPool().process(daemon.mInfo.memPoolThreshold);
-
-            if(daemon.mStopping)
-                break;
-
-            if((getTime() - lastOutputsPurgeTime > 30 && daemon.mChain.outputs().needsPurge()) ||
-              getTime() - lastOutputsPurgeTime > 3600)
+            else
             {
-                if(!daemon.mChain.outputs().save())
-                    daemon.requestStop();
-                lastOutputsPurgeTime = getTime();
+                if(daemon.mChain.isInSync())
+                    daemon.announce();
+
+                if(daemon.mStopping)
+                    break;
+
+                if(getTime() - lastMemPoolCheckPending > 20)
+                {
+                    daemon.mChain.memPool().checkPendingTransactions(daemon.mChain.outputs(),
+                      daemon.mChain.blockStats(), daemon.mChain.forks(), daemon.mInfo.minFee);
+                    lastMemPoolCheckPending = getTime();
+                }
+
+                if(daemon.mStopping)
+                    break;
+
+                daemon.mChain.memPool().process(daemon.mInfo.memPoolThreshold);
+
+                if(daemon.mStopping)
+                    break;
+
+                if((getTime() - lastOutputsPurgeTime > 30 && daemon.mChain.outputs().needsPurge()) ||
+                  getTime() - lastOutputsPurgeTime > 3600)
+                {
+                    if(!daemon.mChain.outputs().save())
+                        daemon.requestStop();
+                    lastOutputsPurgeTime = getTime();
+                }
+
+                if(daemon.mStopping)
+                    break;
+
+                if((getTime() - lastAddressPurgeTime > 30 && daemon.mChain.addresses().needsPurge()) ||
+                  getTime() - lastAddressPurgeTime > 3600)
+                {
+                    if(!daemon.mChain.addresses().save())
+                        daemon.requestStop();
+                    lastAddressPurgeTime = getTime();
+                }
+
+                if(daemon.mStopping)
+                    break;
             }
-
-            if(daemon.mStopping)
-                break;
-
-            if((getTime() - lastAddressPurgeTime > 30 && daemon.mChain.addresses().needsPurge()) ||
-              getTime() - lastAddressPurgeTime > 3600)
-            {
-                if(!daemon.mChain.addresses().save())
-                    daemon.requestStop();
-                lastAddressPurgeTime = getTime();
-            }
-
-            if(daemon.mStopping)
-                break;
 
             ArcMist::Thread::sleep(100);
         }
@@ -1127,7 +1287,7 @@ namespace BitCoin
             mRejectedIPs.erase(mRejectedIPs.begin());
     }
 
-    bool Daemon::addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed)
+    bool Daemon::addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed, uint64_t pServices)
     {
         // Check if IP is on reject list
         for(std::vector<IPBytes>::iterator ip=mRejectedIPs.begin();ip!=mRejectedIPs.end();++ip)
@@ -1142,7 +1302,7 @@ namespace BitCoin
         Node *node;
         try
         {
-            node = new Node(pConnection, &mChain, pIncoming, pIsSeed);
+            node = new Node(pConnection, &mChain, pIncoming, pIsSeed, pServices, mAddressBlock);
         }
         catch(std::bad_alloc &pBadAlloc)
         {
@@ -1196,7 +1356,7 @@ namespace BitCoin
             connection = new ArcMist::Network::Connection(*ip, networkPortString(), 5);
             if(!connection->isOpen())
                 delete connection;
-            else if(addNode(connection, false, true))
+            else if(addNode(connection, false, true, 0))
                 result++;
         }
 
@@ -1213,6 +1373,9 @@ namespace BitCoin
 
         if(mChain.forks().cashActive())
             servicesMask |= Message::VersionData::CASH_NODE_BIT;
+
+        if(mInfo.spvMode)
+            servicesMask |= Message::VersionData::BLOOM_NODE_BIT;
 
         // Try peers with good ratings first
         mInfo.getRandomizedPeers(peers, 5, servicesMask);
@@ -1237,7 +1400,7 @@ namespace BitCoin
             connection = new ArcMist::Network::Connection(AF_INET6, (*peer)->address.ip, (*peer)->address.port, 5);
             if(!connection->isOpen())
                 delete connection;
-            else if(addNode(connection, false))
+            else if(addNode(connection, false, false, (*peer)->services))
                 count++;
 
             if(mStopping || count >= pCount / 2) // Limit good to half
@@ -1267,7 +1430,7 @@ namespace BitCoin
             connection = new ArcMist::Network::Connection(AF_INET6, (*peer)->address.ip, (*peer)->address.port, 5);
             if(!connection->isOpen())
                 delete connection;
-            else if(addNode(connection, false))
+            else if(addNode(connection, false, false, 0))
                 count++;
 
             if(mStopping || count >= pCount)
@@ -1367,10 +1530,10 @@ namespace BitCoin
         uint32_t lastFillNodesTime = 0;
         uint32_t lastCleanTime = getTime();
 
-        if(MAX_OUTGOING_CONNECTION_COUNT >= daemon.mInfo.maxConnections)
+        if(daemon.outgoingConnectionCountTarget() >= daemon.mInfo.maxConnections)
             daemon.mMaxIncoming = 0;
         else
-            daemon.mMaxIncoming = daemon.mInfo.maxConnections - MAX_OUTGOING_CONNECTION_COUNT;
+            daemon.mMaxIncoming = daemon.mInfo.maxConnections - daemon.outgoingConnectionCountTarget();
 
         while(!daemon.mStopping)
         {
@@ -1383,9 +1546,9 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(daemon.mOutgoingNodes < MAX_OUTGOING_CONNECTION_COUNT && getTime() - lastFillNodesTime > 30)
+            if(daemon.mOutgoingNodes < daemon.outgoingConnectionCountTarget() && getTime() - lastFillNodesTime > 30)
             {
-                daemon.recruitPeers(MAX_OUTGOING_CONNECTION_COUNT - daemon.mOutgoingNodes);
+                daemon.recruitPeers(daemon.outgoingConnectionCountTarget() - daemon.mOutgoingNodes);
                 lastFillNodesTime = getTime();
             }
 
@@ -1401,39 +1564,42 @@ namespace BitCoin
             if(daemon.mStopping)
                 break;
 
-            if(nodeListener == NULL)
+            if(!daemon.mInfo.spvMode)
             {
-                if(daemon.mIncomingNodes < daemon.mMaxIncoming)
+                if(nodeListener == NULL)
                 {
-                    nodeListener = new ArcMist::Network::Listener(AF_INET6, networkPort(), 5, 1);
-                    if(nodeListener->isValid())
+                    if(daemon.mIncomingNodes < daemon.mMaxIncoming)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                          "Started listening for incoming connections on port %d", nodeListener->port());
-                    }
-                    else
-                    {
-                        ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create incoming listener");
-                        daemon.requestStop();
-                        break;
+                        nodeListener = new ArcMist::Network::Listener(AF_INET6, networkPort(), 5, 1);
+                        if(nodeListener->isValid())
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                              "Started listening for incoming connections on port %d", nodeListener->port());
+                        }
+                        else
+                        {
+                            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create incoming listener");
+                            daemon.requestStop();
+                            break;
+                        }
                     }
                 }
-            }
-            else
-            {
-                while(!daemon.mStopping && (newConnection = nodeListener->accept()) != NULL)
-                    if(daemon.addNode(newConnection, true) && daemon.mIncomingNodes >= daemon.mMaxIncoming)
-                    {
-                        delete nodeListener;
-                        nodeListener = NULL;
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                          "Stopped listening for incoming connections because of connection limit");
-                        break;
-                    }
-            }
+                else
+                {
+                    while(!daemon.mStopping && (newConnection = nodeListener->accept()) != NULL)
+                        if(daemon.addNode(newConnection, true, false, 0) && daemon.mIncomingNodes >= daemon.mMaxIncoming)
+                        {
+                            delete nodeListener;
+                            nodeListener = NULL;
+                            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                              "Stopped listening for incoming connections because of connection limit");
+                            break;
+                        }
+                }
 
-            if(daemon.mStopping)
-                break;
+                if(daemon.mStopping)
+                    break;
+            }
 
             ArcMist::Thread::sleep(500);
         }
