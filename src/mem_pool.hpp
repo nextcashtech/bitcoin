@@ -13,6 +13,7 @@
 #include "base.hpp"
 #include "transaction.hpp"
 #include "outputs.hpp"
+#include "bloom_filter.hpp"
 
 #include <vector>
 
@@ -73,6 +74,7 @@ namespace BitCoin
 
         // Get transaction hashes that should be announced
         void getToAnnounce(ArcMist::HashList &pList);
+        void getFullList(ArcMist::HashList &pList, const BloomFilter &pFilter);
 
         void checkPendingTransactions(TransactionOutputPool &pOutputs,
           const BlockStats &pBlockStats, const Forks &pForks, uint64_t pMinFeeRate);

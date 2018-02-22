@@ -892,19 +892,33 @@ namespace BitCoin
                             sendBloomFilter();
                         else if(!mIsIncoming)
                             sendFeeFilter();
+
+                        if(!mIsIncoming && !mIsSeed)
+                        {
+                            ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Sending mem pool request");
+                            Message::Data memPoolMessage(Message::MEM_POOL);
+                            sendMessage(&memPoolMessage);
+                        }
                     }
                 }
                 break;
             }
             case Message::VERACK:
                 mVersionAcknowledged = true;
-                if(mVersionData != NULL)
+                if(mVersionData != NULL && !mIsSeed)
                 {
                     sendPing();
                     if(Info::instance().spvMode)
                         sendBloomFilter();
                     else if(!mIsIncoming)
                         sendFeeFilter();
+
+                    if(!mIsIncoming && !mIsSeed)
+                    {
+                        ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Sending mem pool request");
+                        Message::Data memPoolMessage(Message::MEM_POOL);
+                        sendMessage(&memPoolMessage);
+                    }
                 }
                 break;
             case Message::PING:
@@ -1487,12 +1501,35 @@ namespace BitCoin
                 break;
             }
             case Message::MEM_POOL:
-                // TODO Implement MEM_POOL message
-                // Send Inventory message with all transactions in the mem pool
-                //   For large mem pools break in to multiple messages
-                ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Mem pool message (Not implemented)");
-                break;
+                if(!Info::instance().spvMode)
+                {
+                    // Send Inventory message with all transactions in the mem pool
+                    Message::InventoryData message;
+                    ArcMist::HashList list;
 
+                    mChain->memPool().getFullList(list, mFilter);
+
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                      "Sending %d mem pool transaction hashes", list.size());
+
+                    for(ArcMist::HashList::iterator hash=list.begin();hash!=list.end();++hash)
+                    {
+                        if(message.inventory.size() == 50000)
+                        {
+                            // For large mem pools break in to multiple messages
+                            if(!sendMessage(&message))
+                                break;
+                            message.inventory.clear();
+                        }
+
+                        message.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION, *hash));
+                    }
+
+                    if(message.inventory.size() > 0)
+                        sendMessage(&message);
+
+                }
+                break;
             case Message::MERKLE_BLOCK:
                 --mActiveMerkleRequests;
                 if(!mIsIncoming && !mIsSeed && mAddressBlock != NULL &&

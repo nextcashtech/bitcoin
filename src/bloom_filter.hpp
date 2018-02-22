@@ -68,6 +68,8 @@ namespace BitCoin
         void setup(unsigned int pElementCount, unsigned int pFlags = UPDATE_ALL,
           double pFalsePositiveRate = 0.0001, unsigned int pTweak = ArcMist::Math::randomInt());
 
+        bool isEmpty() const { return mIsEmpty; }
+        bool isFull() const { return mIsFull; }
         bool flags() const { return mFlags; }
         const unsigned char *data() const { return mData; }
         unsigned int size() const { return mDataSize; }
@@ -80,10 +82,10 @@ namespace BitCoin
         void addData(ArcMist::Buffer &pData);
         void addScript(ArcMist::Buffer &pScript);
 
-        bool contains(const ArcMist::Hash &pHash);
-        bool contains(Outpoint &pOutpoint);
-        bool contains(Transaction &pTransaction);
-        bool containsScript(ArcMist::Buffer &pScript);
+        bool contains(const ArcMist::Hash &pHash) const;
+        bool contains(Outpoint &pOutpoint) const;
+        bool contains(Transaction &pTransaction) const;
+        bool containsScript(ArcMist::Buffer &pScript) const;
 
         void write(ArcMist::OutputStream *pStream) const;
         bool read(ArcMist::InputStream *pStream);
@@ -96,7 +98,7 @@ namespace BitCoin
 
     private:
 
-        unsigned int bitOffset(unsigned int pHashNum, const ArcMist::Hash &pHash)
+        unsigned int bitOffset(unsigned int pHashNum, const ArcMist::Hash &pHash) const
         {
             ArcMist::Digest digest(ArcMist::Digest::MURMUR3);
             digest.initialize(pHashNum * 0xFBA4C795 + mTweak);
@@ -104,7 +106,7 @@ namespace BitCoin
             return digest.getResult() % (mDataSize * 8);
         }
 
-        unsigned int bitOffset(unsigned int pHashNum, ArcMist::Buffer &pData)
+        unsigned int bitOffset(unsigned int pHashNum, ArcMist::Buffer &pData) const
         {
             ArcMist::Digest digest(ArcMist::Digest::MURMUR3);
             digest.initialize(pHashNum * 0xFBA4C795 + mTweak);

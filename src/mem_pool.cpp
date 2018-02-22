@@ -136,6 +136,16 @@ namespace BitCoin
         mLock.readUnlock();
     }
 
+    void MemPool::getFullList(ArcMist::HashList &pList, const BloomFilter &pFilter)
+    {
+        pList.clear();
+        mLock.readLock();
+        for(TransactionList::iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
+            if(pFilter.isEmpty() || pFilter.contains(**trans))
+                pList.push_back((*trans)->hash);
+        mLock.readUnlock();
+    }
+
     bool MemPool::check(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
       const Forks &pForks, uint64_t pMinFeeRate)
     {

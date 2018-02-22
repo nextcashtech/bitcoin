@@ -185,7 +185,7 @@ namespace BitCoin
         }
     }
 
-    bool BloomFilter::contains(const ArcMist::Hash &pHash)
+    bool BloomFilter::contains(const ArcMist::Hash &pHash) const
     {
         if(mIsFull)
             return true;
@@ -203,7 +203,7 @@ namespace BitCoin
         return true;
     }
 
-    bool BloomFilter::contains(Outpoint &pOutpoint)
+    bool BloomFilter::contains(Outpoint &pOutpoint) const
     {
         if(mIsFull)
             return true;
@@ -224,7 +224,7 @@ namespace BitCoin
         return true;
     }
 
-    bool BloomFilter::contains(Transaction &pTransaction)
+    bool BloomFilter::contains(Transaction &pTransaction) const
     {
         if(mIsFull)
             return true;
@@ -245,7 +245,7 @@ namespace BitCoin
         return false;
     }
 
-    bool BloomFilter::containsScript(ArcMist::Buffer &pScript)
+    bool BloomFilter::containsScript(ArcMist::Buffer &pScript) const
     {
         if(mIsFull)
             return true;
@@ -273,6 +273,9 @@ namespace BitCoin
 
             if(byteCount > 0)
             {
+                if(byteCount > pScript.remaining())
+                    return false;
+
                 data.copyBuffer(pScript, byteCount);
                 matches = true;
 
