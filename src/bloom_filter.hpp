@@ -70,6 +70,7 @@ namespace BitCoin
 
         bool isEmpty() const { return mIsEmpty; }
         bool isFull() const { return mIsFull; }
+
         bool flags() const { return mFlags; }
         const unsigned char *data() const { return mData; }
         unsigned int size() const { return mDataSize; }
