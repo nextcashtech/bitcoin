@@ -765,11 +765,11 @@ namespace BitCoin
                 if((*pendingTransaction)->transaction == NULL)
                 {
                     (*pendingTransaction)->transaction = pTransactionData->transaction;
+                    pTransactionData->transaction = NULL; // Prevent it from being deleted
                     refreshTransaction(*pendingTransaction, true);
                     if((*pendingTransaction)->payOutputs.size() > 0 || (*pendingTransaction)->spendInputs.size() > 0)
                     {
                         // Needed this transaction
-                        pTransactionData->transaction = NULL; // Prevent it from being deleted
                         if((*pendingTransaction)->amount > 0)
                             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Pending transaction paying %0.8f bitcoins : %s", bitcoins((*pendingTransaction)->amount),
