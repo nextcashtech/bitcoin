@@ -33,91 +33,45 @@ namespace BitCoin
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
 
+        int64_t balance(bool pLocked);
         unsigned int size() const { return mAddressHashes.size(); }
         unsigned int transactionCount() const { return mTransactions.size(); }
 
         void clear();
 
+        // Load and add any new addresses from a text file
         bool loadAddresses(ArcMist::InputStream *pStream);
 
-        void setupBloomFilter(BloomFilter &pFilter);
+        unsigned int setupBloomFilter(BloomFilter &pFilter);
 
         // Get hashes for blocks that need merkle blocks
         void getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain, ArcMist::HashList &pBlockHashes,
-          unsigned int pMaxCount = 100);
+          unsigned int pMaxCount = 250);
 
-        bool filterNeedsResend(unsigned int pNodeID);
+        bool filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID);
         bool needsClose(unsigned int pNodeID);
-
         void release(unsigned int pNodeID); // Release everything associated with the node
-        bool addMerkleBlock(Chain &pChain, Message::MerkleBlockData *pData, unsigned int pNodeID);
 
         // Used for zero confirmation approval
         // Returns true if transaction should be requested
         bool addTransactionAnnouncement(const ArcMist::Hash &pTransactionHash, unsigned int pNodeID);
 
+        // Add data from a received merkle block
+        bool addMerkleBlock(Chain &pChain, Message::MerkleBlockData *pData, unsigned int pNodeID);
+
         // Add a received transaction if it was confirmed in a merkle block
         bool addTransaction(Chain &pChain, Message::TransactionData *pTransactionData); // Return true if added
 
-        void revertBlock(const ArcMist::Hash &pBlockHash);
+        void revertBlock(const ArcMist::Hash &pBlockHash, unsigned int pBlockHeight);
 
         void process(Chain &pChain);
-
-        // Returns true if this transaction pays or spends an address in this block
-        // RelationType relatesTo(Transaction *pTransaction, bool pAlreadyLocked = false);
-
-        // Returns true if this transaction pays to an address in this block
-        // bool paysTo(Transaction *pTransaction);
-
-        // Returns true if this transaction spends a UTXO for an address in this block
-        // bool spendsFrom(Transaction *pTransaction, bool pAlreadyLocked = false);
 
         //TODO Add expiration of pending transactions when not related to prevent receiving them more than once.
         //TODO Add handling of non P2PKH transactions
         //TODO Possibly add caching of spend from linking between related transactions
         //TODO Possibly add caching of which output pays which addresses in related transactions
 
-        //TODO Current weakness. With auto remote bloom updates off and random switching between
-        //   nodes for requesting merkle blocks it is possible to miss spend transactions since the
-        //   bloom filter may not have been updated. At least a second pass is required to prevent
-        //   this.
-        // Fix is to add function that when a new "pays to" transaction is found. Reset all node's
-        //   bloom filters to include the new UTXO. Reset pass' block height to height of new
-        //   "pays to" transaction. Ensure all merkle blocks after that point are re-requested with
-        //   the new bloom filters.
-
     private:
-
-        ArcMist::Mutex mMutex;
-        ArcMist::HashList mAddressHashes;
-        BloomFilter mFilter;
-        std::vector<unsigned int> mNodesToResendFilter, mNodesToClose;
-
-        void refreshBloomFilter();
-
-        // Data about a merkle block pass.
-        // A "merkle block pass" is at least one merkle block for every block with a filter that
-        //   includes all current addresses.
-        class PassData
-        {
-        public:
-
-            PassData() { blockHeight = 0; addressesIncluded = 0; }
-            PassData(const PassData &pCopy) { blockHeight = pCopy.blockHeight; addressesIncluded = pCopy.addressesIncluded; }
-
-            unsigned int blockHeight; // Highest block with a valid merkle block
-            unsigned int addressesIncluded; // Number of addresses from block included. Always starts from first.
-
-            void clear() { blockHeight = 0; addressesIncluded = 0; }
-
-            void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream);
-
-        };
-
-        std::vector<PassData *> mPasses;
-
-        PassData mCurrentPass;
 
         class SPVTransactionData
         {
@@ -127,45 +81,39 @@ namespace BitCoin
             {
                 transaction = NULL;
                 amount = 0;
+                announceTime = getTime();
+            }
+            SPVTransactionData(const SPVTransactionData &pCopy) :
+              payOutputs(pCopy.payOutputs), spendInputs(pCopy.spendInputs), nodes(pCopy.nodes)
+            {
+                blockHash = pCopy.blockHash;
+                if(pCopy.transaction == NULL)
+                    transaction = NULL;
+                else
+                {
+                    transaction = new Transaction(*pCopy.transaction);
+                }
+                amount = pCopy.amount;
+                announceTime = pCopy.announceTime;
+            }
+            SPVTransactionData(const ArcMist::Hash &pBlockHash)
+            {
+                blockHash = pBlockHash;
+                transaction = NULL;
+                amount = 0;
+                announceTime = getTime();
             }
             SPVTransactionData(const ArcMist::Hash &pBlockHash, Transaction *pTransaction)
             {
                 blockHash = pBlockHash;
                 transaction = pTransaction;
                 amount = 0;
+                announceTime = getTime();
             }
             ~SPVTransactionData() { if(transaction != NULL) delete transaction; }
 
             void write(ArcMist::OutputStream *pStream);
             bool read(ArcMist::InputStream *pStream);
-
-            ArcMist::Hash blockHash; // Hash of block containing transaction
-            Transaction *transaction;
-            int64_t amount;
-            std::vector<unsigned int> payOutputs, spendInputs;
-
-        };
-
-        void refreshTransaction(SPVTransactionData *pTransaction, bool pAllowPending);
-        Output *getOutput(ArcMist::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending);
-        bool getPayAddresses(Output *pOutput, ArcMist::HashList &pAddresses, bool pBlockOnly);
-
-        // Transactions relating to the addresses in this block that have been confirmed in a block
-        ArcMist::HashContainerList<SPVTransactionData *> mTransactions;
-
-        // Pending transactions
-        //   Transactions not in a confirmed block yet
-        class PendingTransactionData : public SPVTransactionData
-        {
-        public:
-
-            PendingTransactionData()
-            {
-                announceTime = getTime();
-            }
-
-            int32_t announceTime;
-            std::vector<unsigned int> nodes; // IDs of nodes that announced this transaction
 
             bool addNode(unsigned int pNodeID)
             {
@@ -176,9 +124,15 @@ namespace BitCoin
                 return true;
             }
 
-        };
+            ArcMist::Hash blockHash; // Hash of block containing transaction
+            Transaction *transaction;
+            int64_t amount;
+            std::vector<unsigned int> payOutputs, spendInputs;
 
-        ArcMist::HashContainerList<PendingTransactionData *> mPendingTransactions;
+            int32_t announceTime;
+            std::vector<unsigned int> nodes; // IDs of nodes that announced this transaction
+
+        };
 
         class MerkleRequestData
         {
@@ -205,16 +159,55 @@ namespace BitCoin
             unsigned int node;
             int32_t requestTime, receiveTime;
             unsigned int totalTransactions; // Total transaction count of full block
-            ArcMist::HashList transactionHashes; // Hashes of transactions in this block
-            std::vector<SPVTransactionData *> transactions;
+            ArcMist::HashContainerList<SPVTransactionData *> transactions;
             bool complete;
 
             bool isComplete();
             void release();
+            void clear();
 
         };
 
+        // Data about a merkle block pass.
+        // A "merkle block pass" is at least one merkle block for every block with a filter that
+        //   includes all current addresses and UTXOs.
+        class PassData
+        {
+        public:
+
+            PassData();
+            PassData(const PassData &pCopy);
+
+            const PassData &operator =(const PassData &pRight);
+
+            unsigned int beginBlockHeight; // Block height of beginning of pass
+            unsigned int blockHeight; // Highest block with a valid merkle block
+            unsigned int addressesIncluded; // Number of addresses from block included. Always starts from first.
+            bool complete; // No longer processing this pass
+
+            void clear() { beginBlockHeight = 0; blockHeight = 0; addressesIncluded = 0; complete = false; }
+
+            void write(ArcMist::OutputStream *pStream);
+            bool read(ArcMist::InputStream *pStream);
+
+        };
+
+        void refreshBloomFilter(bool pLocked);
+        void refreshTransaction(SPVTransactionData *pTransaction, bool pAllowPending);
+        Output *getOutput(ArcMist::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending);
+        bool getPayAddresses(Output *pOutput, ArcMist::HashList &pAddresses, bool pBlockOnly);
+
+        ArcMist::Mutex mMutex;
+        ArcMist::HashList mAddressHashes;
+        unsigned int mFilterID;
+        BloomFilter mFilter;
+        std::vector<unsigned int> mNodesToResendFilter, mNodesToClose;
+        std::vector<PassData> mPasses;
         ArcMist::HashContainerList<MerkleRequestData *> mMerkleRequests;
+
+        // Transactions relating to the addresses in this block that have been confirmed in a block
+        ArcMist::HashContainerList<SPVTransactionData *> mTransactions;
+        ArcMist::HashContainerList<SPVTransactionData *> mPendingTransactions;
 
     };
 }

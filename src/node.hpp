@@ -138,9 +138,10 @@ namespace BitCoin
         int32_t mLastMerkleCheck;
         int32_t mLastMerkleRequest;
 
-        BloomFilter mFilter;
+        BloomFilter mFilter; // Bloom filter received from peer
         uint64_t mMinimumFeeRate;
         uint64_t mLastPingNonce;
+        unsigned int mBloomFilterID; // ID of bloom filter last sent to peer
 
         unsigned int mBlockDownloadCount;
         unsigned int mBlockDownloadSize;

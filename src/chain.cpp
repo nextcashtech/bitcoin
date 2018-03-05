@@ -1390,7 +1390,7 @@ namespace BitCoin
                   "Reverting block at height %d : %s", height(), block.hash.hex().text());
 
                 if(mAddressBlock != NULL)
-                    mAddressBlock->revertBlock(block.hash);
+                    mAddressBlock->revertBlock(block.hash, height());
 
                 if(!mOutputs.revert(block.transactions, height()))
                 {

@@ -20,6 +20,8 @@ namespace BitCoin
 {
     AddressBlock::AddressBlock() : mMutex("AddressBlock")
     {
+        mFilterID = 0;
+        mPasses.push_back(PassData());
     }
 
     AddressBlock::~AddressBlock()
@@ -27,18 +29,16 @@ namespace BitCoin
         mMutex.lock();
         for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
             delete *trans;
-        for(ArcMist::HashContainerList<PendingTransactionData *>::Iterator transData=mPendingTransactions.begin();transData!=mPendingTransactions.end();++transData)
+        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator transData=mPendingTransactions.begin();transData!=mPendingTransactions.end();++transData)
             delete *transData;
         for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
             delete *request;
-        for(std::vector<PassData *>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass)
-            delete *pass;
         mMutex.unlock();
     }
 
     AddressBlock::MerkleRequestData::~MerkleRequestData()
     {
-        for(std::vector<SPVTransactionData *>::iterator trans=transactions.begin();trans!=transactions.end();++trans)
+        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=transactions.begin();trans!=transactions.end();++trans)
             delete *trans;
     }
 
@@ -47,26 +47,12 @@ namespace BitCoin
         if(receiveTime == 0)
             return false;
 
-        if(complete || transactionHashes.size() == 0)
+        if(complete || transactions.size() == 0)
             return true;
 
-        if(transactionHashes.size() > transactions.size())
-            return false;
-
-        bool found;
-        for(ArcMist::HashList::iterator hash=transactionHashes.begin();hash!=transactionHashes.end();++hash)
-        {
-            found = false;
-            for(std::vector<SPVTransactionData *>::iterator trans=transactions.begin();trans!=transactions.end();++trans)
-                if((*trans)->transaction != NULL && (*trans)->transaction->hash == *hash)
-                {
-                    found = true;
-                    break;
-                }
-
-            if(!found)
+        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=transactions.begin();trans!=transactions.end();++trans)
+            if((*trans)->transaction == NULL)
                 return false;
-        }
 
         complete = true;
         return true;
@@ -74,9 +60,20 @@ namespace BitCoin
 
     void AddressBlock::MerkleRequestData::release()
     {
-        node = 0;
         if(!isComplete())
             requestTime = 0;
+    }
+
+    void AddressBlock::MerkleRequestData::clear()
+    {
+        //node = 0;
+        requestTime = 0;
+        receiveTime = 0;
+        totalTransactions = 0;
+        complete = false;
+        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=transactions.begin();trans!=transactions.end();++trans)
+            delete *trans;
+        transactions.clear();
     }
 
     void AddressBlock::write(ArcMist::OutputStream *pStream)
@@ -86,13 +83,10 @@ namespace BitCoin
         // Version
         pStream->writeUnsignedInt(1);
 
-        // Current Pass
-        mCurrentPass.write(pStream);
-
         // Passes
         pStream->writeUnsignedInt(mPasses.size());
-        for(std::vector<PassData *>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass)
-            (*pass)->write(pStream);
+        for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass)
+            pass->write(pStream);
 
         // Addresses
         pStream->writeUnsignedInt(mAddressHashes.size());
@@ -119,23 +113,14 @@ namespace BitCoin
             return false; // Wrong version
         }
 
-        // Current pass
-        if(!mCurrentPass.read(pStream))
-        {
-            mMutex.unlock();
-            clear();
-            return false;
-        }
-
         // Passes
         unsigned int passesCount = pStream->readUnsignedInt();
-        PassData *newPassData;
+        PassData newPassData;
         for(unsigned int i=0;i<passesCount;++i)
         {
-            newPassData = new PassData();
-            if(!newPassData->read(pStream))
+            newPassData.clear();
+            if(!newPassData.read(pStream))
             {
-                delete newPassData;
                 mMutex.unlock();
                 clear();
                 return false;
@@ -178,9 +163,9 @@ namespace BitCoin
         for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
             refreshTransaction(*trans, true);
 
-        mMutex.unlock();
+        refreshBloomFilter(true);
 
-        refreshBloomFilter();
+        mMutex.unlock();
         return true;
     }
 
@@ -251,19 +236,54 @@ namespace BitCoin
         return true;
     }
 
+    AddressBlock::PassData::PassData()
+    {
+        beginBlockHeight = 0;
+        blockHeight = 0;
+        addressesIncluded = 0;
+        complete = false;
+    }
+
+    AddressBlock::PassData::PassData(const AddressBlock::PassData &pCopy)
+    {
+        beginBlockHeight = pCopy.beginBlockHeight;
+        blockHeight = pCopy.blockHeight;
+        addressesIncluded = pCopy.addressesIncluded;
+        complete = pCopy.complete;
+    }
+
+    const AddressBlock::PassData &AddressBlock::PassData::operator =(const AddressBlock::PassData &pRight)
+    {
+        beginBlockHeight = pRight.beginBlockHeight;
+        blockHeight = pRight.blockHeight;
+        addressesIncluded = pRight.addressesIncluded;
+        complete = pRight.complete;
+        return *this;
+    }
+
     void AddressBlock::PassData::write(ArcMist::OutputStream *pStream)
     {
+        pStream->writeUnsignedInt(beginBlockHeight);
         pStream->writeUnsignedInt(blockHeight);
         pStream->writeUnsignedInt(addressesIncluded);
+        if(complete)
+            pStream->writeByte(-1);
+        else
+            pStream->writeByte(0);
     }
 
     bool AddressBlock::PassData::read(ArcMist::InputStream *pStream)
     {
-        if(pStream->remaining() < 8)
+        if(pStream->remaining() < 13)
             return false;
 
+        beginBlockHeight = pStream->readUnsignedInt();
         blockHeight = pStream->readUnsignedInt();
         addressesIncluded = pStream->readUnsignedInt();
+        if(pStream->readByte())
+            complete = true;
+        else
+            complete = false;
         return true;
     }
 
@@ -277,7 +297,7 @@ namespace BitCoin
         if(!pAllowPending)
             return NULL;
 
-        ArcMist::HashContainerList<PendingTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionHash);
+        ArcMist::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionHash);
         if(pendingTransaction != mPendingTransactions.end() && (*pendingTransaction)->transaction != NULL &&
           (*pendingTransaction)->transaction->outputs.size() > pIndex)
                 return (*pendingTransaction)->transaction->outputs[pIndex];
@@ -357,12 +377,7 @@ namespace BitCoin
     {
         mMutex.lock();
 
-        mCurrentPass.clear();
-
-        for(std::vector<PassData *>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass)
-            delete *pass;
         mPasses.clear();
-
         mAddressHashes.clear();
         mFilter.clear();
         mNodesToResendFilter.clear();
@@ -376,7 +391,7 @@ namespace BitCoin
             delete *request;
         mMerkleRequests.clear();
 
-        for(ArcMist::HashContainerList<PendingTransactionData *>::Iterator transData=mPendingTransactions.begin();transData!=mPendingTransactions.end();++transData)
+        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator transData=mPendingTransactions.begin();transData!=mPendingTransactions.end();++transData)
             delete *transData;
         mPendingTransactions.clear();
 
@@ -393,6 +408,7 @@ namespace BitCoin
         ArcMist::Hash addressHash;
         AddressType addressType;
         bool found;
+
         while(pStream->remaining())
         {
             line.clear();
@@ -429,61 +445,53 @@ namespace BitCoin
 
         if(addedCount)
         {
-            if(mCurrentPass.blockHeight > 0)
+            unsigned int passIndex = 0;
+            for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass,++passIndex)
+                if(!pass->complete && pass->blockHeight > 0)
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                      "Pass %d marked complete at block height %d to start new pass for new addresses",
+                      passIndex, pass->blockHeight);
+                    pass->complete = true;
+                }
+
+            if(mPasses.size() == 0)
             {
-                // Push current pass, reset to zero block height, start new pass
-                mPasses.push_back(new PassData(mCurrentPass));
-                mCurrentPass.clear();
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                  "Starting first pass %d for %d addresses", mPasses.size() + 1, mAddressHashes.size());
+                mPasses.push_back(PassData());
+            }
+            else if(mPasses.back().blockHeight > 0)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                  "Starting new pass %d for new addresses", mPasses.size() + 1);
+                mPasses.push_back(PassData());
             }
 
-            mCurrentPass.addressesIncluded = mAddressHashes.size();
+            mPasses.back().addressesIncluded = mAddressHashes.size();
 
             for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
                 delete *request;
             mMerkleRequests.clear();
+
+            refreshBloomFilter(true);
         }
 
         mMutex.unlock();
-
-        if(addedCount)
-            refreshBloomFilter();
-
         return true;
     }
 
-    void AddressBlock::refreshBloomFilter()
+    void AddressBlock::refreshBloomFilter(bool pLocked)
     {
         std::vector<Outpoint *> outpoints;
-        ArcMist::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction, inputConfirmedTransaction;
-        ArcMist::HashContainerList<PendingTransactionData *>::Iterator pendingTransaction, inputPendingTransaction;
-        ScriptInterpreter::ScriptType scriptType;
-        ArcMist::HashList payAddressHashes;
-        unsigned int index;
 
-        mMutex.lock();
+        if(!pLocked)
+            mMutex.lock();
 
         // Add outpoints to monitor for spending
         for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
-            if((*trans)->transaction != NULL && (*trans)->payOutputs.size() > 0)
-            {
-                // Determine which outputs pay to a block address
-                index = 0;
-                for(std::vector<Output *>::iterator output=(*trans)->transaction->outputs.begin();output!=(*trans)->transaction->outputs.end();++output,++index)
-                {
-                    // Parse the output for addresses
-                    scriptType = ScriptInterpreter::parseOutputScript((*output)->script, payAddressHashes);
-                    if(scriptType == ScriptInterpreter::P2PKH)
-                    {
-                        // Check the output addresses against block addresses
-                        for(ArcMist::HashList::iterator hash=payAddressHashes.begin();hash!=payAddressHashes.end();++hash)
-                            if(mAddressHashes.contains(*hash))
-                            {
-                                outpoints.push_back(new Outpoint((*trans)->transaction->hash, index));
-                                break;
-                            }
-                    }
-                }
-            }
+            for(std::vector<unsigned int>::iterator index=(*trans)->payOutputs.begin();index!=(*trans)->payOutputs.end();++index)
+                outpoints.push_back(new Outpoint((*trans)->transaction->hash, *index));
 
         mFilter.setup(mAddressHashes.size() + outpoints.size(), BloomFilter::UPDATE_NONE, 0.00001);
 
@@ -498,12 +506,34 @@ namespace BitCoin
             delete *outpoint;
         }
 
-        mMutex.unlock();
+        ++mFilterID;
+        mNodesToResendFilter.clear();
+        if(!pLocked)
+            mMutex.unlock();
     }
 
-    bool AddressBlock::filterNeedsResend(unsigned int pNodeID)
+    int64_t AddressBlock::balance(bool pLocked)
+    {
+        if(!pLocked)
+            mMutex.lock();
+        int64_t result = 0;
+        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
+            result += (*trans)->amount;
+        if(!pLocked)
+            mMutex.unlock();
+        return result;
+    }
+
+    bool AddressBlock::filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID)
     {
         mMutex.lock();
+
+        if(pBloomID != mFilterID)
+        {
+            mMutex.unlock();
+            return true;
+        }
+
         for(std::vector<unsigned int>::iterator node=mNodesToResendFilter.begin();node!=mNodesToResendFilter.end();++node)
             if(*node == pNodeID)
             {
@@ -511,6 +541,7 @@ namespace BitCoin
                 mMutex.unlock();
                 return true;
             }
+
         mMutex.unlock();
         return false;
     }
@@ -554,9 +585,14 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    void AddressBlock::setupBloomFilter(BloomFilter &pFilter)
+    unsigned int AddressBlock::setupBloomFilter(BloomFilter &pFilter)
     {
+        mMutex.lock();
         pFilter = mFilter;
+        unsigned int result = mFilterID;
+        mMutex.unlock();
+
+        return result;
     }
 
     void AddressBlock::getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain, ArcMist::HashList &pBlockHashes, unsigned int pMaxCount)
@@ -564,76 +600,93 @@ namespace BitCoin
         ArcMist::Hash nextBlockHash;
         ArcMist::HashContainerList<MerkleRequestData *>::Iterator request;
         MerkleRequestData *newMerkleRequest;
-        unsigned int blockHeight = mCurrentPass.blockHeight;
+        unsigned int blockHeight;
         int32_t time = getTime();
 
         pBlockHashes.clear();
 
-        while(pBlockHashes.size() < pMaxCount)
-        {
-            // Get next block hash
-            if(!pChain.getBlockHash(++blockHeight, nextBlockHash))
-                return;
+        mMutex.lock();
 
-            // Check if there is a merkle request for this block hash and if it needs more requests sent
-            mMutex.lock();
-            request = mMerkleRequests.get(nextBlockHash);
-            if(request == mMerkleRequests.end())
+        for(std::vector<PassData>::reverse_iterator pass=mPasses.rbegin();pass!=mPasses.rend();++pass)
+        {
+            if(pass->complete)
+                continue;
+
+            blockHeight = pass->blockHeight;
+
+            while(pBlockHashes.size() < pMaxCount)
             {
-                if(mMerkleRequests.size() < 2000)
+                // Get next block hash
+                if(!pChain.getBlockHash(++blockHeight, nextBlockHash))
+                    break;
+
+                // Check if there is a merkle request for this block hash and if it needs more requests sent
+                request = mMerkleRequests.get(nextBlockHash);
+                if(request == mMerkleRequests.end())
                 {
-                    // Add new merkle block request
-                    newMerkleRequest = new MerkleRequestData(pNodeID, time);
-                    mMerkleRequests.insert(nextBlockHash, newMerkleRequest);
+                    if(mMerkleRequests.size() < 2000)
+                    {
+                        // Add new merkle block request
+                        newMerkleRequest = new MerkleRequestData(pNodeID, time);
+                        mMerkleRequests.insert(nextBlockHash, newMerkleRequest);
+                        pBlockHashes.push_back(nextBlockHash);
+                    }
+                    else
+                        break;
+                }
+                else if(!(*request)->isComplete() &&
+                  (*request)->node != pNodeID && // Don't reassign to the same node
+                  ((*request)->requestTime == 0 || ((*request)->requestTime != 0 && time - (*request)->requestTime > 60)))
+                {
+                    if((*request)->node != 0 && (*request)->requestTime != 0)
+                    {
+                        // Close slow node
+                        bool found = false;
+                        for(std::vector<unsigned int>::iterator node=mNodesToClose.begin();node!=mNodesToClose.end();++node)
+                            if(*node == (*request)->node)
+                            {
+                                found = true;
+                                break;
+                            }
+
+                        if(!found)
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                              "Node [%d] needs closed. Merkle blocks too slow", (*request)->node);
+                            mNodesToClose.push_back((*request)->node);
+                        }
+                    }
+
+                    // Assign request to this node
+                    (*request)->node = pNodeID;
+                    (*request)->requestTime = time;
                     pBlockHashes.push_back(nextBlockHash);
                 }
-                else
-                {
-                    mMutex.unlock();
-                    break;
-                }
             }
-            else if(!(*request)->isComplete() &&
-              ((*request)->requestTime == 0 || ((*request)->requestTime != 0 && time - (*request)->requestTime > 60)))
-            {
-                if((*request)->node != 0 && (*request)->requestTime != 0)
-                {
-                    bool found = false;
-                    for(std::vector<unsigned int>::iterator node=mNodesToClose.begin();node!=mNodesToClose.end();++node)
-                        if(*node == (*request)->node)
-                        {
-                            found = true;
-                            break;
-                        }
 
-                    if(!found)
-                    {
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                          "Node [%d] needs closed. Merkle blocks too slow", (*request)->node);
-                        mNodesToClose.push_back((*request)->node);
-                    }
-                }
-                (*request)->node = pNodeID;
-                (*request)->requestTime = time;
-                pBlockHashes.push_back(nextBlockHash);
-            }
-            mMutex.unlock();
+            if(pBlockHashes.size() >= pMaxCount)
+                break;
         }
+
+        mMutex.unlock();
     }
 
     bool AddressBlock::addMerkleBlock(Chain &pChain, Message::MerkleBlockData *pData, unsigned int pNodeID)
     {
         mMutex.lock();
 
-        ArcMist::HashContainerList<MerkleRequestData *>::Iterator request = mMerkleRequests.get(pData->block->hash);
-        if(request == mMerkleRequests.end())
+        ArcMist::HashContainerList<MerkleRequestData *>::Iterator requestIter = mMerkleRequests.get(pData->block->hash);
+        if(requestIter == mMerkleRequests.end())
         {
             mMutex.unlock();
             return false; // Not a requested block, so it probably isn't in the chain
         }
 
         // Check if it is already complete
-        if((*request)->isComplete())
+        // Check if node id matches. It must match to ensure this is based on the latest bloom filter.
+        //   For Bloom filter updates based on finding new UTXOs.
+        MerkleRequestData *request = *requestIter;
+        if(request->isComplete() || request->node != pNodeID)
         {
             mMutex.unlock();
             return false;
@@ -643,44 +696,88 @@ namespace BitCoin
         ArcMist::HashList transactionHashes;
         if(!pData->validate(transactionHashes))
         {
-            (*request)->release();
+            request->release();
             mMutex.unlock();
             return false;
         }
 
-        (*request)->node = pNodeID;
-        (*request)->totalTransactions = pData->block->transactionCount;
-
-        // Clear transactions because if more than one merkle block are received from different
-        //   nodes, then they might have different bloom filters and different false positive
-        //   transactions.
-        (*request)->transactionHashes.clear();
-        for(std::vector<SPVTransactionData *>::iterator trans=(*request)->transactions.begin();trans!=(*request)->transactions.end();++trans)
-            delete *trans;
-        (*request)->transactions.clear();
-
         // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
           // "Received merkle block from node [%d] with %d transaction hashes : %s", pNodeID,
-          // (*request)->transactionHashes.size(), pData->block->hash.hex().text());
+          // transactionHashes.size(), pData->block->hash.hex().text());
 
-        // Add transaction hashes
+        request->totalTransactions = pData->block->transactionCount;
+
+        // Update transactions because if more than one merkle block are received from different
+        //   nodes, then they might have different bloom filters and different false positive
+        //   transactions.
+        SPVTransactionData *newSPVTransaction;
+        ArcMist::HashContainerList<SPVTransactionData *>::Iterator transaction;
+        ArcMist::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
+        ArcMist::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
         for(ArcMist::HashList::iterator hash=transactionHashes.begin();hash!=transactionHashes.end();++hash)
         {
-            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-              // "Confirmed transaction hash : %s", hash->hex().text());
-            (*request)->transactionHashes.push_back(*hash);
+            transaction = request->transactions.get(*hash);
+            if(transaction == request->transactions.end())
+            {
+                // Check Pending
+                pendingTransaction = mPendingTransactions.get(*hash);
+                if(pendingTransaction != mPendingTransactions.end())
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                      "Transaction pulled from pending into merkle request : %s", hash->hex().text());
+                    request->transactions.insert(*hash, *pendingTransaction);
+                    (*pendingTransaction)->blockHash = pData->block->hash;
+                    mPendingTransactions.erase(pendingTransaction);
+                }
+                else
+                {
+                    confirmedTransaction = mTransactions.get(*hash);
+                    if(confirmedTransaction != mTransactions.end())
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                          "Transaction found in confirmed for merkle request : %s", hash->hex().text());
+                        newSPVTransaction = new SPVTransactionData(**confirmedTransaction);
+                        request->transactions.insert(*hash, newSPVTransaction);
+                        newSPVTransaction->blockHash = pData->block->hash;
+                    }
+                    else // Create empty transaction
+                    {
+                        newSPVTransaction = new SPVTransactionData(pData->block->hash);
+                        request->transactions.insert(*hash, newSPVTransaction);
+                    }
+                }
+            }
+        }
+
+        // Check for any extra transactions (different false positives from previous peer)
+        for(transaction=request->transactions.begin();transaction!=request->transactions.end();)
+        {
+            if(transactionHashes.contains(transaction.hash()))
+                ++transaction;
+            else
+            {
+                // Move transaction to pending
+                if(mPendingTransactions.get((*transaction)->transaction->hash) == mPendingTransactions.end())
+                {
+                    (*transaction)->blockHash.clear();
+                    mPendingTransactions.insert((*transaction)->transaction->hash, *transaction);
+                }
+                else
+                    delete *transaction; // Already in pending
+
+                transaction = request->transactions.erase(transaction);
+            }
         }
 
         // Mark receive time
-        if((*request)->receiveTime != 0)
+        if(request->receiveTime != 0)
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-              "Repeated Merkle block from node [%d] with %d/%d transaction (%d sec ago) : %s", pNodeID,
-              (*request)->transactions.size(), (*request)->transactionHashes.size(),
-              getTime() - (*request)->receiveTime, pData->block->hash.hex().text());
-        else
-            (*request)->receiveTime = getTime();
+              "Repeated merkle block from node [%d] with %d transaction (%d sec ago) : %s", pNodeID,
+              request->transactions.size(), getTime() - request->receiveTime, pData->block->hash.hex().text());
 
-        bool processNeeded = (*request)->isComplete();
+        request->receiveTime = getTime();
+
+        bool processNeeded = request->isComplete();
 
         mMutex.unlock();
 
@@ -701,52 +798,32 @@ namespace BitCoin
         if(mTransactions.get(pTransactionData->transaction->hash) != mTransactions.end())
         {
             mMutex.unlock();
-            return result; // Already have this transaction
+            return result; // Already confirmed this transaction
         }
 
         if(Info::instance().spvMode)
         {
             // Check that it has been proven by a merkle block
-            MerkleRequestData *merkleRequest;
-            bool transFound = false, processNeeded = false;
-            SPVTransactionData *newTransaction;
-            Transaction *transaction = pTransactionData->transaction;
-            for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
+            MerkleRequestData *request;
+            bool processNeeded = false;
+            ArcMist::HashContainerList<SPVTransactionData *>::Iterator transactionIter;
+            for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator requestIter=mMerkleRequests.begin();requestIter!=mMerkleRequests.end();++requestIter)
             {
-                merkleRequest = *request;
-                if(merkleRequest->transactionHashes.contains(pTransactionData->transaction->hash))
+                request = *requestIter;
+                transactionIter = request->transactions.get(pTransactionData->transaction->hash);
+                if(transactionIter != request->transactions.end())
                 {
                     result = true;
-
-                    for(std::vector<SPVTransactionData *>::iterator trans=merkleRequest->transactions.begin();trans!=merkleRequest->transactions.end();++trans)
-                        if((*trans)->transaction != NULL && (*trans)->transaction->hash == pTransactionData->transaction->hash)
-                        {
-                            transFound = true;
-                            break;
-                        }
-
-                    if(!transFound)
+                    if((*transactionIter)->transaction == NULL)
                     {
-                        newTransaction = new SPVTransactionData(request.hash(), pTransactionData->transaction);
+                        (*transactionIter)->transaction = pTransactionData->transaction;
                         pTransactionData->transaction = NULL; // Prevent it from being deleted
-                        refreshTransaction(newTransaction, true);
-                        merkleRequest->transactions.push_back(newTransaction);
-                        processNeeded = merkleRequest->isComplete();
+                        refreshTransaction(*transactionIter, true);
+                        processNeeded = request->isComplete();
                         // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                           // "Added confirmed transaction to merkle block request : %s", transaction->hash.hex().text());
 
-                        // Update filter
-                        if(newTransaction->payOutputs.size() > 0)
-                        {
-                            Outpoint outpoint;
-                            outpoint.transactionID = newTransaction->transaction->hash;
-                            for(std::vector<unsigned int>::iterator index=newTransaction->payOutputs.begin();index!=newTransaction->payOutputs.end();++index)
-                            {
-                                // Add new UTXO to filter
-                                outpoint.index = *index;
-                                mFilter.add(outpoint);
-                            }
-                        }
+                        // Note: Bloom filter updated when merkle block is processed
                     }
 
                     mMutex.unlock();
@@ -757,7 +834,7 @@ namespace BitCoin
             }
 
             // Check pending transactions
-            ArcMist::HashContainerList<PendingTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionData->transaction->hash);
+            ArcMist::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionData->transaction->hash);
             if(pendingTransaction != mPendingTransactions.end())
             {
                 result = true;
@@ -767,6 +844,7 @@ namespace BitCoin
                     (*pendingTransaction)->transaction = pTransactionData->transaction;
                     pTransactionData->transaction = NULL; // Prevent it from being deleted
                     refreshTransaction(*pendingTransaction, true);
+
                     if((*pendingTransaction)->payOutputs.size() > 0 || (*pendingTransaction)->spendInputs.size() > 0)
                     {
                         // Needed this transaction
@@ -782,16 +860,16 @@ namespace BitCoin
                     else
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                          "Removed unrelated pending transaction : %s", transaction->hash.hex().text());
-                        delete *pendingTransaction;
-                        mPendingTransactions.erase(pendingTransaction);
+                          "Pending transaction (unrelated) : %s", (*pendingTransaction)->transaction->hash.hex().text());
+                        //delete *pendingTransaction;
+                        //mPendingTransactions.erase(pendingTransaction);
                     }
                 }
             }
 
             if(!result)
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                  "Transaction not found in merkle block or pending : %s", transaction->hash.hex().text());
+                  "Transaction not found in merkle block or pending : %s", pTransactionData->transaction->hash.hex().text());
 
             mMutex.unlock();
             return result;
@@ -829,11 +907,11 @@ namespace BitCoin
 
         if(Info::instance().spvMode)
         {
-            ArcMist::HashContainerList<PendingTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionHash);
+            ArcMist::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionHash);
             if(pendingTransaction == mPendingTransactions.end())
             {
                 // Add new pending transaction
-                PendingTransactionData *newPendingTransaction = new PendingTransactionData();
+                SPVTransactionData *newPendingTransaction = new SPVTransactionData();
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                   "Pending transaction accepted on first node [%d] : %s", pNodeID, pTransactionHash.hex().text());
                 newPendingTransaction->nodes.push_back(pNodeID);
@@ -873,7 +951,7 @@ namespace BitCoin
         return result;
     }
 
-    void AddressBlock::revertBlock(const ArcMist::Hash &pBlockHash)
+    void AddressBlock::revertBlock(const ArcMist::Hash &pBlockHash, unsigned int pBlockHeight)
     {
         mMutex.lock();
 
@@ -881,6 +959,7 @@ namespace BitCoin
         ArcMist::HashContainerList<MerkleRequestData *>::Iterator request = mMerkleRequests.get(pBlockHash);
         if(request != mMerkleRequests.end())
         {
+            // TODO Move transactions back to pending
             delete *request;
             mMerkleRequests.erase(request);
             mMutex.unlock();
@@ -903,112 +982,15 @@ namespace BitCoin
 
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
           "Reverted block with %d transactions at height %d : %s", transactionCount,
-          mCurrentPass.blockHeight, pBlockHash.hex().text());
+          pBlockHeight, pBlockHash.hex().text());
 
         // Update last block height
-        --mCurrentPass.blockHeight;
+        for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass)
+            if(!pass->complete && pass->blockHeight == pBlockHeight)
+                --(pass->blockHeight);
 
         mMutex.unlock();
     }
-
-    // AddressBlock::RelationType AddressBlock::relatesTo(Transaction *pTransaction, bool pAlreadyLocked)
-    // {
-        // if(paysTo(pTransaction))
-            // return PAYS_TO;
-
-        // if(spendsFrom(pTransaction, pAlreadyLocked))
-            // return SPENDS_FROM;
-
-        // return NONE;
-
-    // }
-
-    // bool AddressBlock::paysTo(Transaction *pTransaction)
-    // {
-        // // Check outputs for any block addresses
-        // ArcMist::HashList addressHashes;
-        // ScriptInterpreter::ScriptType scriptType;
-
-        // for(std::vector<Output *>::iterator output=pTransaction->outputs.begin();output!=pTransaction->outputs.end();++output)
-        // {
-            // scriptType = ScriptInterpreter::parseOutputScript((*output)->script, addressHashes);
-            // if(scriptType != ScriptInterpreter::P2PKH)
-                // continue;
-
-            // for(ArcMist::HashList::iterator hash=addressHashes.begin();hash!=addressHashes.end();++hash)
-                // if(mAddressHashes.contains(*hash))
-                    // return true;
-        // }
-
-        // return false;
-    // }
-
-    // bool AddressBlock::spendsFrom(Transaction *pTransaction, bool pAlreadyLocked)
-    // {
-        // ArcMist::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
-        // ArcMist::HashContainerList<PendingTransactionData *>::Iterator pendingTransaction;
-        // Transaction *otherTransaction;
-        // ArcMist::HashList addressHashes;
-        // ScriptInterpreter::ScriptType scriptType;
-
-        // if(!pAlreadyLocked)
-            // mMutex.lock();
-
-        // for(std::vector<Input *>::iterator input=pTransaction->inputs.begin();input!=pTransaction->inputs.end();++input)
-        // {
-            // // Check if a confirmed transaction exists for this outpoint
-            // confirmedTransaction = mTransactions.get((*input)->outpoint.transactionID);
-            // if(confirmedTransaction != mTransactions.end())
-            // {
-                // // Check that the confirmed transaction has enough outputs for the outpoint index
-                // otherTransaction = (*confirmedTransaction)->transaction;
-                // if(otherTransaction != NULL && (*input)->outpoint.index < otherTransaction->outputs.size())
-                // {
-                    // // Parse the output for addresses
-                    // scriptType = ScriptInterpreter::parseOutputScript((otherTransaction->outputs[(*input)->outpoint.index])->script, addressHashes);
-                    // if(scriptType == ScriptInterpreter::P2PKH)
-                    // {
-                        // // Check the output addresses against block addresses
-                        // for(ArcMist::HashList::iterator hash=addressHashes.begin();hash!=addressHashes.end();++hash)
-                            // if(mAddressHashes.contains(*hash))
-                            // {
-                                // if(!pAlreadyLocked)
-                                    // mMutex.unlock();
-                                // return true;
-                            // }
-                    // }
-                // }
-            // }
-
-            // // Check if a pending transaction exists for this outpoint
-            // pendingTransaction = mPendingTransactions.get((*input)->outpoint.transactionID);
-            // if(pendingTransaction != mPendingTransactions.end())
-            // {
-                // // Check that the confirmed transaction has enough outputs for the outpoint index
-                // otherTransaction = (*pendingTransaction)->transaction;
-                // if(otherTransaction != NULL && (*input)->outpoint.index < otherTransaction->outputs.size())
-                // {
-                    // // Parse the output for addresses
-                    // scriptType = ScriptInterpreter::parseOutputScript((otherTransaction->outputs[(*input)->outpoint.index])->script, addressHashes);
-                    // if(scriptType != ScriptInterpreter::NON_STANDARD)
-                    // {
-                        // // Check the output addresses against block addresses
-                        // for(ArcMist::HashList::iterator hash=addressHashes.begin();hash!=addressHashes.end();++hash)
-                            // if(mAddressHashes.contains(*hash))
-                            // {
-                                // if(!pAlreadyLocked)
-                                    // mMutex.unlock();
-                                // return true;
-                            // }
-                    // }
-                // }
-            // }
-        // }
-
-        // if(!pAlreadyLocked)
-            // mMutex.unlock();
-        // return false;
-    // }
 
     void AddressBlock::process(Chain &pChain)
     {
@@ -1017,143 +999,197 @@ namespace BitCoin
             if(mAddressHashes.size() == 0)
                 return;
 
+            mMutex.lock();
+
             unsigned int falsePositiveCount;
+            bool resetNeeded = false, balanceUpdated = false;
             ArcMist::Hash nextBlockHash;
             ArcMist::HashContainerList<MerkleRequestData *>::Iterator request;
             MerkleRequestData *merkleRequest;
-            ArcMist::HashContainerList<PendingTransactionData *>::Iterator pendingTransaction;
+            ArcMist::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
             ArcMist::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
+            unsigned int passIndex = mPasses.size();
 
-            while(true)
+            if(pChain.isInSync() && pChain.height() > 5000 && mPasses.back().blockHeight < (unsigned int)pChain.height() - 5000)
             {
-                // Check if the next block has enough merkle confirms
-                mMutex.lock();
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                  "Starting new pass at block height %d to monitor new blocks", pChain.height());
+                PassData newPass;
+                newPass.beginBlockHeight = pChain.height();
+                newPass.blockHeight = newPass.beginBlockHeight;
+                newPass.addressesIncluded = mAddressHashes.size();
+                mPasses.push_back(newPass);
+                ++passIndex;
+            }
 
-                if(!pChain.getBlockHash(mCurrentPass.blockHeight + 1, nextBlockHash))
+            for(std::vector<PassData>::reverse_iterator pass=mPasses.rbegin();pass!=mPasses.rend();++pass,--passIndex)
+            {
+                if(pass->complete)
+                    continue;
+
+                if(pass->blockHeight == (unsigned int)pChain.height() && passIndex < mPasses.size())
                 {
-                    mMutex.unlock();
-                    break;
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                      "Pass %d completed at block height %d", passIndex, pass->blockHeight);
+                    pass->complete = true;
+                    continue;
                 }
 
-                request = mMerkleRequests.get(nextBlockHash);
-                if(request != mMerkleRequests.end())
+                while(true)
                 {
-                    merkleRequest = *request;
-                    if(!merkleRequest->isComplete())
-                    {
-                        // Waiting for more transactions
-                        mMutex.unlock();
+                    // Check if the next block has enough merkle confirms
+                    if(!pChain.getBlockHash(pass->blockHeight + 1, nextBlockHash))
                         break;
-                    }
 
-                    // Process transactions
-                    falsePositiveCount = 0;
-                    for(std::vector<SPVTransactionData *>::iterator trans=merkleRequest->transactions.begin();trans!=merkleRequest->transactions.end();++trans)
+                    request = mMerkleRequests.get(nextBlockHash);
+                    if(request != mMerkleRequests.end())
                     {
-                        // Remove from pending
-                        pendingTransaction = mPendingTransactions.get((*trans)->transaction->hash);
-                        if(pendingTransaction != mPendingTransactions.end())
+                        merkleRequest = *request;
+                        if(!merkleRequest->isComplete())
+                            break; // Waiting for more transactions
+
+                        // Process transactions
+                        falsePositiveCount = 0;
+                        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=merkleRequest->transactions.begin();trans!=merkleRequest->transactions.end();++trans)
                         {
-                            delete *pendingTransaction;
-                            mPendingTransactions.erase(pendingTransaction);
+                            // Remove from pending
+                            pendingTransaction = mPendingTransactions.get((*trans)->transaction->hash);
+                            if(pendingTransaction != mPendingTransactions.end())
+                            {
+                                delete *pendingTransaction;
+                                mPendingTransactions.erase(pendingTransaction);
+                            }
+
+                            // Add to confirmed
+                            confirmedTransaction = mTransactions.get((*trans)->transaction->hash);
+                            if(confirmedTransaction == mTransactions.end())
+                            {
+                                // Refresh in case it spends pending or previous transaction in this block
+                                refreshTransaction(*trans, false);
+
+                                // New UTXO requires new bloom filter and reset of all existing merkle requests
+                                if((*trans)->payOutputs.size() > 0)
+                                    resetNeeded = true;
+
+                                // Determine if transaction actually effects block addresses
+                                if((*trans)->payOutputs.size() > 0 || (*trans)->spendInputs.size() > 0)
+                                {
+                                    balanceUpdated = true;
+                                    mTransactions.insert((*trans)->transaction->hash, *trans);
+                                    if((*trans)->amount > 0)
+                                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                                          "Confirmed transaction paying %0.8f bitcoins : %s", bitcoins((*trans)->amount),
+                                          (*trans)->transaction->hash.hex().text());
+                                    else
+                                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                                          "Confirmed transaction spending %0.8f bitcoins : %s", -bitcoins((*trans)->amount),
+                                          (*trans)->transaction->hash.hex().text());
+                                }
+                                else
+                                {
+                                    delete *trans;
+                                    ++falsePositiveCount;
+                                }
+                            }
+                            else
+                                delete *trans; // Transaction already confirmed
                         }
 
-                        // Add to confirmed
-                        confirmedTransaction = mTransactions.get((*trans)->transaction->hash);
-                        if(confirmedTransaction == mTransactions.end())
-                        {
-                            // Refresh in case it spends pending or previous transaction in this block
-                            refreshTransaction(*trans, false);
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                          "Adding merkle block from node [%d] with %d/%d trans at height %d : %s", merkleRequest->node,
+                          merkleRequest->transactions.size() - falsePositiveCount, merkleRequest->transactions.size(),
+                          pass->blockHeight + 1, request.hash().hex().text());
 
-                            // Determine if transaction actually effects block addresses
-                            if((*trans)->payOutputs.size() > 0 || (*trans)->spendInputs.size() > 0)
+                        // Clear so they aren't deleted since they were either reused or already deleted.
+                        merkleRequest->transactions.clear();
+
+                        // Check for false positive rate too high
+                        if(merkleRequest->node != 0 && falsePositiveCount > 2 &&
+                          (float)falsePositiveCount / (float)merkleRequest->totalTransactions > 0.001)
+                        {
+                            if(falsePositiveCount > 5 && (float)falsePositiveCount / (float)merkleRequest->totalTransactions > 0.02)
                             {
-                                mTransactions.insert((*trans)->transaction->hash, *trans);
-                                if((*trans)->amount > 0)
+                                bool found = false;
+                                for(std::vector<unsigned int>::iterator node=mNodesToClose.begin();node!=mNodesToClose.end();++node)
+                                    if(*node == merkleRequest->node)
+                                    {
+                                        found = true;
+                                        break;
+                                    }
+
+                                if(!found)
+                                {
                                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                                      "Confirmed transaction paying %0.8f bitcoins : %s", bitcoins((*trans)->amount),
-                                      (*trans)->transaction->hash.hex().text());
-                                else
-                                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                                      "Confirmed transaction spending %0.8f bitcoins : %s", -bitcoins((*trans)->amount),
-                                      (*trans)->transaction->hash.hex().text());
+                                      "Node [%d] needs closed. False positive rate %d/%d", merkleRequest->node,
+                                      falsePositiveCount, merkleRequest->totalTransactions);
+                                    mNodesToClose.push_back(merkleRequest->node);
+                                }
                             }
                             else
                             {
-                                delete *trans;
-                                ++falsePositiveCount;
+                                bool found = false;
+                                for(std::vector<unsigned int>::iterator node=mNodesToResendFilter.begin();node!=mNodesToResendFilter.end();++node)
+                                    if(*node == merkleRequest->node)
+                                    {
+                                        found = true;
+                                        break;
+                                    }
+
+                                //TODO Add delay so bloom filter doesn't get sent after every merkle block received before it actually updates
+                                if(!found)
+                                {
+                                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                                      "Node [%d] needs bloom filter resend. False positive rate %d/%d", merkleRequest->node,
+                                      falsePositiveCount, merkleRequest->totalTransactions);
+                                    mNodesToResendFilter.push_back(merkleRequest->node);
+                                }
                             }
                         }
-                        else
-                            delete *trans; // Transaction already in mTransactions
+
+                        // Remove merkle request
+                        delete *request;
+                        mMerkleRequests.erase(request);
+
+                        // Update last block hash and height
+                        ++(pass->blockHeight);
                     }
+                    else
+                        break;
 
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                      "Adding merkle block from node [%d] with %d/%d trans at height %d : %s", merkleRequest->node,
-                      merkleRequest->transactions.size() - falsePositiveCount, merkleRequest->transactions.size(),
-                      mCurrentPass.blockHeight + 1, request.hash().hex().text());
-
-                    // Clear so they aren't deleted since they were either reused or already deleted.
-                    merkleRequest->transactions.clear();
-
-                    // Check for false positive rate too high
-                    if(merkleRequest->node != 0 && falsePositiveCount > 2 &&
-                      (float)falsePositiveCount / (float)merkleRequest->totalTransactions > 0.001)
+                    if(balanceUpdated)
                     {
-                        if(falsePositiveCount > 5 && (float)falsePositiveCount / (float)merkleRequest->totalTransactions > 0.02)
-                        {
-                            bool found = false;
-                            for(std::vector<unsigned int>::iterator node=mNodesToClose.begin();node!=mNodesToClose.end();++node)
-                                if(*node == merkleRequest->node)
-                                {
-                                    found = true;
-                                    break;
-                                }
-
-                            if(!found)
-                            {
-                                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                                  "Node [%d] needs closed. False positive rate %d/%d", merkleRequest->node,
-                                  falsePositiveCount, merkleRequest->totalTransactions);
-                                mNodesToClose.push_back(merkleRequest->node);
-                            }
-                        }
-                        else
-                        {
-                            bool found = false;
-                            for(std::vector<unsigned int>::iterator node=mNodesToResendFilter.begin();node!=mNodesToResendFilter.end();++node)
-                                if(*node == merkleRequest->node)
-                                {
-                                    found = true;
-                                    break;
-                                }
-
-                            //TODO Add delay so bloom filter doesn't get sent after every merkle block received before it actually updates
-                            if(!found)
-                            {
-                                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                                  "Node [%d] needs bloom filter resend. False positive rate %d/%d", merkleRequest->node,
-                                  falsePositiveCount, merkleRequest->totalTransactions);
-                                mNodesToResendFilter.push_back(merkleRequest->node);
-                            }
-                        }
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                          "Total balance updated to %0.8f bitcoins", bitcoins(balance(true)));
+                        balanceUpdated = false;
                     }
 
-                    // Remove merkle request
-                    delete *request;
-                    mMerkleRequests.erase(request);
+                    if(resetNeeded)
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                          "New UTXO found. Resetting bloom filters and merkle requests");
 
-                    // Update last block hash and height
-                    ++mCurrentPass.blockHeight;
+                        // Update bloom filter and reset all node bloom filters
+                        // Node bloom filters are reset with mFilterID
+                        refreshBloomFilter(true);
+
+                        // Reset all merkle requests so they are only received with updated bloom filters
+                        for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
+                            (*request)->clear();
+
+                        break;
+                    }
                 }
-                else
-                {
-                    mMutex.unlock();
+
+                if(resetNeeded)
                     break;
-                }
-
-                mMutex.unlock();
             }
+
+            mMutex.unlock();
+        }
+        else
+        {
+            // Not SPV mode
+
         }
     }
 }

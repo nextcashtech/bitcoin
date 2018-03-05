@@ -67,6 +67,7 @@ namespace BitCoin
         mActiveMerkleRequests = 0;
         mLastMerkleCheck = 0;
         mLastMerkleRequest = 0;
+        mBloomFilterID = 0;
         mChain = pChain;
 
         if(mIsIncoming)
@@ -334,7 +335,7 @@ namespace BitCoin
             return false;
 
         Message::FilterLoadData message;
-        mAddressBlock->setupBloomFilter(message.filter);
+        mBloomFilterID = mAddressBlock->setupBloomFilter(message.filter);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Sending bloom filter with %d bytes and %d functions",
           message.filter.size(), message.filter.functionCount());
         return sendMessage(&message);
@@ -668,8 +669,8 @@ namespace BitCoin
 
         Info &info = Info::instance();
 
-        if(info.spvMode && mVersionAcknowledged && mVersionData != NULL && !mIsIncoming && !mIsSeed &&
-          mAddressBlock != NULL && time - mLastMerkleCheck > 2)
+        if(info.spvMode && mVersionAcknowledged && mVersionData != NULL && isReady() && !mIsIncoming &&
+          !mIsSeed && mAddressBlock != NULL && time - mLastMerkleCheck > 2)
         {
             if(mAddressBlock->needsClose(mID))
             {
@@ -679,7 +680,7 @@ namespace BitCoin
                 return;
             }
 
-            if(mAddressBlock->filterNeedsResend(mID))
+            if(mAddressBlock->filterNeedsResend(mID, mBloomFilterID))
                 sendBloomFilter();
 
             if(mActiveMerkleRequests < 25)
@@ -895,9 +896,11 @@ namespace BitCoin
 
                         if(!mIsIncoming && !mIsSeed)
                         {
-                            ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Sending mem pool request");
                             Message::Data memPoolMessage(Message::MEM_POOL);
                             sendMessage(&memPoolMessage);
+
+                            Message::Data sendHeadersMessage(Message::SEND_HEADERS);
+                            sendMessage(&sendHeadersMessage);
                         }
                     }
                 }
@@ -915,9 +918,11 @@ namespace BitCoin
 
                     if(!mIsIncoming && !mIsSeed)
                     {
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Sending mem pool request");
                         Message::Data memPoolMessage(Message::MEM_POOL);
                         sendMessage(&memPoolMessage);
+
+                        Message::Data sendHeadersMessage(Message::SEND_HEADERS);
+                        sendMessage(&sendHeadersMessage);
                     }
                 }
                 break;
@@ -1076,7 +1081,6 @@ namespace BitCoin
             case Message::SEND_HEADERS:
                 mSendHeaders = true;
                 break;
-
             case Message::GET_BLOCKS:
             {
                 // Send Inventory of block headers
