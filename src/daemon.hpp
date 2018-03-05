@@ -93,7 +93,7 @@ namespace BitCoin
         unsigned int mNodeCount, mIncomingNodes, mOutgoingNodes;
         unsigned int mMaxIncoming;
 
-        unsigned int outgoingConnectionCountTarget() const { if(mInfo.spvMode) return 16; else return 8; }
+        unsigned int outgoingConnectionCountTarget() const { return 8; }
 
         class IPBytes
         {
