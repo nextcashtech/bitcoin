@@ -651,6 +651,12 @@ namespace BitCoin
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         randomizeOutgoing(nodes);
 
+        if(nodes.size() == 0)
+        {
+            mNodeLock.readUnlock();
+            return;
+        }
+
         NodeRequests *nodeRequests = new NodeRequests[nodes.size()];
         NodeRequests *nodeRequest = nodeRequests;
         unsigned int i;
@@ -704,6 +710,12 @@ namespace BitCoin
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         randomizeOutgoing(nodes);
         bool sent = false;
+
+        if(nodes.size() == 0)
+        {
+            mNodeLock.readUnlock();
+            return;
+        }
 
         // Check for node with empty last header
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
