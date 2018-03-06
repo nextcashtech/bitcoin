@@ -105,6 +105,7 @@ namespace BitCoin
             left = NULL;
             right = NULL;
             matches = pMatches;
+            hash = transaction->hash;
         }
         MerkleNode(MerkleNode *pLeft, MerkleNode *pRight, bool pMatches)
         {

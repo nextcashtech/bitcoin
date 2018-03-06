@@ -432,16 +432,9 @@ namespace BitCoin
     MerkleNode *buildMerkleTree(std::vector<Transaction *> &pBlockTransactions, BloomFilter &pFilter)
     {
         if(pBlockTransactions.size() == 0)
-        {
-            MerkleNode *result = new MerkleNode(NULL, NULL, false);
-            return result;
-        }
+            return new MerkleNode(NULL, NULL, false);
         else if(pBlockTransactions.size() == 1)
-        {
-            MerkleNode *result = new MerkleNode(NULL, NULL, pFilter.contains(*pBlockTransactions.front()));
-            result->hash = pBlockTransactions.front()->hash;
-            return result;
-        }
+            return new MerkleNode(pBlockTransactions.front(), pFilter.contains(*pBlockTransactions.front()));
 
         // Build leaf nodes
         std::vector<MerkleNode *> nodes;
