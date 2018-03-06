@@ -2042,12 +2042,13 @@ namespace BitCoin
             if(mBlockStats.height() < mNextBlockHeight - 1)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                  "Refreshing block statistics to height %d", mNextBlockHeight - 1);
+                  "Updating block statistics to height %d", mNextBlockHeight - 1);
 
-                mBlockStats.clear();
                 mBlockStats.reserve(mNextBlockHeight);
+                fileID = (mBlockStats.height() + 1) / BlockFile::MAX_BLOCKS;
+                unsigned int offset = (mBlockStats.height() + 1) - (fileID * BlockFile::MAX_BLOCKS);
                 uint32_t lastReport = getTime();
-                for(fileID=0;fileID<=mLastFileID;fileID++)
+                for(;fileID<=mLastFileID;++fileID)
                 {
                     if(getTime() - lastReport > 10)
                     {
@@ -2062,7 +2063,7 @@ namespace BitCoin
                     if(!blockFile->isValid())
                         success = false;
 
-                    if(success && !blockFile->readStats(mBlockStats))
+                    if(success && !blockFile->readStats(mBlockStats, offset))
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                           "Failed to read stats from block file %08x", fileID);
@@ -2071,6 +2072,7 @@ namespace BitCoin
 
                     delete blockFile;
                     BlockFile::unlock(fileID);
+                    offset = 0;
 
                     if(!success || mStop)
                         break;

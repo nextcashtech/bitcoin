@@ -214,7 +214,7 @@ namespace BitCoin
         bool readBlockHashes(ArcMist::HashList &pHashes);
 
         // Append block stats from this file to the list specified
-        bool readStats(BlockStats &pStats);
+        bool readStats(BlockStats &pStats, unsigned int pOffset);
 
         // Read list of block headers from this file. If pStartingHash is empty then start with first block
         bool readBlockHeaders(BlockList &pBlockHeaders, const ArcMist::Hash &pStartingHash,

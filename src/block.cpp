@@ -1046,7 +1046,7 @@ namespace BitCoin
     }
 
     // Append block stats from this file to the list specified
-    bool BlockFile::readStats(BlockStats &pStats)
+    bool BlockFile::readStats(BlockStats &pStats, unsigned int pOffset)
     {
         if(!openFile())
         {
@@ -1054,7 +1054,8 @@ namespace BitCoin
             return false;
         }
 
-        mInputFile->setReadOffset(HASHES_OFFSET + 32); // Set offset to offset of first data offset location in file
+        // Set offset to offset of first data offset location in file
+        mInputFile->setReadOffset(HASHES_OFFSET + 32 + (pOffset * HEADER_ITEM_SIZE));
         unsigned int blockOffset, previousOffset;
         uint32_t version, time, targetBits;
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
@@ -1513,8 +1514,8 @@ namespace BitCoin
 
     bool BlockFile::readBlock(unsigned int pHeight, Block &pBlock)
     {
-        unsigned int fileID = pHeight / 100;
-        unsigned int offset = pHeight - (fileID * 100);
+        unsigned int fileID = pHeight / MAX_BLOCKS;
+        unsigned int offset = pHeight - (fileID * MAX_BLOCKS);
 
         BlockFile *blockFile;
         BlockFile::lock(fileID);
@@ -1527,8 +1528,8 @@ namespace BitCoin
 
     bool BlockFile::readBlockTransaction(unsigned int pHeight, unsigned int pTransactionOffset, Transaction &pTransaction)
     {
-        unsigned int fileID = pHeight / 100;
-        unsigned int blockOffset = pHeight - (fileID * 100);
+        unsigned int fileID = pHeight / MAX_BLOCKS;
+        unsigned int blockOffset = pHeight - (fileID * MAX_BLOCKS);
 
         BlockFile *blockFile;
         BlockFile::lock(fileID);
@@ -1542,8 +1543,8 @@ namespace BitCoin
     bool BlockFile::readBlockTransactionOutput(unsigned int pHeight, unsigned int pTransactionOffset,
       unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput)
     {
-        unsigned int fileID = pHeight / 100;
-        unsigned int blockOffset = pHeight - (fileID * 100);
+        unsigned int fileID = pHeight / MAX_BLOCKS;
+        unsigned int blockOffset = pHeight - (fileID * MAX_BLOCKS);
 
         BlockFile *blockFile;
         BlockFile::lock(fileID);
