@@ -20,6 +20,8 @@
 
 namespace BitCoin
 {
+    void notify(const char *pSubject, const char *pMessage);
+
     class Peer
     {
     public:
@@ -94,6 +96,8 @@ namespace BitCoin
 
         // Number of peers that an unconfirmed transaction must be announced from before it has zero confirm trust.
         unsigned int spvMemPoolCountRequired;
+
+        ArcMist::String notifyEmail;
 
         // Return list of peers in random order
         void getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating, uint64_t mServicesRequiredMask = 0);

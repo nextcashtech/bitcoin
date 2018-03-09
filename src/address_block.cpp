@@ -848,14 +848,27 @@ namespace BitCoin
                     if((*pendingTransaction)->payOutputs.size() > 0 || (*pendingTransaction)->spendInputs.size() > 0)
                     {
                         // Needed this transaction
+                        ArcMist::String subject, message;
                         if((*pendingTransaction)->amount > 0)
+                        {
+                            subject = "Bitcoin Cash Payment Pending";
+                            message.writeFormatted("Payment pending for %0.8f bitcoins.\nTransaction : %s",
+                              -bitcoins((*pendingTransaction)->amount), (*pendingTransaction)->transaction->hash.hex().text());
                             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Pending transaction paying %0.8f bitcoins : %s", bitcoins((*pendingTransaction)->amount),
                               (*pendingTransaction)->transaction->hash.hex().text());
+                        }
                         else
+                        {
+                            subject = "Bitcoin Cash Spend Pending";
+                            message.writeFormatted("Spend pending for %0.8f bitcoins.\nTransaction : %s",
+                              -bitcoins((*pendingTransaction)->amount), (*pendingTransaction)->transaction->hash.hex().text());
                             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Pending transaction spending %0.8f bitcoins : %s", -bitcoins((*pendingTransaction)->amount),
                               (*pendingTransaction)->transaction->hash.hex().text());
+                        }
+
+                        notify(subject, message);
                     }
                     else
                     {
@@ -1076,14 +1089,30 @@ namespace BitCoin
                                 {
                                     balanceUpdated = true;
                                     mTransactions.insert((*trans)->transaction->hash, *trans);
+                                    ArcMist::String subject, message;
+
                                     if((*trans)->amount > 0)
+                                    {
+                                        subject = "Bitcoin Cash Payment Confirmed";
+                                        message.writeFormatted("Payment confirmed for %0.8f bitcoins in block %d\nNew Balance : %0.8f\nTransaction : %s",
+                                          bitcoins((*trans)->amount), pass->blockHeight + 1, bitcoins(balance(true)),
+                                          (*trans)->transaction->hash.hex().text());
                                         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                                           "Confirmed transaction paying %0.8f bitcoins : %s", bitcoins((*trans)->amount),
                                           (*trans)->transaction->hash.hex().text());
+                                    }
                                     else
+                                    {
+                                        subject = "Bitcoin Cash Spend Confirmed";
+                                        message.writeFormatted("Spend confirmed for %0.8f bitcoins in block %d.\nNew Balance : %0.8f\nTransaction : %s",
+                                          -bitcoins((*trans)->amount), pass->blockHeight + 1, bitcoins(balance(true)),
+                                          (*trans)->transaction->hash.hex().text());
                                         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                                           "Confirmed transaction spending %0.8f bitcoins : %s", -bitcoins((*trans)->amount),
                                           (*trans)->transaction->hash.hex().text());
+                                    }
+
+                                    notify(subject, message);
                                 }
                                 else
                                 {

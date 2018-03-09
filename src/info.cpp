@@ -13,6 +13,7 @@
 #include "arcmist/base/log.hpp"
 #include "arcmist/crypto/digest.hpp"
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -23,6 +24,31 @@
 
 namespace BitCoin
 {
+    void notify(const char *pSubject, const char *pMessage)
+    {
+        ArcMist::String emailAddress = Info::instance().notifyEmail;
+
+        if(!emailAddress)
+            return;
+
+        FILE *mailPipe = popen("/usr/lib/sendmail -t", "w");
+        if (mailPipe != NULL)
+        {
+            fprintf(mailPipe, "To: %s\n", emailAddress.text());
+            //fprintf(mailPipe, "From: %s\n", from); // Use default from address for server
+            fprintf(mailPipe, "Subject: %s\n\n", pSubject);
+            fwrite(pMessage, 1, std::strlen(pMessage), mailPipe);
+            fwrite("\n", 1, 2, mailPipe);
+            pclose(mailPipe);
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_INFO_LOG_NAME, "Sent email : %s", pSubject);
+        }
+        else
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INFO_LOG_NAME, "Failed to send email");
+            perror("Failed to invoke sendmail");
+        }
+    }
+
     void Peer::write(ArcMist::OutputStream *pStream) const
     {
         // Validation Header
@@ -218,6 +244,8 @@ namespace BitCoin
             memPoolThreshold = std::stol(value, NULL, 0);
         else if(std::strcmp(name, "address_threshold") == 0)
             addressesThreshold = std::stol(value, NULL, 0);
+        else if(std::strcmp(name, "notify_email") == 0)
+            notifyEmail = value;
 
         delete[] name;
         delete[] value;
