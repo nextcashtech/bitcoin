@@ -600,6 +600,18 @@ namespace BitCoin
         return sendMessage(&rejectMessage);
     }
 
+    bool Node::sendRejectWithHash(const char *pCommand, Message::RejectData::Code pCode, const char *pReason,
+      const ArcMist::Hash &pHash)
+    {
+        if(!isOpen())
+            return false;
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_NODE_LOG_NAME, "Sending reject : %s", pReason);
+        Message::RejectData rejectMessage(pCommand, pCode, pReason, NULL);
+        pHash.write(&rejectMessage.extra);
+        return sendMessage(&rejectMessage);
+    }
+
     void Node::run()
     {
         Node *node = (Node *)ArcMist::Thread::getParameter();
@@ -736,7 +748,7 @@ namespace BitCoin
         {
             ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,
               "Dropping. Ping not received within cutoff of %ds", mPingCutoff);
-            Info::instance().addPeerFail(mAddress);
+            info.addPeerFail(mAddress);
             close();
             return;
         }
@@ -749,7 +761,7 @@ namespace BitCoin
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::WARNING, mName,
                       "Dropping. Detected black listed transaction : %s", hash->hex().text());
-                    Info::instance().addPeerFail(mAddress);
+                    info.addPeerFail(mAddress);
                     close();
                     return;
                 }
@@ -766,7 +778,7 @@ namespace BitCoin
                 ArcMist::Log::add(ArcMist::Log::WARNING, mName, "No valid messages within 60 seconds of connecting");
                 close();
                 if(!mIsSeed)
-                    Info::instance().addPeerFail(mAddress);
+                    info.addPeerFail(mAddress);
                 return;
             }
 
@@ -789,7 +801,7 @@ namespace BitCoin
               Message::nameFor(message->type));
             close();
             if(!mIsSeed)
-                Info::instance().addPeerFail(mAddress);
+                info.addPeerFail(mAddress);
             delete message;
             return;
         }
@@ -848,7 +860,7 @@ namespace BitCoin
                     sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
                       "Full node bit (0x01) required in protocol version");
                     ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Missing full node bit");
-                    Info::instance().addPeerFail(mAddress);
+                    info.addPeerFail(mAddress);
                     close();
                 }
                 else if(mChain->forks().cashActive() &&
@@ -859,7 +871,7 @@ namespace BitCoin
                     sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
                       "Cash node bit (0x20) required in protocol version");
                     ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Missing cash node bit");
-                    Info::instance().addPeerFail(mAddress);
+                    info.addPeerFail(mAddress);
                     close();
                 }
                 else if(!mIsIncoming && !mIsSeed && !mChain->isInSync() && (mVersionData->startBlockHeight < 0 ||
@@ -874,7 +886,7 @@ namespace BitCoin
                     sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
                       "Bloom node bit (0x04) required in protocol version");
                     ArcMist::Log::add(ArcMist::Log::INFO, mName, "Dropping. Missing bloom node bit");
-                    Info::instance().addPeerFail(mAddress);
+                    info.addPeerFail(mAddress);
                     close();
                 }
                 else
@@ -911,7 +923,7 @@ namespace BitCoin
                 if(mVersionData != NULL && !mIsSeed)
                 {
                     sendPing();
-                    if(Info::instance().spvMode)
+                    if(info.spvMode)
                         sendBloomFilter();
                     else if(!mIsIncoming)
                         sendFeeFilter();
@@ -960,7 +972,7 @@ namespace BitCoin
                             }
                             else if(mVersionData != NULL && !mIsIncoming && !mIsSeed)
                             {
-                                Info::instance().updatePeer(mAddress, mVersionData->userAgent,
+                                info.updatePeer(mAddress, mVersionData->userAgent,
                                   mVersionData->transmittingServices);
                             }
                         }
@@ -1006,7 +1018,7 @@ namespace BitCoin
                     servicesMask |= Message::VersionData::CASH_NODE_BIT;
 
                 // Get list of peers
-                Info::instance().getRandomizedPeers(peers, 1, servicesMask);
+                info.getRandomizedPeers(peers, 1, servicesMask);
 
                 unsigned int count = peers.size();
                 if(count > 1000) // Maximum of 1000
@@ -1035,7 +1047,6 @@ namespace BitCoin
                   addressesData->addresses.size());
                 IPAddress ip;
 
-                Info &info = Info::instance();
                 for(std::vector<Message::Address>::iterator address=addressesData->addresses.begin();address!=addressesData->addresses.end();++address)
                 {
                     ip.set(address->ip, address->port);
@@ -1296,7 +1307,7 @@ namespace BitCoin
 
                             if(!info.spvMode)
                             {
-                                switch(mChain->memPool().addPending((*item)->hash, mID))
+                                switch(mChain->memPool().addPending((*item)->hash, mChain->outputs(), mID))
                                 {
                                     case MemPool::NEED:
                                         transactionList.push_back((*item)->hash);
@@ -1396,7 +1407,7 @@ namespace BitCoin
                         mRejected = true;
                         ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
                           "Dropping. Announced block for which they didn't provide header : %s", mLastBlockAnnounced.hex().text());
-                        Info::instance().addPeerFail(mAddress, 5);
+                        info.addPeerFail(mAddress, 5);
                         close();
                     }
 
@@ -1417,7 +1428,7 @@ namespace BitCoin
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
                       "Dropping. Incoming node sent %d headers", ((Message::HeadersData *)message)->headers.size());
-                    Info::instance().addPeerFail(mAddress, 5);
+                    info.addPeerFail(mAddress, 5);
                     close();
                 }
                 break;
@@ -1428,7 +1439,7 @@ namespace BitCoin
                     {
                         ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
                           "Dropping. Sent block in SPV mode : %s", ((Message::BlockData *)message)->block->hash);
-                        Info::instance().addPeerFail(mAddress, 5);
+                        info.addPeerFail(mAddress, 5);
                         close();
                     }
                     else
@@ -1459,7 +1470,7 @@ namespace BitCoin
                             // Drop after the block finishes so it doesn't have to be restarted
                             ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
                               "Dropping. Block download took %ds", time - mMessageInterpreter.pendingBlockStartTime);
-                            Info::instance().addPeerFail(mAddress, 5);
+                            info.addPeerFail(mAddress, 5);
                             close();
                         }
 
@@ -1467,7 +1478,7 @@ namespace BitCoin
                         {
                             ((Message::BlockData *)message)->block = NULL; // Memory has been handed off
                             if(!mIsSeed && mVersionData != NULL)
-                                Info::instance().updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
+                                info.updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
                         }
                     }
                 }
@@ -1475,7 +1486,7 @@ namespace BitCoin
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
                       "Dropping. Incoming node sent block : %s", ((Message::BlockData *)message)->block->hash);
-                    Info::instance().addPeerFail(mAddress, 5);
+                    info.addPeerFail(mAddress, 5);
                     close();
                 }
                 break;
@@ -1488,16 +1499,44 @@ namespace BitCoin
                     ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
                       "Received transaction (%d bytes) : %s", transactionData->transaction->size(),
                       transactionData->transaction->hash.hex().text());
-                    if(!info.spvMode && mChain->memPool().add(transactionData->transaction, mChain->outputs(),
-                      mChain->blockStats(), mChain->forks(), Info::instance().minFee))
+
+                    if(!info.spvMode)
                     {
-                        if(mAddressBlock != NULL)
+                        MemPool::AddStatus addStatus = mChain->memPool().add(transactionData->transaction,
+                          mChain->outputs(), mChain->blockStats(), mChain->forks(), info.minFee);
+
+                        switch(addStatus)
                         {
-                            transactionData->transaction = new Transaction(*transactionData->transaction);
-                            mAddressBlock->addTransaction(*mChain, transactionData);
+                            case MemPool::ADDED:
+                            case MemPool::UNSEEN_OUTPOINTS: // Added to pending
+                                if(mAddressBlock != NULL)
+                                {
+                                    transactionData->transaction = new Transaction(*transactionData->transaction);
+                                    mAddressBlock->addTransaction(*mChain, transactionData);
+                                }
+                                else
+                                    transactionData->transaction = NULL; // So it won't be deleted with the message
+                                break;
+
+                            case MemPool::NON_STANDARD:
+                                sendRejectWithHash(Message::nameFor(message->type), Message::RejectData::NON_STANDARD,
+                                  "Non standard", transactionData->transaction->hash);
+                                break;
+
+                            case MemPool::DOUBLE_SPEND:
+                                sendRejectWithHash(Message::nameFor(message->type), Message::RejectData::DUPLICATE,
+                                  "Double spend", transactionData->transaction->hash);
+                                break;
+
+                            case MemPool::LOW_FEE:
+                                sendRejectWithHash(Message::nameFor(message->type), Message::RejectData::LOW_FEE,
+                                  "Fee below minimum", transactionData->transaction->hash);
+                                break;
+
+                            default:
+                                break;
                         }
-                        else
-                            transactionData->transaction = NULL; // So it won't be deleted with the message
+
                     }
                     else if(mAddressBlock != NULL)
                         mAddressBlock->addTransaction(*mChain, transactionData);
@@ -1505,7 +1544,7 @@ namespace BitCoin
                 break;
             }
             case Message::MEM_POOL:
-                if(!Info::instance().spvMode)
+                if(!info.spvMode)
                 {
                     // Send Inventory message with all transactions in the mem pool
                     Message::InventoryData message;

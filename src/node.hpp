@@ -108,6 +108,8 @@ namespace BitCoin
         bool sendPing();
         bool sendFeeFilter();
         bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
+        bool sendRejectWithHash(const char *pCommand, Message::RejectData::Code pCode, const char *pReason,
+          const ArcMist::Hash &pHash);
         bool sendBlock(Block &pBlock);
         bool sendBloomFilter();
         bool sendMerkleBlock(const ArcMist::Hash &pBlockHash);

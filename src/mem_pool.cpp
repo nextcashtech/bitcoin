@@ -48,9 +48,16 @@ namespace BitCoin
         return mBlackListed.contains(pHash);
     }
 
-    MemPool::HashStatus MemPool::addPending(const ArcMist::Hash &pHash, unsigned int pNodeID)
+    MemPool::HashStatus MemPool::addPending(const ArcMist::Hash &pHash, TransactionOutputPool &pOutputs, unsigned int pNodeID)
     {
         mLock.writeLock("Add Pending");
+
+        if(pOutputs.find(pHash, 0) != NULL)
+        {
+            mLock.writeUnlock();
+            return ALREADY_HAVE; // Already in UTXO set
+        }
+
         HashStatus result = addPendingInternal(pHash, pNodeID);
         mLock.writeUnlock();
         return result;
@@ -146,6 +153,16 @@ namespace BitCoin
         mLock.readUnlock();
     }
 
+    bool MemPool::outpointExists(Transaction *pTransaction)
+    {
+        for(TransactionList::iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
+            for(std::vector<Input *>::iterator input=(*trans)->inputs.begin();input!=(*trans)->inputs.end();++input)
+                for(std::vector<Input *>::iterator otherInput=pTransaction->inputs.begin();otherInput!=pTransaction->inputs.end();++otherInput)
+                    if((*input)->outpoint == (*otherInput)->outpoint)
+                        return true;
+        return false;
+    }
+
     bool MemPool::check(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
       const Forks &pForks, uint64_t pMinFeeRate)
     {
@@ -161,13 +178,7 @@ namespace BitCoin
         }
 
         if(!(pTransaction->status() & Transaction::IS_VALID))
-        {
-            addBlacklisted(pTransaction->hash);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Transaction is not valid %02x. (%d bytes) : %s", pTransaction->status(), pTransaction->size(),
-              pTransaction->hash.hex().text());
             return false;
-        }
         else if(!(pTransaction->status() & Transaction::STANDARD_VERIFIED))
         {
             // Transaction not standard or has invalid signatures
@@ -186,6 +197,7 @@ namespace BitCoin
 
             for(ArcMist::HashList::iterator outpoint=outpointsNeeded.begin();outpoint!=outpointsNeeded.end();++outpoint)
                 addPendingInternal(*outpoint, 0);
+
             return pTransaction->status();
         }
 
@@ -234,32 +246,57 @@ namespace BitCoin
         mLock.writeUnlock();
     }
 
-    bool MemPool::add(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
-      const Forks &pForks, uint64_t pMinFeeRate)
+    MemPool::AddStatus MemPool::add(Transaction *pTransaction, TransactionOutputPool &pOutputs,
+      const BlockStats &pBlockStats, const Forks &pForks, uint64_t pMinFeeRate)
     {
-        // Check the transaction isn't already in the list
-        if(get(pTransaction->hash) != NULL)
-            return false;
+        mLock.writeLock("Add");
 
-        mLock.readLock();
+        // Check the transaction isn't already in the list
+        if(get(pTransaction->hash, true) != NULL)
+        {
+            mLock.writeUnlock();
+            return NOT_NEEDED;
+        }
+
+        if(pOutputs.find(pTransaction->hash, 0) != NULL)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Transaction already confirmed : %s", pTransaction->hash.hex().text());
+            mLock.writeUnlock();
+            return NOT_NEEDED;
+        }
+
         for(TransactionList::iterator transaction=mPendingTransactions.begin();transaction!=mPendingTransactions.end();++transaction)
             if((*transaction)->hash == pTransaction->hash)
             {
-                mLock.readUnlock();
-                return false;
+                mLock.writeUnlock();
+                return NOT_NEEDED;
             }
-        mLock.readUnlock();
 
         // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
           // "Attempting to add transaction. (%d bytes) : %s", pTransaction->size(),
           // pTransaction->hash.hex().text());
 
-        mLock.writeLock("Verify Insert");
         //TODO Move this outside of write lock
         if(!check(pTransaction, pOutputs, pBlockStats, pForks, pMinFeeRate))
         {
             mLock.writeUnlock();
-            return false;
+            if(pTransaction->feeRate() < pMinFeeRate)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
+                  "Transaction has low fee (%d bytes) (%llu fee rate) : %s", pTransaction->size(), pTransaction->feeRate(),
+                  pTransaction->hash.hex().text());
+                return LOW_FEE;
+            }
+            else if((pTransaction->status() & Transaction::STANDARD_VERIFIED) == Transaction::STANDARD_VERIFIED &&
+              pTransaction->status() & Transaction::OUTPOINTS_SPENT)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
+                  "Transaction has double spend : %s", pTransaction->hash.hex().text());
+                return DOUBLE_SPEND;
+            }
+            else
+                return NON_STANDARD;
         }
         else if(!(pTransaction->status() & Transaction::OUTPOINTS_FOUND))
         {
@@ -267,7 +304,16 @@ namespace BitCoin
             mPendingTransactions.insertSorted(pTransaction);
             mSize += pTransaction->size();
             mLock.writeUnlock();
-            return true;
+            return UNSEEN_OUTPOINTS;
+        }
+
+        if(outpointExists(pTransaction))
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
+              "Transaction has double spend from mempool : %s", pTransaction->hash.hex().text());
+            addBlacklisted(pTransaction->hash);
+            mLock.writeUnlock();
+            return DOUBLE_SPEND;
         }
 
         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
@@ -277,7 +323,7 @@ namespace BitCoin
         insert(pTransaction, true);
 
         mLock.writeUnlock();
-        return true;
+        return ADDED;
     }
 
     void MemPool::remove(const std::vector<Transaction *> &pTransactions)
@@ -378,11 +424,13 @@ namespace BitCoin
         return false;
     }
 
-    Transaction *MemPool::get(const ArcMist::Hash &pHash)
+    Transaction *MemPool::get(const ArcMist::Hash &pHash, bool pLocked)
     {
-        mLock.readLock();
+        if(!pLocked)
+            mLock.readLock();
         Transaction *result = getInternal(pHash);
-        mLock.readUnlock();
+        if(!pLocked)
+            mLock.readUnlock();
         return result;
     }
 
@@ -448,6 +496,27 @@ namespace BitCoin
         }
     }
 
+    void MemPool::expire()
+    {
+        int32_t expireTime = getTime() - (60 * 60 * 24);
+        ArcMist::String timeString;
+
+        for(TransactionList::iterator transaction=mTransactions.begin();transaction!=mTransactions.end();)
+        {
+            if((*transaction)->time() < expireTime)
+            {
+                timeString.writeFormattedTime((*transaction)->time());
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
+                  "Expiring transaction (time %d) %s : %s", (*transaction)->time(), timeString.text(),
+                  (*transaction)->hash.hex().text());
+                delete *transaction;
+                transaction = mTransactions.erase(transaction);
+            }
+            else
+                ++transaction;
+        }
+    }
+
     void MemPool::process(unsigned int pMemPoolThreshold)
     {
         mLock.writeLock("Process");
@@ -455,6 +524,7 @@ namespace BitCoin
             drop();
 
         expirePending();
+        expire();
         mLock.writeUnlock();
     }
 }

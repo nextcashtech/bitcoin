@@ -51,6 +51,11 @@ namespace BitCoin
 
         static bool skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream = NULL);
 
+        bool operator == (const Outpoint &pRight)
+        {
+            return transactionID == pRight.transactionID && index == pRight.index;
+        }
+
         ArcMist::Hash transactionID; // Double SHA256 of signed transaction that paid the input of this transaction.
         uint32_t index;
 
@@ -181,7 +186,8 @@ namespace BitCoin
         static const uint8_t IS_VALID        = 0x02; // Basic format validity
         static const uint8_t IS_STANDARD     = 0x04; // Is a "standard" transaction
         static const uint8_t OUTPOINTS_FOUND = 0x08; // Has valid outpoints
-        static const uint8_t SIGS_VERIFIED   = 0x10; // Has valid signatures
+        static const uint8_t OUTPOINTS_SPENT = 0x10; // Outpoint already spent
+        static const uint8_t SIGS_VERIFIED   = 0x11; // Has valid signatures
 
         // Flag checking operations
         uint8_t status() const { return mStatus; }

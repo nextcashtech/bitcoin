@@ -51,10 +51,11 @@ namespace BitCoin
 
         enum HashStatus { ALREADY_HAVE, NEED, BLACK_LISTED };
         // Add to transaction hashes that need downloaded and verified. Returns hash status. Zero means already added.
-        HashStatus addPending(const ArcMist::Hash &pHash, unsigned int pNodeID);
+        HashStatus addPending(const ArcMist::Hash &pHash, TransactionOutputPool &pOutputs, unsigned int pNodeID);
 
         // Add transaction to mem pool. Returns false if it was already in the mem pool or is invalid
-        bool add(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
+        enum AddStatus { ADDED, NOT_NEEDED, NON_STANDARD, DOUBLE_SPEND, LOW_FEE, UNSEEN_OUTPOINTS };
+        AddStatus add(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
           const Forks &pForks, uint64_t pMinFeeRate);
 
         // Remove transactions that have been added to a block
@@ -63,7 +64,7 @@ namespace BitCoin
         // Add transactions back in for a block that is being reverted
         void revert(const std::vector<Transaction *> &pTransactions);
 
-        Transaction *get(const ArcMist::Hash &pHash);
+        Transaction *get(const ArcMist::Hash &pHash, bool pLocked = false);
 
         void process(unsigned int pMemPoolThreshold);
 
@@ -93,8 +94,11 @@ namespace BitCoin
         // Drop the oldest/lowest fee rate transaction
         void drop();
 
-        // Drop pending transactions older than 10 minutes
+        // Drop pending transactions older than 60 seconds
         void expirePending();
+
+        // Drop verified transactions older than 24 hours
+        void expire();
 
         void addBlacklisted(const ArcMist::Hash &pHash);
         bool isBlackListedInternal(const ArcMist::Hash &pHash);
@@ -106,6 +110,8 @@ namespace BitCoin
         // Verifies that a transaction is valid
         bool check(Transaction *pTransaction, TransactionOutputPool &pOutputs,
           const BlockStats &pBlockStats, const Forks &pForks, uint64_t pMinFeeRate);
+
+        bool outpointExists(Transaction *pTransaction);
 
         ArcMist::ReadersLock mLock;
         unsigned int mSize; // Size in bytes of all transactions in mempool

@@ -540,6 +540,32 @@ namespace BitCoin
         return NULL;
     }
 
+    TransactionReference *TransactionOutputPool::find(const ArcMist::Hash &pTransactionID, uint32_t pIndex)
+    {
+        if(!mIsValid)
+            return NULL;
+
+#ifdef PROFILER_ON
+        ArcMist::Profiler profiler("Find Unspent");
+#endif
+        Iterator reference = get(pTransactionID);
+        TransactionReference *result = NULL;
+        while(reference && reference.hash() == pTransactionID)
+        {
+            if(!((TransactionReference *)(*reference))->markedRemove())
+            {
+              if(((TransactionReference *)(*reference))->hasUnspentOutput(pIndex))
+                  return (TransactionReference *)*reference;
+              else
+                  result = (TransactionReference *)*reference;
+            }
+
+            ++reference;
+        }
+
+        return result;
+    }
+
     // Mark an output as spent
     void TransactionOutputPool::spend(TransactionReference *pReference, unsigned int pIndex, unsigned int pBlockHeight)
     {

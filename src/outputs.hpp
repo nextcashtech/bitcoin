@@ -228,6 +228,9 @@ namespace BitCoin
         // Find an unspent transaction output
         TransactionReference *findUnspent(const ArcMist::Hash &pTransactionID, uint32_t pIndex);
 
+        // Find a transaction output. Return unspent if found, otherwise return spent.
+        TransactionReference *find(const ArcMist::Hash &pTransactionID, uint32_t pIndex);
+
         // BIP-0030 Check if this block's transactions match any existing unspent transaction IDs
         //   This is expensive since it is a negative lookup and has to search a file for every transaction.
         //   Positive lookups can be limited extremely by cacheing transactions from recent (a few thousand) blocks

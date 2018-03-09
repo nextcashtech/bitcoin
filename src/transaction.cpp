@@ -923,9 +923,16 @@ namespace BitCoin
                 (*input)->outpoint.signatureStatus = 0;
 
                 // Find unspent transaction for input
-                reference = pOutputs.findUnspent((*input)->outpoint.transactionID, (*input)->outpoint.index);
+                reference = pOutputs.find((*input)->outpoint.transactionID, (*input)->outpoint.index);
                 if(reference != NULL)
                     outputReference = reference->outputAt((*input)->outpoint.index);
+                if(outputReference != NULL && outputReference->spentBlockHeight != 0)
+                {
+                    // Already spent
+                    mStatus |= OUTPOINTS_SPENT;
+                    mStatus ^= IS_VALID;
+                    return true;
+                }
                 if(reference == NULL || outputReference == NULL || outputReference->blockFileOffset == 0)
                 {
                     // Search mempool
