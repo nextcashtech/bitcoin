@@ -807,22 +807,24 @@ namespace BitCoin
 
         if(size() > 100000)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-              "Transaction over standard size of 100000");
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              "Transaction over standard size of 100000 : trans %s", hash.hex().text());
             if(mStatus & IS_STANDARD)
                 mStatus ^= IS_STANDARD;
         }
 
         if(inputs.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              "Zero inputs : trans %s", hash.hex().text());
             mStatus ^= IS_VALID;
             return true;
         }
 
         if(outputs.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              "Zero outputs : trans %s", hash.hex().text());
             mStatus ^= IS_VALID;
             return true;
         }
@@ -834,7 +836,7 @@ namespace BitCoin
             if((*input)->outpoint.index == 0xffffffff)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d has no outpoint transaction", index);
+                  "Input %d has no outpoint transaction : trans %s", index, hash.hex().text());
                 mStatus ^= IS_VALID;
                 return true; // Coinbase transactions not allowed in mempool
             }
@@ -842,7 +844,7 @@ namespace BitCoin
             if((*input)->script.length() > 1650)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d script over standard size of 1650", index);
+                  "Input %d script over standard size of 1650 : trans %s", index, hash.hex().text());
                 if(mStatus & IS_STANDARD)
                     mStatus ^= IS_STANDARD;
             }
@@ -852,7 +854,7 @@ namespace BitCoin
             if(!ScriptInterpreter::isPushOnly((*input)->script))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d script is not push only", index);
+                  "Input %d script is not push only : trans %s", index, hash.hex().text());
                 if(mStatus & IS_STANDARD)
                     mStatus ^= IS_STANDARD;
             }
@@ -868,7 +870,7 @@ namespace BitCoin
             if((*output)->amount < 0)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Output %d amount is less than zero : %d", index, (*output)->amount);
+                  "Output %d amount is less than zero (%d) : trans %s", index, (*output)->amount, hash.hex().text());
                 (*output)->print(ArcMist::Log::VERBOSE);
                 print(ArcMist::Log::VERBOSE);
                 mStatus ^= IS_VALID;
@@ -880,7 +882,7 @@ namespace BitCoin
             if(scriptType == ScriptInterpreter::NON_STANDARD)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Output %d is non standard", index);
+                  "Output %d is non standard : trans %s", index, hash.hex().text());
                 print(ArcMist::Log::VERBOSE);
                 if(mStatus & IS_STANDARD)
                     mStatus ^= IS_STANDARD;
@@ -896,7 +898,7 @@ namespace BitCoin
             else if(scriptType == ScriptInterpreter::INVALID)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Output %d is invalid", index);
+                  "Output %d is invalid : trans %s", index, hash.hex().text());
                 print(ArcMist::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
@@ -990,7 +992,7 @@ namespace BitCoin
             if(!interpreter.process((*input)->script, pBlockVersion, pForks))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d signature script is invalid : ", index);
+                  "Input %d signature script is invalid : trans %s", index, hash.hex().text());
                 (*input)->print(ArcMist::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
@@ -1002,7 +1004,7 @@ namespace BitCoin
               !interpreter.isValid())
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d outpoint script is not valid : ", index);
+                  "Input %d outpoint script is not valid : trans %s", index, hash.hex().text());
                 (*input)->print(ArcMist::Log::VERBOSE);
                 if(reference != NULL)
                 {
@@ -1016,7 +1018,7 @@ namespace BitCoin
             else if(!interpreter.isVerified())
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d script did not verify : ", index);
+                  "Input %d script did not verify : trans %s", index, hash.hex().text());
                 (*input)->print(ArcMist::Log::VERBOSE);
                 interpreter.printStack("After fail verify");
                 if(reference != NULL)
