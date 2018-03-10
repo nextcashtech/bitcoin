@@ -12,6 +12,7 @@
 #include "arcmist/io/network.hpp"
 #include "arcmist/base/log.hpp"
 #include "arcmist/crypto/digest.hpp"
+#include "arcmist/io/email.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -27,26 +28,10 @@ namespace BitCoin
     void notify(const char *pSubject, const char *pMessage)
     {
         ArcMist::String emailAddress = Info::instance().notifyEmail;
-
         if(!emailAddress)
             return;
 
-        FILE *mailPipe = popen("/usr/lib/sendmail -t", "w");
-        if (mailPipe != NULL)
-        {
-            fprintf(mailPipe, "To: %s\n", emailAddress.text());
-            //fprintf(mailPipe, "From: %s\n", from); // Use default from address for server
-            fprintf(mailPipe, "Subject: %s\n\n", pSubject);
-            fwrite(pMessage, 1, std::strlen(pMessage), mailPipe);
-            fwrite("\n", 1, 2, mailPipe);
-            pclose(mailPipe);
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_INFO_LOG_NAME, "Sent email : %s", pSubject);
-        }
-        else
-        {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INFO_LOG_NAME, "Failed to send email");
-            perror("Failed to invoke sendmail");
-        }
+        ArcMist::Email::send(NULL, emailAddress, pSubject, pMessage);
     }
 
     void Peer::write(ArcMist::OutputStream *pStream) const
