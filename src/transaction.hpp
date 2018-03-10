@@ -187,7 +187,7 @@ namespace BitCoin
         static const uint8_t IS_STANDARD     = 0x04; // Is a "standard" transaction
         static const uint8_t OUTPOINTS_FOUND = 0x08; // Has valid outpoints
         static const uint8_t OUTPOINTS_SPENT = 0x10; // Outpoint already spent
-        static const uint8_t SIGS_VERIFIED   = 0x11; // Has valid signatures
+        static const uint8_t SIGS_VERIFIED   = 0x20; // Has valid signatures
 
         // Flag checking operations
         uint8_t status() const { return mStatus; }
@@ -198,7 +198,7 @@ namespace BitCoin
         bool isVerfied() const { return mStatus & SIGS_VERIFIED; }
 
         // Flag masks
-        static const uint8_t STANDARD_VERIFIED = IS_STANDARD | SIGS_VERIFIED;
+        static const uint8_t STANDARD_VERIFIED = IS_VALID | IS_STANDARD | SIGS_VERIFIED;
         bool isStandardVerified() const { return (mStatus & STANDARD_VERIFIED) == STANDARD_VERIFIED; }
 
         unsigned int calculatedSize();
