@@ -11,7 +11,9 @@
 #include "arcmist/base/string.hpp"
 #include "arcmist/base/hash.hpp"
 #include "arcmist/io/stream.hpp"
+#include "arcmist/io/buffer.hpp"
 #include "base.hpp"
+#include "mnemonics.hpp"
 
 #include "secp256k1.h"
 
@@ -122,6 +124,8 @@ namespace BitCoin
             }
         }
 
+        const uint8_t *data() const { return mData; }
+
     private:
 
         void generateOutput();
@@ -160,6 +164,162 @@ namespace BitCoin
 
         secp256k1_context *mContext;
         uint8_t mData[32];
+
+    };
+
+    /**********************************************************************************************
+     *                       BIP-0032 Hierarchal Deterministic Keys
+     *
+     * A private key with the chain code at each level can derive anything below it.
+     * A "non-hardened" public key with the chain code at a specific level can derive only public
+     *   keys below that level.
+     * A "hardened" public key with the chain code at a specific level can't derive anything.
+     *
+     * Levels of Hierarchy
+     *
+     * Name                                    |     Count
+     * --------------------------------------------------------------------
+     * Seed    : 128 .. 512 bits of entropy    |       1
+     * Level 1 : Master Key                    |       1
+     * Level 2 : Accounts                      |    1 .. 2^32
+     * Level 3 : Chains                        |    1 .. 2^32 per account
+     * Level 4 : Payable Addresses             |    1 .. 2^32 per chain
+     *
+     *********************************************************************************************/
+    class KeyTree
+    {
+    public:
+
+        // Keys with indices greater than or equal to this are "hardened".
+        static const uint32_t HARDENED_LIMIT = 0x80000000;
+
+        enum Version { MAINNET_PRIVATE, MAINNET_PUBLIC, TESTNET_PRIVATE, TESTNET_PUBLIC };
+        static const uint32_t sVersionValues[4];
+
+        KeyTree();
+        ~KeyTree();
+
+        Network network() const { return mNetwork; }
+
+        void clear(); // Clear all data and set master key to zero
+
+        // Seed initialization
+        void generate(Network pNetwork);
+        bool setSeed(Network pNetwork, ArcMist::InputStream *pStream);
+        void readSeed(ArcMist::OutputStream *pStream) { mSeed.setReadOffset(0); pStream->writeStream(&mSeed, mSeed.length()); }
+
+        // Seed to/from mnemonic conversion BIP-0039
+        bool loadMnemonic(const char *pText);
+        ArcMist::String createMnemonic(Mnemonic::Language);
+
+        void write(ArcMist::OutputStream *pStream);
+        bool read(ArcMist::InputStream *pStream);
+
+        // TODO Add sub tree functions. i.e. Given an extended key, public or private, a sub tree can be created.
+        // Public only can be used to verify incoming payments and balances.
+
+        class KeyData
+        {
+        public:
+
+            KeyData() { mPublicKey = NULL; clear(); }
+            ~KeyData() { clear(); }
+
+            // Encode key as base58 text
+            ArcMist::String encode() const;
+
+            bool isPrivate() const { return mKey[0] == 0; }
+            bool isHardened() const { return mIndex >= HARDENED_LIMIT; }
+            const Version version() const { return (Version)mVersion; }
+            uint8_t depth() const { return mDepth; }
+            const uint8_t *fingerPrint() const { return mFingerPrint; }
+            const uint8_t *parentFingerPrint() const { return mParentFingerPrint; }
+            uint32_t index() const { return mIndex; }
+            const uint8_t *key() const { return mKey; }
+            const uint8_t *chainCode() const { return mChainCode; }
+            KeyData *publicKey() { return mPublicKey; } // Null for public keys
+            const ArcMist::Hash &hash();
+
+            bool sign(secp256k1_context *pContext, ArcMist::Hash &pHash, Signature &pSignature) const;
+            bool verify(secp256k1_context *pContext, Signature &pSignature, const ArcMist::Hash &pHash) const;
+
+            void clear();
+
+            // Serializes key data
+            void write(ArcMist::OutputStream *pStream) const;
+            bool read(ArcMist::InputStream *pStream);
+
+            // Serializes key data and all children
+            void writeTree(ArcMist::OutputStream *pStream) const;
+            bool readTree(ArcMist::InputStream *pStream);
+
+            // Find an already derived child key with the specified index
+            KeyData *findChild(uint32_t pIndex);
+
+            // If this is the address level then search for public address with matching hash
+            KeyData *findAddress(const ArcMist::Hash &pHash);
+
+            // For private key, creates child private/public key pair for specified index.
+            // For public only key, creates child public key for specified index.
+            KeyData *deriveChild(secp256k1_context *pContext, Network pNetwork, uint32_t pIndex);
+
+            /*************************** Functions used to setup keys ****************************/
+            void setInfo(Version pVersion, uint8_t pDepth, const uint8_t *pParentFingerPrint, uint32_t pIndex)
+            {
+                mVersion = pVersion;
+                mDepth = pDepth;
+                std::memcpy(mParentFingerPrint, pParentFingerPrint, 4);
+                mIndex = pIndex;
+            }
+
+            void setKey(const uint8_t *pKey, uint8_t pType) { mKey[0] = pType; std::memcpy(mKey + 1, pKey, 32); }
+            void writeKey(ArcMist::InputStream *pStream, uint8_t pType) { mKey[0] = pType; pStream->read(mKey + 1, 32); }
+            void setChainCode(const uint8_t *pChainCode) { std::memcpy(mChainCode, pChainCode, 32); }
+            void writeChainCode(ArcMist::InputStream *pStream) { pStream->read(mChainCode, 32); }
+
+            // Used only by KeyTree
+            // Calculates fingerprint
+            // Creates associated public key if this is a private key
+            bool finalize(secp256k1_context *pContext, Network pNetwork);
+            /*************************************************************************************/
+
+        private:
+
+            uint8_t  mVersion;
+            uint8_t  mDepth;
+            uint8_t  mParentFingerPrint[4]; // First 4 bytes of parent's Hash160. Zeros for master.
+            uint32_t mIndex;
+            uint8_t  mChainCode[32];
+            uint8_t  mKey[33]; // First byte zero for private
+
+            uint8_t mFingerPrint[4];
+
+            KeyData *mPublicKey;
+            std::vector<KeyData *> mChildren;
+
+            ArcMist::Hash mHash;
+
+        };
+
+        KeyData &master() { return mMasterKey; }
+        KeyData *getAccount(uint32_t pIndex); // Children of master key
+        KeyData *getChain(uint32_t pAccountIndex, uint32_t pIndex); // Children of account keys
+        KeyData *getAddress(uint32_t pAccountIndex, uint32_t pChainIndex, uint32_t pIndex); // Children of chain keys
+        KeyData *findAddress(const ArcMist::Hash &pHash); // Find child of chain key with matching public key hash
+
+        // Calls deriveChild function on parent key with appropriate tree values.
+        KeyData *deriveChild(KeyData *pParent, uint32_t pIndex) { return pParent->deriveChild(mContext, mNetwork, pIndex); }
+
+    private:
+
+        void generateSeed(); // Generate entropy to create master key/code
+        bool generateMaster(); // Generate master private key and chain code from entropy
+
+        secp256k1_context *mContext;
+
+        Network mNetwork;
+        ArcMist::Buffer mSeed;
+        KeyData mMasterKey;
 
     };
 }
