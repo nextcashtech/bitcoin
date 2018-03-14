@@ -527,8 +527,11 @@ namespace BitCoin
 
     const ArcMist::Hash &KeyTree::KeyData::hash()
     {
-        if(isPrivate() || !mHash.isEmpty())
+        if(!mHash.isEmpty())
             return mHash;
+
+        if(isPrivate())
+            return mPublicKey->hash();
 
         ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
         digest.write(mKey, 33);
@@ -662,6 +665,53 @@ namespace BitCoin
         return result;
     }
 
+    bool KeyTree::KeyData::decode(secp256k1_context *pContext, const char *pText)
+    {
+        ArcMist::Buffer data;
+
+        // Decode base58
+        if(data.writeBase58AsBinary(pText) == 0)
+            return false;
+
+        // Read into key
+        if(!read(&data) || data.remaining() != 4)
+        {
+            clear();
+            return false;
+        }
+
+        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+        ArcMist::Buffer checkSum;
+
+        write(&digest);
+        digest.getResult(&checkSum);
+
+        checkSum.setInputEndian(ArcMist::Endian::BIG);
+        if(checkSum.readUnsignedInt() != data.readUnsignedInt())
+        {
+            clear();
+            return false;
+        }
+
+        Network network;
+        switch(mVersion)
+        {
+            case MAINNET_PRIVATE:
+            case MAINNET_PUBLIC:
+                network = MAINNET;
+                break;
+            case TESTNET_PRIVATE:
+            case TESTNET_PUBLIC:
+                network = TESTNET;
+                break;
+            default:
+                clear();
+                return false;
+        }
+
+        return finalize(pContext, network);
+    }
+
     bool KeyTree::KeyData::finalize(secp256k1_context *pContext, Network pNetwork)
     {
         ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
@@ -753,37 +803,22 @@ namespace BitCoin
 
     KeyTree::KeyData *KeyTree::getAccount(uint32_t pIndex)
     {
-        KeyData *result = mMasterKey.findChild(pIndex);
-        if(result == NULL)
-            result = mMasterKey.deriveChild(mContext, mNetwork, pIndex);
-        return result;
-    }
-
-    KeyTree::KeyData *KeyTree::getChain(uint32_t pAccountIndex, uint32_t pIndex)
-    {
-        KeyData *account = getAccount(pAccountIndex);
-        if(account == NULL)
+        if(mTopKey.depth() == 0)
+        {
+            KeyData *result = mTopKey.findChild(pIndex);
+            if(result == NULL)
+                result = mTopKey.deriveChild(mContext, mNetwork, pIndex);
+            return result;
+        }
+        else if(mTopKey.depth() == 1 && mTopKey.index() == pIndex)
+            return &mTopKey;
+        else
             return NULL;
-        KeyData *result = account->findChild(pIndex);
-        if(result == NULL)
-            result = account->deriveChild(mContext, mNetwork, pIndex);
-        return result;
-    }
-
-    KeyTree::KeyData *KeyTree::getAddress(uint32_t pAccountIndex, uint32_t pChainIndex, uint32_t pIndex)
-    {
-        KeyData *chain = getChain(pAccountIndex, pChainIndex);
-        if(chain == NULL)
-            return NULL;
-        KeyData *result = chain->findChild(pIndex);
-        if(result == NULL)
-            result = chain->deriveChild(mContext, mNetwork, pIndex);
-        return result;
     }
 
     KeyTree::KeyData *KeyTree::findAddress(const ArcMist::Hash &pHash)
     {
-        return mMasterKey.findAddress(pHash);
+        return mTopKey.findAddress(pHash);
     }
 
     KeyTree::KeyData *KeyTree::KeyData::findChild(uint32_t pIndex)
@@ -1054,7 +1089,7 @@ namespace BitCoin
     void KeyTree::clear()
     {
         mSeed.clear();
-        mMasterKey.clear();
+        mTopKey.clear();
     }
 
     void KeyTree::generateSeed()
@@ -1073,10 +1108,10 @@ namespace BitCoin
         switch(mNetwork)
         {
         case MAINNET:
-            mMasterKey.setInfo(MAINNET_PRIVATE, 0, (uint8_t *)"\0\0\0\0", 0);
+            mTopKey.setInfo(MAINNET_PRIVATE, 0, (uint8_t *)"\0\0\0\0", 0);
             break;
         case TESTNET:
-            mMasterKey.setInfo(TESTNET_PRIVATE, 0, (uint8_t *)"\0\0\0\0", 0);
+            mTopKey.setInfo(TESTNET_PRIVATE, 0, (uint8_t *)"\0\0\0\0", 0);
             break;
         }
 
@@ -1091,10 +1126,10 @@ namespace BitCoin
         hmac.getResult(&hmacResult);
 
         // Split HMAC SHA512 into halves for key and chain code
-        mMasterKey.writeKey(&hmacResult, 0); // Zero for private key
-        mMasterKey.writeChainCode(&hmacResult);
+        mTopKey.writeKey(&hmacResult, 0); // Zero for private key
+        mTopKey.writeChainCode(&hmacResult);
 
-        return secp256k1_ec_seckey_verify(mContext, mMasterKey.key() + 1) && mMasterKey.finalize(mContext, mNetwork);
+        return secp256k1_ec_seckey_verify(mContext, mTopKey.key() + 1) && mTopKey.finalize(mContext, mNetwork);
     }
 
     void KeyTree::generate(Network pNetwork)
@@ -1118,12 +1153,32 @@ namespace BitCoin
         return generateMaster();
     }
 
-    ArcMist::String KeyTree::createMnemonic(Mnemonic::Language pLanguage)
+    bool KeyTree::setTopKey(const char *pKeyText)
     {
-        if(mSeed.length() == 0 || // No seed
-          mSeed.length() % 4 != 0) // Seed not multiple of 32 bits
-            return ArcMist::String();
+        clear();
+        if(!mTopKey.decode(mContext, pKeyText))
+            return false;
 
+        switch(mTopKey.version())
+        {
+            case MAINNET_PRIVATE:
+            case MAINNET_PUBLIC:
+                mNetwork = MAINNET;
+                break;
+            case TESTNET_PRIVATE:
+            case TESTNET_PUBLIC:
+                mNetwork = TESTNET;
+                break;
+            default:
+                mTopKey.clear();
+                return false;
+        }
+
+        return true;
+    }
+
+    ArcMist::String createMnemonicFromSeed(Mnemonic::Language pLanguage, ArcMist::InputStream *pSeed)
+    {
         ArcMist::String result;
         ArcMist::Digest digest(ArcMist::Digest::SHA256);
         ArcMist::Buffer checkSum;
@@ -1131,17 +1186,17 @@ namespace BitCoin
         uint8_t nextByte;
 
         // Calculate checksum
-        mSeed.setReadOffset(0);
-        digest.writeStream(&mSeed, mSeed.length());
+        pSeed->setReadOffset(0);
+        digest.writeStream(pSeed, pSeed->length());
         digest.getResult(&checkSum);
 
-        int checkSumBits = mSeed.length() / 4; // Entropy bit count / 32
+        int checkSumBits = pSeed->length() / 4; // Entropy bit count / 32
 
         // Copy seed to bit vector
-        mSeed.setReadOffset(0);
-        while(mSeed.remaining())
+        pSeed->setReadOffset(0);
+        while(pSeed->remaining())
         {
-            nextByte = mSeed.readByte();
+            nextByte = pSeed->readByte();
             for(unsigned int bit=0;bit<8;++bit)
                 bits.push_back(ArcMist::Math::bit(nextByte, bit));
         }
@@ -1190,161 +1245,234 @@ namespace BitCoin
         return result;
     }
 
-    bool KeyTree::loadMnemonic(const char *pText)
+    ArcMist::String KeyTree::generateMnemonic(Mnemonic::Language pLanguage, unsigned int pBytesEntropy)
     {
-        std::vector<bool> bits;
-        uint16_t value;
-        uint8_t valueBits;
-        ArcMist::String word;
-        bool found;
-        const char *ptr;
-        int seedBits, checkSumBits;
-        ArcMist::Buffer checkSum, mnemonicCheckSum;
+        // Generate specified number of bytes of entropy
+        ArcMist::Buffer seed;
+        for(unsigned int i=0;i<pBytesEntropy;i+=4)
+            seed.writeUnsignedInt(ArcMist::Math::randomInt());
+        return createMnemonicFromSeed(pLanguage, &seed);
+    }
 
-        // Loop through languages
-        for(unsigned int languageIndex=0;languageIndex<Mnemonic::LANGUAGE_COUNT;++languageIndex)
+    // PBKDF2 with HMAC SHA512, 2048 iterations, and output length of 512 bits.
+    bool processMnemonicSeed(ArcMist::InputStream *pMnemonicSentence, ArcMist::InputStream *pSaltPlusPassPhrase, ArcMist::OutputStream *pResult)
+    {
+        ArcMist::HMACDigest digest(ArcMist::Digest::SHA512);
+        ArcMist::Buffer result, newResult, round, data;
+
+        for(unsigned int i=0;i<64;++i)
+            result.writeByte(0);
+
+        data.setOutputEndian(ArcMist::Endian::BIG);
+        pSaltPlusPassPhrase->setReadOffset(0);
+        data.writeStream(pSaltPlusPassPhrase, pSaltPlusPassPhrase->length());
+        data.writeUnsignedInt(1);
+
+        for(unsigned int i=0;i<2048;++i)
         {
-            // Parse words from text
-            bits.clear();
-            ptr = pText;
-            while(*ptr)
-            {
-                if(*ptr == ' ' && word.length())
-                {
-                    // Lookup word in mnemonics and add value to list
-                    // TODO Implement binary search
-                    found = false;
-                    for(value=0;value<Mnemonic::WORD_COUNT;++value)
-                        if(word == Mnemonic::WORDS[languageIndex][value])
-                        {
-                            for(int bit=5;bit<16;++bit)
-                            {
-                                if(bit >= 8)
-                                    bits.push_back(ArcMist::Math::bit(value & 0xff, bit - 8));
-                                else
-                                    bits.push_back(ArcMist::Math::bit(value >> 8, bit));
-                            }
-                            found = true;
-                            break;
-                        }
+            pMnemonicSentence->setReadOffset(0);
+            digest.initialize(pMnemonicSentence);
 
-                    word.clear();
+            data.setReadOffset(0);
+            digest.writeStream(&data, data.length());
 
-                    if(!found)
-                        break;
-                }
-                else
-                    word += ArcMist::lower(*ptr);
+            round.setWriteOffset(0);
+            digest.getResult(&round);
 
-                ++ptr;
-            }
+            // Save this round to use as data for next
+            data.setWriteOffset(0);
+            round.setReadOffset(0);
+            data.writeStream(&round, round.length());
 
-            if(!found)
-                continue; // Next language
+            // Xor round into result
+            result.setReadOffset(0);
+            round.setReadOffset(0);
+            newResult.setWriteOffset(0);
+            while(result.remaining())
+                newResult.writeByte(result.readByte() ^ round.readByte());
 
-            if(word.length())
-            {
-                found = false;
-                for(value=0;value<Mnemonic::WORD_COUNT;++value)
-                    if(word == Mnemonic::WORDS[languageIndex][value])
-                    {
-                        for(int bit=5;bit<16;++bit)
-                        {
-                            if(bit >= 8)
-                                bits.push_back(ArcMist::Math::bit(value & 0xff, bit - 8));
-                            else
-                                bits.push_back(ArcMist::Math::bit(value >> 8, bit));
-                        }
-                        found = true;
-                        break;
-                    }
-
-                if(!found)
-                    continue; // Next language
-            }
-
-            // Check if values is a valid seed
-            if(bits.size() > 128)
-            {
-                checkSumBits = 0;
-                for(unsigned int i=128;i<=256;i+=32)
-                    if(bits.size() == i + (i / 32))
-                    {
-                        seedBits = i;
-                        checkSumBits = i / 32;
-                        break;
-                    }
-
-                if(checkSumBits == 0)
-                    continue;
-
-                // Parse bits
-                mSeed.clear();
-                mnemonicCheckSum.clear();
-                value = 0;
-                valueBits = 0;
-                for(std::vector<bool>::iterator bit=bits.begin();bit!=bits.end();++bit)
-                {
-                    --seedBits;
-                    ++valueBits;
-                    value <<= 1;
-                    if(*bit)
-                        value |= 0x01;
-
-                    if(valueBits == 8)
-                    {
-                        if(seedBits >= 0)
-                            mSeed.writeByte(value);
-                        else
-                            mnemonicCheckSum.writeByte(value);
-                        value = 0;
-                        valueBits = 0;
-                    }
-                }
-
-                if(valueBits > 0)
-                {
-                    if(valueBits < 8)
-                        value <<= (8 - valueBits);
-                    if(seedBits >= 0)
-                        mSeed.writeByte(value);
-                    else
-                        mnemonicCheckSum.writeByte(value);
-                }
-
-                ArcMist::Digest digest(ArcMist::Digest::SHA256);
-
-                // Calculate checksum
-                mSeed.setReadOffset(0);
-                digest.writeStream(&mSeed, mSeed.length());
-                checkSum.clear();
-                digest.getResult(&checkSum);
-
-                // Verify checksum
-                bool matches = true;
-                for(int bit=checkSumBits;bit>0;bit-=8)
-                {
-                    if(bit >= 8)
-                    {
-                        if(checkSum.readByte() != mnemonicCheckSum.readByte())
-                        {
-                            matches = false;
-                            break;
-                        }
-                    }
-                    else if((checkSum.readByte() >> bit) != (mnemonicCheckSum.readByte() >> bit))
-                    {
-                        matches = false;
-                        break;
-                    }
-                }
-
-                if(matches)
-                    return true;
-            }
+            result.setWriteOffset(0);
+            newResult.setReadOffset(0);
+            result.writeStream(&newResult, newResult.length());
         }
 
-        return false;
+        result.setReadOffset(0);
+        pResult->writeStream(&result, result.length());
+
+        // Zeroize before releasing memory since a password might have been in here
+        round.zeroize();
+        newResult.zeroize();
+        result.zeroize();
+        return true;
+    }
+
+    bool KeyTree::loadMnemonic(const char *pMnemonicSentence, const char *pPassPhrase)
+    {
+        clear();
+
+        //TODO Validate Mnemonic Sentence
+        // // Loop through languages
+        // for(unsigned int languageIndex=0;languageIndex<Mnemonic::LANGUAGE_COUNT;++languageIndex)
+        // {
+            // // Parse words from text
+            // bits.clear();
+            // ptr = pText;
+            // while(*ptr)
+            // {
+                // if(*ptr == ' ' && word.length())
+                // {
+                    // // Lookup word in mnemonics and add value to list
+                    // // TODO Implement binary search
+                    // found = false;
+                    // for(value=0;value<Mnemonic::WORD_COUNT;++value)
+                        // if(word == Mnemonic::WORDS[languageIndex][value])
+                        // {
+                            // for(int bit=5;bit<16;++bit)
+                            // {
+                                // if(bit >= 8)
+                                    // bits.push_back(ArcMist::Math::bit(value & 0xff, bit - 8));
+                                // else
+                                    // bits.push_back(ArcMist::Math::bit(value >> 8, bit));
+                            // }
+                            // found = true;
+                            // break;
+                        // }
+
+                    // word.clear();
+
+                    // if(!found)
+                        // break;
+                // }
+                // else
+                    // word += ArcMist::lower(*ptr);
+
+                // ++ptr;
+            // }
+
+            // if(!found)
+                // continue; // Next language
+
+            // if(word.length())
+            // {
+                // found = false;
+                // for(value=0;value<Mnemonic::WORD_COUNT;++value)
+                    // if(word == Mnemonic::WORDS[languageIndex][value])
+                    // {
+                        // for(int bit=5;bit<16;++bit)
+                        // {
+                            // if(bit >= 8)
+                                // bits.push_back(ArcMist::Math::bit(value & 0xff, bit - 8));
+                            // else
+                                // bits.push_back(ArcMist::Math::bit(value >> 8, bit));
+                        // }
+                        // found = true;
+                        // break;
+                    // }
+
+                // if(!found)
+                    // continue; // Next language
+            // }
+
+            // // Check if values is a valid seed
+            // if(bits.size() > 128)
+            // {
+                // checkSumBits = 0;
+                // if(pIncludesCheckSum)
+                // {
+                    // for(unsigned int i=128;i<=256;i+=32)
+                        // if(bits.size() == i + (i / 32))
+                        // {
+                            // seedBits = i;
+                            // checkSumBits = i / 32;
+                            // break;
+                        // }
+
+                    // if(checkSumBits == 0)
+                        // continue;
+                // }
+                // else
+                    // seedBits = bits.size();
+
+                // // Parse bits
+                // mSeed.clear();
+                // mnemonicCheckSum.clear();
+                // value = 0;
+                // valueBits = 0;
+                // for(std::vector<bool>::iterator bit=bits.begin();bit!=bits.end();++bit)
+                // {
+                    // --seedBits;
+                    // ++valueBits;
+                    // value <<= 1;
+                    // if(*bit)
+                        // value |= 0x01;
+
+                    // if(valueBits == 8)
+                    // {
+                        // if(seedBits >= 0)
+                            // mSeed.writeByte(value);
+                        // else
+                            // mnemonicCheckSum.writeByte(value);
+                        // value = 0;
+                        // valueBits = 0;
+                    // }
+                // }
+
+                // if(valueBits > 0)
+                // {
+                    // if(valueBits < 8)
+                        // value <<= (8 - valueBits);
+                    // if(seedBits >= 0)
+                        // mSeed.writeByte(value);
+                    // else
+                        // mnemonicCheckSum.writeByte(value);
+                // }
+
+                // if(pIncludesCheckSum)
+                // {
+                    // // Calculate checksum
+                    // ArcMist::Digest digest(ArcMist::Digest::SHA256);
+                    // mSeed.setReadOffset(0);
+                    // digest.writeStream(&mSeed, mSeed.length());
+                    // checkSum.clear();
+                    // digest.getResult(&checkSum);
+
+                    // // Verify checksum
+                    // bool matches = true;
+                    // for(int bit=checkSumBits;bit>0;bit-=8)
+                    // {
+                        // if(bit >= 8)
+                        // {
+                            // if(checkSum.readByte() != mnemonicCheckSum.readByte())
+                            // {
+                                // matches = false;
+                                // break;
+                            // }
+                        // }
+                        // else if((checkSum.readByte() >> bit) != (mnemonicCheckSum.readByte() >> bit))
+                        // {
+                            // matches = false;
+                            // break;
+                        // }
+                    // }
+
+                    // if(matches)
+                        // return generateMnemonicMaster();
+                // }
+                // else
+                    // return generateMnemonicMaster();
+            // }
+        // }
+
+        // return false;
+
+        ArcMist::Buffer sentence, salt;
+        sentence.writeString(pMnemonicSentence);
+        salt.writeString("mnemonic");
+        salt.writeString(pPassPhrase);
+        if(!processMnemonicSeed(&sentence, &salt, &mSeed))
+            return false;
+
+        return generateMaster();
     }
 
     void KeyTree::write(ArcMist::OutputStream *pStream)
@@ -1354,7 +1482,7 @@ namespace BitCoin
         mSeed.setReadOffset(0);
         pStream->writeUnsignedInt(mSeed.length());
         pStream->writeStream(&mSeed, mSeed.length());
-        mMasterKey.writeTree(pStream);
+        mTopKey.writeTree(pStream);
     }
 
     bool KeyTree::read(ArcMist::InputStream *pStream)
@@ -1377,7 +1505,7 @@ namespace BitCoin
 
         pStream->readStream(&mSeed, seedLength);
 
-        return mMasterKey.readTree(pStream);
+        return mTopKey.readTree(pStream);
     }
 
     bool Key::test()
@@ -1570,7 +1698,7 @@ namespace BitCoin
             keyTreeSeed.writeHex("000102030405060708090a0b0c0d0e0f");
             keyTree.setSeed(MAINNET, &keyTreeSeed);
 
-            resultEncoding = keyTree.master().encode();
+            resultEncoding = keyTree.top().encode();
             correctEncoding = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
@@ -1585,7 +1713,7 @@ namespace BitCoin
                   "Result  : %s", resultEncoding.text());
             }
 
-            resultEncoding = keyTree.master().publicKey()->encode();
+            resultEncoding = keyTree.top().publicKey()->encode();
             correctEncoding = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
@@ -1609,7 +1737,7 @@ namespace BitCoin
         KeyTree::KeyData *m0hKey;
         if(success)
         {
-            m0hKey = keyTree.deriveChild(&keyTree.master(), KeyTree::HARDENED_LIMIT + 0);
+            m0hKey = keyTree.deriveChild(&keyTree.top(), KeyTree::HARDENED_LIMIT + 0);
             if(m0hKey == NULL)
             {
                 success = false;
@@ -1909,7 +2037,7 @@ namespace BitCoin
             keyTreeSeed.writeHex("4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4acba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be");
             keyTree.setSeed(MAINNET, &keyTreeSeed);
 
-            resultEncoding = keyTree.master().encode();
+            resultEncoding = keyTree.top().encode();
             correctEncoding = "xprv9s21ZrQH143K25QhxbucbDDuQ4naNntJRi4KUfWT7xo4EKsHt2QJDu7KXp1A3u7Bi1j8ph3EGsZ9Xvz9dGuVrtHHs7pXeTzjuxBrCmmhgC6";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
@@ -1924,7 +2052,7 @@ namespace BitCoin
                   "Result  : %s", resultEncoding.text());
             }
 
-            resultEncoding = keyTree.master().publicKey()->encode();
+            resultEncoding = keyTree.top().publicKey()->encode();
             correctEncoding = "xpub661MyMwAqRbcEZVB4dScxMAdx6d4nFc9nvyvH3v4gJL378CSRZiYmhRoP7mBy6gSPSCYk6SzXPTf3ND1cZAceL7SfJ1Z3GC8vBgp2epUt13";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
@@ -1947,7 +2075,7 @@ namespace BitCoin
          ***********************************************************************************************/
         if(success)
         {
-            m0hKey = keyTree.deriveChild(&keyTree.master(), KeyTree::HARDENED_LIMIT + 0);
+            m0hKey = keyTree.deriveChild(&keyTree.top(), KeyTree::HARDENED_LIMIT + 0);
             if(m0hKey == NULL)
             {
                 success = false;
@@ -1994,7 +2122,8 @@ namespace BitCoin
         /***********************************************************************************************
          * BIP-0039 Trezor Test Vectors
          ***********************************************************************************************/
-        ArcMist::Buffer resultSeed, correctSeed;
+        ArcMist::Buffer resultSeed, correctSeed, mnemonicStream;
+        ArcMist::Buffer resultProcessedSeed, correctProcessedSeed;
         ArcMist::String resultMnemonic, correctMnemonic;
         unsigned int trezorCount = 24;
 
@@ -2054,6 +2183,34 @@ namespace BitCoin
             "void come effort suffer camp survey warrior heavy shoot primary clutch crush open amazing screen patrol group space point ten exist slush involve unfold"
         };
 
+        const char *trezorProcessedSeed[] =
+        {
+            "c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04",
+            "2e8905819b8723fe2c1d161860e5ee1830318dbf49a83bd451cfb8440c28bd6fa457fe1296106559a3c80937a1c1069be3a3a5bd381ee6260e8d9739fce1f607",
+            "d71de856f81a8acc65e6fc851a38d4d7ec216fd0796d0a6827a3ad6ed5511a30fa280f12eb2e47ed2ac03b5c462a0358d18d69fe4f985ec81778c1b370b652a8",
+            "ac27495480225222079d7be181583751e86f571027b0497b5b5d11218e0a8a13332572917f0f8e5a589620c6f15b11c61dee327651a14c34e18231052e48c069",
+            "035895f2f481b1b0f01fcf8c289c794660b289981a78f8106447707fdd9666ca06da5a9a565181599b79f53b844d8a71dd9f439c52a3d7b3e8a79c906ac845fa",
+            "f2b94508732bcbacbcc020faefecfc89feafa6649a5491b8c952cede496c214a0c7b3c392d168748f2d4a612bada0753b52a1c7ac53c1e93abd5c6320b9e95dd",
+            "107d7c02a5aa6f38c58083ff74f04c607c2d2c0ecc55501dadd72d025b751bc27fe913ffb796f841c49b1d33b610cf0e91d3aa239027f5e99fe4ce9e5088cd65",
+            "0cd6e5d827bb62eb8fc1e262254223817fd068a74b5b449cc2f667c3f1f985a76379b43348d952e2265b4cd129090758b3e3c2c49103b5051aac2eaeb890a528",
+            "bda85446c68413707090a52022edd26a1c9462295029f2e60cd7c4f2bbd3097170af7a4d73245cafa9c3cca8d561a7c3de6f5d4a10be8ed2a5e608d68f92fcc8",
+            "bc09fca1804f7e69da93c2f2028eb238c227f2e9dda30cd63699232578480a4021b146ad717fbb7e451ce9eb835f43620bf5c514db0f8add49f5d121449d3e87",
+            "c0c519bd0e91a2ed54357d9d1ebef6f5af218a153624cf4f2da911a0ed8f7a09e2ef61af0aca007096df430022f7a2b6fb91661a9589097069720d015e4e982f",
+            "dd48c104698c30cfe2b6142103248622fb7bb0ff692eebb00089b32d22484e1613912f0a5b694407be899ffd31ed3992c456cdf60f5d4564b8ba3f05a69890ad",
+            "274ddc525802f7c828d8ef7ddbcdc5304e87ac3535913611fbbfa986d0c9e5476c91689f9c8a54fd55bd38606aa6a8595ad213d4c9c9f9aca3fb217069a41028",
+            "628c3827a8823298ee685db84f55caa34b5cc195a778e52d45f59bcf75aba68e4d7590e101dc414bc1bbd5737666fbbef35d1f1903953b66624f910feef245ac",
+            "64c87cde7e12ecf6704ab95bb1408bef047c22db4cc7491c4271d170a1b213d20b385bc1588d9c7b38f1b39d415665b8a9030c9ec653d75e65f847d8fc1fc440",
+            "ea725895aaae8d4c1cf682c1bfd2d358d52ed9f0f0591131b559e2724bb234fca05aa9c02c57407e04ee9dc3b454aa63fbff483a8b11de949624b9f1831a9612",
+            "fd579828af3da1d32544ce4db5c73d53fc8acc4ddb1e3b251a31179cdb71e853c56d2fcb11aed39898ce6c34b10b5382772db8796e52837b54468aeb312cfc3d",
+            "72be8e052fc4919d2adf28d5306b5474b0069df35b02303de8c1729c9538dbb6fc2d731d5f832193cd9fb6aeecbc469594a70e3dd50811b5067f3b88b28c3e8d",
+            "deb5f45449e615feff5640f2e49f933ff51895de3b4381832b3139941c57b59205a42480c52175b6efcffaa58a2503887c1e8b363a707256bdd2b587b46541f5",
+            "4cbdff1ca2db800fd61cae72a57475fdc6bab03e441fd63f96dabd1f183ef5b782925f00105f318309a7e9c3ea6967c7801e46c8a58082674c860a37b93eda02",
+            "26e975ec644423f4a4c4f4215ef09b4bd7ef924e85d1d17c4cf3f136c2863cf6df0a475045652c57eb5fb41513ca2a2d67722b77e954b4b3fc11f7590449191d",
+            "2aaa9242daafcee6aa9d7269f17d4efe271e1b9a529178d7dc139cd18747090bf9d60295d0ce74309a78852a9caadf0af48aae1c6253839624076224374bc63f",
+            "7b4a10be9d98e6cba265566db7f136718e1398c71cb581e1b2f464cac1ceedf4f3e274dc270003c670ad8d02c4558b2f8e39edea2775c9e232c7cb798b069e88",
+            "01f5bced59dec48e362f2c45b5de68b9fd6c92c6634f44d6d40aab69056506f0e35524a518034ddc1192e1dacd32c1ed3eaa3c3b131c88ed8e7e54c49a5d0998"
+        };
+
         const char *trezorKeyEncoding[] =
         {
             "xprv9s21ZrQH143K3h3fDYiay8mocZ3afhfULfb5GX8kCBdno77K4HiA15Tg23wpbeF1pLfs1c5SPmYHrEpTuuRhxMwvKDwqdKiGJS9XFKzUsAF",
@@ -2083,18 +2240,23 @@ namespace BitCoin
         };
 
         /***********************************************************************************************
-         * BIP-0039 Trezor Test 1
+         * BIP-0039 Trezor Test Vector
          ***********************************************************************************************/
         bool trezorPassed = true;
+        ArcMist::Buffer salt;
+
+        salt.writeString("mnemonicTREZOR");
+
         for(unsigned int i=0;i<trezorCount;++i)
         {
             correctSeed.clear();
             correctSeed.writeHex(trezorSeedHex[i]);
+            correctProcessedSeed.clear();
+            correctProcessedSeed.writeHex(trezorProcessedSeed[i]);
             correctMnemonic = trezorSeedMnemonic[i];
             correctEncoding = trezorKeyEncoding[i];
 
-            keyTree.setSeed(MAINNET, &correctSeed);
-            resultMnemonic = keyTree.createMnemonic(Mnemonic::English);
+            resultMnemonic = createMnemonicFromSeed(Mnemonic::English, &correctSeed);
 
             if(resultMnemonic != correctMnemonic)
             {
@@ -2105,35 +2267,197 @@ namespace BitCoin
                   "Correct : %s", correctMnemonic.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Result  : %s", resultMnemonic.text());
+                continue;
             }
 
-            if(!keyTree.loadMnemonic(correctMnemonic))
+            resultProcessedSeed.clear();
+            mnemonicStream.clear();
+            mnemonicStream.writeString(correctMnemonic);
+            processMnemonicSeed(&mnemonicStream, &salt, &resultProcessedSeed);
+            if(resultProcessedSeed != correctProcessedSeed)
+            {
+                trezorPassed = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0039 Trezor Test %d Load Mnemonic : Incorrect Processed Seed", i + 1);
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", correctProcessedSeed.readHexString(correctProcessedSeed.length()).text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", resultProcessedSeed.readHexString(resultProcessedSeed.length()).text());
+                continue;
+            }
+
+            if(!keyTree.loadMnemonic(correctMnemonic, "TREZOR"))
             {
                 trezorPassed = false;
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Failed BIP-0039 Trezor Test %d Load Mnemonic : Failed to load", i + 1);
+                continue;
             }
-            else
-            {
-                correctSeed.setReadOffset(0);
-                resultSeed.clear();
-                keyTree.readSeed(&resultSeed);
 
-                if(resultSeed != correctSeed)
-                {
-                    trezorPassed = false;
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Failed BIP-0039 Trezor Test %d Load Mnemonic", i + 1);
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Correct : %s", correctSeed.readHexString(correctSeed.length()).text());
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Result  : %s", resultSeed.readHexString(resultSeed.length()).text());
-                }
+            if(keyTree.top().encode() != correctEncoding)
+            {
+                trezorPassed = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0039 Trezor Test %d Load Mnemonic : Incorrect Key", i + 1);
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", correctEncoding.text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", keyTree.top().encode().text());
+                continue;
             }
         }
 
         if(trezorPassed)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed BIP-0039 Trezor Test Vector");
+
+        /***********************************************************************************************
+         * Decode Key Text 1
+         ***********************************************************************************************/
+        if(success)
+        {
+            correctEncoding = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
+
+            if(!keyTree.setTopKey(correctEncoding))
+            {
+                success = false;
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 1 : Failed to decode");
+            }
+            else if(keyTree.top().encode() != correctEncoding)
+            {
+                success = false;
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 1 : Encode doesn't match");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", correctEncoding.text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", keyTree.top().encode().text());
+            }
+            else if(!keyTree.top().isPrivate())
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 1 : Key not private");
+            }
+            else if(keyTree.top().depth() != 0)
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 1 : Depth not zero : %d", keyTree.top().depth());
+            }
+        }
+
+        if(success)
+        {
+            correctEncoding = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
+            if(keyTree.top().publicKey()->encode() != correctEncoding)
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 1 : Public encode doesn't match");
+            }
+        }
+
+        if(success)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+              "Passed Decode Key Text 1");
+
+        /***********************************************************************************************
+         * Decode Key Text 2
+         ***********************************************************************************************/
+        if(success)
+        {
+            correctEncoding = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
+
+            if(!keyTree.setTopKey(correctEncoding))
+            {
+                success = false;
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 2 : Failed to decode");
+            }
+            else if(keyTree.top().encode() != correctEncoding)
+            {
+                success = false;
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 2 : Encode doesn't match");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", correctEncoding.text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", keyTree.top().encode().text());
+            }
+            else if(keyTree.top().isPrivate())
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 2 : Key not public");
+            }
+            else if(keyTree.top().depth() != 0)
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 2 : Depth not zero : %d", keyTree.top().depth());
+            }
+        }
+
+        if(success)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+              "Passed Decode Key Text 2");
+
+        /***********************************************************************************************
+         * Decode Key Text 3
+         ***********************************************************************************************/
+        if(success)
+        {
+            correctEncoding = "xprvA41z7zogVVwxVSgdKUHDy1SKmdb533PjDz7J6N6mV6uS3ze1ai8FHa8kmHScGpWmj4WggLyQjgPie1rFSruoUihUZREPSL39UNdE3BBDu76";
+
+            if(!keyTree.setTopKey(correctEncoding))
+            {
+                success = false;
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 3 : Failed to decode");
+            }
+            else if(keyTree.top().encode() != correctEncoding)
+            {
+                success = false;
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 3 : Encode doesn't match");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", correctEncoding.text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", keyTree.top().encode().text());
+            }
+            else if(!keyTree.top().isPrivate())
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 3 : Key not private");
+            }
+            else if(keyTree.top().depth() != 5)
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 3 : Depth not 5 : %d", keyTree.top().depth());
+            }
+        }
+
+        if(success)
+        {
+            correctEncoding = "xpub6H1LXWLaKsWFhvm6RVpEL9P4KfRZSW7abD2ttkWP3SSQvnyA8FSVqNTEcYFgJS2UaFcxupHiYkro49S8yGasTvXEYBVPamhGW6cFJodrTHy";
+            if(keyTree.top().publicKey()->encode() != correctEncoding)
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Decode Key Text 3 : Public encode doesn't match");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", correctEncoding.text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", keyTree.top().publicKey()->encode().text());
+            }
+        }
+
+        if(success)
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+              "Passed Decode Key Text 3");
 
         return success;
     }

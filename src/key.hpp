@@ -199,25 +199,6 @@ namespace BitCoin
         KeyTree();
         ~KeyTree();
 
-        Network network() const { return mNetwork; }
-
-        void clear(); // Clear all data and set master key to zero
-
-        // Seed initialization
-        void generate(Network pNetwork);
-        bool setSeed(Network pNetwork, ArcMist::InputStream *pStream);
-        void readSeed(ArcMist::OutputStream *pStream) { mSeed.setReadOffset(0); pStream->writeStream(&mSeed, mSeed.length()); }
-
-        // Seed to/from mnemonic conversion BIP-0039
-        bool loadMnemonic(const char *pText);
-        ArcMist::String createMnemonic(Mnemonic::Language);
-
-        void write(ArcMist::OutputStream *pStream);
-        bool read(ArcMist::InputStream *pStream);
-
-        // TODO Add sub tree functions. i.e. Given an extended key, public or private, a sub tree can be created.
-        // Public only can be used to verify incoming payments and balances.
-
         class KeyData
         {
         public:
@@ -227,6 +208,9 @@ namespace BitCoin
 
             // Encode key as base58 text
             ArcMist::String encode() const;
+
+            // Decode key from base58 text
+            bool decode(secp256k1_context *pContext, const char *pText);
 
             bool isPrivate() const { return mKey[0] == 0; }
             bool isHardened() const { return mIndex >= HARDENED_LIMIT; }
@@ -301,10 +285,32 @@ namespace BitCoin
 
         };
 
-        KeyData &master() { return mMasterKey; }
+        Network network() const { return mNetwork; }
+
+        void clear(); // Clear all data and set master key to zero
+
+        // Seed initialization
+        void generate(Network pNetwork);
+        bool setSeed(Network pNetwork, ArcMist::InputStream *pStream);
+        void readSeed(ArcMist::OutputStream *pStream) { mSeed.setReadOffset(0); pStream->writeStream(&mSeed, mSeed.length()); }
+
+        // Generate a master key from a mnemonic sentence and passphrase BIP-0039
+        bool loadMnemonic(const char *pText, const char *pPassPhrase = "");
+
+        // Generate a random mnemonic sentence
+        static ArcMist::String generateMnemonic(Mnemonic::Language, unsigned int pBytesEntropy = 32);
+
+        // Set top key in tree. Don't generate from seed.
+        bool setTopKey(const char *pKeyText);
+
+        void write(ArcMist::OutputStream *pStream);
+        bool read(ArcMist::InputStream *pStream);
+
+        // TODO Add sub tree functions. i.e. Given an extended key, public or private, a sub tree can be created.
+        // Public only can be used to verify incoming payments and balances.
+
+        KeyData &top() { return mTopKey; }
         KeyData *getAccount(uint32_t pIndex); // Children of master key
-        KeyData *getChain(uint32_t pAccountIndex, uint32_t pIndex); // Children of account keys
-        KeyData *getAddress(uint32_t pAccountIndex, uint32_t pChainIndex, uint32_t pIndex); // Children of chain keys
         KeyData *findAddress(const ArcMist::Hash &pHash); // Find child of chain key with matching public key hash
 
         // Calls deriveChild function on parent key with appropriate tree values.
@@ -319,7 +325,7 @@ namespace BitCoin
 
         Network mNetwork;
         ArcMist::Buffer mSeed;
-        KeyData mMasterKey;
+        KeyData mTopKey;
 
     };
 }
