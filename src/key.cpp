@@ -779,46 +779,85 @@ namespace BitCoin
 
     KeyTree::KeyData *KeyTree::KeyData::findAddress(const ArcMist::Hash &pHash)
     {
-        if(mDepth < 2)
-        {
-            KeyData *result;
-            for(std::vector<KeyData *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
-            {
-                result = (*child)->findAddress(pHash);
-                if(result != NULL)
-                    return result;
-            }
-        }
-        else if(mDepth == 2)
-        {
-            for(std::vector<KeyData *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
-                if((*child)->hash() == pHash)
-                    return *child;
-        }
-        else if(pHash == hash())
+        if(pHash == hash())
             return this;
 
-        return NULL;
-    }
-
-    KeyTree::KeyData *KeyTree::getAccount(uint32_t pIndex)
-    {
-        if(mTopKey.depth() == 0)
+        KeyData *result;
+        for(std::vector<KeyData *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
         {
-            KeyData *result = mTopKey.findChild(pIndex);
-            if(result == NULL)
-                result = mTopKey.deriveChild(mContext, mNetwork, pIndex);
-            return result;
+            result = (*child)->findAddress(pHash);
+            if(result != NULL)
+                return result;
         }
-        else if(mTopKey.depth() == 1 && mTopKey.index() == pIndex)
-            return &mTopKey;
-        else
-            return NULL;
+
+        return NULL;
     }
 
     KeyTree::KeyData *KeyTree::findAddress(const ArcMist::Hash &pHash)
     {
         return mTopKey.findAddress(pHash);
+    }
+
+    KeyTree::KeyData *KeyTree::chainKey(uint32_t pChain, DerivationPathMethod pMethod,
+      uint32_t pAccount, uint32_t pCoin)
+    {
+        switch(pMethod)
+        {
+        case SIMPLE: // m/account/chain
+        {
+            if(pAccount == 0xffffffff)
+                pAccount = 0; // Default
+
+            KeyData *account = NULL;
+            if(mTopKey.depth() == 0) // Master key
+                account = deriveChild(&mTopKey, pAccount);
+            if(account == NULL)
+                return NULL;
+
+            return deriveChild(account, pChain);
+        }
+        case BIP0032: // m/account/chain
+        {
+            if(pAccount == 0xffffffff)
+                pAccount = HARDENED_LIMIT; // Default
+
+            KeyData *account = NULL;
+            if(mTopKey.depth() == 0) // Master key
+                account = deriveChild(&mTopKey, pAccount);
+            if(account == NULL)
+                return NULL;
+
+            return deriveChild(account, pChain);
+        }
+        case BIP0044: // m/44'/coin/account/chain
+        {
+            // Purpose
+            KeyData *purpose = NULL;
+            if(mTopKey.depth() == 0) // Master key
+                purpose = deriveChild(&mTopKey, HARDENED_LIMIT + 44);
+            if(purpose == NULL)
+                return NULL;
+
+            // Coin
+            if(pCoin == 0xffffffff)
+                pCoin = BITCOIN; // Default
+            KeyData *coin = deriveChild(purpose, pCoin);
+            if(coin == NULL)
+                return NULL;
+
+            // Account
+            if(pAccount == 0xffffffff)
+                pAccount = HARDENED_LIMIT; // Default
+            KeyData *account = NULL;
+            account = deriveChild(coin, pAccount);
+            if(account == NULL)
+                return NULL;
+
+            return deriveChild(account, pChain);
+        }
+        default:
+            return NULL;
+        }
     }
 
     KeyTree::KeyData *KeyTree::KeyData::findChild(uint32_t pIndex)
@@ -2586,6 +2625,256 @@ namespace BitCoin
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Wallet Test vs Electron Cash");
         else
             success = false;
+
+        /***********************************************************************************************
+         * Key Derivation Path Test Vector
+         ***********************************************************************************************/
+        KeyTree::KeyData *purpose, *coin, *account, *chain, *checkChain;
+
+        /***********************************************************************************************
+         * SIMPLE m/0
+         ***********************************************************************************************/
+        account = keyTree.deriveChild(&keyTree.top(), 0);
+        if(account == NULL)
+        {
+            success = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+              "Failed SIMPLE : Failed to derive account key.");
+        }
+        else
+        {
+            // Receiving
+            chain = keyTree.deriveChild(account, 0);
+            if(chain == NULL)
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed SIMPLE Receiving Chain Key : Failed to derive chain key.");
+            }
+            else
+            {
+                checkChain = keyTree.chainKey(0, KeyTree::SIMPLE);
+                if(checkChain == NULL)
+                {
+                    success = false;
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed SIMPLE Receiving Chain Key : Failed to request chain key.");
+                }
+                else if(chain->encode() != checkChain->encode())
+                {
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed SIMPLE Receiving Chain Key : Non Matching Chain Keys");
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Correct : %s", chain->encode().text());
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Result  : %s", checkChain->encode().text());
+                }
+                else
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                      "Passed SIMPLE Receiving Chain Key.");
+            }
+
+            // Change
+            chain = keyTree.deriveChild(account, 1);
+            if(chain == NULL)
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed SIMPLE Change Chain Key : Failed to derive chain key.");
+            }
+            else
+            {
+                checkChain = keyTree.chainKey(1, KeyTree::SIMPLE);
+                if(checkChain == NULL)
+                {
+                    success = false;
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed SIMPLE Change Chain Key : Failed to request chain key.");
+                }
+                else if(chain->encode() != checkChain->encode())
+                {
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed SIMPLE Change Chain Key : Non Matching Chain Keys");
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Correct : %s", chain->encode().text());
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Result  : %s", checkChain->encode().text());
+                }
+                else
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                      "Passed SIMPLE Change Chain Key.");
+            }
+        }
+
+        /***********************************************************************************************
+         * BIP-0032 m/0'
+         ***********************************************************************************************/
+        account = keyTree.deriveChild(&keyTree.top(), KeyTree::HARDENED_LIMIT);
+        if(account == NULL)
+        {
+            success = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+              "Failed BIP-0032 : Failed to derive account key.");
+        }
+        else
+        {
+            // Receiving
+            chain = keyTree.deriveChild(account, 0);
+            if(chain == NULL)
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Receiving Chain Key : Failed to derive chain key.");
+            }
+            else
+            {
+                checkChain = keyTree.chainKey(0, KeyTree::BIP0032);
+                if(checkChain == NULL)
+                {
+                    success = false;
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Receiving Chain Key : Failed to request chain key.");
+                }
+                else if(chain->encode() != checkChain->encode())
+                {
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Receiving Chain Key : Non Matching Chain Keys");
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Correct : %s", chain->encode().text());
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Result  : %s", checkChain->encode().text());
+                }
+                else
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                      "Passed BIP-0032 Receiving Chain Key.");
+            }
+
+            // Change
+            chain = keyTree.deriveChild(account, 1);
+            if(chain == NULL)
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Change Chain Key : Failed to derive chain key.");
+            }
+            else
+            {
+                checkChain = keyTree.chainKey(1, KeyTree::BIP0032);
+                if(checkChain == NULL)
+                {
+                    success = false;
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Change Chain Key : Failed to request chain key.");
+                }
+                else if(chain->encode() != checkChain->encode())
+                {
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Change Chain Key : Non Matching Chain Keys");
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Correct : %s", chain->encode().text());
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Result  : %s", checkChain->encode().text());
+                }
+                else
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                      "Passed BIP-0032 Change Chain Key.");
+            }
+        }
+
+        /***********************************************************************************************
+         * BIP-0044 m/44'/0'/0'
+         ***********************************************************************************************/
+        purpose = keyTree.deriveChild(&keyTree.top(), KeyTree::HARDENED_LIMIT + 44);
+        if(purpose == NULL)
+        {
+            success = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+              "Failed BIP-0044 : Failed to derive purpose key.");
+        }
+        else
+        {
+            coin = keyTree.deriveChild(purpose, KeyTree::HARDENED_LIMIT);
+            if(coin == NULL)
+            {
+                success = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0044 : Failed to derive coin key.");
+            }
+            else
+            {
+                account = keyTree.deriveChild(coin, KeyTree::HARDENED_LIMIT);
+                if(account == NULL)
+                {
+                    success = false;
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0044 : Failed to derive account key.");
+                }
+                else
+                {
+                    // Receiving
+                    chain = keyTree.deriveChild(account, 0);
+                    if(chain == NULL)
+                    {
+                        success = false;
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Failed BIP-0044 Receiving Chain Key : Failed to derive chain key.");
+                    }
+                    else
+                    {
+                        checkChain = keyTree.chainKey(0);
+                        if(checkChain == NULL)
+                        {
+                            success = false;
+                            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                              "Failed BIP-0044 Receiving Chain Key : Failed to request chain key.");
+                        }
+                        else if(chain->encode() != checkChain->encode())
+                        {
+                            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                              "Failed BIP-0044 Receiving Chain Key : Non Matching Chain Keys");
+                            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                              "Correct : %s", chain->encode().text());
+                            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                              "Result  : %s", checkChain->encode().text());
+                        }
+                        else
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                              "Passed BIP-0044 Receiving Chain Key.");
+                    }
+
+                    // Change
+                    chain = keyTree.deriveChild(account, 1);
+                    if(chain == NULL)
+                    {
+                        success = false;
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Failed BIP-0044 Change Chain Key : Failed to derive chain key.");
+                    }
+                    else
+                    {
+                        checkChain = keyTree.chainKey(1);
+                        if(checkChain == NULL)
+                        {
+                            success = false;
+                            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                              "Failed BIP-0044 Change Chain Key : Failed to request chain key.");
+                        }
+                        else if(chain->encode() != checkChain->encode())
+                        {
+                            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                              "Failed BIP-0044 Change Chain Key : Non Matching Chain Keys");
+                            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                              "Correct : %s", chain->encode().text());
+                            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                              "Result  : %s", checkChain->encode().text());
+                        }
+                        else
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                              "Passed BIP-0044 Change Chain Key.");
+                    }
+                }
+            }
+        }
 
         return success;
     }

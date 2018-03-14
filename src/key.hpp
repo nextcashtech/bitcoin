@@ -170,20 +170,13 @@ namespace BitCoin
     /**********************************************************************************************
      *                       BIP-0032 Hierarchal Deterministic Keys
      *
-     * A private key with the chain code at each level can derive anything below it.
-     * A "non-hardened" public key with the chain code at a specific level can derive only public
+     * Each key with a chain code can generate 2^32 child keys.
+     * 2^31 non-hardened and 2^31 hardened.
+     *
+     * A private key at each level can derive anything below it.
+     * A "non-hardened" public key at a specific level can derive only public
      *   keys below that level.
-     * A "hardened" public key with the chain code at a specific level can't derive anything.
-     *
-     * Levels of Hierarchy
-     *
-     * Name                                    |     Count
-     * --------------------------------------------------------------------
-     * Seed    : 128 .. 512 bits of entropy    |       1
-     * Level 1 : Master Key                    |       1
-     * Level 2 : Accounts                      |    1 .. 2^32
-     * Level 3 : Chains                        |    1 .. 2^32 per account
-     * Level 4 : Payable Addresses             |    1 .. 2^32 per chain
+     * A "hardened" public key at a specific level can't derive anything.
      *
      *********************************************************************************************/
     class KeyTree
@@ -287,6 +280,49 @@ namespace BitCoin
 
         Network network() const { return mNetwork; }
 
+        KeyData &top() { return mTopKey; }
+
+        /******************************************************************************************
+        * BIP-0044 Derivation Paths
+        *   Path : Master / Purpose / Coin / Account / Chain
+        *
+        * BIP-0044 Hierarchy levels are defined as such. (' after key index means hardened)
+        *   Master  - Top level key generated from seed.
+        *   Purpose - Separates different derivation path methods. Default 44'.
+        *   Coin    - Separates different coins. Default 0'.
+        *   Account - Separates different "identities". Like separate bank accounts. Default 0.
+        *   Chain   - Parent of address keys. Default 0 for external "receiving" addresses and 1
+        *     for internal "change" addresses.
+        *
+        * SIMPLE derivation uses first level extended key 0 (non hardened) as account key.
+        *   Default account path m/0.
+        * BIP0032 derivation uses first level extended key 0' (hardened) default account key.
+        *   Default account path m/0'.
+        * BIP0044 derivation uses first level extended key 44' (hardened) for "purpose" with levels
+        *   for coin and account below that. Default account path m/44'/0'/0'.
+        *
+        * Chain is 0 for receiving (external) addresses and 1 for "change" (internal) addresses.
+        * Coin and Account value of 0xffffffff means use default for derivation path
+        *   method.
+        ******************************************************************************************/
+        enum DerivationPathMethod { SIMPLE, BIP0032, BIP0044 };
+        enum CoinIndex
+        {
+            BITCOIN      = 0x80000000, // 0x00'
+            BITCOIN_CASH = 0x80000091  // 0x91'
+        };
+
+        // Return "chain" key with which to generate/lookup address keys. Requires master key as
+        //   top key to ensure correct full path.
+        KeyData *chainKey(uint32_t pChain, DerivationPathMethod pMethod = BIP0044,
+          uint32_t pAccount = 0xffffffff, uint32_t pCoin = 0xffffffff);
+
+        // Find existing child (already derived) with matching public key hash.
+        KeyData *findAddress(const ArcMist::Hash &pHash);
+
+        // Calls deriveChild function on parent key with appropriate tree values.
+        KeyData *deriveChild(KeyData *pParent, uint32_t pIndex) { return pParent->deriveChild(mContext, mNetwork, pIndex); }
+
         void clear(); // Clear all data and set master key to zero
 
         // Seed initialization
@@ -305,16 +341,6 @@ namespace BitCoin
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
-
-        // TODO Add sub tree functions. i.e. Given an extended key, public or private, a sub tree can be created.
-        // Public only can be used to verify incoming payments and balances.
-
-        KeyData &top() { return mTopKey; }
-        KeyData *getAccount(uint32_t pIndex); // Children of master key
-        KeyData *findAddress(const ArcMist::Hash &pHash); // Find child of chain key with matching public key hash
-
-        // Calls deriveChild function on parent key with appropriate tree values.
-        KeyData *deriveChild(KeyData *pParent, uint32_t pIndex) { return pParent->deriveChild(mContext, mNetwork, pIndex); }
 
     private:
 
