@@ -1306,7 +1306,7 @@ namespace BitCoin
         return true;
     }
 
-    bool KeyTree::loadMnemonic(const char *pMnemonicSentence, const char *pPassPhrase)
+    bool KeyTree::loadMnemonic(const char *pMnemonicSentence, const char *pPassPhrase, const char *pSalt)
     {
         clear();
 
@@ -1467,7 +1467,7 @@ namespace BitCoin
 
         ArcMist::Buffer sentence, salt;
         sentence.writeString(pMnemonicSentence);
-        salt.writeString("mnemonic");
+        salt.writeString(pSalt);
         salt.writeString(pPassPhrase);
         if(!processMnemonicSeed(&sentence, &salt, &mSeed))
             return false;
@@ -2458,6 +2458,134 @@ namespace BitCoin
         if(success)
             ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
               "Passed Decode Key Text 3");
+
+        /***********************************************************************************************
+         * Wallet Test vs Electron Cash
+         * /0 For receiving addresses
+         * /1 For change addresses
+         ***********************************************************************************************/
+        KeyTree::KeyData *account0, *account1, *addressKey;
+        ArcMist::String encodedAddress;
+        bool walletSuccess = true;
+
+        if(!keyTree.loadMnemonic("advice cushion arrange charge update kit gloom elbow delay message swap bulk", "", "electrum"))
+        {
+            walletSuccess = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+              "Failed Wallet Test : Failed to load mnemonic");
+        }
+
+        if(walletSuccess)
+        {
+            correctEncoding = "xpub661MyMwAqRbcGujPLVW3q6UQQGetTsUcM7EYwUTDFGif17McpzNmGu5P1kzwxvCNGnjtDPM5MDbRTD8QZQSpktu7f9CcYydG7PNc3tqCKZi";
+            if(keyTree.top().publicKey()->encode() != correctEncoding)
+            {
+                walletSuccess = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Wallet Test : Public encode doesn't match");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", correctEncoding.text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", keyTree.top().publicKey()->encode().text());
+            }
+        }
+
+        account0 = keyTree.deriveChild(&keyTree.top(), 0);
+        if(account0 == NULL)
+        {
+            walletSuccess = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+              "Failed Wallet Test : Failed create account 0");
+        }
+
+        if(walletSuccess)
+        {
+            account1 = keyTree.deriveChild(&keyTree.top(), 1);
+            if(account1 == NULL)
+            {
+                walletSuccess = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Wallet Test : Failed create account 1");
+            }
+        }
+
+        if(walletSuccess)
+        {
+            const char *receivingAddresses[5] =
+            {
+                "1Jvfk1qMhnZ6i6eWSSkgihwacaTjwABBsr",
+                "1JinwuSo1JoUPnxQs3hM4sisyJeNZo3Zvv",
+                "1LYZtXwzSHhhFoDyJccjpMWLVZpzgkaZsV",
+                "1JK5MMpiTYv8wSZgPZ5oyYZgyVQP6h8prQ",
+                "1K2eD9iWqBunMBGWcJBZUSQQmNYHRpk5Ne"
+            };
+
+            for(unsigned int i=0;i<5 && walletSuccess;++i)
+            {
+                addressKey = keyTree.deriveChild(account0, i);
+
+                if(addressKey != NULL)
+                {
+                    encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH);
+                    if(encodedAddress != receivingAddresses[i])
+                    {
+                        walletSuccess = false;
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Failed to generate receiving address key : %d : Non Matching Address", i);
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Correct : %s", receivingAddresses[i]);
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Result  : %s", encodedAddress.text());
+                    }
+                }
+                else
+                {
+                    walletSuccess = false;
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed to generate address key : %d", i);
+                }
+            }
+
+            const char *changeAddresses[5] =
+            {
+                "1N89DzxGHj9gfg2uA53QYKuoNX4hhvYwrZ",
+                "16xur1hethAuELqR2t5LDAUeUdvUqjgqxW",
+                "1BXQQWVzUC6GtutPPvEKnLdXKsFLcGGB9u",
+                "1JTxMVtTVJPR1L1WLpH7W3he46Mjatrbk8",
+                "1NZbMv8qneXKkexBnjm5BpHMC5teG9BgpS"
+            };
+
+            for(unsigned int i=0;i<5 && walletSuccess;++i)
+            {
+                addressKey = keyTree.deriveChild(account1, i);
+
+                if(addressKey != NULL)
+                {
+                    encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH);
+                    if(encodedAddress != changeAddresses[i])
+                    {
+                        walletSuccess = false;
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Failed to generate change address key : %d : Non Matching Address", i);
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Correct : %s", receivingAddresses[i]);
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Result  : %s", encodedAddress.text());
+                    }
+                }
+                else
+                {
+                    walletSuccess = false;
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed to generate address key : %d", i);
+                }
+            }
+        }
+
+        if(walletSuccess)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Wallet Test vs Electron Cash");
+        else
+            success = false;
 
         return success;
     }

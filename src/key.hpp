@@ -295,7 +295,7 @@ namespace BitCoin
         void readSeed(ArcMist::OutputStream *pStream) { mSeed.setReadOffset(0); pStream->writeStream(&mSeed, mSeed.length()); }
 
         // Generate a master key from a mnemonic sentence and passphrase BIP-0039
-        bool loadMnemonic(const char *pText, const char *pPassPhrase = "");
+        bool loadMnemonic(const char *pText, const char *pPassPhrase = "", const char *pSalt = "mnemonic");
 
         // Generate a random mnemonic sentence
         static ArcMist::String generateMnemonic(Mnemonic::Language, unsigned int pBytesEntropy = 32);
