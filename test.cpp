@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017-2018 ArcMist, LLC                                       *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@arcmist.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
@@ -463,6 +463,7 @@ bool chainTest()
     ArcMist::Hash publicKeyHash;
     std::vector<BitCoin::FullOutputData> coinbaseOutputs;
     std::vector<BitCoin::FullOutputData>::iterator fullOutput;
+    BitCoin::Key privateKey;
 
     if(true)
     {
@@ -470,13 +471,9 @@ bool chainTest()
         chain.setMaxTargetBits(maxTargetBits); // zero difficulty (all block hashes are valid)
         chain.load(true);
 
-        BitCoin::PrivateKey privateKey;
-        privateKey.generate();
-        BitCoin::PublicKey publicKey;
-        privateKey.generatePublicKey(publicKey);
-        publicKey.getHash(publicKeyHash);
+        privateKey.generatePrivate(BitCoin::MAINNET);
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Using coinbase payment address : %s", publicKeyHash.hex().text());
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Using coinbase payment address : %s", privateKey.hash().hex().text());
 
         // Genesis block time
         uint32_t time = chain.blockStats().time(0);
@@ -484,7 +481,7 @@ bool chainTest()
         // Add 2016 blocks
         for(unsigned int i=0;i<2016;++i)
         {
-            if(addBlock(chain, chain.lastPendingBlockHash(), publicKeyHash, i + 1, time, maxTargetBits, transactionID).isEmpty())
+            if(addBlock(chain, chain.lastPendingBlockHash(), privateKey.hash(), i + 1, time, maxTargetBits, transactionID).isEmpty())
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed to add block");
                 return false;
@@ -505,7 +502,7 @@ bool chainTest()
         chain.getBlockHash(branchHeight, branchHash);
         preBranchHash = branchHash;
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain hash before branch : %s", branchHash.hex().text());
-        branchHash = addBlock(chain, branchHash, publicKeyHash, ++branchHeight, time, maxTargetBits, transactionID);
+        branchHash = addBlock(chain, branchHash, privateKey.hash(), ++branchHeight, time, maxTargetBits, transactionID);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
         const BitCoin::Branch *branch;
@@ -532,7 +529,7 @@ bool chainTest()
         // Extend the branch
         for(unsigned int i=0;i<20;++i)
         {
-            branchHash = addBlock(chain, branchHash, publicKeyHash, ++branchHeight, time, maxTargetBits, transactionID);
+            branchHash = addBlock(chain, branchHash, privateKey.hash(), ++branchHeight, time, maxTargetBits, transactionID);
             if(branchHash.isEmpty())
             {
                 ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed to add branch block");
@@ -658,7 +655,7 @@ bool chainTest()
         return false;
     }
 
-    chain2.addresses().getOutputs(publicKeyHash, coinbaseOutputs);
+    chain2.addresses().getOutputs(privateKey.hash(), coinbaseOutputs);
 
     if(coinbaseOutputs.size() == (unsigned int)chain2.height())
         ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed transaction address output count after save");

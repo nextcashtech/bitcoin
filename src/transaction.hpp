@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017-2018 ArcMist, LLC                                       *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@arcmist.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
@@ -234,24 +234,24 @@ namespace BitCoin
         bool addCoinbaseInput(int pBlockHeight);
 
         // P2PKH Pay to Public Key Hash
-        bool signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
-          const PublicKey &pPublicKey, Signature::HashType pType);
+        bool signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
+          const Key &pPublicKey, Signature::HashType pType);
         bool addP2PKHOutput(const ArcMist::Hash &pPublicKeyHash, uint64_t pAmount);
 
         // P2PK Pay to Public Key (not as secure as P2PKH)
-        bool signP2PKInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
-          const PublicKey &pPublicKey, Signature::HashType pType);
-        bool addP2PKOutput(const PublicKey &pPublicKey, uint64_t pAmount);
+        bool signP2PKInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
+          const Key &pPublicKey, Signature::HashType pType);
+        bool addP2PKOutput(const Key &pPublicKey, uint64_t pAmount);
 
         // P2SH Pay to Script Hash
         bool authorizeP2SHInput(Output &pOutput, unsigned int pInputOffset, ArcMist::Buffer &pRedeemScript);
         bool addP2SHOutput(const ArcMist::Hash &pScriptHash, uint64_t pAmount);
 
         // MultiSig
-        bool addMultiSigInputSignature(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
-          const PublicKey &pPublicKey, Signature::HashType pHashType, const Forks &pForks, bool &pSignatureAdded,
+        bool addMultiSigInputSignature(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
+          const Key &pPublicKey, Signature::HashType pHashType, const Forks &pForks, bool &pSignatureAdded,
           bool &pTransactionComplete);
-        bool addMultiSigOutput(unsigned int pRequiredSignatureCount, std::vector<PublicKey *> pPublicKeys,
+        bool addMultiSigOutput(unsigned int pRequiredSignatureCount, std::vector<Key *> pPublicKeys,
           uint64_t pAmount);
 
         static Transaction *createCoinbaseTransaction(int pBlockHeight, int64_t pFees, const ArcMist::Hash &pPublicKeyHash);

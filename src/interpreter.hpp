@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017-2018 ArcMist, LLC                                       *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@arcmist.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
@@ -346,7 +346,7 @@ namespace BitCoin
         static void arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue);
 
         static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset, int64_t pOutputAmount,
-          const PublicKey &pPublicKey, const Signature &pSignature, ArcMist::Buffer &pCurrentOutputScript,
+          const Key &pPublicKey, const Signature &pSignature, ArcMist::Buffer &pCurrentOutputScript,
           unsigned int pSignatureStartOffset, const Forks &pForks);
 
         static bool test();

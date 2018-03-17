@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017-2018 ArcMist, LLC                                       *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@arcmist.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
@@ -827,7 +827,7 @@ namespace BitCoin
     }
 
     bool ScriptInterpreter::checkSignature(Transaction &pTransaction, unsigned int pInputOffset,
-      int64_t pOutputAmount, const PublicKey &pPublicKey, const Signature &pSignature,
+      int64_t pOutputAmount, const Key &pPublicKey, const Signature &pSignature,
       ArcMist::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset, const Forks &pForks)
     {
         if(pForks.cashActive() && !(pSignature.hashType() & Signature::FORKID))
@@ -857,7 +857,7 @@ namespace BitCoin
         }
 
         pCurrentOutputScript.setReadOffset(previousOffset);
-        if(pSignature.verify(pPublicKey, signatureHash))
+        if(pPublicKey.verify(pSignature, signatureHash))
             return true;
         else
         {
@@ -1425,9 +1425,9 @@ namespace BitCoin
                     }
 
                     // Pop the public key
-                    PublicKey publicKey;
+                    Key publicKey;
                     top()->setReadOffset(0);
-                    publicKey.read(top());
+                    publicKey.readPublic(top());
                     pop();
 
                     // Pop the signature
@@ -1496,12 +1496,12 @@ namespace BitCoin
                     }
 
                     // Pop public keys
-                    PublicKey *publicKeys[publicKeyCount];
+                    Key *publicKeys[publicKeyCount];
                     for(unsigned int i=0;i<publicKeyCount;i++)
                     {
-                        publicKeys[i] = new PublicKey();
+                        publicKeys[i] = new Key();
                         top()->setReadOffset(0);
-                        publicKeys[i]->read(top());
+                        publicKeys[i]->readPublic(top());
                         pop();
                     }
 

@@ -10,6 +10,7 @@
 
 #include "arcmist/base/string.hpp"
 #include "arcmist/base/hash.hpp"
+#include "arcmist/base/mutex.hpp"
 #include "arcmist/io/stream.hpp"
 #include "arcmist/io/buffer.hpp"
 #include "base.hpp"
@@ -23,16 +24,6 @@
 
 namespace BitCoin
 {
-    class Key
-    {
-    public:
-        static secp256k1_context *context();
-        static void destroyContext();
-        static secp256k1_context *sContext;
-
-        static bool test();
-    };
-
     enum AddressType
     {
         PUB_KEY_HASH = 0x00, // Public key hash
@@ -44,43 +35,11 @@ namespace BitCoin
         TEST_PRIVATE_KEY  = 0xef, // Testnet Private key
     };
 
+    // Return Base58 address from hash and type.
     ArcMist::String encodeAddress(const ArcMist::Hash &pHash, AddressType pType);
+
+    // Parse hash and type from Base58 encoded data.
     bool decodeAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType);
-
-    class PublicKey
-    {
-    public:
-
-        PublicKey()
-        {
-            mContext = Key::context();
-            std::memset(mData, 0, 64);
-            mValid = false;
-        }
-
-        bool operator == (const PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) == 0; }
-        bool operator != (const PublicKey &pRight) const { return std::memcmp(mData, pRight.mData, 64) != 0; }
-
-        void set(const void *pData) { std::memcpy(mData, pData, 64); mValid = true; }
-        ArcMist::String hex() const;
-
-        void write(ArcMist::OutputStream *pStream, bool pCompressed, bool pScriptFormat) const;
-        bool read(ArcMist::InputStream *pStream);
-
-        bool isValid() const { return mValid; }
-        void getHash(ArcMist::Hash &pHash) const;
-
-        ArcMist::String address(bool pTest = false);
-
-        const uint8_t *data() const { return mData; }
-
-    private:
-
-        secp256k1_context *mContext;
-        uint8_t mData[64];
-        bool mValid;
-
-    };
 
     class Signature
     {
@@ -98,7 +57,6 @@ namespace BitCoin
 
         Signature()
         {
-            mContext = Key::context();
             std::memset(mData, 0, 64);
             mHashType = INVALID;
         }
@@ -111,8 +69,6 @@ namespace BitCoin
 
         void write(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
         bool read(ArcMist::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly = false);
-
-        bool verify(const PublicKey &pPublicKey, const ArcMist::Hash &pHash) const;
 
         void randomize()
         {
@@ -130,181 +86,118 @@ namespace BitCoin
 
         void generateOutput();
 
-        secp256k1_context *mContext;
         uint8_t mData[64];
         HashType mHashType;
 
     };
 
-    class PrivateKey
+    class Key
     {
     public:
 
-        PrivateKey();
-        ~PrivateKey();
-
-        bool generate();
-        bool generatePublicKey(PublicKey &pPublicKey) const;
-
-        void set(void *pData) { std::memcpy(mData, pData, 32); }
-        ArcMist::String hex() const;
-
-        bool sign(ArcMist::Hash &pHash, Signature &pSignature) const;
-
-        void write(ArcMist::OutputStream *pStream) const { pStream->write(mData, 32); }
-        bool read(ArcMist::InputStream *pStream)
-        {
-            if(pStream->remaining() < 32)
-                return false;
-            pStream->read(mData, 32);
-            return true;
-        }
-
-    private:
-
-        secp256k1_context *mContext;
-        uint8_t mData[32];
-
-    };
-
-    /**********************************************************************************************
-     *                       BIP-0032 Hierarchal Deterministic Keys
-     *
-     * Each key with a chain code can generate 2^32 child keys.
-     * 2^31 non-hardened and 2^31 hardened.
-     *
-     * A private key at each level can derive anything below it.
-     * A "non-hardened" public key at a specific level can derive only public
-     *   keys below that level.
-     * A "hardened" public key at a specific level can't derive anything.
-     *
-     *********************************************************************************************/
-    class KeyTree
-    {
-    public:
-
-        // Keys with indices greater than or equal to this are "hardened".
+        // Keys with indices greater than or equal to this are "hardened", meaning the private keys
+        //   are required to derive children.
         static const uint32_t HARDENED_LIMIT = 0x80000000;
 
         enum Version { MAINNET_PRIVATE, MAINNET_PUBLIC, TESTNET_PRIVATE, TESTNET_PUBLIC };
-        static const uint32_t sVersionValues[4];
 
-        KeyTree();
-        ~KeyTree();
+        Key() { mPublicKey = NULL; clear(); }
+        ~Key() { clear(); }
 
-        class KeyData
+        // Encode key as base58 text
+        ArcMist::String encode() const;
+
+        // Decode key from base58 text
+        bool decode(const char *pText);
+
+        bool isPrivate() const { return mKey[0] == 0; }
+        bool isHardened() const { return mIndex >= HARDENED_LIMIT; }
+        const Version version() const { return (Version)mVersion; }
+        uint8_t depth() const { return mDepth; }
+        const uint8_t *fingerPrint() const { return mFingerPrint; }
+        const uint8_t *parentFingerPrint() const { return mParentFingerPrint; }
+        uint32_t index() const { return mIndex; }
+        const uint8_t *key() const { return mKey; }
+        const uint8_t *chainCode() const { return mChainCode; }
+        unsigned int childCount() const { return mChildren.size(); }
+        Key *publicKey() { return mPublicKey; } // Null for public keys
+        bool used() const { return mUsed; } // Public key has received payment
+        const ArcMist::Hash &hash() const; // SHA256 then RIPEMD160 of compressed key data
+        ArcMist::String address() const; // Base58 encoded hash of compressed key data
+
+        bool operator == (const Key &pRight)
         {
-        public:
+            if(mHash.isEmpty())
+                return std::memcmp(mKey, pRight.mKey, 33) == 0;
+            else
+                return mHash == pRight.mHash;
+        }
+        bool operator != (const Key &pRight)
+        {
+            if(mHash.isEmpty())
+                return std::memcmp(mKey, pRight.mKey, 33) != 0;
+            else
+                return mHash != pRight.mHash;
+        }
 
-            KeyData() { mPublicKey = NULL; clear(); }
-            ~KeyData() { clear(); }
+        void clear();
 
-            // Encode key as base58 text
-            ArcMist::String encode() const;
+        bool sign(const ArcMist::Hash &pHash, Signature &pSignature) const;
+        bool verify(const Signature &pSignature, const ArcMist::Hash &pHash) const;
 
-            // Decode key from base58 text
-            bool decode(secp256k1_context *pContext, const char *pText);
+        // Read/Write public key in script format
+        bool readPublic(ArcMist::InputStream *pStream);
+        bool writePublic(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
 
-            bool isPrivate() const { return mKey[0] == 0; }
-            bool isHardened() const { return mIndex >= HARDENED_LIMIT; }
-            const Version version() const { return (Version)mVersion; }
-            uint8_t depth() const { return mDepth; }
-            const uint8_t *fingerPrint() const { return mFingerPrint; }
-            const uint8_t *parentFingerPrint() const { return mParentFingerPrint; }
-            uint32_t index() const { return mIndex; }
-            const uint8_t *key() const { return mKey; }
-            const uint8_t *chainCode() const { return mChainCode; }
-            KeyData *publicKey() { return mPublicKey; } // Null for public keys
-            const ArcMist::Hash &hash();
+        // Read/Write private key raw key data only
+        bool readPrivate(ArcMist::InputStream *pStream);
+        bool writePrivate(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
 
-            bool sign(secp256k1_context *pContext, ArcMist::Hash &pHash, Signature &pSignature) const;
-            bool verify(secp256k1_context *pContext, Signature &pSignature, const ArcMist::Hash &pHash) const;
+        // Serialize key data
+        void write(ArcMist::OutputStream *pStream) const;
+        bool read(ArcMist::InputStream *pStream);
 
-            void clear();
+        // Generate an individual private key (not a hierarchal key).
+        void generatePrivate(Network pNetwork);
 
-            // Serializes key data
-            void write(ArcMist::OutputStream *pStream) const;
-            bool read(ArcMist::InputStream *pStream);
-
-            // Serializes key data and all children
-            void writeTree(ArcMist::OutputStream *pStream) const;
-            bool readTree(ArcMist::InputStream *pStream);
-
-            // Find an already derived child key with the specified index
-            KeyData *findChild(uint32_t pIndex);
-
-            // If this is the address level then search for public address with matching hash
-            KeyData *findAddress(const ArcMist::Hash &pHash);
-
-            // For private key, creates child private/public key pair for specified index.
-            // For public only key, creates child public key for specified index.
-            KeyData *deriveChild(secp256k1_context *pContext, Network pNetwork, uint32_t pIndex);
-
-            /*************************** Functions used to setup keys ****************************/
-            void setInfo(Version pVersion, uint8_t pDepth, const uint8_t *pParentFingerPrint, uint32_t pIndex)
-            {
-                mVersion = pVersion;
-                mDepth = pDepth;
-                std::memcpy(mParentFingerPrint, pParentFingerPrint, 4);
-                mIndex = pIndex;
-            }
-
-            void setKey(const uint8_t *pKey, uint8_t pType) { mKey[0] = pType; std::memcpy(mKey + 1, pKey, 32); }
-            void writeKey(ArcMist::InputStream *pStream, uint8_t pType) { mKey[0] = pType; pStream->read(mKey + 1, 32); }
-            void setChainCode(const uint8_t *pChainCode) { std::memcpy(mChainCode, pChainCode, 32); }
-            void writeChainCode(ArcMist::InputStream *pStream) { pStream->read(mChainCode, 32); }
-
-            // Used only by KeyTree
-            // Calculates fingerprint
-            // Creates associated public key if this is a private key
-            bool finalize(secp256k1_context *pContext, Network pNetwork);
-            /*************************************************************************************/
-
-        private:
-
-            uint8_t  mVersion;
-            uint8_t  mDepth;
-            uint8_t  mParentFingerPrint[4]; // First 4 bytes of parent's Hash160. Zeros for master.
-            uint32_t mIndex;
-            uint8_t  mChainCode[32];
-            uint8_t  mKey[33]; // First byte zero for private
-
-            uint8_t mFingerPrint[4];
-
-            KeyData *mPublicKey;
-            std::vector<KeyData *> mChildren;
-
-            ArcMist::Hash mHash;
-
-        };
-
-        Network network() const { return mNetwork; }
-
-        KeyData &top() { return mTopKey; }
+        // Setup a key with only a hash
+        void loadHash(const ArcMist::Hash &pHash);
 
         /******************************************************************************************
-        * BIP-0044 Derivation Paths
-        *   Path : Master / Purpose / Coin / Account / Chain
-        *
-        * BIP-0044 Hierarchy levels are defined as such. (' after key index means hardened)
-        *   Master  - Top level key generated from seed.
-        *   Purpose - Separates different derivation path methods. Default 44'.
-        *   Coin    - Separates different coins. Default 0'.
-        *   Account - Separates different "identities". Like separate bank accounts. Default 0.
-        *   Chain   - Parent of address keys. Default 0 for external "receiving" addresses and 1
-        *     for internal "change" addresses.
-        *
-        * SIMPLE derivation uses first level extended key 0 (non hardened) as account key.
-        *   Default account path m/0.
-        * BIP0032 derivation uses first level extended key 0' (hardened) default account key.
-        *   Default account path m/0'.
-        * BIP0044 derivation uses first level extended key 44' (hardened) for "purpose" with levels
-        *   for coin and account below that. Default account path m/44'/0'/0'.
-        *
-        * Chain is 0 for receiving (external) addresses and 1 for "change" (internal) addresses.
-        * Coin and Account value of 0xffffffff means use default for derivation path
-        *   method.
-        ******************************************************************************************/
+         *                       BIP-0032 Hierarchal Deterministic Keys
+         *
+         * Each key with a chain code can generate 2^32 child keys.
+         * 2^31 non-hardened and 2^31 hardened.
+         *
+         * A private key at each level can derive anything below it.
+         * A "non-hardened" public key at a specific level can derive only public
+         *   keys below that level.
+         * A "hardened" public key at a specific level can't derive anything.
+         *
+         ******************************************************************************************
+         *
+         * BIP-0044 Derivation Paths
+         *   Path : Master / Purpose / Coin / Account / Chain
+         *
+         * BIP-0044 Hierarchy levels are defined as such. (' after key index means hardened)
+         *   Master  - Top level key generated from seed.
+         *   Purpose - Separates different derivation path methods. Default 44'.
+         *   Coin    - Separates different coins. Default 0'.
+         *   Account - Separates different "identities". Like separate bank accounts. Default 0.
+         *   Chain   - Parent of address keys. Default 0 for external "receiving" addresses and 1
+         *     for internal "change" addresses.
+         *
+         * SIMPLE derivation uses first level extended key 0 (non hardened) as account key.
+         *   Default account path m/0.
+         * BIP0032 derivation uses first level extended key 0' (hardened) default account key.
+         *   Default account path m/0'.
+         * BIP0044 derivation uses first level extended key 44' (hardened) for "purpose" with levels
+         *   for coin and account below that. Default account path m/44'/0'/0'.
+         *
+         * Chain is 0 for receiving (external) addresses and 1 for "change" (internal) addresses.
+         * Coin and Account value of 0xffffffff means use default for derivation path
+         *   method.
+         ******************************************************************************************/
         enum DerivationPathMethod { SIMPLE, BIP0032, BIP0044 };
         enum CoinIndex
         {
@@ -314,45 +207,95 @@ namespace BitCoin
 
         // Return "chain" key with which to generate/lookup address keys. Requires master key as
         //   top key to ensure correct full path.
-        KeyData *chainKey(uint32_t pChain, DerivationPathMethod pMethod = BIP0044,
+        Key *chainKey(uint32_t pChain, DerivationPathMethod pMethod = BIP0044,
           uint32_t pAccount = 0xffffffff, uint32_t pCoin = 0xffffffff);
 
-        // Find existing child (already derived) with matching public key hash.
-        KeyData *findAddress(const ArcMist::Hash &pHash);
+        // Updates gap (unused addresses)
+        // Call only on "chain" key (parent of address keys).
+        // Returns true if new addresses were generated.
+        bool updateGap(unsigned int pGap);
 
-        // Calls deriveChild function on parent key with appropriate tree values.
-        KeyData *deriveChild(KeyData *pParent, uint32_t pIndex) { return pParent->deriveChild(mContext, mNetwork, pIndex); }
+        // Find an already derived child key with the specified index
+        Key *findChild(uint32_t pIndex);
 
-        void clear(); // Clear all data and set master key to zero
+        // Find an address level key with a matching hash
+        Key *findAddress(const ArcMist::Hash &pHash);
+
+        // Return the next child key that is not used
+        Key *getNextUnused();
+
+        // Mark a key as "used" and generate new keys if necessary.
+        // Keep a specified number of unused addresses ahead of any used address.
+        // Sets pNewAddresses to true if new addresses are generated.
+        // Returns the key matching the hash or NULL if none found.
+        Key *markUsed(const ArcMist::Hash &pHash, unsigned int pGap, bool &pNewAddresses);
+
+        // For private key, creates child private/public key pair for specified index.
+        // For public only key, creates child public key for specified index.
+        Key *deriveChild(uint32_t pIndex);
 
         // Seed initialization
-        void generate(Network pNetwork);
-        bool setSeed(Network pNetwork, ArcMist::InputStream *pStream);
-        void readSeed(ArcMist::OutputStream *pStream) { mSeed.setReadOffset(0); pStream->writeStream(&mSeed, mSeed.length()); }
+        bool loadBinarySeed(Network pNetwork, ArcMist::InputStream *pStream);
 
         // Generate a master key from a mnemonic sentence and passphrase BIP-0039
-        bool loadMnemonic(const char *pText, const char *pPassPhrase = "", const char *pSalt = "mnemonic");
+        bool loadMnemonicSeed(Network pNetwork, const char *pText, const char *pPassPhrase = "", const char *pSalt = "mnemonic");
 
         // Generate a random mnemonic sentence
-        static ArcMist::String generateMnemonic(Mnemonic::Language, unsigned int pBytesEntropy = 32);
+        static ArcMist::String generateMnemonicSeed(Mnemonic::Language, unsigned int pBytesEntropy = 32);
 
-        // Set top key in tree. Don't generate from seed.
-        bool setTopKey(const char *pKeyText);
+        // Serializes key data and all children
+        void writeTree(ArcMist::OutputStream *pStream) const;
+        bool readTree(ArcMist::InputStream *pStream);
 
-        void write(ArcMist::OutputStream *pStream);
-        bool read(ArcMist::InputStream *pStream);
+        static secp256k1_context *context(unsigned int pFlags);
+        static void destroyContext();
+        static secp256k1_context *sContext;
+        static unsigned int sContextFlags;
+        static ArcMist::Mutex sMutex;
+        static const uint32_t sVersionValues[4];
+
+        static bool test();
 
     private:
 
-        void generateSeed(); // Generate entropy to create master key/code
-        bool generateMaster(); // Generate master private key and chain code from entropy
+        Key(const Key &pCopy);
+        void operator = (const Key &pRight);
 
-        secp256k1_context *mContext;
+        bool finalize();
 
-        Network mNetwork;
-        ArcMist::Buffer mSeed;
-        KeyData mTopKey;
+        uint8_t  mVersion;
+        uint8_t  mDepth;
+        uint8_t  mParentFingerPrint[4]; // First 4 bytes of parent's Hash160. Zeros for master.
+        uint32_t mIndex;
+        uint8_t  mChainCode[32];
+        uint8_t  mKey[33]; // First byte zero for private
 
+        uint8_t mFingerPrint[4];
+
+        Key *mPublicKey;
+        std::vector<Key *> mChildren;
+
+        ArcMist::Hash mHash;
+        bool mUsed;
+
+    };
+
+    class KeyStore : public std::vector<Key *>
+    {
+    public:
+
+        ~KeyStore();
+
+        void clear();
+
+        // Find an address level key with a matching hash
+        Key *findAddress(const ArcMist::Hash &pHash);
+
+        // Mark a key as "used" and generate new keys if necessary.
+        // Keep a specified number of unused addresses ahead of any used address.
+        // Sets pNewAddresses to true if new addresses are generated.
+        // Returns the key matching the hash or NULL if none found.
+        Key *markUsed(const ArcMist::Hash &pHash, unsigned int pGap, bool &pNewAddresses);
     };
 }
 

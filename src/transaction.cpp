@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017-2018 ArcMist, LLC                                       *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@arcmist.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
@@ -148,8 +148,8 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
-      const PublicKey &pPublicKey, Signature::HashType pHashType)
+    bool Transaction::signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
+      const Key &pPublicKey, Signature::HashType pHashType)
     {
         ArcMist::HashList outputHashes;
         if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHashes) != ScriptInterpreter::P2PKH)
@@ -158,9 +158,7 @@ namespace BitCoin
             return false;
         }
 
-        ArcMist::Hash publicKeyHash;
-        pPublicKey.getHash(publicKeyHash);
-        if(outputHashes.size() != 1 || publicKeyHash != outputHashes.front())
+        if(outputHashes.size() != 1 || pPublicKey.hash() != outputHashes.front())
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public key hash doesn't match");
             return false;
@@ -195,7 +193,7 @@ namespace BitCoin
         signature.write(&thisInput->script, true);
 
         // Push the public key onto the stack
-        pPublicKey.write(&thisInput->script, true, true);
+        pPublicKey.writePublic(&thisInput->script, true);
         return true;
     }
 
@@ -225,8 +223,8 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::signP2PKInput(Output &pOutput, unsigned int pInputOffset, const PrivateKey &pPrivateKey,
-      const PublicKey &pPublicKey, Signature::HashType pHashType)
+    bool Transaction::signP2PKInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
+      const Key &pPublicKey, Signature::HashType pHashType)
     {
         ArcMist::HashList outputHashes;
         pOutput.script.setReadOffset(0);
@@ -242,12 +240,7 @@ namespace BitCoin
             return false;
         }
 
-        ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
-        ArcMist::Hash publicKeyHash(20);
-        pPublicKey.write(&digest, false, false);
-        digest.getResult(&publicKeyHash);
-
-        if(publicKeyHash != outputHashes.front())
+        if(pPublicKey.hash() != outputHashes.front())
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public key doesn't match");
             return false;
@@ -262,8 +255,8 @@ namespace BitCoin
             return false;
         }
 
-        PublicKey checkPublicKey;
-        if(!checkPublicKey.read(&publicKeyData))
+        Key checkPublicKey;
+        if(!checkPublicKey.readPublic(&publicKeyData))
         {
             ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Failed to parse public key");
             return false;
@@ -304,13 +297,13 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::addP2PKOutput(const PublicKey &pPublicKey, uint64_t pAmount)
+    bool Transaction::addP2PKOutput(const Key &pPublicKey, uint64_t pAmount)
     {
         Output *newOutput = new Output();
         newOutput->amount = pAmount;
 
         // Push the provided public key onto the stack
-        pPublicKey.write(&newOutput->script, true, true);
+        pPublicKey.writePublic(&newOutput->script, true);
 
         // Pop the signature from the signature script and verify it against the transaction data
         newOutput->script.writeByte(OP_CHECKSIG);
@@ -380,7 +373,7 @@ namespace BitCoin
     }
 
     bool Transaction::addMultiSigInputSignature(Output &pOutput, unsigned int pInputOffset,
-      const PrivateKey &pPrivateKey, const PublicKey &pPublicKey, Signature::HashType pHashType,
+      const Key &pPrivateKey, const Key &pPublicKey, Signature::HashType pHashType,
       const Forks &pForks, bool &pSignatureAdded, bool &pTransactionComplete)
     {
         pSignatureAdded = false;
@@ -418,8 +411,8 @@ namespace BitCoin
 
         // Parse public keys
         ArcMist::Buffer data;
-        PublicKey *publicKey;
-        std::vector<PublicKey *> publicKeys;
+        Key *publicKey;
+        std::vector<Key *> publicKeys;
         bool success = true;
         while(success)
         {
@@ -453,8 +446,8 @@ namespace BitCoin
                 if(ScriptInterpreter::pullData(opCode, pOutput.script, data) &&
                   (data.length() >= 33 && data.length() <= 65)) // Valid size for public key
                 {
-                    publicKey = new PublicKey();
-                    if(publicKey->read(&data))
+                    publicKey = new Key();
+                    if(publicKey->readPublic(&data))
                         publicKeys.push_back(publicKey);
                     else
                     {
@@ -477,7 +470,7 @@ namespace BitCoin
 
         if(!success)
         {
-            for(std::vector<PublicKey *>::iterator key=publicKeys.begin();key!=publicKeys.end();++key)
+            for(std::vector<Key *>::iterator key=publicKeys.begin();key!=publicKeys.end();++key)
                 delete *key;
             return false;
         }
@@ -531,7 +524,7 @@ namespace BitCoin
         if(success)
         {
             // Check signatures against public keys to find  where the new signature belongs
-            std::vector<PublicKey *>::iterator publicKeyIter = publicKeys.begin();
+            std::vector<Key *>::iterator publicKeyIter = publicKeys.begin();
             std::vector<Signature *>::iterator signatureIter = signatures.begin();
             bool signatureVerified;
             bool publicKeyFound = false;
@@ -606,7 +599,7 @@ namespace BitCoin
                           "MultiSig signature %d didn't verify : %s", signatureOffset, (*signatureIter)->hex().text());
                     else
                         ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                          "MultiSig public key not found in output script : %s", pPublicKey.hex().text());
+                          "MultiSig public key not found in output script : %s", pPublicKey.hash().hex().text());
                     success = false;
                     break;
                 }
@@ -632,7 +625,7 @@ namespace BitCoin
 
         if(signature != NULL)
             delete signature;
-        for(std::vector<PublicKey *>::iterator key=publicKeys.begin();key!=publicKeys.end();++key)
+        for(std::vector<Key *>::iterator key=publicKeys.begin();key!=publicKeys.end();++key)
             delete *key;
         for(std::vector<Signature *>::iterator sig=signatures.begin();sig!=signatures.end();++sig)
             delete *sig;
@@ -640,7 +633,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Transaction::addMultiSigOutput(unsigned int pRequiredSignatureCount, std::vector<PublicKey *> pPublicKeys,
+    bool Transaction::addMultiSigOutput(unsigned int pRequiredSignatureCount, std::vector<Key *> pPublicKeys,
       uint64_t pAmount)
     {
         Output *newOutput = new Output();
@@ -653,8 +646,8 @@ namespace BitCoin
         ScriptInterpreter::writeSmallInteger(pRequiredSignatureCount, newOutput->script);
 
         // Public keys
-        for(std::vector<PublicKey *>::iterator key=pPublicKeys.begin();key!=pPublicKeys.end();++key)
-            (*key)->write(&newOutput->script, true, true);
+        for(std::vector<Key *>::iterator key=pPublicKeys.begin();key!=pPublicKeys.end();++key)
+            (*key)->writePublic(&newOutput->script, true);
 
         // Public key count
         ScriptInterpreter::writeSmallInteger(pPublicKeys.size(), newOutput->script);
@@ -2228,38 +2221,36 @@ namespace BitCoin
           "------------- Starting Transaction Tests -------------");
 
         bool success = true;
-        PrivateKey privateKey1;
-        PublicKey publicKey1;
+        Key privateKey1;
+        Key publicKey1;
         Signature signature;
-        PrivateKey privateKey2;
-        PublicKey publicKey2;
+        Key privateKey2;
+        Key publicKey2;
         ArcMist::Buffer data;
         Forks forks;
 
         // Initialize private key
         data.writeHex("d68e0869df44615cc57f196208a896653e969f69960c6435f38ae47f6b6d082d");
-        privateKey1.read(&data);
+        privateKey1.readPrivate(&data);
 
         // Initialize public key
         data.clear();
         data.writeHex("03077b2a0406db4b4e2cddbe9aca5e9f1a3cf039feb843992d05cc0b7a75046635");
-        publicKey1.read(&data);
+        publicKey1.readPublic(&data);
 
         // Initialize private key
         data.writeHex("4fd0a873dba1d74801f182013c5ae17c17213d333657047a6e6c5865f388a60a");
-        privateKey2.read(&data);
+        privateKey2.readPrivate(&data);
 
         // Initialize public key
         data.clear();
         data.writeHex("03362365326bd230642290787f3ba93d6299392ac5d26cd66e300f140184521e9c");
-        publicKey2.read(&data);
+        publicKey2.readPublic(&data);
 
         // Create unspent transaction output (so we can spend it)
         Transaction spendable, transaction;
-        ArcMist::Hash publicKey1Hash;
 
-        publicKey1.getHash(publicKey1Hash);
-        spendable.addP2PKHOutput(publicKey1Hash, 51000);
+        spendable.addP2PKHOutput(publicKey1.hash(), 51000);
 
         spendable.calculateHash();
 
@@ -2267,15 +2258,13 @@ namespace BitCoin
          * Process Valid P2PKH Transaction
          ***********************************************************************************************/
         // Create public key script to pay the third public key
-        ArcMist::Hash publicKey2Hash;
-        publicKey2.getHash(publicKey2Hash);
 
         // Create Transaction to spend it
         // Add input
         transaction.addInput(spendable.hash, 0);
 
         // Add output
-        transaction.addP2PKHOutput(publicKey2Hash, 50000);
+        transaction.addP2PKHOutput(publicKey2.hash(), 50000);
 
         // Sign the input
         transaction.signP2PKHInput(*spendable.outputs[0], 0, privateKey1, publicKey1, Signature::ALL);
@@ -2291,7 +2280,7 @@ namespace BitCoin
             success = false;
         }
 
-        if(checkHashes.size() != 1 || publicKey1Hash == checkHashes.front())
+        if(checkHashes.size() != 1 || publicKey1.hash() == checkHashes.front())
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script hash");
         else
         {
@@ -2340,7 +2329,7 @@ namespace BitCoin
         transaction.addInput(spendable.hash, 0);
 
         // Add output
-        transaction.addP2PKHOutput(publicKey2Hash, 50000);
+        transaction.addP2PKHOutput(publicKey2.hash(), 50000);
 
         // Sign the input
         if(!transaction.signP2PKHInput(*spendable.outputs[0], 0, privateKey1, publicKey2, Signature::ALL))
@@ -2361,7 +2350,7 @@ namespace BitCoin
             success = false;
         }
 
-        if(checkHashes.size() != 1 || publicKey1Hash == checkHashes.front())
+        if(checkHashes.size() != 1 || publicKey1.hash() == checkHashes.front())
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script bad PK hash");
         else
         {
@@ -2410,7 +2399,7 @@ namespace BitCoin
         transaction.addInput(spendable.hash, 0);
 
         // Add output
-        transaction.addP2PKHOutput(publicKey2Hash, 50000);
+        transaction.addP2PKHOutput(publicKey2.hash(), 50000);
 
         // Sign the input
         if(transaction.signP2PKHInput(*spendable.outputs[0], 0, privateKey2, publicKey1, Signature::ALL))
@@ -2475,7 +2464,7 @@ namespace BitCoin
         transaction.addInput(spendable.hash, 0);
 
         // Add output
-        transaction.addP2PKHOutput(publicKey2Hash, 50000);
+        transaction.addP2PKHOutput(publicKey2.hash(), 50000);
 
         // Create signature script
         redeemScript.setReadOffset(0);
@@ -2541,7 +2530,7 @@ namespace BitCoin
         spendable.clear();
 
         ArcMist::Hash testOutHash(20);
-        std::vector<PublicKey *> publicKeys;
+        std::vector<Key *> publicKeys;
 
         publicKeys.push_back(&publicKey1);
         publicKeys.push_back(&publicKey2);
@@ -2634,16 +2623,14 @@ namespace BitCoin
         transaction.clear();
         spendable.clear();
 
-        PrivateKey privateKey3;
-        PublicKey publicKey3;
+        Key privateKey3;
 
-        privateKey3.generate();
-        privateKey3.generatePublicKey(publicKey3);
+        privateKey3.generatePrivate(MAINNET);
 
         publicKeys.clear();
         publicKeys.push_back(&publicKey1);
         publicKeys.push_back(&publicKey2);
-        publicKeys.push_back(&publicKey3);
+        publicKeys.push_back(privateKey3.publicKey());
 
         spendable.addMultiSigOutput(2, publicKeys, 51000);
         spendable.calculateHash();

@@ -202,10 +202,9 @@ namespace BitCoin
             }
 
             // Check signature against authorized public keys
-            PublicKey publicKey;
+            Key publicKey;
             ArcMist::String keyText, keyName;
-            ArcMist::Buffer keyBuffer;
-            uint8_t keyData[64];
+            ArcMist::Buffer keyBuffer, keyData;
             char nextChar;
             unsigned int authorizedCount = 0;
             ArcMist::Hash validHash;
@@ -243,16 +242,16 @@ namespace BitCoin
                 keyBuffer.clear();
                 keyBuffer.writeHex(keyText);
 
-                if(!publicKey.read(&keyBuffer))
+                if(!publicKey.readPublic(&keyBuffer))
                     break;
                 keyBuffer.clear();
-                publicKey.write(&keyBuffer, true, false);
+                publicKey.writePublic(&keyBuffer, false);
                 ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
                   "Checking public key %s : %s", keyName.text(), keyBuffer.readHexString(keyBuffer.remaining()).text());
                 ++authorizedCount;
 
                 for(int i=0;i<5;++i)
-                    if(signature.verify(publicKey, hashes[i]))
+                    if(publicKey.verify(signature, hashes[i]))
                     {
                         validHash = hashes[i];
                         mAuthenticated = true;
@@ -300,7 +299,7 @@ namespace BitCoin
             }
 
             keyText = privateKeyFile.readString(64);
-            if(keyText.readHex(keyData) != 32)
+            if(keyData.writeHex(keyText) != 32)
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
                   "Failed to read private key from file : %s", privateKeyFilePathName.text());
@@ -308,9 +307,9 @@ namespace BitCoin
                 return;
             }
 
-            PrivateKey privateKey;
+            Key privateKey;
             Signature returnSignature;
-            privateKey.set(keyData);
+            privateKey.readPrivate(&keyData);
             if(!privateKey.sign(validHash, returnSignature))
             {
                 ArcMist::Log::add(ArcMist::Log::VERBOSE, mName,
