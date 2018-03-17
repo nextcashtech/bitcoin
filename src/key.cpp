@@ -1547,50 +1547,59 @@ namespace BitCoin
       ArcMist::InputStream *pSaltPlusPassPhrase, ArcMist::OutputStream *pResult)
     {
         ArcMist::HMACDigest digest(ArcMist::Digest::SHA512);
-        ArcMist::Buffer result, newResult, round, data;
+        ArcMist::Buffer dataList[2], *data, *round, result;
 
+        data = dataList;
+        round = dataList + 1;
+
+        // Write salt, passphrase, and iteration index into data for first round
+        data->setOutputEndian(ArcMist::Endian::BIG);
+        pSaltPlusPassPhrase->setReadOffset(0);
+        data->writeStream(pSaltPlusPassPhrase, pSaltPlusPassPhrase->length());
+        data->writeUnsignedInt(1); // Iteration index (only 1 iteration since output length is 512)
+
+        // Initialize result to zeros
         for(unsigned int i=0;i<64;++i)
             result.writeByte(0);
 
-        data.setOutputEndian(ArcMist::Endian::BIG);
-        pSaltPlusPassPhrase->setReadOffset(0);
-        data.writeStream(pSaltPlusPassPhrase, pSaltPlusPassPhrase->length());
-        data.writeUnsignedInt(1);
-
         for(unsigned int i=0;i<2048;++i)
         {
+            // Calculate HMAC SHA512
             pMnemonicSentence->setReadOffset(0);
             digest.initialize(pMnemonicSentence);
 
-            data.setReadOffset(0);
-            digest.writeStream(&data, data.length());
+            data->setReadOffset(0);
+            digest.writeStream(data, data->length());
 
-            round.setWriteOffset(0);
-            digest.getResult(&round);
-
-            // Save this round to use as data for next
-            data.setWriteOffset(0);
-            round.setReadOffset(0);
-            data.writeStream(&round, round.length());
+            round->setWriteOffset(0);
+            digest.getResult(round);
 
             // Xor round into result
+            round->setReadOffset(0);
             result.setReadOffset(0);
-            round.setReadOffset(0);
-            newResult.setWriteOffset(0);
-            while(result.remaining())
-                newResult.writeByte(result.readByte() ^ round.readByte());
-
             result.setWriteOffset(0);
-            newResult.setReadOffset(0);
-            result.writeStream(&newResult, newResult.length());
+            while(result.remaining())
+                result.writeByte(result.readByte() ^ round->readByte());
+
+            // Swap data and round
+            if(data == dataList)
+            {
+                data = dataList + 1;
+                round = dataList;
+            }
+            else
+            {
+                data = dataList;
+                round = dataList + 1;
+            }
         }
 
         result.setReadOffset(0);
         pResult->writeStream(&result, result.length());
 
         // Zeroize before releasing memory since a password might have been in here
-        round.zeroize();
-        newResult.zeroize();
+        data->zeroize();
+        round->zeroize();
         result.zeroize();
         return true;
     }
