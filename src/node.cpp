@@ -23,7 +23,7 @@ namespace BitCoin
     unsigned int Node::mNextID = 256;
 
     Node::Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
-      bool pIsSeed, uint64_t pServices, AddressBlock &pAddressBlock) : mID(mNextID++), mConnectionMutex("Node Connection"),
+      bool pIsSeed, uint64_t pServices, Monitor &pMonitor) : mID(mNextID++), mConnectionMutex("Node Connection"),
       mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce")
     {
         Info &info = Info::instance();
@@ -61,9 +61,9 @@ namespace BitCoin
         mSocketID = -1;
         mServices = pServices;
         if(!pIncoming && !pIsSeed)
-            mAddressBlock = &pAddressBlock;
+            mMonitor = &pMonitor;
         else
-            mAddressBlock = NULL;
+            mMonitor = NULL;
         mActiveMerkleRequests = 0;
         mLastMerkleCheck = 0;
         mLastMerkleRequest = 0;
@@ -146,8 +146,8 @@ namespace BitCoin
             mConnection->close();
         mConnectionMutex.unlock();
         requestStop();
-        if(mAddressBlock != NULL)
-            mAddressBlock->release(mID);
+        if(mMonitor != NULL)
+            mMonitor->release(mID);
         mChain->releaseBlocksForNode(mID);
         mChain->memPool().releaseForNode(mID);
     }
@@ -331,11 +331,11 @@ namespace BitCoin
 
     bool Node::sendBloomFilter()
     {
-        if(!Info::instance().spvMode || mAddressBlock == NULL)
+        if(!Info::instance().spvMode || mMonitor == NULL)
             return false;
 
         Message::FilterLoadData message;
-        mBloomFilterID = mAddressBlock->setupBloomFilter(message.filter);
+        mBloomFilterID = mMonitor->setupBloomFilter(message.filter);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Sending bloom filter with %d bytes and %d functions",
           message.filter.size(), message.filter.functionCount());
         return sendMessage(&message);
@@ -670,7 +670,7 @@ namespace BitCoin
         }
         mAnnounceMutex.unlock();
 
-        return mAddressBlock != NULL && mAddressBlock->addTransactionAnnouncement(pHash, mID);
+        return mMonitor != NULL && mMonitor->addTransactionAnnouncement(pHash, mID);
     }
 
     void Node::process()
@@ -682,9 +682,9 @@ namespace BitCoin
         Info &info = Info::instance();
 
         if(info.spvMode && mVersionAcknowledged && mVersionData != NULL && isReady() && !mIsIncoming &&
-          !mIsSeed && mAddressBlock != NULL && time - mLastMerkleCheck > 2)
+          !mIsSeed && mMonitor != NULL && time - mLastMerkleCheck > 2)
         {
-            if(mAddressBlock->needsClose(mID))
+            if(mMonitor->needsClose(mID))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
                   "Dropping. Inappropriate false positive rate.");
@@ -692,7 +692,7 @@ namespace BitCoin
                 return;
             }
 
-            if(mAddressBlock->filterNeedsResend(mID, mBloomFilterID))
+            if(mMonitor->filterNeedsResend(mID, mBloomFilterID))
                 sendBloomFilter();
 
             if(mActiveMerkleRequests < 25)
@@ -700,7 +700,7 @@ namespace BitCoin
                 bool fail = false;
                 ArcMist::HashList blockHashes;
 
-                mAddressBlock->getNeededMerkleBlocks(mID, *mChain, blockHashes);
+                mMonitor->getNeededMerkleBlocks(mID, *mChain, blockHashes);
                 for(ArcMist::HashList::iterator hash=blockHashes.begin();hash!=blockHashes.end();++hash)
                     if(!requestMerkleBlock(*hash))
                     {
@@ -1509,10 +1509,10 @@ namespace BitCoin
                         {
                             case MemPool::ADDED:
                             case MemPool::UNSEEN_OUTPOINTS: // Added to pending
-                                if(mAddressBlock != NULL)
+                                if(mMonitor != NULL)
                                 {
                                     transactionData->transaction = new Transaction(*transactionData->transaction);
-                                    mAddressBlock->addTransaction(*mChain, transactionData);
+                                    mMonitor->addTransaction(*mChain, transactionData);
                                 }
                                 else
                                     transactionData->transaction = NULL; // So it won't be deleted with the message
@@ -1538,8 +1538,8 @@ namespace BitCoin
                         }
 
                     }
-                    else if(mAddressBlock != NULL)
-                        mAddressBlock->addTransaction(*mChain, transactionData);
+                    else if(mMonitor != NULL)
+                        mMonitor->addTransaction(*mChain, transactionData);
                 }
                 break;
             }
@@ -1575,8 +1575,8 @@ namespace BitCoin
                 break;
             case Message::MERKLE_BLOCK:
                 --mActiveMerkleRequests;
-                if(!mIsIncoming && !mIsSeed && mAddressBlock != NULL &&
-                  !mAddressBlock->addMerkleBlock(*mChain, (Message::MerkleBlockData *)message, mID) &&
+                if(!mIsIncoming && !mIsSeed && mMonitor != NULL &&
+                  !mMonitor->addMerkleBlock(*mChain, (Message::MerkleBlockData *)message, mID) &&
                   !mChain->blockInChain(((Message::MerkleBlockData *)message)->block->hash))
                 {
                     ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,

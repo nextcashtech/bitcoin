@@ -17,7 +17,7 @@
 #include "message.hpp"
 #include "chain.hpp"
 #include "bloom_filter.hpp"
-#include "address_block.hpp"
+#include "monitor.hpp"
 
 #include <cstdint>
 #include <list>
@@ -30,7 +30,7 @@ namespace BitCoin
     public:
 
         Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
-          bool pIsSeed, uint64_t pServices, AddressBlock &pAddressBlock);
+          bool pIsSeed, uint64_t pServices, Monitor &pMonitor);
         ~Node();
 
         static void run();
@@ -71,7 +71,7 @@ namespace BitCoin
 
         const ArcMist::Hash &lastHeader() const { return mLastHeader; }
 
-        void setAddressBlock(AddressBlock &pAddressBlock);
+        void setMonitor(Monitor &pMonitor);
 
         bool hasTransaction(const ArcMist::Hash &pHash);
 
@@ -119,7 +119,7 @@ namespace BitCoin
         ArcMist::Thread *mThread;
         IPAddress mAddress;
         Chain *mChain;
-        AddressBlock *mAddressBlock;
+        Monitor *mMonitor;
         ArcMist::Mutex mConnectionMutex;
         ArcMist::Network::Connection *mConnection;
         ArcMist::Buffer mReceiveBuffer;

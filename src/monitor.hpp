@@ -23,12 +23,12 @@ namespace BitCoin
 {
     /* Data set of addresses to monitor for an SPV wallet
      */
-    class AddressBlock
+    class Monitor
     {
     public:
 
-        AddressBlock();
-        ~AddressBlock();
+        Monitor();
+        ~Monitor();
 
         void write(ArcMist::OutputStream *pStream);
         bool read(ArcMist::InputStream *pStream);
@@ -39,8 +39,13 @@ namespace BitCoin
 
         void clear();
 
-        // Load and add any new addresses from a text file
+        // Load and add any new addresses from a text file.
         bool loadAddresses(ArcMist::InputStream *pStream);
+
+        // Sets up monitoring on a key store.
+        // Each key in the key store must be "primed". Meaning there must be some address keys
+        //   already generated under the "chain" key according to a known hierarchal structure.
+        void setKeyStore(KeyStore *pKeyStore);
 
         unsigned int setupBloomFilter(BloomFilter &pFilter);
 
@@ -192,12 +197,23 @@ namespace BitCoin
 
         };
 
+        // Update address list from key store and add any missing.
+        // Return number of new addresses added.
+        unsigned int refreshKeyStore();
+
         void refreshBloomFilter(bool pLocked);
         void refreshTransaction(SPVTransactionData *pTransaction, bool pAllowPending);
         Output *getOutput(ArcMist::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending);
         bool getPayAddresses(Output *pOutput, ArcMist::HashList &pAddresses, bool pBlockOnly);
 
+        // Start a new "pass" to check new addresses for previous transactions
+        void startNewPass();
+
+        // Cancel all pending merkle requests and update the bloom filter.
+        void restartBloomFilter();
+
         ArcMist::Mutex mMutex;
+        KeyStore *mKeyStore;
         ArcMist::HashList mAddressHashes;
         unsigned int mFilterID;
         BloomFilter mFilter;

@@ -17,7 +17,7 @@
 #include "arcmist/crypto/digest.hpp"
 #include "info.hpp"
 #include "daemon.hpp"
-#include "address_block.hpp"
+#include "monitor.hpp"
 
 #define BITCOIN_CHAIN_LOG_NAME "Chain"
 
@@ -43,7 +43,7 @@ namespace BitCoin
         mAccumulatedProofOfWork = 0;
         mBlockHashes.reserve(2048);
         mPendingAccumulatedWork.setSize(32);
-        mAddressBlock = NULL;
+        mMonitor = NULL;
     }
 
     Chain::~Chain()
@@ -1389,8 +1389,8 @@ namespace BitCoin
                 ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                   "Reverting block at height %d : %s", height(), block.hash.hex().text());
 
-                if(mAddressBlock != NULL)
-                    mAddressBlock->revertBlock(block.hash, height());
+                if(mMonitor != NULL)
+                    mMonitor->revertBlock(block.hash, height());
 
                 if(!mOutputs.revert(block.transactions, height()))
                 {

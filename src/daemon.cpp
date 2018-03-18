@@ -141,6 +141,12 @@ namespace BitCoin
         else
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in Full/Bloom mode");
 
+        if(!loadKeyStore())
+            return false;
+
+        if(!loadMonitor())
+            return false;
+
         mManagerThread = new ArcMist::Thread("Manager", manage);
         if(mManagerThread == NULL)
         {
@@ -263,7 +269,8 @@ namespace BitCoin
 
         ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Saving data");
         saveStatistics();
-        saveAddressBlock();
+        saveMonitor();
+        saveKeyStore();
         mChain.save();
         Info::destroy();
 
@@ -379,54 +386,100 @@ namespace BitCoin
           timeText.text());
     }
 
-    bool Daemon::loadAddressBlock()
+    bool Daemon::loadMonitor()
     {
         ArcMist::String filePathName = Info::instance().path();
-        filePathName.pathAppend("address_block");
+        filePathName.pathAppend("monitor");
         ArcMist::FileInputStream file(filePathName);
         if(file.isValid())
         {
-            if(!mAddressBlock.read(&file))
+            if(!mMonitor.read(&file))
             {
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Address block failed to load");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                  "Monitor failed to load");
                 return false;
             }
             else
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Address block loaded with %d addresses and %d transactions", mAddressBlock.size(),
-                  mAddressBlock.transactionCount());
+                  "Monitor loaded with %d addresses and %d transactions", mMonitor.size(),
+                  mMonitor.transactionCount());
         }
         else
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Address block not found to load");
+              "Monitor file not found to load");
 
-        unsigned int previousSize = mAddressBlock.size();
+        // filePathName = Info::instance().path();
+        // filePathName.pathAppend("address_text");
+        // ArcMist::FileInputStream textFile(filePathName);
+        // if(textFile.isValid() && !mMonitor.loadAddresses(&textFile))
+            // return false;
+
+        mMonitor.setKeyStore(&mKeyStore);
+        return true;
+    }
+
+    bool Daemon::saveMonitor()
+    {
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("monitor");
+        ArcMist::FileOutputStream file(filePathName, true);
+        if(!file.isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Monitor file failed to open");
+            return false;
+        }
+        mMonitor.write(&file);
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Monitor saved with %d addresses and %d transactions", mMonitor.size(),
+          mMonitor.transactionCount());
+        return true;
+    }
+
+    bool Daemon::loadKeyStore()
+    {
+        ArcMist::String filePathName = Info::instance().path();
+        filePathName.pathAppend("keystore");
+        ArcMist::FileInputStream file(filePathName);
+        if(file.isValid())
+        {
+            if(!mKeyStore.read(&file))
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                  "Key store failed to load");
+                return false;
+            }
+            else
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Key store loaded with %d keys", mKeyStore.size());
+        }
+        else
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Key store file not found to load");
 
         filePathName = Info::instance().path();
-        filePathName.pathAppend("address_text");
+        filePathName.pathAppend("key_text");
         ArcMist::FileInputStream textFile(filePathName);
-        if(textFile.isValid() && !mAddressBlock.loadAddresses(&textFile))
+        if(textFile.isValid() && !mKeyStore.loadKeys(&textFile))
             return false;
-
-        if(previousSize != mAddressBlock.size())
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Address block added %d addresses", mAddressBlock.size() - previousSize);
 
         return true;
     }
 
-    bool Daemon::saveAddressBlock()
+    bool Daemon::saveKeyStore()
     {
         ArcMist::String filePathName = Info::instance().path();
-        filePathName.pathAppend("address_block");
+        filePathName.pathAppend("keystore");
         ArcMist::FileOutputStream file(filePathName, true);
         if(!file.isValid())
+        {
+            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Key store file failed to open");
             return false;
-        mAddressBlock.write(&file);
+        }
+        mKeyStore.write(&file);
         ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Address block saved with %d addresses and %d transactions", mAddressBlock.size(),
-          mAddressBlock.transactionCount());
+          "Key store saved with %d keys", mKeyStore.size());
         return true;
     }
 
@@ -1055,8 +1108,7 @@ namespace BitCoin
             return;
         }
 
-        if(daemon.loadAddressBlock())
-            daemon.mChain.setAddressBlock(daemon.mAddressBlock);
+        daemon.mChain.setMonitor(daemon.mMonitor);
 
         daemon.mLoaded = true;
 
@@ -1160,7 +1212,7 @@ namespace BitCoin
             {
                 lastInfoSaveTime = time;
                 daemon.mInfo.save();
-                daemon.saveAddressBlock();
+                daemon.saveMonitor();
             }
 
             if(daemon.mStopping)
@@ -1217,7 +1269,7 @@ namespace BitCoin
         uint32_t lastOutputsPurgeTime = getTime();
         uint32_t lastAddressPurgeTime = getTime();
         uint32_t lastMemPoolCheckPending = getTime();
-        uint32_t lastAddressBlockProcess = getTime();
+        uint32_t lastMonitorProcess = getTime();
         ArcMist::Hash lastBlockHash = daemon.mChain.lastBlockHash();
 
         while(!daemon.mStopping)
@@ -1230,10 +1282,10 @@ namespace BitCoin
             if(daemon.mInfo.spvMode)
             {
                 if(lastBlockHash != daemon.mChain.lastBlockHash() ||
-                  getTime() - lastAddressBlockProcess > 2)
+                  getTime() - lastMonitorProcess > 2)
                 {
-                    daemon.mAddressBlock.process(daemon.mChain);
-                    lastAddressBlockProcess = getTime();
+                    daemon.mMonitor.process(daemon.mChain);
+                    lastMonitorProcess = getTime();
                     lastBlockHash = daemon.mChain.lastBlockHash();
                 }
 
@@ -1314,7 +1366,7 @@ namespace BitCoin
         Node *node;
         try
         {
-            node = new Node(pConnection, &mChain, pIncoming, pIsSeed, pServices, mAddressBlock);
+            node = new Node(pConnection, &mChain, pIncoming, pIsSeed, pServices, mMonitor);
         }
         catch(std::bad_alloc &pBadAlloc)
         {

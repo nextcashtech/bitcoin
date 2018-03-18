@@ -74,224 +74,12 @@ namespace BitCoin
         sContext = NULL;
     }
 
-    // PrivateKey::PrivateKey()
-    // {
-        // // Create context with sign ability
-        // mContext = secp256k1_context_create(SECP256K1_CONTEXT_SIGN);
-        // std::memset(mData, 0, 32);
-    // }
-
-    // PrivateKey::~PrivateKey()
-    // {
-        // secp256k1_context_destroy(mContext);
-    // }
-
-    // bool PrivateKey::generate()
-    // {
-        // bool valid;
-
-        // uint32_t random;
-        // for(unsigned int i=0;i<32;i+=4)
-        // {
-            // random = ArcMist::Math::randomInt();
-            // std::memcpy(mData + i, &random, 4);
-        // }
-
-        // valid = secp256k1_ec_seckey_verify(mContext, mData);
-
-        // if(!valid)
-            // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to generate private key");
-
-        // return valid;
-    // }
-
-    // ArcMist::String PrivateKey::hex() const
-    // {
-        // ArcMist::String result;
-        // result.writeHex(mData, 32);
-        // return result;
-    // }
-
-    // bool PrivateKey::generatePublicKey(PublicKey &pPublicKey) const
-    // {
-        // secp256k1_pubkey pubkey;
-        // if(!secp256k1_ec_pubkey_create(mContext, &pubkey, mData))
-        // {
-            // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to generate public key");
-            // return false;
-        // }
-
-        // pPublicKey.set(pubkey.data);
-        // return true;
-    // }
-
-    // bool PrivateKey::sign(ArcMist::Hash &pHash, Signature &pSignature) const
-    // {
-        // if(pHash.size() != 32)
-        // {
-            // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Wrong size hash to verify");
-            // return false;
-        // }
-
-// #ifdef PROFILER_ON
-        // ArcMist::Profiler profiler("Private Key Sign");
-// #endif
-        // secp256k1_ecdsa_signature signature;
-        // if(!secp256k1_ecdsa_sign(mContext, &signature, pHash.data(), mData,
-          // secp256k1_nonce_function_default, NULL))
-        // {
-            // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to sign hash");
-            // return false;
-        // }
-
-        // pSignature.set(signature.data);
-        // return true;
-    // }
-
-    // bool Signature::verify(const PublicKey &pPublicKey, const ArcMist::Hash &pHash) const
-    // {
-        // if(!pPublicKey.isValid())
-        // {
-            // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Invalid public key. Can't verify.");
-            // return false;
-        // }
-
-        // if(pHash.size() != 32)
-        // {
-            // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Wrong size hash to verify");
-            // return false;
-        // }
-
-// #ifdef PROFILER_ON
-        // ArcMist::Profiler profiler("Signature Verify");
-// #endif
-        // if(secp256k1_ecdsa_verify(mContext, (const secp256k1_ecdsa_signature *)mData,
-          // pHash.data(), (const secp256k1_pubkey *)pPublicKey.data()))
-            // return true;
-
-        // if(!secp256k1_ecdsa_signature_normalize(mContext, (secp256k1_ecdsa_signature *)mData,
-          // (const secp256k1_ecdsa_signature *)mData))
-            // return false; // Already normalized
-
-        // // Try it again with the normalized signature
-        // if(secp256k1_ecdsa_verify(mContext, (const secp256k1_ecdsa_signature *)mData,
-          // pHash.data(), (const secp256k1_pubkey *)pPublicKey.data()))
-            // return true;
-
-        // return false;
-    // }
-
     ArcMist::String Signature::hex() const
     {
         ArcMist::String result;
         result.writeHex(mData, 64);
         return result;
     }
-
-    // ArcMist::String PublicKey::hex() const
-    // {
-        // ArcMist::String result;
-        // result.writeHex(mData, 64);
-        // return result;
-    // }
-
-    // void PublicKey::write(ArcMist::OutputStream *pStream, bool pCompressed, bool pScriptFormat) const
-    // {
-        // if(pCompressed)
-        // {
-            // size_t compressedLength = 33;
-            // uint8_t compressedData[compressedLength];
-            // if(!secp256k1_ec_pubkey_serialize(mContext, compressedData, &compressedLength, (const secp256k1_pubkey *)mData, SECP256K1_EC_COMPRESSED))
-                // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to write compressed public key");
-            // else
-            // {
-                // if(pScriptFormat)
-                    // ScriptInterpreter::writePushDataSize(compressedLength, pStream);
-                // pStream->write(compressedData, compressedLength);
-            // }
-        // }
-        // else
-        // {
-            // size_t length = 65;
-            // uint8_t data[length];
-            // if(!secp256k1_ec_pubkey_serialize(mContext, data, &length, (const secp256k1_pubkey *)mData, 0))
-                // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to write public key");
-            // else
-            // {
-                // if(pScriptFormat)
-                    // ScriptInterpreter::writePushDataSize(length, pStream);
-                // pStream->write(data, length);
-            // }
-        // }
-    // }
-
-    // bool PublicKey::read(ArcMist::InputStream *pStream)
-    // {
-        // size_t length;
-        // uint8_t *data;
-        // mValid = false;
-
-        // if(pStream->remaining() < 1)
-            // return false;
-
-        // // Check first byte to determine length
-        // uint8_t type = pStream->readByte();
-        // if(type == 0x02 || type == 0x03) // Compressed
-            // length = 33;
-        // else if(type == 0x04) // Uncompressed
-            // length = 65;
-        // else // Unknown
-        // {
-            // length = pStream->remaining() + 1;
-            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              // "Public key type unknown. type %02x size %d", type, length);
-        // }
-
-        // if(pStream->remaining() < length - 1)
-        // {
-            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              // "Failed to read public key. type %02x size %d", type, pStream->remaining() + 1);
-            // return false;
-        // }
-
-        // data = new uint8_t[length];
-        // data[0] = type;
-        // pStream->read(data + 1, length - 1);
-
-// #ifdef PROFILER_ON
-        // ArcMist::Profiler profiler("Public Key Read");
-// #endif
-        // if(secp256k1_ec_pubkey_parse(mContext, (secp256k1_pubkey *)mData, data, length))
-        // {
-            // mValid = true;
-            // delete[] data;
-            // return true;
-        // }
-
-        // std::memset(mData, 0, 64);
-        // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to read public key");
-        // delete[] data;
-        // return false;
-    // }
-
-    // void PublicKey::getHash(ArcMist::Hash &pHash) const
-    // {
-        // // Calculate hash
-        // ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
-        // write(&digest, true, false); // Compressed
-        // digest.getResult(&pHash);
-    // }
-
-    // ArcMist::String PublicKey::address(bool pTest)
-    // {
-        // ArcMist::Hash hash;
-        // getHash(hash);
-
-        // if(pTest)
-            // return encodeAddress(hash, TEST_PUB_KEY_HASH);
-        // else
-            // return encodeAddress(hash, PUB_KEY_HASH);
-    // }
 
     ArcMist::String encodeAddress(const ArcMist::Hash &pHash, AddressType pType)
     {
@@ -574,15 +362,13 @@ namespace BitCoin
             if(mPublicKey != NULL)
                 return mPublicKey->address();
             else
-                return NULL;
+                return ArcMist::String();
         }
 
         switch(mVersion)
         {
-        case MAINNET_PRIVATE:
         case MAINNET_PUBLIC:
             return encodeAddress(hash(), PUB_KEY_HASH);
-        case TESTNET_PRIVATE:
         case TESTNET_PUBLIC:
             return encodeAddress(hash(), TEST_PUB_KEY_HASH);
         default:
@@ -806,6 +592,15 @@ namespace BitCoin
         mIndex = pStream->readUnsignedInt();
         pStream->read(mChainCode, 32);
         pStream->read(mKey, 33);
+
+        if(!isPrivate())
+        {
+            // Calculate hash
+            ArcMist::Digest hash(ArcMist::Digest::SHA256_RIPEMD160);
+            hash.write(mKey, 33);
+            hash.getResult(&mHash);
+        }
+
         return true;
     }
 
@@ -1000,23 +795,15 @@ namespace BitCoin
         return NULL;
     }
 
-    Key *Key::chainKey(uint32_t pChain, DerivationPathMethod pMethod,
-      uint32_t pAccount, uint32_t pCoin)
+    Key *Key::chainKey(uint32_t pChain, DerivationPathMethod pMethod, uint32_t pAccount, uint32_t pCoin)
     {
         switch(pMethod)
         {
         case SIMPLE: // m/account/chain
         {
-            if(pAccount == 0xffffffff)
-                pAccount = 0; // Default
-
-            Key *account = NULL;
-            if(mDepth == 0) // Master key
-                account = deriveChild(pAccount);
-            if(account == NULL)
+            if(mDepth != 0) // Master key
                 return NULL;
-
-            return account->deriveChild(pChain);
+            return deriveChild(pChain);
         }
         case BIP0032: // m/account/chain
         {
@@ -1065,10 +852,11 @@ namespace BitCoin
     bool Key::updateGap(unsigned int pGap)
     {
         unsigned int gap = 0;
-        unsigned int lastIndex = 0;
+        unsigned int nextIndex = 0;
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
         {
-            lastIndex = (*child)->mIndex;
+            if((*child)->mIndex >= nextIndex)
+                nextIndex = (*child)->mIndex + 1;
             if((*child)->mUsed)
                 gap = 0;
             else
@@ -1077,12 +865,11 @@ namespace BitCoin
 
         if(gap < pGap)
         {
-            ++lastIndex; // Go to next index
             while(gap < pGap)
-                if(deriveChild(lastIndex) != NULL)
+                if(deriveChild(nextIndex) != NULL)
                 {
                     ++gap;
-                    ++lastIndex;
+                    ++nextIndex;
                 }
             return true;
         }
@@ -1161,6 +948,40 @@ namespace BitCoin
         return result;
     }
 
+    bool Key::synchronize(Key *pOther)
+    {
+        if(pOther->hash() == hash())
+        {
+            if(pOther->mUsed)
+            {
+                mUsed = true;
+                if(mPublicKey != NULL)
+                    mPublicKey->mUsed = true;
+            }
+
+            Key *childKey;
+            for(std::vector<Key *>::iterator otherChild=mChildren.begin();otherChild!=mChildren.end();++otherChild)
+            {
+                // Derive of find child with matching index to synchronize
+                childKey = deriveChild((*otherChild)->index());
+                if(childKey == NULL)
+                    return false;
+                childKey->synchronize(*otherChild);
+            }
+
+            return true;
+        }
+        else
+        {
+            // Check if pOther is below this node in the hierarchy
+            for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
+                if((*child)->synchronize(pOther))
+                    return true;
+        }
+
+        return false;
+    }
+
     Key *Key::getNextUnused()
     {
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
@@ -1168,6 +989,14 @@ namespace BitCoin
                 return *child;
 
         return NULL;
+    }
+
+    void Key::getChildren(std::vector<Key *> &pChildren)
+    {
+        pChildren.clear();
+        pChildren.reserve(mChildren.size());
+        for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
+            pChildren.push_back(*child);
     }
 
     Key *Key::findChild(uint32_t pIndex)
@@ -1246,7 +1075,7 @@ namespace BitCoin
         if(result != NULL)
             return result; // Already created
 
-        secp256k1_context *thisContext = context(SECP256K1_CONTEXT_NONE);
+        secp256k1_context *thisContext = context(SECP256K1_CONTEXT_SIGN);
         ArcMist::HMACDigest hmac(ArcMist::Digest::SHA512);
         ArcMist::Buffer hmacKey, hmacResult;
 
@@ -1776,13 +1605,13 @@ namespace BitCoin
 
     KeyStore::~KeyStore()
     {
-        for(std::vector<Key *>::iterator key=begin();key!=end();++key)
+        for(iterator key=begin();key!=end();++key)
             delete *key;
     }
 
     void KeyStore::clear()
     {
-        for(std::vector<Key *>::iterator key=begin();key!=end();++key)
+        for(iterator key=begin();key!=end();++key)
             delete *key;
         std::vector<Key *>::clear();
     }
@@ -1791,7 +1620,7 @@ namespace BitCoin
     Key *KeyStore::findAddress(const ArcMist::Hash &pHash)
     {
         Key *result = NULL;
-        for(std::vector<Key *>::iterator key=begin();key!=end();++key)
+        for(iterator key=begin();key!=end();++key)
         {
             result = (*key)->findAddress(pHash);
             if(result != NULL)
@@ -1805,7 +1634,7 @@ namespace BitCoin
     {
         pNewAddresses = false;
         Key *result = NULL;
-        for(std::vector<Key *>::iterator key=begin();key!=end();++key)
+        for(iterator key=begin();key!=end();++key)
         {
             result = (*key)->markUsed(pHash, pGap, pNewAddresses);
             if(result != NULL)
@@ -1813,6 +1642,137 @@ namespace BitCoin
         }
 
         return NULL;
+    }
+
+    void KeyStore::write(ArcMist::OutputStream *pStream) const
+    {
+        // Version
+        pStream->writeUnsignedInt(1);
+
+        // Count
+        pStream->writeUnsignedInt(size());
+
+        for(const_iterator key=begin();key!=end();++key)
+            (*key)->writeTree(pStream);
+    }
+
+    bool KeyStore::read(ArcMist::InputStream *pStream)
+    {
+        clear();
+
+        if(pStream->remaining() < 8)
+            return false;
+
+        // Version
+        if(pStream->readUnsignedInt() != 1)
+            return false;
+
+        // Count
+        unsigned int count = pStream->readUnsignedInt();
+        Key *newKey;
+
+        reserve(count);
+
+        for(unsigned int i=0;i<count;++i)
+        {
+            newKey = new Key();
+            if(newKey->readTree(pStream))
+                push_back(newKey);
+            else
+            {
+                delete newKey;
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool KeyStore::loadKeys(ArcMist::InputStream *pStream)
+    {
+        ArcMist::String line;
+        unsigned char nextChar;
+        ArcMist::Hash addressHash;
+        AddressType addressType;
+        bool found;
+        Key *newKey = new Key(), *chain;
+
+        while(pStream->remaining())
+        {
+            line.clear();
+
+            while(pStream->remaining())
+            {
+                nextChar = pStream->readByte();
+                if(nextChar == '\r' || nextChar == '\n' || nextChar == ' ')
+                    break;
+                line += nextChar;
+            }
+
+            if(line.length())
+            {
+                if(newKey->decode(line))
+                {
+                    found = false;
+                    for(const_iterator key=begin();key!=end();++key)
+                        if(**key == *newKey)
+                        {
+                            found = true;
+                            break;
+                        }
+
+                    if(!found)
+                    {
+                        // Prime the key for several derivation methods
+                        chain = newKey->chainKey(0, Key::SIMPLE);
+                        if(chain != NULL)
+                            chain->updateGap(20);
+                        chain = newKey->chainKey(1, Key::SIMPLE);
+                        if(chain != NULL)
+                            chain->updateGap(20);
+
+                        chain = newKey->chainKey(0, Key::BIP0032);
+                        if(chain != NULL)
+                            chain->updateGap(20);
+                        chain = newKey->chainKey(1, Key::BIP0032);
+                        if(chain != NULL)
+                            chain->updateGap(20);
+
+                        chain = newKey->chainKey(0, Key::BIP0044);
+                        if(chain != NULL)
+                            chain->updateGap(20);
+                        chain = newKey->chainKey(1, Key::BIP0044);
+                        if(chain != NULL)
+                            chain->updateGap(20);
+
+                        push_back(newKey);
+                        newKey = new Key();
+                    }
+                }
+                else if(decodeAddress(line, addressHash, addressType) && addressType == PUB_KEY_HASH &&
+                  addressHash.size() == ADDRESS_HASH_SIZE)
+                {
+                    // Check if it is already in this block
+                    found = false;
+                    for(const_iterator key=begin();key!=end();++key)
+                        if((*key)->hash() == addressHash)
+                        {
+                            found = true;
+                            break;
+                        }
+
+                    if(!found)
+                    {
+                        newKey->loadHash(addressHash);
+                        push_back(newKey);
+                        newKey = new Key();
+                    }
+                }
+            }
+        }
+
+        delete newKey;
+        return true;
     }
 
     bool Key::test()
@@ -1824,7 +1784,7 @@ namespace BitCoin
         ArcMist::Hash hash;
 
         /***********************************************************************************************
-         * BIP-0032 Test Vector 1
+         * BIP-0032 Test 1
          ***********************************************************************************************/
         Key keyTree;
         ArcMist::Buffer keyTreeSeed;
@@ -1845,11 +1805,11 @@ namespace BitCoin
             correctEncoding = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Passed BIP-0032 Test Vector 1 Master Key Private");
+                  "Passed BIP-0032 Test 1 Master Key Private");
             else
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 Master Key Private");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 Master Key Private");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -1860,11 +1820,11 @@ namespace BitCoin
             correctEncoding = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Passed BIP-0032 Test Vector 1 Master Key Public");
+                  "Passed BIP-0032 Test 1 Master Key Public");
             else
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 Master Key Public");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 Master Key Public");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -1884,7 +1844,7 @@ namespace BitCoin
             if(m0hKey == NULL)
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H Private : Derive Failed");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H Private : Derive Failed");
             }
             else
             {
@@ -1892,11 +1852,11 @@ namespace BitCoin
                 correctEncoding = "xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7";
                 if(correctEncoding == resultEncoding)
                     ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                      "Passed BIP-0032 Test Vector 1 m/0H Private");
+                      "Passed BIP-0032 Test 1 m/0H Private");
                 else
                 {
                     success = false;
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H Private");
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H Private");
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -1912,11 +1872,11 @@ namespace BitCoin
             correctEncoding = "xpub68Gmy5EdvgibQVfPdqkBBCHxA5htiqg55crXYuXoQRKfDBFA1WEjWgP6LHhwBZeNK1VTsfTFUHCdrfp1bgwQ9xv5ski8PX9rL2dZXvgGDnw";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Passed BIP-0032 Test Vector 1 m/0H Public");
+                  "Passed BIP-0032 Test 1 m/0H Public");
             else
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H Public");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H Public");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -1936,7 +1896,7 @@ namespace BitCoin
             if(m0h1Key == NULL)
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1 Private : Derive Failed");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1 Private : Derive Failed");
             }
             else
             {
@@ -1944,11 +1904,11 @@ namespace BitCoin
                 correctEncoding = "xprv9wTYmMFdV23N2TdNG573QoEsfRrWKQgWeibmLntzniatZvR9BmLnvSxqu53Kw1UmYPxLgboyZQaXwTCg8MSY3H2EU4pWcQDnRnrVA1xe8fs";
                 if(correctEncoding == resultEncoding)
                     ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                      "Passed BIP-0032 Test Vector 1 m/0H/1 Private");
+                      "Passed BIP-0032 Test 1 m/0H/1 Private");
                 else
                 {
                     success = false;
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1 Private");
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1 Private");
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -1964,11 +1924,11 @@ namespace BitCoin
             correctEncoding = "xpub6ASuArnXKPbfEwhqN6e3mwBcDTgzisQN1wXN9BJcM47sSikHjJf3UFHKkNAWbWMiGj7Wf5uMash7SyYq527Hqck2AxYysAA7xmALppuCkwQ";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Passed BIP-0032 Test Vector 1 m/0H/1 Public");
+                  "Passed BIP-0032 Test 1 m/0H/1 Public");
             else
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1 Public");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1 Public");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -1987,7 +1947,7 @@ namespace BitCoin
             if(m0h1PublicKey == NULL)
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1 Public Only : Derive Failed");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1 Public Only : Derive Failed");
             }
             else
             {
@@ -1995,11 +1955,11 @@ namespace BitCoin
                 correctEncoding = "xpub6ASuArnXKPbfEwhqN6e3mwBcDTgzisQN1wXN9BJcM47sSikHjJf3UFHKkNAWbWMiGj7Wf5uMash7SyYq527Hqck2AxYysAA7xmALppuCkwQ";
                 if(correctEncoding == resultEncoding)
                     ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                      "Passed BIP-0032 Test Vector 1 m/0H/1 Public Only");
+                      "Passed BIP-0032 Test 1 m/0H/1 Public Only");
                 else
                 {
                     success = false;
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1 Public Only");
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1 Public Only");
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2021,7 +1981,7 @@ namespace BitCoin
             if(m0h12hKey == NULL)
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1/2h Private : Derive Failed");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h Private : Derive Failed");
             }
             else
             {
@@ -2029,11 +1989,11 @@ namespace BitCoin
                 correctEncoding = "xprv9z4pot5VBttmtdRTWfWQmoH1taj2axGVzFqSb8C9xaxKymcFzXBDptWmT7FwuEzG3ryjH4ktypQSAewRiNMjANTtpgP4mLTj34bhnZX7UiM";
                 if(correctEncoding == resultEncoding)
                     ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                      "Passed BIP-0032 Test Vector 1 m/0H/1/2h Private");
+                      "Passed BIP-0032 Test 1 m/0H/1/2h Private");
                 else
                 {
                     success = false;
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1/2h Private");
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h Private");
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2049,11 +2009,11 @@ namespace BitCoin
             correctEncoding = "xpub6D4BDPcP2GT577Vvch3R8wDkScZWzQzMMUm3PWbmWvVJrZwQY4VUNgqFJPMM3No2dFDFGTsxxpG5uJh7n7epu4trkrX7x7DogT5Uv6fcLW5";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Passed BIP-0032 Test Vector 1 m/0H/1/2h Public");
+                  "Passed BIP-0032 Test 1 m/0H/1/2h Public");
             else
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1/2h Public");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h Public");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2073,7 +2033,7 @@ namespace BitCoin
             if(m0h12h2Key == NULL)
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1/2h/2 Private : Derive Failed");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2 Private : Derive Failed");
             }
             else
             {
@@ -2081,11 +2041,11 @@ namespace BitCoin
                 correctEncoding = "xprvA2JDeKCSNNZky6uBCviVfJSKyQ1mDYahRjijr5idH2WwLsEd4Hsb2Tyh8RfQMuPh7f7RtyzTtdrbdqqsunu5Mm3wDvUAKRHSC34sJ7in334";
                 if(correctEncoding == resultEncoding)
                     ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                      "Passed BIP-0032 Test Vector 1 m/0H/1/2h/2 Private");
+                      "Passed BIP-0032 Test 1 m/0H/1/2h/2 Private");
                 else
                 {
                     success = false;
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1/2h/2 Private");
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2 Private");
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2101,11 +2061,11 @@ namespace BitCoin
             correctEncoding = "xpub6FHa3pjLCk84BayeJxFW2SP4XRrFd1JYnxeLeU8EqN3vDfZmbqBqaGJAyiLjTAwm6ZLRQUMv1ZACTj37sR62cfN7fe5JnJ7dh8zL4fiyLHV";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Passed BIP-0032 Test Vector 1 m/0H/1/2h/2 Public");
+                  "Passed BIP-0032 Test 1 m/0H/1/2h/2 Public");
             else
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1/2h/2 Public");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2 Public");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2125,7 +2085,7 @@ namespace BitCoin
             if(m0h12h21000000000Key == NULL)
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1/2h/2/1000000000 Private : Derive Failed");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Private : Derive Failed");
             }
             else
             {
@@ -2133,11 +2093,11 @@ namespace BitCoin
                 correctEncoding = "xprvA41z7zogVVwxVSgdKUHDy1SKmdb533PjDz7J6N6mV6uS3ze1ai8FHa8kmHScGpWmj4WggLyQjgPie1rFSruoUihUZREPSL39UNdE3BBDu76";
                 if(correctEncoding == resultEncoding)
                     ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                      "Passed BIP-0032 Test Vector 1 m/0H/1/2h/2/1000000000 Private");
+                      "Passed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Private");
                 else
                 {
                     success = false;
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1/2h/2/1000000000 Private");
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Private");
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2153,11 +2113,11 @@ namespace BitCoin
             correctEncoding = "xpub6H1LXWLaKsWFhvm6RVpEL9P4KfRZSW7abD2ttkWP3SSQvnyA8FSVqNTEcYFgJS2UaFcxupHiYkro49S8yGasTvXEYBVPamhGW6cFJodrTHy";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Passed BIP-0032 Test Vector 1 m/0H/1/2h/2/1000000000 Public");
+                  "Passed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Public");
             else
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 1 m/0H/1/2h/2/1000000000 Public");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Public");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2166,7 +2126,7 @@ namespace BitCoin
         }
 
         /***********************************************************************************************
-         * BIP-0032 Test Vector 3
+         * BIP-0032 Test 3
          ***********************************************************************************************/
 
         /***********************************************************************************************
@@ -2184,11 +2144,11 @@ namespace BitCoin
             correctEncoding = "xprv9s21ZrQH143K25QhxbucbDDuQ4naNntJRi4KUfWT7xo4EKsHt2QJDu7KXp1A3u7Bi1j8ph3EGsZ9Xvz9dGuVrtHHs7pXeTzjuxBrCmmhgC6";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Passed BIP-0032 Test Vector 3 Master Key Private");
+                  "Passed BIP-0032 Test 3 Master Key Private");
             else
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 3 Master Key Private");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 3 Master Key Private");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2199,11 +2159,11 @@ namespace BitCoin
             correctEncoding = "xpub661MyMwAqRbcEZVB4dScxMAdx6d4nFc9nvyvH3v4gJL378CSRZiYmhRoP7mBy6gSPSCYk6SzXPTf3ND1cZAceL7SfJ1Z3GC8vBgp2epUt13";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Passed BIP-0032 Test Vector 3 Master Key Public");
+                  "Passed BIP-0032 Test 3 Master Key Public");
             else
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 3 Master Key Public");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 3 Master Key Public");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2222,7 +2182,7 @@ namespace BitCoin
             if(m0hKey == NULL)
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 3 m/0H Private : Derive Failed");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 3 m/0H Private : Derive Failed");
             }
             else
             {
@@ -2230,11 +2190,11 @@ namespace BitCoin
                 correctEncoding = "xprv9uPDJpEQgRQfDcW7BkF7eTya6RPxXeJCqCJGHuCJ4GiRVLzkTXBAJMu2qaMWPrS7AANYqdq6vcBcBUdJCVVFceUvJFjaPdGZ2y9WACViL4L";
                 if(correctEncoding == resultEncoding)
                     ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                      "Passed BIP-0032 Test Vector 3 m/0H Private");
+                      "Passed BIP-0032 Test 3 m/0H Private");
                 else
                 {
                     success = false;
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 3 m/0H Private");
+                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 3 m/0H Private");
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2250,11 +2210,11 @@ namespace BitCoin
             correctEncoding = "xpub68NZiKmJWnxxS6aaHmn81bvJeTESw724CRDs6HbuccFQN9Ku14VQrADWgqbhhTHBaohPX4CjNLf9fq9MYo6oDaPPLPxSb7gwQN3ih19Zm4Y";
             if(correctEncoding == resultEncoding)
                 ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Passed BIP-0032 Test Vector 3 m/0H Public");
+                  "Passed BIP-0032 Test 3 m/0H Public");
             else
             {
                 success = false;
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test Vector 3 m/0H Public");
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 3 m/0H Public");
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2604,10 +2564,10 @@ namespace BitCoin
 
         /***********************************************************************************************
          * Wallet Test vs Electron Cash
-         * /0 For receiving addresses
-         * /1 For change addresses
+         * m/0 For receiving addresses
+         * m/1 For change addresses
          ***********************************************************************************************/
-        Key *account0, *account1, *addressKey;
+        Key *chain0, *chain1, *addressKey;
         ArcMist::String encodedAddress;
         bool walletSuccess = true;
 
@@ -2635,22 +2595,22 @@ namespace BitCoin
             }
         }
 
-        account0 = keyTree.deriveChild(0);
-        if(account0 == NULL)
+        chain0 = keyTree.deriveChild(0);
+        if(chain0 == NULL)
         {
             walletSuccess = false;
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-              "Failed Wallet Test : Failed create account 0");
+              "Failed Wallet Test : Failed create chain 0");
         }
 
         if(walletSuccess)
         {
-            account1 = keyTree.deriveChild(1);
-            if(account1 == NULL)
+            chain1 = keyTree.deriveChild(1);
+            if(chain1 == NULL)
             {
                 walletSuccess = false;
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Failed Wallet Test : Failed create account 1");
+                  "Failed Wallet Test : Failed create chain 1");
             }
         }
 
@@ -2667,7 +2627,7 @@ namespace BitCoin
 
             for(unsigned int i=0;i<5 && walletSuccess;++i)
             {
-                addressKey = account0->deriveChild(i);
+                addressKey = chain0->deriveChild(i);
 
                 if(addressKey != NULL)
                 {
@@ -2728,7 +2688,7 @@ namespace BitCoin
 
             for(unsigned int i=0;i<5 && walletSuccess;++i)
             {
-                addressKey = account1->deriveChild(i);
+                addressKey = chain1->deriveChild(i);
 
                 if(addressKey != NULL)
                 {
@@ -2764,78 +2724,68 @@ namespace BitCoin
         Key *purpose, *coin, *account, *chain, *checkChain;
 
         /***********************************************************************************************
-         * SIMPLE m/0
+         * SIMPLE external m/0, internal m/1
          ***********************************************************************************************/
-        account = keyTree.deriveChild(0);
-        if(account == NULL)
+        // Receiving
+        chain = keyTree.deriveChild(0);
+        if(chain == NULL)
         {
             success = false;
             ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-              "Failed SIMPLE : Failed to derive account key.");
+              "Failed SIMPLE Receiving Chain Key : Failed to derive chain key.");
         }
         else
         {
-            // Receiving
-            chain = account->deriveChild(0);
-            if(chain == NULL)
+            checkChain = keyTree.chainKey(0, Key::SIMPLE);
+            if(checkChain == NULL)
             {
                 success = false;
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Failed SIMPLE Receiving Chain Key : Failed to derive chain key.");
+                  "Failed SIMPLE Receiving Chain Key : Failed to request chain key.");
+            }
+            else if(chain->encode() != checkChain->encode())
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed SIMPLE Receiving Chain Key : Non Matching Chain Keys");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", chain->encode().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", checkChain->encode().text());
             }
             else
-            {
-                checkChain = keyTree.chainKey(0, Key::SIMPLE);
-                if(checkChain == NULL)
-                {
-                    success = false;
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Failed SIMPLE Receiving Chain Key : Failed to request chain key.");
-                }
-                else if(chain->encode() != checkChain->encode())
-                {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Failed SIMPLE Receiving Chain Key : Non Matching Chain Keys");
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Correct : %s", chain->encode().text());
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Result  : %s", checkChain->encode().text());
-                }
-                else
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                      "Passed SIMPLE Receiving Chain Key.");
-            }
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                  "Passed SIMPLE Receiving Chain Key.");
+        }
 
-            // Change
-            chain = account->deriveChild(1);
-            if(chain == NULL)
+        // Change
+        chain = keyTree.deriveChild(1);
+        if(chain == NULL)
+        {
+            success = false;
+            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+              "Failed SIMPLE Change Chain Key : Failed to derive chain key.");
+        }
+        else
+        {
+            checkChain = keyTree.chainKey(1, Key::SIMPLE);
+            if(checkChain == NULL)
             {
                 success = false;
                 ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Failed SIMPLE Change Chain Key : Failed to derive chain key.");
+                  "Failed SIMPLE Change Chain Key : Failed to request chain key.");
+            }
+            else if(chain->encode() != checkChain->encode())
+            {
+                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed SIMPLE Change Chain Key : Non Matching Chain Keys");
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", chain->encode().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", checkChain->encode().text());
             }
             else
-            {
-                checkChain = keyTree.chainKey(1, Key::SIMPLE);
-                if(checkChain == NULL)
-                {
-                    success = false;
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Failed SIMPLE Change Chain Key : Failed to request chain key.");
-                }
-                else if(chain->encode() != checkChain->encode())
-                {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Failed SIMPLE Change Chain Key : Non Matching Chain Keys");
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Correct : %s", chain->encode().text());
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                      "Result  : %s", checkChain->encode().text());
-                }
-                else
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                      "Passed SIMPLE Change Chain Key.");
-            }
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                  "Passed SIMPLE Change Chain Key.");
         }
 
         /***********************************************************************************************
@@ -3047,7 +2997,7 @@ namespace BitCoin
               "Failed Address Gap : Increment address gap : %d != 21", chain->childCount());
         }
 
-        addressKey = chain->findChild(11);
+        addressKey = chain->findChild(10);
         chain->markUsed(addressKey->hash(), 20, updated);
 
         if(chain->childCount() != 31)
@@ -3060,6 +3010,89 @@ namespace BitCoin
         if(addressGapSuccess)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
               "Passed Address Gap");
+        else
+            success = false;
+
+        /***********************************************************************************************
+         * KeyStore Read/Write
+         ***********************************************************************************************/
+        ArcMist::Buffer keyBuffer;
+        KeyStore keyStore;
+        bool readWriteSuccess = true;
+
+        keyStore.push_back(&keyTree);
+
+        keyStore.write(&keyBuffer);
+        keyStore.erase(keyStore.begin());
+        keyStore.clear();
+        keyStore.read(&keyBuffer);
+
+        chain = (*keyStore.begin())->chainKey(0, SIMPLE);
+
+        const char *receivingAddresses[5] =
+        {
+            "1Jvfk1qMhnZ6i6eWSSkgihwacaTjwABBsr",
+            "1JinwuSo1JoUPnxQs3hM4sisyJeNZo3Zvv",
+            "1LYZtXwzSHhhFoDyJccjpMWLVZpzgkaZsV",
+            "1JK5MMpiTYv8wSZgPZ5oyYZgyVQP6h8prQ",
+            "1K2eD9iWqBunMBGWcJBZUSQQmNYHRpk5Ne"
+        };
+
+        for(unsigned int i=0;i<5 && readWriteSuccess;++i)
+        {
+            addressKey = chain->findChild(i);
+
+            if(addressKey != NULL)
+            {
+                encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH);
+                if(encodedAddress != receivingAddresses[i])
+                {
+                    readWriteSuccess = false;
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed to generate receiving address key : %d : Non Matching Address", i);
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Correct : %s", receivingAddresses[i]);
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Result  : %s", encodedAddress.text());
+                }
+
+                if(!decodeAddress(receivingAddresses[i], hash, addressType))
+                {
+                    readWriteSuccess = false;
+                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed decode address %d", i);
+                }
+                else
+                {
+                    if(addressType != PUB_KEY_HASH)
+                    {
+                        readWriteSuccess = false;
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Failed decode address type %d : type %d", i, addressType);
+                    }
+                    else if(hash != addressKey->hash())
+                    {
+                        readWriteSuccess = false;
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Failed decode address hash %d", i);
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Correct : %s", addressKey->hash().hex().text());
+                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Result  : %s", hash.hex().text());
+                    }
+                }
+            }
+            else
+            {
+                readWriteSuccess = false;
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed to generate address key : %d", i);
+            }
+        }
+
+        if(readWriteSuccess)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+              "Passed Key Store Read/Write");
         else
             success = false;
 

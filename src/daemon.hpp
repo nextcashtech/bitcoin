@@ -16,7 +16,8 @@
 #include "info.hpp"
 #include "node.hpp"
 #include "requests.hpp"
-#include "address_block.hpp"
+#include "key.hpp"
+#include "monitor.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -52,6 +53,8 @@ namespace BitCoin
         static void handleSigTerm(int pValue);
         static void handleSigInt(int pValue);
         static void handleSigPipe(int pValue);
+
+        KeyStore *keyStore() { return &mKeyStore; }
 
     protected:
 
@@ -132,9 +135,13 @@ namespace BitCoin
         // Announce verified blocks and transactions
         void announce();
 
-        AddressBlock mAddressBlock;
-        bool loadAddressBlock();
-        bool saveAddressBlock();
+        KeyStore mKeyStore;
+        bool loadKeyStore();
+        bool saveKeyStore();
+
+        Monitor mMonitor;
+        bool loadMonitor();
+        bool saveMonitor();
 
         // Request Channels
         ArcMist::ReadersLock mRequestsLock;

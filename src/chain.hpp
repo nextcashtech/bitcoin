@@ -26,7 +26,7 @@
 
 namespace BitCoin
 {
-    class AddressBlock;
+    class Monitor;
 
     class BlockInfo
     {
@@ -294,7 +294,7 @@ namespace BitCoin
         static bool test();
         static void tempTest();
 
-        void setAddressBlock(AddressBlock &pAddressBlock) { mAddressBlock = &pAddressBlock; }
+        void setMonitor(Monitor &pMonitor) { mMonitor = &pMonitor; }
 
     private:
 
@@ -324,7 +324,7 @@ namespace BitCoin
         // Update the transaction addresses for any blocks it is missing
         bool updateAddresses();
 
-        AddressBlock *mAddressBlock;
+        Monitor *mMonitor;
 
         // Verify and process block then add it to the chain
         ArcMist::Mutex mProcessMutex;

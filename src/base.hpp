@@ -16,6 +16,7 @@
 
 #define BITCOIN_USER_AGENT "/ArcMist:0.8.0/" // BIP-0014 Specifies User Agent Format
 #define PROTOCOL_VERSION 70015
+#define ADDRESS_HASH_SIZE 20
 
 
 namespace BitCoin

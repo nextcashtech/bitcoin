@@ -187,8 +187,9 @@ namespace BitCoin
          *   Chain   - Parent of address keys. Default 0 for external "receiving" addresses and 1
          *     for internal "change" addresses.
          *
-         * SIMPLE derivation uses first level extended key 0 (non hardened) as account key.
-         *   Default account path m/0.
+         * SIMPLE derivation uses master as "account".
+         *   Default receiving chain path m/0.
+         *   Default change chain path m/1.
          * BIP0032 derivation uses first level extended key 0' (hardened) default account key.
          *   Default account path m/0'.
          * BIP0044 derivation uses first level extended key 44' (hardened) for "purpose" with levels
@@ -224,11 +225,20 @@ namespace BitCoin
         // Return the next child key that is not used
         Key *getNextUnused();
 
+        // Fill a vector with children
+        void getChildren(std::vector<Key *> &pChildren);
+
         // Mark a key as "used" and generate new keys if necessary.
         // Keep a specified number of unused addresses ahead of any used address.
         // Sets pNewAddresses to true if new addresses are generated.
         // Returns the key matching the hash or NULL if none found.
         Key *markUsed(const ArcMist::Hash &pHash, unsigned int pGap, bool &pNewAddresses);
+
+        // Synchronize which keys are created and which addresses are "used".
+        // pOther should be a public only version of one of the keys in the structure.
+        // This allows monitoring for transactions in "public only" mode, then synchronizing
+        //   data back to the private section when signing transactions.
+        bool synchronize(Key *pOther);
 
         // For private key, creates child private/public key pair for specified index.
         // For public only key, creates child public key for specified index.
@@ -288,6 +298,12 @@ namespace BitCoin
 
         void clear();
 
+        // Load keys from a text stream
+        // Valid lines of text are:
+        //   Base58 encoded address key hashes.
+        //   Base58 encoded BIP-0032 key data.
+        bool loadKeys(ArcMist::InputStream *pStream);
+
         // Find an address level key with a matching hash
         Key *findAddress(const ArcMist::Hash &pHash);
 
@@ -296,6 +312,9 @@ namespace BitCoin
         // Sets pNewAddresses to true if new addresses are generated.
         // Returns the key matching the hash or NULL if none found.
         Key *markUsed(const ArcMist::Hash &pHash, unsigned int pGap, bool &pNewAddresses);
+
+        void write(ArcMist::OutputStream *pStream) const;
+        bool read(ArcMist::InputStream *pStream);
     };
 }
 

@@ -5,26 +5,25 @@
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
-#include "address_block.hpp"
+#include "monitor.hpp"
 
 #include "arcmist/base/log.hpp"
 #include "base.hpp"
 #include "key.hpp"
 #include "interpreter.hpp"
 
-#define BITCOIN_ADDRESS_BLOCK_LOG_NAME "AddressBlock"
-#define ADDRESS_HASH_SIZE 20
+#define BITCOIN_ADDRESS_BLOCK_LOG_NAME "Monitor"
 
 
 namespace BitCoin
 {
-    AddressBlock::AddressBlock() : mMutex("AddressBlock")
+    Monitor::Monitor() : mMutex("Monitor")
     {
         mFilterID = 0;
         mPasses.push_back(PassData());
     }
 
-    AddressBlock::~AddressBlock()
+    Monitor::~Monitor()
     {
         mMutex.lock();
         for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
@@ -36,13 +35,13 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    AddressBlock::MerkleRequestData::~MerkleRequestData()
+    Monitor::MerkleRequestData::~MerkleRequestData()
     {
         for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=transactions.begin();trans!=transactions.end();++trans)
             delete *trans;
     }
 
-    bool AddressBlock::MerkleRequestData::isComplete()
+    bool Monitor::MerkleRequestData::isComplete()
     {
         if(receiveTime == 0)
             return false;
@@ -58,13 +57,13 @@ namespace BitCoin
         return true;
     }
 
-    void AddressBlock::MerkleRequestData::release()
+    void Monitor::MerkleRequestData::release()
     {
         if(!isComplete())
             requestTime = 0;
     }
 
-    void AddressBlock::MerkleRequestData::clear()
+    void Monitor::MerkleRequestData::clear()
     {
         //node = 0;
         requestTime = 0;
@@ -76,7 +75,7 @@ namespace BitCoin
         transactions.clear();
     }
 
-    void AddressBlock::write(ArcMist::OutputStream *pStream)
+    void Monitor::write(ArcMist::OutputStream *pStream)
     {
         mMutex.lock();
 
@@ -101,7 +100,7 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    bool AddressBlock::read(ArcMist::InputStream *pStream)
+    bool Monitor::read(ArcMist::InputStream *pStream)
     {
         clear();
 
@@ -169,7 +168,7 @@ namespace BitCoin
         return true;
     }
 
-    void AddressBlock::SPVTransactionData::write(ArcMist::OutputStream *pStream)
+    void Monitor::SPVTransactionData::write(ArcMist::OutputStream *pStream)
     {
         // Block hash
         blockHash.write(pStream);
@@ -191,7 +190,7 @@ namespace BitCoin
             pStream->writeUnsignedInt(*spend);
     }
 
-    bool AddressBlock::SPVTransactionData::read(ArcMist::InputStream *pStream)
+    bool Monitor::SPVTransactionData::read(ArcMist::InputStream *pStream)
     {
         // Block hash
         if(!blockHash.read(pStream, 32))
@@ -236,7 +235,7 @@ namespace BitCoin
         return true;
     }
 
-    AddressBlock::PassData::PassData()
+    Monitor::PassData::PassData()
     {
         beginBlockHeight = 0;
         blockHeight = 0;
@@ -244,7 +243,7 @@ namespace BitCoin
         complete = false;
     }
 
-    AddressBlock::PassData::PassData(const AddressBlock::PassData &pCopy)
+    Monitor::PassData::PassData(const Monitor::PassData &pCopy)
     {
         beginBlockHeight = pCopy.beginBlockHeight;
         blockHeight = pCopy.blockHeight;
@@ -252,7 +251,7 @@ namespace BitCoin
         complete = pCopy.complete;
     }
 
-    const AddressBlock::PassData &AddressBlock::PassData::operator =(const AddressBlock::PassData &pRight)
+    const Monitor::PassData &Monitor::PassData::operator =(const Monitor::PassData &pRight)
     {
         beginBlockHeight = pRight.beginBlockHeight;
         blockHeight = pRight.blockHeight;
@@ -261,7 +260,7 @@ namespace BitCoin
         return *this;
     }
 
-    void AddressBlock::PassData::write(ArcMist::OutputStream *pStream)
+    void Monitor::PassData::write(ArcMist::OutputStream *pStream)
     {
         pStream->writeUnsignedInt(beginBlockHeight);
         pStream->writeUnsignedInt(blockHeight);
@@ -272,7 +271,7 @@ namespace BitCoin
             pStream->writeByte(0);
     }
 
-    bool AddressBlock::PassData::read(ArcMist::InputStream *pStream)
+    bool Monitor::PassData::read(ArcMist::InputStream *pStream)
     {
         if(pStream->remaining() < 13)
             return false;
@@ -287,7 +286,7 @@ namespace BitCoin
         return true;
     }
 
-    Output *AddressBlock::getOutput(ArcMist::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending)
+    Output *Monitor::getOutput(ArcMist::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending)
     {
         ArcMist::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction = mTransactions.get(pTransactionHash);
         if(confirmedTransaction != mTransactions.end() && (*confirmedTransaction)->transaction != NULL &&
@@ -305,7 +304,7 @@ namespace BitCoin
         return NULL;
     }
 
-    bool AddressBlock::getPayAddresses(Output *pOutput, ArcMist::HashList &pAddresses, bool pBlockOnly)
+    bool Monitor::getPayAddresses(Output *pOutput, ArcMist::HashList &pAddresses, bool pBlockOnly)
     {
         pAddresses.clear();
 
@@ -333,7 +332,7 @@ namespace BitCoin
         return pAddresses.size() > 0;
     }
 
-    void AddressBlock::refreshTransaction(AddressBlock::SPVTransactionData *pTransaction, bool pAllowPending)
+    void Monitor::refreshTransaction(Monitor::SPVTransactionData *pTransaction, bool pAllowPending)
     {
         pTransaction->amount = 0;
         pTransaction->payOutputs.clear();
@@ -355,25 +354,38 @@ namespace BitCoin
                 pTransaction->spendInputs.push_back(index);
                 pTransaction->amount -= spentOutput->amount;
             }
-
             ++index;
         }
 
         // Check for payments
         index = 0;
+        bool updateNeeded = false, newAddressesCreated = false;
         for(std::vector<Output *>::iterator output=pTransaction->transaction->outputs.begin();output!=pTransaction->transaction->outputs.end();++output)
         {
             if(getPayAddresses(*output, payAddresses, true))
             {
+                if(mKeyStore != NULL)
+                {
+                    for(ArcMist::HashList::iterator hash=payAddresses.begin();hash!=payAddresses.end();++hash)
+                    {
+                        mKeyStore->markUsed(*hash, 20, newAddressesCreated);
+                        if(newAddressesCreated)
+                            updateNeeded = true;
+                    }
+                }
                 pTransaction->payOutputs.push_back(index);
                 pTransaction->amount += (*output)->amount;
             }
 
             ++index;
         }
+
+        // Refresh addresses from key store and update bloom filter if necessary
+        if(updateNeeded && refreshKeyStore())
+            restartBloomFilter();
     }
 
-    void AddressBlock::clear()
+    void Monitor::clear()
     {
         mMutex.lock();
 
@@ -398,7 +410,46 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    bool AddressBlock::loadAddresses(ArcMist::InputStream *pStream)
+    void Monitor::startNewPass()
+    {
+        unsigned int passIndex = 0;
+        for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass,++passIndex)
+            if(!pass->complete && pass->blockHeight > 0)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                  "Pass %d marked complete at block height %d to start new pass for new addresses",
+                  passIndex, pass->blockHeight);
+                pass->complete = true;
+            }
+
+        if(mPasses.size() == 0)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+              "Starting first pass %d for %d addresses", mPasses.size() + 1, mAddressHashes.size());
+            mPasses.push_back(PassData());
+        }
+        else if(mPasses.back().blockHeight > 0)
+        {
+            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+              "Starting new pass %d for new addresses", mPasses.size() + 1);
+            mPasses.push_back(PassData());
+        }
+
+        mPasses.back().addressesIncluded = mAddressHashes.size();
+
+        restartBloomFilter();
+    }
+
+    void Monitor::restartBloomFilter()
+    {
+        for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
+            delete *request;
+        mMerkleRequests.clear();
+
+        refreshBloomFilter(true);
+    }
+
+    bool Monitor::loadAddresses(ArcMist::InputStream *pStream)
     {
         mMutex.lock();
 
@@ -407,7 +458,6 @@ namespace BitCoin
         unsigned char nextChar;
         ArcMist::Hash addressHash;
         AddressType addressType;
-        bool found;
 
         while(pStream->remaining())
         {
@@ -425,15 +475,7 @@ namespace BitCoin
               addressHash.size() == ADDRESS_HASH_SIZE)
             {
                 // Check if it is already in this block
-                found = false;
-                for(ArcMist::HashList::iterator hash=mAddressHashes.begin();hash!=mAddressHashes.end();++hash)
-                    if(*hash == addressHash)
-                    {
-                        found = true;
-                        break;
-                    }
-
-                if(!found)
+                if(!mAddressHashes.contains(addressHash))
                 {
                     mAddressHashes.push_back(addressHash);
                     ++addedCount;
@@ -444,44 +486,153 @@ namespace BitCoin
         }
 
         if(addedCount)
-        {
-            unsigned int passIndex = 0;
-            for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass,++passIndex)
-                if(!pass->complete && pass->blockHeight > 0)
-                {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                      "Pass %d marked complete at block height %d to start new pass for new addresses",
-                      passIndex, pass->blockHeight);
-                    pass->complete = true;
-                }
-
-            if(mPasses.size() == 0)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                  "Starting first pass %d for %d addresses", mPasses.size() + 1, mAddressHashes.size());
-                mPasses.push_back(PassData());
-            }
-            else if(mPasses.back().blockHeight > 0)
-            {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                  "Starting new pass %d for new addresses", mPasses.size() + 1);
-                mPasses.push_back(PassData());
-            }
-
-            mPasses.back().addressesIncluded = mAddressHashes.size();
-
-            for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
-                delete *request;
-            mMerkleRequests.clear();
-
-            refreshBloomFilter(true);
-        }
+            startNewPass();
 
         mMutex.unlock();
         return true;
     }
 
-    void AddressBlock::refreshBloomFilter(bool pLocked)
+    void Monitor::setKeyStore(KeyStore *pKeyStore)
+    {
+        mMutex.lock();
+        mKeyStore = pKeyStore;
+        if(refreshKeyStore())
+            startNewPass();
+        mMutex.unlock();
+    }
+
+    unsigned int Monitor::refreshKeyStore()
+    {
+        unsigned int addedCount = 0;
+        std::vector<Key *> children;
+        Key *chain;
+
+        for(KeyStore::iterator key=mKeyStore->begin();key!=mKeyStore->end();++key)
+        {
+            if((*key)->depth() == 0)
+            {
+                // Check for BIP-0044 External Addresses
+                chain = (*key)->chainKey(0, Key::BIP0044);
+                if(chain != NULL && chain->childCount() > 0)
+                {
+                    chain->getChildren(children);
+                    for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
+                        if(!mAddressHashes.contains((*child)->hash()))
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                              "Added new BIP0044 external address from key store : %s", (*child)->address().text());
+                            mAddressHashes.push_back((*child)->hash());
+                            ++addedCount;
+                        }
+                }
+
+                // Check for BIP-0044 Internal Addresses
+                chain = (*key)->chainKey(1, Key::BIP0044);
+                if(chain != NULL && chain->childCount() > 0)
+                {
+                    chain->getChildren(children);
+                    for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
+                        if(!mAddressHashes.contains((*child)->hash()))
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                              "Added new BIP0044 internal address from key store : %s", (*child)->address().text());
+                            mAddressHashes.push_back((*child)->hash());
+                            ++addedCount;
+                        }
+                }
+
+                // Check for BIP-0032 External Addresses
+                chain = (*key)->chainKey(0, Key::BIP0032);
+                if(chain != NULL && chain->childCount() > 0)
+                {
+                    chain->getChildren(children);
+                    for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
+                        if(!mAddressHashes.contains((*child)->hash()))
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                              "Added new BIP0032 external address from key store : %s", (*child)->address().text());
+                            mAddressHashes.push_back((*child)->hash());
+                            ++addedCount;
+                        }
+                }
+
+                // Check for BIP-0032 Internal Addresses
+                chain = (*key)->chainKey(1, Key::BIP0032);
+                if(chain != NULL && chain->childCount() > 0)
+                {
+                    chain->getChildren(children);
+                    for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
+                        if(!mAddressHashes.contains((*child)->hash()))
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                              "Added new BIP0032 internal address from key store : %s", (*child)->address().text());
+                            mAddressHashes.push_back((*child)->hash());
+                            ++addedCount;
+                        }
+                }
+
+                // Check for SIMPLE External Addresses
+                chain = (*key)->chainKey(0, Key::SIMPLE);
+                if(chain != NULL && chain->childCount() > 0)
+                {
+                    chain->getChildren(children);
+                    for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
+                        if(!mAddressHashes.contains((*child)->hash()))
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                              "Added new SIMPLE external address from key store : %s", (*child)->address().text());
+                            mAddressHashes.push_back((*child)->hash());
+                            ++addedCount;
+                        }
+                }
+
+                // Check for SIMPLE Internal Addresses
+                chain = (*key)->chainKey(1, Key::SIMPLE);
+                if(chain != NULL && chain->childCount() > 0)
+                {
+                    chain->getChildren(children);
+                    for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
+                        if(!mAddressHashes.contains((*child)->hash()))
+                        {
+                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                              "Added new SIMPLE internal address from key store : %s", (*child)->address().text());
+                            mAddressHashes.push_back((*child)->hash());
+                            ++addedCount;
+                        }
+                }
+            }
+            else if((*key)->depth() == -1)
+            {
+                if(!mAddressHashes.contains((*key)->hash()))
+                {
+                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                      "Added new individual address from key store : %s", (*key)->address().text());
+                    mAddressHashes.push_back((*key)->hash());
+                    ++addedCount;
+                }
+            }
+            else
+            {
+                // Check for immediate children addresses.
+                // For scenarios like when a public chain key is provided for monitoring.
+                (*key)->getChildren(children);
+                for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
+                    if(!mAddressHashes.contains((*child)->hash()))
+                    {
+                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                          "Added new immediate child address from key store : %s", (*child)->address().text());
+                        mAddressHashes.push_back((*child)->hash());
+                        ++addedCount;
+                    }
+            }
+        }
+
+        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+          "Added %d new addresses from key store", addedCount);
+        return addedCount;
+    }
+
+    void Monitor::refreshBloomFilter(bool pLocked)
     {
         std::vector<Outpoint *> outpoints;
 
@@ -512,7 +663,7 @@ namespace BitCoin
             mMutex.unlock();
     }
 
-    int64_t AddressBlock::balance(bool pLocked)
+    int64_t Monitor::balance(bool pLocked)
     {
         if(!pLocked)
             mMutex.lock();
@@ -524,7 +675,7 @@ namespace BitCoin
         return result;
     }
 
-    bool AddressBlock::filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID)
+    bool Monitor::filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID)
     {
         mMutex.lock();
 
@@ -546,7 +697,7 @@ namespace BitCoin
         return false;
     }
 
-    bool AddressBlock::needsClose(unsigned int pNodeID)
+    bool Monitor::needsClose(unsigned int pNodeID)
     {
         mMutex.lock();
         for(std::vector<unsigned int>::iterator node=mNodesToClose.begin();node!=mNodesToClose.end();++node)
@@ -560,7 +711,7 @@ namespace BitCoin
         return false;
     }
 
-    void AddressBlock::release(unsigned int pNodeID)
+    void Monitor::release(unsigned int pNodeID)
     {
         mMutex.lock();
 
@@ -585,7 +736,7 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    unsigned int AddressBlock::setupBloomFilter(BloomFilter &pFilter)
+    unsigned int Monitor::setupBloomFilter(BloomFilter &pFilter)
     {
         mMutex.lock();
         pFilter = mFilter;
@@ -595,7 +746,7 @@ namespace BitCoin
         return result;
     }
 
-    void AddressBlock::getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain, ArcMist::HashList &pBlockHashes, unsigned int pMaxCount)
+    void Monitor::getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain, ArcMist::HashList &pBlockHashes, unsigned int pMaxCount)
     {
         ArcMist::Hash nextBlockHash;
         ArcMist::HashContainerList<MerkleRequestData *>::Iterator request;
@@ -671,7 +822,7 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    bool AddressBlock::addMerkleBlock(Chain &pChain, Message::MerkleBlockData *pData, unsigned int pNodeID)
+    bool Monitor::addMerkleBlock(Chain &pChain, Message::MerkleBlockData *pData, unsigned int pNodeID)
     {
         mMutex.lock();
 
@@ -789,7 +940,7 @@ namespace BitCoin
         return true;
     }
 
-    bool AddressBlock::addTransaction(Chain &pChain, Message::TransactionData *pTransactionData)
+    bool Monitor::addTransaction(Chain &pChain, Message::TransactionData *pTransactionData)
     {
         bool result = false;
 
@@ -913,7 +1064,7 @@ namespace BitCoin
         }
     }
 
-    bool AddressBlock::addTransactionAnnouncement(const ArcMist::Hash &pTransactionHash, unsigned int pNodeID)
+    bool Monitor::addTransactionAnnouncement(const ArcMist::Hash &pTransactionHash, unsigned int pNodeID)
     {
         bool result = false;
         mMutex.lock();
@@ -964,7 +1115,7 @@ namespace BitCoin
         return result;
     }
 
-    void AddressBlock::revertBlock(const ArcMist::Hash &pBlockHash, unsigned int pBlockHeight)
+    void Monitor::revertBlock(const ArcMist::Hash &pBlockHash, unsigned int pBlockHeight)
     {
         mMutex.lock();
 
@@ -1005,7 +1156,7 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    void AddressBlock::process(Chain &pChain)
+    void Monitor::process(Chain &pChain)
     {
         if(Info::instance().spvMode)
         {
