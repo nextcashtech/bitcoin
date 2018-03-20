@@ -188,8 +188,9 @@ int main(int pArgumentCount, char **pArguments)
 
         ArcMist::Hash keyHash;
         BitCoin::AddressType addressType;
+        BitCoin::AddressFormat addressFormat;
 
-        if(!BitCoin::decodeAddress(address.text(), keyHash, addressType))
+        if(!BitCoin::decodeAddress(address.text(), keyHash, addressType, addressFormat))
             return 1;
 
         if(addressType != BitCoin::PUB_KEY_HASH)

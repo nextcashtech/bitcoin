@@ -458,6 +458,7 @@ namespace BitCoin
         unsigned char nextChar;
         ArcMist::Hash addressHash;
         AddressType addressType;
+        AddressFormat addressFormat;
 
         while(pStream->remaining())
         {
@@ -471,8 +472,8 @@ namespace BitCoin
                 line += nextChar;
             }
 
-            if(line.length() && decodeAddress(line, addressHash, addressType) && addressType == PUB_KEY_HASH &&
-              addressHash.size() == ADDRESS_HASH_SIZE)
+            if(line.length() && decodeAddress(line, addressHash, addressType, addressFormat) &&
+              addressType == PUB_KEY_HASH && addressHash.size() == ADDRESS_HASH_SIZE)
             {
                 // Check if it is already in this block
                 if(!mAddressHashes.contains(addressHash))

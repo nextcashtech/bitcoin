@@ -100,11 +100,12 @@ bool merkleTest1()
     BitCoin::BloomFilter filter(100);
     ArcMist::Hash addressHash;
     BitCoin::AddressType addressType;
+    BitCoin::AddressFormat addressFormat;
 
     ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
       filter.size(), filter.functionCount());
 
-    if(!BitCoin::decodeAddress("1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX", addressHash, addressType))
+    if(!BitCoin::decodeAddress("1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX", addressHash, addressType, addressFormat))
     {
         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed decode address : %s", "1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX");
         return false;
@@ -274,11 +275,12 @@ bool merkleTest2()
     BitCoin::BloomFilter filter(100);
     ArcMist::Hash addressHash;
     BitCoin::AddressType addressType;
+    BitCoin::AddressFormat addressFormat;
 
     ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
       filter.size(), filter.functionCount());
 
-    if(!BitCoin::decodeAddress("1Ff79dW4CymX2msdyat4SbTupCG1d6imib", addressHash, addressType))
+    if(!BitCoin::decodeAddress("1Ff79dW4CymX2msdyat4SbTupCG1d6imib", addressHash, addressType, addressFormat))
     {
         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed decode address : %s", "1Ff79dW4CymX2msdyat4SbTupCG1d6imib");
         return false;

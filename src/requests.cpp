@@ -381,8 +381,9 @@ namespace BitCoin
             ArcMist::String address = mReceiveBuffer.readString(addressLength);
             ArcMist::Hash addressHash;
             AddressType addressType;
+            AddressFormat addressFormat;
 
-            if(!decodeAddress(address, addressHash, addressType))
+            if(!decodeAddress(address, addressHash, addressType, addressFormat))
             {
                 ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
                   "Invalid address (%d bytes) : %s", addressLength, address.text());

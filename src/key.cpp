@@ -81,28 +81,169 @@ namespace BitCoin
         return result;
     }
 
-    ArcMist::String encodeAddress(const ArcMist::Hash &pHash, AddressType pType)
+    uint64_t cashAddressCheckSum(ArcMist::InputStream *pData)
+    {
+        uint64_t result = 1;
+        uint8_t round;
+        while(pData->remaining())
+        {
+            round = result >> 35;
+            result = ((result & 0x07ffffffff) << 5) ^ pData->readByte();
+
+            if(round & 0x01) result ^= 0x98f2bc8e61;
+            if(round & 0x02) result ^= 0x79b76d99e2;
+            if(round & 0x04) result ^= 0xf33e5fb3c4;
+            if(round & 0x08) result ^= 0xae2eabe2a8;
+            if(round & 0x10) result ^= 0x1e4f43e470;
+        }
+
+        return result ^ 0x01;
+    }
+
+    ArcMist::String encodeAddress(const ArcMist::Hash &pHash, AddressType pType, AddressFormat pFormat)
     {
         ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
         ArcMist::Buffer data, check;
 
-        // Calculate check
-        digest.writeByte(static_cast<uint8_t>(pType));
-        pHash.write(&digest);
-        digest.getResult(&check);
+        switch(pFormat)
+        {
+        case LEGACY:
+        {
+            // Calculate check
+            digest.writeByte(static_cast<uint8_t>(pType));
+            pHash.write(&digest);
+            digest.getResult(&check);
 
-        // Write data for address
-        data.writeByte(static_cast<uint8_t>(pType));
-        pHash.write(&data);
-        data.writeUnsignedInt(check.readUnsignedInt());
+            // Write data for address
+            data.writeByte(static_cast<uint8_t>(pType));
+            pHash.write(&data);
+            data.writeUnsignedInt(check.readUnsignedInt());
 
-        // Encode with base 58
-        ArcMist::String result;
-        result.writeBase58(data.startPointer(), data.length());
-        return result;
+            // Encode with base 58
+            ArcMist::String result;
+            result.writeBase58(data.startPointer(), data.length());
+            return result;
+        }
+        case CASH:
+        {
+            uint8_t versionByte = 0; // Top bit zero, next 4 type, next 3 size
+            const char *prefix;
+            switch(pType)
+            {
+            case PUB_KEY_HASH:
+                versionByte |= (0x00 << 3);
+                prefix = "bitcoincash";
+                break;
+            case TEST_PUB_KEY_HASH:
+                versionByte |= (0x00 << 3);
+                prefix = "bchtest";
+                break;
+            case SCRIPT_HASH:
+                versionByte |= (0x01 << 3);
+                prefix = "bitcoincash";
+                break;
+            case TEST_SCRIPT_HASH:
+                versionByte |= (0x01 << 3);
+                prefix = "bchtest";
+                break;
+            case PRIVATE_KEY:
+            case TEST_PRIVATE_KEY:
+            case UNKNOWN:
+                return ArcMist::String(); // No private key type for this format
+            }
+
+            if(pHash.size() == 20) // 160 bits
+                versionByte |= 0x00;
+            else if(pHash.size() == 24) // 192 bits
+                versionByte |= 0x01;
+            else if(pHash.size() == 28) // 224 bits
+                versionByte |= 0x02;
+            else if(pHash.size() == 32) // 256 bits
+                versionByte |= 0x03;
+            else if(pHash.size() == 40) // 320 bits
+                versionByte |= 0x04;
+            else if(pHash.size() == 48) // 384 bits
+                versionByte |= 0x05;
+            else if(pHash.size() == 56) // 448 bits
+                versionByte |= 0x06;
+            else //if(pHash.size() == 64) // 512 bits
+                versionByte |= 0x07;
+
+            data.writeByte(versionByte);
+            pHash.write(&data);
+
+            // Encode with base 32
+            ArcMist::String encodedPayload;
+            encodedPayload.writeBase32(data.startPointer(), data.length());
+
+            // Build check sum data
+            ArcMist::Buffer checkSumData;
+            std::vector<bool> bits;
+            uint8_t byteValue;
+            unsigned int bitOffset;
+
+            // Prefix
+            const char *prefixChar = prefix;
+            while(*prefixChar)
+            {
+                checkSumData.writeByte((uint8_t)*prefixChar & 0x1f);
+                ++prefixChar;
+            }
+
+            // Separator
+            checkSumData.writeByte(0);
+
+            // Payload
+            data.setReadOffset(0);
+            while(data.remaining())
+            {
+                byteValue = data.readByte();
+                for(int bitOffset=0;bitOffset<8;++bitOffset)
+                    bits.push_back(ArcMist::Math::bit(byteValue, bitOffset));
+            }
+
+            // Pad payload to 5 bit boundary
+            while(bits.size() % 5)
+                bits.push_back(0);
+
+            // Convert 5 bit sets back to 5 bit bytes
+            bitOffset = 0;
+            byteValue = 0;
+            for(std::vector<bool>::iterator bit=bits.begin();bit!=bits.end();++bit)
+            {
+                byteValue <<= 1;
+                if(*bit)
+                    byteValue |= 0x01;
+                ++bitOffset;
+
+                if(bitOffset == 5)
+                {
+                    checkSumData.writeByte(byteValue);
+                    byteValue = 0;
+                    bitOffset = 0;
+                }
+            }
+
+            // Check sum template (8 x 5 zero bits)
+            for(unsigned int i=0;i<8;++i)
+                checkSumData.writeByte(0);
+
+            // Calculate check sum
+            uint64_t check = cashAddressCheckSum(&checkSumData);
+
+            // Append check sum to result
+            ArcMist::Buffer encodedCheckSum;
+            for(int i=0;i<8;++i)
+                encodedCheckSum.writeByte(ArcMist::Math::base32Codes[(check >> (5 * (7 - i))) & 0x1f]);
+
+            return ArcMist::String(prefix) + ":" + encodedPayload + encodedCheckSum.readString(encodedCheckSum.length());
+        }
+        }
+
+        return ArcMist::String();
     }
 
-    bool decodeAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType)
+    bool decodeLegacyAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType)
     {
         ArcMist::Buffer data;
 
@@ -111,8 +252,8 @@ namespace BitCoin
 
         if(data.length() < 24 || data.length() > 35)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Invalid address length : %d not within (24, 35)", data.length());
+            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              "Invalid legacy address length : %d not within (24, 35)", data.length());
             return false;
         }
 
@@ -133,11 +274,205 @@ namespace BitCoin
         if(checkValue != check)
         {
             ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Invalid address check : %08x != %08x", checkValue, check);
+              "Invalid legacy address check : %08x != %08x", checkValue, check);
             return false;
         }
 
         return true;
+    }
+
+    bool decodeCashAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType)
+    {
+        const char *character = pText;
+        ArcMist::Buffer prefixBuffer, checkSumData;
+        while(*character && *character != ':')
+        {
+            prefixBuffer.writeByte(*character);
+            ++character;
+        }
+
+        if(*character == ':')
+        {
+            ++character;
+            if(prefixBuffer.length() == 0)
+            {
+                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  "Cash address with zero length prefix");
+                return false;
+            }
+        }
+        else
+        {
+            prefixBuffer.clear();
+            character = pText;
+        }
+
+        ArcMist::String prefix = prefixBuffer.readString(prefixBuffer.length());
+        unsigned int remainingLength = std::strlen(character);
+
+        if(remainingLength < 8)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Cash address payload less than 8 characters");
+            return false;
+        }
+
+        ArcMist::Buffer payload, decodedPayload, checkSumPayload;
+        const char *match;
+
+        payload.write(character, remainingLength - 8);
+        payload.writeByte(0); // Write null byte for base 32 convert
+        decodedPayload.writeBase32AsBinary((const char *)payload.startPointer());
+
+        while(payload.remaining() > 1) // Don't include null byte
+        {
+            // Decode base32 character
+            match = std::strchr(ArcMist::Math::base32Codes, payload.readByte());
+            if(match == NULL)
+            {
+                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  "Cash address with invalid base32 character");
+                return false;
+            }
+            checkSumPayload.writeByte(match - ArcMist::Math::base32Codes);
+        }
+
+        // Write check sum
+        character += (remainingLength - 8);
+        while(*character)
+        {
+            // Decode base32 character
+            match = std::strchr(ArcMist::Math::base32Codes, *character);
+            if(match == NULL)
+            {
+                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  "Cash address check sum with invalid base32 character");
+                return false;
+            }
+            checkSumPayload.writeByte(match - ArcMist::Math::base32Codes);
+            ++character;
+        }
+
+        // Verify checksum
+        std::vector<ArcMist::String> prefixesToAttempt;
+        bool validCheckSum = false;
+
+        if(prefix.length())
+            prefixesToAttempt.push_back(prefix);
+        else
+        {
+            prefixesToAttempt.push_back(ArcMist::String("bitcoincash"));
+            prefixesToAttempt.push_back(ArcMist::String("bchtest"));
+        }
+
+        for(std::vector<ArcMist::String>::iterator prefixAttempt=prefixesToAttempt.begin();prefixAttempt!=prefixesToAttempt.end();++prefixAttempt)
+        {
+            checkSumData.clear();
+            character = prefixAttempt->text();
+
+            // Prefix
+            while(*character)
+            {
+                checkSumData.writeByte(*character & 0x1f);
+                ++character;
+            }
+
+            // Separator
+            checkSumData.writeByte(0);
+
+            // Payload
+            checkSumPayload.setReadOffset(0);
+            checkSumData.writeStream(&checkSumPayload, checkSumPayload.length());
+
+            if(cashAddressCheckSum(&checkSumData) == 0)
+            {
+                validCheckSum = true;
+                if(*prefixAttempt == "bitcoincash")
+                    pType = PUB_KEY_HASH;
+                else if(*prefixAttempt == "bchtest")
+                    pType = TEST_PUB_KEY_HASH;
+                else
+                    pType = UNKNOWN;
+                break;
+            }
+        }
+
+        if(!validCheckSum)
+        {
+            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Cash address valid check sum not found for given prefixes");
+            pType = UNKNOWN;
+            return false;
+        }
+
+        uint8_t versionByte = decodedPayload.readByte();
+        unsigned int decodedSize = 0;
+        switch(versionByte & 0x07) // 3 least significant bits
+        {
+        case 0: // 160
+            decodedSize = 20;
+            break;
+        case 1: // 192
+            decodedSize = 24;
+            break;
+        case 2: // 224
+            decodedSize = 28;
+            break;
+        case 3: // 256
+            decodedSize = 32;
+            break;
+        case 4: // 320
+            decodedSize = 40;
+            break;
+        case 5: // 384
+            decodedSize = 48;
+            break;
+        case 6: // 448
+            decodedSize = 56;
+            break;
+        case 7: // 512
+            decodedSize = 64;
+            break;
+        default:
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Cash address encoded size is not valid : %d", versionByte & 0x07);
+            return false;
+        }
+
+        switch((versionByte >> 3) & 0x0f)
+        {
+        case 0: // P2KH
+            // Already set as main net pub key hash
+            break;
+        case 1: // P2SH
+            if(pType == PUB_KEY_HASH)
+                pType = SCRIPT_HASH;
+            else if(pType == TEST_PUB_KEY_HASH)
+                pType = TEST_SCRIPT_HASH;
+            break;
+        default:
+            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Cash address encoded type is not valid : %d", (versionByte >> 3) & 0x0f);
+            break;
+        }
+
+        return pHash.read(&decodedPayload, decodedSize);
+    }
+
+    bool decodeAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType, AddressFormat &pFormat)
+    {
+        if(decodeLegacyAddress(pText, pHash, pType))
+        {
+            pFormat = LEGACY;
+            return true;
+        }
+        else if(decodeCashAddress(pText, pHash, pType))
+        {
+            pFormat = CASH;
+            return true;
+        }
+        else
+            return false;
     }
 
     void Signature::write(ArcMist::OutputStream *pStream, bool pScriptFormat) const
@@ -355,7 +690,7 @@ namespace BitCoin
             return mHash;
     }
 
-    ArcMist::String Key::address() const
+    ArcMist::String Key::address(AddressFormat pFormat) const
     {
         if(isPrivate())
         {
@@ -368,9 +703,9 @@ namespace BitCoin
         switch(mVersion)
         {
         case MAINNET_PUBLIC:
-            return encodeAddress(hash(), PUB_KEY_HASH);
+            return encodeAddress(hash(), PUB_KEY_HASH, pFormat);
         case TESTNET_PUBLIC:
-            return encodeAddress(hash(), TEST_PUB_KEY_HASH);
+            return encodeAddress(hash(), TEST_PUB_KEY_HASH, pFormat);
         default:
             return ArcMist::String();
         }
@@ -1694,6 +2029,7 @@ namespace BitCoin
         unsigned char nextChar;
         ArcMist::Hash addressHash;
         AddressType addressType;
+        AddressFormat addressFormat;
         bool found;
         Key *newKey = new Key(), *chain;
 
@@ -1749,8 +2085,8 @@ namespace BitCoin
                         newKey = new Key();
                     }
                 }
-                else if(decodeAddress(line, addressHash, addressType) && addressType == PUB_KEY_HASH &&
-                  addressHash.size() == ADDRESS_HASH_SIZE)
+                else if(decodeAddress(line, addressHash, addressType, addressFormat) &&
+                  addressType == PUB_KEY_HASH && addressHash.size() == ADDRESS_HASH_SIZE)
                 {
                     // Check if it is already in this block
                     found = false;
@@ -1781,7 +2117,9 @@ namespace BitCoin
 
         bool success = true;
         AddressType addressType;
+        AddressFormat addressFormat;
         ArcMist::Hash hash;
+        ArcMist::Hash addressHash;
 
         /***********************************************************************************************
          * BIP-0032 Test 1
@@ -2631,7 +2969,7 @@ namespace BitCoin
 
                 if(addressKey != NULL)
                 {
-                    encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH);
+                    encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH, LEGACY);
                     if(encodedAddress != receivingAddresses[i])
                     {
                         walletSuccess = false;
@@ -2643,7 +2981,7 @@ namespace BitCoin
                           "Result  : %s", encodedAddress.text());
                     }
 
-                    if(!decodeAddress(receivingAddresses[i], hash, addressType))
+                    if(!decodeAddress(receivingAddresses[i], hash, addressType, addressFormat))
                     {
                         walletSuccess = false;
                         ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -2692,7 +3030,7 @@ namespace BitCoin
 
                 if(addressKey != NULL)
                 {
-                    encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH);
+                    encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH, LEGACY);
                     if(encodedAddress != changeAddresses[i])
                     {
                         walletSuccess = false;
@@ -3044,7 +3382,7 @@ namespace BitCoin
 
             if(addressKey != NULL)
             {
-                encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH);
+                encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH, LEGACY);
                 if(encodedAddress != receivingAddresses[i])
                 {
                     readWriteSuccess = false;
@@ -3056,7 +3394,7 @@ namespace BitCoin
                       "Result  : %s", encodedAddress.text());
                 }
 
-                if(!decodeAddress(receivingAddresses[i], hash, addressType))
+                if(!decodeAddress(receivingAddresses[i], hash, addressType, addressFormat))
                 {
                     readWriteSuccess = false;
                     ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3093,6 +3431,99 @@ namespace BitCoin
         if(readWriteSuccess)
             ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
               "Passed Key Store Read/Write");
+        else
+            success = false;
+
+        /***********************************************************************************************
+         * Encode Cash Address
+         ***********************************************************************************************/
+        unsigned int cashAddressCount = 5;
+        ArcMist::String cashAddressResult;
+        bool cashAddressSuccess = true;
+        ArcMist::Hash correctAddressHash;
+        AddressType correctAddressType;
+        ArcMist::String legacyAddresses[] =
+        {
+            "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu",
+            "1KXrWXciRDZUpQwQmuM1DbwsKDLYAYsVLR",
+            "16w1D5WRVKJuZUsSRzdLp9w3YGcgoxDXb",
+            "3CWFddi6m4ndiGyKqzYvsFYagqDLPVMTzC",
+            "3LDsS579y7sruadqu11beEJoTjdFiFCdX4",
+            "31nwvkZwyPdgzjBJZXfDmSWsC4ZLKpYyUw",
+        };
+        ArcMist::String correctCashAddresses[] =
+        {
+            "bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a",
+            "bitcoincash:qr95sy3j9xwd2ap32xkykttr4cvcu7as4y0qverfuy",
+            "bitcoincash:qqq3728yw0y47sqn6l2na30mcw6zm78dzqre909m2r",
+            "bitcoincash:ppm2qsznhks23z7629mms6s4cwef74vcwvn0h829pq",
+            "bitcoincash:pr95sy3j9xwd2ap32xkykttr4cvcu7as4yc93ky28e",
+            "bitcoincash:pqq3728yw0y47sqn6l2na30mcw6zm78dzq5ucqzc37",
+        };
+
+
+        for(unsigned int i=0;i<cashAddressCount;++i)
+        {
+            if(!decodeAddress(legacyAddresses[i], correctAddressHash, correctAddressType, addressFormat))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Encode %d : Decode of LEGACY failed", i);
+                cashAddressSuccess = false;
+                continue;
+            }
+            else if(addressFormat != LEGACY)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Encode %d : Decode format is not LEGACY", i);
+                cashAddressSuccess = false;
+                continue;
+            }
+
+            cashAddressResult = encodeAddress(correctAddressHash, correctAddressType);
+
+            if(cashAddressResult != correctCashAddresses[i])
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Encode %d : Incorrect encoding", i);
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", cashAddressResult.text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", correctCashAddresses[i].text());
+                cashAddressSuccess = false;
+            }
+            else if(!decodeAddress(correctCashAddresses[i], addressHash, addressType, addressFormat))
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Decode %d : Decode failed", i);
+                cashAddressSuccess = false;
+            }
+            else if(addressType != correctAddressType)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Decode %d : Decode type is not correct", i);
+                cashAddressSuccess = false;
+            }
+            else if(addressFormat != CASH)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Decode %d : Decode format is not CASH", i);
+                cashAddressSuccess = false;
+            }
+            else if(addressHash != correctAddressHash)
+            {
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Decode %d : Incorrect hash", i);
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", addressHash.hex().text());
+                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", correctAddressHash.hex().text());
+                cashAddressSuccess = false;
+            }
+        }
+
+        if(cashAddressSuccess)
+            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_KEY_LOG_NAME,
+              "Passed Cash Address");
         else
             success = false;
 

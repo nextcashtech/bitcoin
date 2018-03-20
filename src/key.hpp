@@ -24,6 +24,12 @@
 
 namespace BitCoin
 {
+    enum AddressFormat
+    {
+        LEGACY,
+        CASH
+    };
+
     enum AddressType
     {
         PUB_KEY_HASH = 0x00, // Public key hash
@@ -33,13 +39,22 @@ namespace BitCoin
         TEST_PUB_KEY_HASH = 0x6f, // Testnet Public key hash
         TEST_SCRIPT_HASH  = 0xc4, // Testnet Script hash
         TEST_PRIVATE_KEY  = 0xef, // Testnet Private key
+
+        UNKNOWN
     };
 
     // Return Base58 address from hash and type.
-    ArcMist::String encodeAddress(const ArcMist::Hash &pHash, AddressType pType);
+    ArcMist::String encodeAddress(const ArcMist::Hash &pHash, AddressType pType,
+      AddressFormat pFormat = CASH);
+
+    // Decode address to hash, type, and format from any known format.
+    bool decodeAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType, AddressFormat &pFormat);
 
     // Parse hash and type from Base58 encoded data.
-    bool decodeAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType);
+    bool decodeLegacyAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType);
+
+    // Parse hash and type from cash address format.
+    bool decodeCashAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType);
 
     class Signature
     {
@@ -123,7 +138,9 @@ namespace BitCoin
         Key *publicKey() { return mPublicKey; } // Null for public keys
         bool used() const { return mUsed; } // Public key has received payment
         const ArcMist::Hash &hash() const; // SHA256 then RIPEMD160 of compressed key data
-        ArcMist::String address() const; // Base58 encoded hash of compressed key data
+
+        // Encoded hash of compressed key data as specified text format.
+        ArcMist::String address(AddressFormat pFormat = CASH) const;
 
         bool operator == (const Key &pRight)
         {
