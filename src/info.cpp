@@ -1,18 +1,18 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #include "info.hpp"
 
-#include "arcmist/io/buffer.hpp"
-#include "arcmist/io/file_stream.hpp"
-#include "arcmist/io/network.hpp"
-#include "arcmist/base/log.hpp"
-#include "arcmist/crypto/digest.hpp"
-#include "arcmist/io/email.hpp"
+#include "nextcash/io/buffer.hpp"
+#include "nextcash/io/file_stream.hpp"
+#include "nextcash/io/network.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/crypto/digest.hpp"
+#include "nextcash/io/email.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -27,14 +27,14 @@ namespace BitCoin
 {
     void notify(const char *pSubject, const char *pMessage)
     {
-        ArcMist::String emailAddress = Info::instance().notifyEmail;
+        NextCash::String emailAddress = Info::instance().notifyEmail;
         if(!emailAddress)
             return;
 
-        ArcMist::Email::send(NULL, emailAddress, pSubject, pMessage);
+        NextCash::Email::send(NULL, emailAddress, pSubject, pMessage);
     }
 
-    void Peer::write(ArcMist::OutputStream *pStream) const
+    void Peer::write(NextCash::OutputStream *pStream) const
     {
         // Validation Header
         pStream->writeString("AMPR");
@@ -58,7 +58,7 @@ namespace BitCoin
         address.write(pStream);
     }
 
-    bool Peer::read(ArcMist::InputStream *pStream)
+    bool Peer::read(NextCash::InputStream *pStream)
     {
         const char *match = "AMPR";
         bool matchFound = false;
@@ -106,7 +106,7 @@ namespace BitCoin
     }
 
     Info *Info::sInstance = 0;
-    ArcMist::String Info::sPath;
+    NextCash::String Info::sPath;
 
     void Info::setPath(const char *pPath)
     {
@@ -148,11 +148,11 @@ namespace BitCoin
 
         if(sPath)
         {
-            ArcMist::String configFilePath = sPath;
+            NextCash::String configFilePath = sPath;
             configFilePath.pathAppend("config");
             readSettingsFile(configFilePath);
 
-            ArcMist::String dataFilePath = sPath;
+            NextCash::String dataFilePath = sPath;
             dataFilePath.pathAppend("data");
             readSettingsFile(dataFilePath);
         }
@@ -180,7 +180,7 @@ namespace BitCoin
         writePeersFile();
     }
 
-    void Info::applyValue(ArcMist::Buffer &pName, ArcMist::Buffer &pValue)
+    void Info::applyValue(NextCash::Buffer &pName, NextCash::Buffer &pValue)
     {
         char *name = new char[pName.length()+1];
         pName.read(name, pName.length());
@@ -216,7 +216,7 @@ namespace BitCoin
                 minFee = 100000;
         }
         else if(std::strcmp(name, "ip") == 0)
-            ip = ArcMist::Network::parseIPv6(value);
+            ip = NextCash::Network::parseIPv6(value);
         else if(std::strcmp(name, "port") == 0)
             port = std::stol(value, NULL, 0);
         else if(std::strcmp(name, "pending_size") == 0)
@@ -238,11 +238,11 @@ namespace BitCoin
 
     void Info::readSettingsFile(const char *pPath)
     {
-        ArcMist::FileInputStream file(pPath);
+        NextCash::FileInputStream file(pPath);
 
         char newByte;
         bool equalFound = false;
-        ArcMist::Buffer name, value;
+        NextCash::Buffer name, value;
 
         while(file.remaining())
         {
@@ -271,9 +271,9 @@ namespace BitCoin
         if(!sPath)
             return;
 
-        //ArcMist::String dataFilePath = sPath;
+        //NextCash::String dataFilePath = sPath;
         //dataFilePath.pathAppend("data");
-        //ArcMist::FileOutputStream file(dataFilePath, true);
+        //NextCash::FileOutputStream file(dataFilePath, true);
     }
 
     void Info::writePeersFile()
@@ -283,17 +283,17 @@ namespace BitCoin
 
         if(!sPath)
         {
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INFO_LOG_NAME, "No Path. Not writing peers file.");
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INFO_LOG_NAME, "No Path. Not writing peers file.");
             return;
         }
 
-        ArcMist::String dataFilePath = sPath;
+        NextCash::String dataFilePath = sPath;
         dataFilePath.pathAppend("peers");
-        ArcMist::FileOutputStream file(dataFilePath, true);
-        file.setOutputEndian(ArcMist::Endian::LITTLE);
+        NextCash::FileOutputStream file(dataFilePath, true);
+        file.setOutputEndian(NextCash::Endian::LITTLE);
 
         mPeerLock.readLock();
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Writing peers file with %d peers", mPeers.size());
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Writing peers file with %d peers", mPeers.size());
         for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
             (*i)->write(&file);
         mPeerLock.readUnlock();
@@ -306,10 +306,10 @@ namespace BitCoin
         if(!sPath)
             return;
 
-        ArcMist::String dataFilePath = sPath;
+        NextCash::String dataFilePath = sPath;
         dataFilePath.pathAppend("peers");
-        ArcMist::FileInputStream file(dataFilePath);
-        file.setInputEndian(ArcMist::Endian::LITTLE);
+        NextCash::FileInputStream file(dataFilePath);
+        file.setInputEndian(NextCash::Endian::LITTLE);
 
         mPeerLock.writeLock("Load");
         for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
@@ -324,7 +324,7 @@ namespace BitCoin
                 mPeers.push_back(newPeer);
         }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Read peers file with %d peers", mPeers.size());
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Read peers file with %d peers", mPeers.size());
         mPeerLock.writeUnlock();
     }
 
@@ -369,7 +369,7 @@ namespace BitCoin
                 // if((*peer)->address.matches(pAddress))
                 // {
                     // mPeers.erase(peer);
-                    // ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Removed peer");
+                    // NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Removed peer");
                     // break;
                 // }
             // mPeerLock.writeUnlock();
@@ -401,7 +401,7 @@ namespace BitCoin
 
         mPeerLock.writeLock("Add");
         // Add new
-        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Adding new peer");
+        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Adding new peer");
         Peer *newPeer = new Peer;
         newPeer->userAgent = pUserAgent;
         if(pUserAgent != NULL)

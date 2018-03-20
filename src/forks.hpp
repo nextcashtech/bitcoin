@@ -1,17 +1,17 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_FORKS_HPP
 #define BITCOIN_FORKS_HPP
 
-#include "arcmist/base/string.hpp"
-#include "arcmist/base/hash.hpp"
-#include "arcmist/base/log.hpp"
-#include "arcmist/io/stream.hpp"
+#include "nextcash/base/string.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/io/stream.hpp"
 #include "base.hpp"
 
 #include <cstdint>
@@ -27,17 +27,17 @@ namespace BitCoin
     {
     public:
         BlockStat() : accumulatedWork(32) {}
-        BlockStat(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits, const ArcMist::Hash &pAccumulatedWork) :
+        BlockStat(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits, const NextCash::Hash &pAccumulatedWork) :
           accumulatedWork(pAccumulatedWork)
           { version = pVersion; time = pTime; targetBits = pTargetBits; }
 
-        void write(ArcMist::OutputStream *pStream) const
+        void write(NextCash::OutputStream *pStream) const
         {
             pStream->write(this, 12);
             accumulatedWork.write(pStream);
         }
 
-        bool read(ArcMist::InputStream *pStream)
+        bool read(NextCash::InputStream *pStream)
         {
             if(pStream->remaining() < 12)
                 return false;
@@ -56,7 +56,7 @@ namespace BitCoin
         int32_t       version;
         uint32_t      time;
         uint32_t      targetBits;
-        ArcMist::Hash accumulatedWork;
+        NextCash::Hash accumulatedWork;
     };
 
     class BlockStats : public std::vector<BlockStat *>
@@ -70,22 +70,22 @@ namespace BitCoin
 
         uint32_t time(unsigned int pBlockHeight) const;
         uint32_t targetBits(unsigned int pBlockHeight) const;
-        const ArcMist::Hash &accumulatedWork(unsigned int pBlockHeight) const;
+        const NextCash::Hash &accumulatedWork(unsigned int pBlockHeight) const;
 
         // Note : Call after block has been added to stats
         uint32_t getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount = 11) const;
 
-        void getMedianPastTimeAndWork(unsigned int pBlockHeight, uint32_t &pTime, ArcMist::Hash &pAccumulatedWork,
+        void getMedianPastTimeAndWork(unsigned int pBlockHeight, uint32_t &pTime, NextCash::Hash &pAccumulatedWork,
           unsigned int pMedianCount = 3) const;
 
         void add(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits)
         {
-            ArcMist::Hash work(32);
-            ArcMist::Hash target(32);
+            NextCash::Hash work(32);
+            NextCash::Hash target(32);
             target.setDifficulty(pTargetBits);
             target.getWork(work);
             work += accumulatedWork(height());
-            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
+            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
               // "Block work at height %d : %s", size(), work.hex().text());
             push_back(new BlockStat(pVersion, pTime, pTargetBits, work));
         }
@@ -165,14 +165,14 @@ namespace BitCoin
             lockedHeight = NOT_LOCKED;
         }
 
-        void write(ArcMist::OutputStream *pStream);
-        bool read(ArcMist::InputStream *pStream);
+        void write(NextCash::OutputStream *pStream);
+        bool read(NextCash::InputStream *pStream);
 
         const char *stateName();
-        ArcMist::String description();
+        NextCash::String description();
 
         // Predefined values
-        ArcMist::String name;
+        NextCash::String name;
         unsigned int id;
         uint8_t bit;
         unsigned int startTime;

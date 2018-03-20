@@ -1,18 +1,18 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_ADDRESSES_HPP
 #define BITCOIN_ADDRESSES_HPP
 
-#include "arcmist/base/mutex.hpp"
-#include "arcmist/base/hash.hpp"
-#include "arcmist/base/hash_data_set.hpp"
-#include "arcmist/base/distributed_vector.hpp"
-#include "arcmist/base/log.hpp"
+#include "nextcash/base/mutex.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/base/hash_data_set.hpp"
+#include "nextcash/base/distributed_vector.hpp"
+#include "nextcash/base/log.hpp"
 #include "base.hpp"
 #include "transaction.hpp"
 #include "info.hpp"
@@ -29,7 +29,7 @@ namespace BitCoin
     public:
 
         FullOutputData() {}
-        FullOutputData(unsigned int pBlockHeight, const ArcMist::Hash &pTransactionID, unsigned int pIndex, Output &pOutput)
+        FullOutputData(unsigned int pBlockHeight, const NextCash::Hash &pTransactionID, unsigned int pIndex, Output &pOutput)
         {
             blockHeight = pBlockHeight;
             transactionID = pTransactionID;
@@ -40,12 +40,12 @@ namespace BitCoin
         void print();
 
         unsigned int blockHeight;
-        ArcMist::Hash transactionID;
+        NextCash::Hash transactionID;
         unsigned int index;
         Output output;
     };
 
-    class AddressOutputReference : public ArcMist::HashData
+    class AddressOutputReference : public NextCash::HashData
     {
     public:
 
@@ -68,7 +68,7 @@ namespace BitCoin
         // Negative means this object is older than pRight.
         // Zero means both objects are the same age.
         // Positive means this object is newer than pRight.
-        int compareAge(ArcMist::HashData *pRight)
+        int compareAge(NextCash::HashData *pRight)
         {
             if(blockHeight < ((AddressOutputReference *)pRight)->blockHeight)
                 return -1;
@@ -87,7 +87,7 @@ namespace BitCoin
         }
 
         // Reads object data from a stream
-        bool read(ArcMist::InputStream *pStream)
+        bool read(NextCash::InputStream *pStream)
         {
             if(pStream->remaining() < 12)
                 return false;
@@ -98,7 +98,7 @@ namespace BitCoin
         }
 
         // Writes object data to a stream
-        bool write(ArcMist::OutputStream *pStream)
+        bool write(NextCash::OutputStream *pStream)
         {
             pStream->writeUnsignedInt(blockHeight);
             pStream->writeUnsignedInt(transactionOffset);
@@ -113,11 +113,11 @@ namespace BitCoin
 
     /* Data set of address hashes and the transaction outputs associated with them
      */
-    class Addresses : public ArcMist::HashDataSet<AddressOutputReference, 20, 1024, 1024>
+    class Addresses : public NextCash::HashDataSet<AddressOutputReference, 20, 1024, 1024>
     {
     public:
 
-        unsigned int subSetOffset(const ArcMist::Hash &pLookupValue)
+        unsigned int subSetOffset(const NextCash::Hash &pLookupValue)
         {
             return pLookupValue.lookup16() >> 6;
         }
@@ -131,7 +131,7 @@ namespace BitCoin
         bool remove(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
 
         // Get transaction outputs associated with the specified public key address hash
-        bool getOutputs(const ArcMist::Hash &pAddress, std::vector<FullOutputData> &pOutputs);
+        bool getOutputs(const NextCash::Hash &pAddress, std::vector<FullOutputData> &pOutputs);
 
         bool needsPurge() { return cacheDataSize() > mMaxCacheSize; }
 

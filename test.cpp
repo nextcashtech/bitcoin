@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2017-2018 ArcMist, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                       *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -13,7 +13,7 @@
 #include "chain.hpp"
 #include "info.hpp"
 
-#include "arcmist/base/log.hpp"
+#include "nextcash/base/log.hpp"
 
 bool chainTest();
 bool merkleTest1();
@@ -23,7 +23,7 @@ int main(int pArgumentCount, char **pArguments)
 {
     int failed = 0;
 
-    ArcMist::Log::setLevel(ArcMist::Log::DEBUG);
+    NextCash::Log::setLevel(NextCash::Log::DEBUG);
 
     if(!BitCoin::Base::test())
         failed++;
@@ -71,7 +71,7 @@ int main(int pArgumentCount, char **pArguments)
 
 bool merkleTest1()
 {
-    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "------------- Starting Merkle Tree Test 1 -------------");
+    NextCash::Log::add(NextCash::Log::INFO, "Test", "------------- Starting Merkle Tree Test 1 -------------");
     BitCoin::setNetwork(BitCoin::MAINNET);
     BitCoin::Info::instance().setPath("/var/bitcoin/mainnet/");
 
@@ -82,32 +82,32 @@ bool merkleTest1()
 
     if(!BitCoin::BlockFile::readBlock(515695, block))
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed read block %d", 515695);
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed read block %d", 515695);
         return false;
     }
 
     // Validate Merkle Hash
-    ArcMist::Hash calculatedMerkleHash;
+    NextCash::Hash calculatedMerkleHash;
     block.calculateMerkleHash(calculatedMerkleHash);
     if(calculatedMerkleHash != block.merkleHash)
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed match merkle root hash");
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Block Hash : %s", block.merkleHash.hex().text());
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Calc Hash  : %s", calculatedMerkleHash.hex().text());
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed match merkle root hash");
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Block Hash : %s", block.merkleHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Calc Hash  : %s", calculatedMerkleHash.hex().text());
         return false;
     }
 
     BitCoin::BloomFilter filter(100);
-    ArcMist::Hash addressHash;
+    NextCash::Hash addressHash;
     BitCoin::AddressType addressType;
     BitCoin::AddressFormat addressFormat;
 
-    ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
+    NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
       filter.size(), filter.functionCount());
 
     if(!BitCoin::decodeAddress("1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX", addressHash, addressType, addressFormat))
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed decode address : %s", "1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX");
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed decode address : %s", "1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX");
         return false;
     }
 
@@ -119,31 +119,31 @@ bool merkleTest1()
 
     if(merkleTreeRoot == NULL)
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed create merkle tree");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed create merkle tree");
         return false;
     }
     else
-        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed create merkle tree");
+        NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed create merkle tree");
 
     if(merkleTreeRoot->hash != block.merkleHash)
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle tree hash");
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Merkle Hash : %s", block.merkleHash.hex().text());
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Merkle Tree : %s", merkleTreeRoot->hash.hex().text());
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle tree hash");
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Merkle Hash : %s", block.merkleHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Merkle Tree : %s", merkleTreeRoot->hash.hex().text());
         return false;
     }
     else
-        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle tree hash");
+        NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed merkle tree hash");
 
     if(!merkleTreeRoot->matches)
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle tree match");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle tree match");
         return false;
     }
     else
-        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle tree match");
+        NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed merkle tree match");
 
-    ArcMist::Hash transactionHash("98bde91934d6abc038e5162c583204c630e974f7cb9bf03daa8655d92e2d08d1"), foundHash;
+    NextCash::Hash transactionHash("98bde91934d6abc038e5162c583204c630e974f7cb9bf03daa8655d92e2d08d1"), foundHash;
     BitCoin::MerkleNode *node = merkleTreeRoot;
     bool found = false;
 
@@ -166,10 +166,10 @@ bool merkleTest1()
     }
 
     if(found)
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle tree match found : %s", foundHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed merkle tree match found : %s", foundHash.hex().text());
     else
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle tree match found : %s", foundHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed merkle tree match found : %s", foundHash.hex().text());
         return false;
     }
 
@@ -186,17 +186,17 @@ bool merkleTest1()
         }
 
     if(found)
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message transaction found : %s",
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed merkle block message transaction found : %s",
           transactionHash.hex().text());
     else
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle block message transaction found : %s",
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed merkle block message transaction found : %s",
           transactionHash.hex().text());
         return false;
     }
 
     BitCoin::Message::Interpreter interpreter;
-    ArcMist::Buffer messageBuffer;
+    NextCash::Buffer messageBuffer;
 
     interpreter.write(&merkleBlockMessage, &messageBuffer);
 
@@ -204,39 +204,39 @@ bool merkleTest1()
 
     if(messageData == NULL)
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message read");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle block message read");
         return false;
     }
     else if(messageData->type != BitCoin::Message::MERKLE_BLOCK)
     {
         delete messageData;
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message read type");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle block message read type");
         return false;
     }
 
-    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle block message read");
+    NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed merkle block message read");
 
     BitCoin::Message::MerkleBlockData *message = (BitCoin::Message::MerkleBlockData *)messageData;
 
-    ArcMist::HashList confirmedTransactionHashes;
+    NextCash::HashList confirmedTransactionHashes;
     if(message->validate(confirmedTransactionHashes))
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message validate : %d trans",
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed merkle block message validate : %d trans",
           confirmedTransactionHashes.size());
     }
     else
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message validate");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle block message validate");
         delete messageData;
         return false;
     }
 
     if(confirmedTransactionHashes.contains(transactionHash))
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message transaction confirmed : %s",
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed merkle block message transaction confirmed : %s",
           transactionHash.hex().text());
     else
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle block message transaction confirmed : %s",
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed merkle block message transaction confirmed : %s",
           transactionHash.hex().text());
         delete messageData;
         return false;
@@ -248,7 +248,7 @@ bool merkleTest1()
 
 bool merkleTest2()
 {
-    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "------------- Starting Merkle Tree Test 2 -------------");
+    NextCash::Log::add(NextCash::Log::INFO, "Test", "------------- Starting Merkle Tree Test 2 -------------");
 
     /***********************************************************************************************
      * Merkle block (Randomly chosen transaction)
@@ -257,32 +257,32 @@ bool merkleTest2()
 
     if(!BitCoin::BlockFile::readBlock(515712, block))
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed read block %d", 515712);
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed read block %d", 515712);
         return false;
     }
 
     // Validate Merkle Hash
-    ArcMist::Hash calculatedMerkleHash;
+    NextCash::Hash calculatedMerkleHash;
     block.calculateMerkleHash(calculatedMerkleHash);
     if(calculatedMerkleHash != block.merkleHash)
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed match merkle root hash");
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Block Hash : %s", block.merkleHash.hex().text());
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Calc Hash  : %s", calculatedMerkleHash.hex().text());
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed match merkle root hash");
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Block Hash : %s", block.merkleHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Calc Hash  : %s", calculatedMerkleHash.hex().text());
         return false;
     }
 
     BitCoin::BloomFilter filter(100);
-    ArcMist::Hash addressHash;
+    NextCash::Hash addressHash;
     BitCoin::AddressType addressType;
     BitCoin::AddressFormat addressFormat;
 
-    ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
+    NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
       filter.size(), filter.functionCount());
 
     if(!BitCoin::decodeAddress("1Ff79dW4CymX2msdyat4SbTupCG1d6imib", addressHash, addressType, addressFormat))
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed decode address : %s", "1Ff79dW4CymX2msdyat4SbTupCG1d6imib");
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed decode address : %s", "1Ff79dW4CymX2msdyat4SbTupCG1d6imib");
         return false;
     }
 
@@ -292,31 +292,31 @@ bool merkleTest2()
 
     if(merkleTreeRoot == NULL)
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed create merkle tree");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed create merkle tree");
         return false;
     }
     else
-        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed create merkle tree");
+        NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed create merkle tree");
 
     if(merkleTreeRoot->hash != block.merkleHash)
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle tree hash");
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Merkle Hash : %s", block.merkleHash.hex().text());
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "  Merkle Tree : %s", merkleTreeRoot->hash.hex().text());
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle tree hash");
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Merkle Hash : %s", block.merkleHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Merkle Tree : %s", merkleTreeRoot->hash.hex().text());
         return false;
     }
     else
-        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle tree hash");
+        NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed merkle tree hash");
 
     if(!merkleTreeRoot->matches)
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle tree match");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle tree match");
         return false;
     }
     else
-        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle tree match");
+        NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed merkle tree match");
 
-    ArcMist::Hash transactionHash("a13a63717ef85e88973ee54a9d86794e27a913784d45bfa6e3f659cf03db32e6"), foundHash;
+    NextCash::Hash transactionHash("a13a63717ef85e88973ee54a9d86794e27a913784d45bfa6e3f659cf03db32e6"), foundHash;
     BitCoin::MerkleNode *node = merkleTreeRoot;
     bool found = false;
 
@@ -339,10 +339,10 @@ bool merkleTest2()
     }
 
     if(found)
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle tree match found : %s", foundHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed merkle tree match found : %s", foundHash.hex().text());
     else
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle tree match found : %s", foundHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed merkle tree match found : %s", foundHash.hex().text());
         return false;
     }
 
@@ -359,17 +359,17 @@ bool merkleTest2()
         }
 
     if(found)
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message transaction found : %s",
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed merkle block message transaction found : %s",
           transactionHash.hex().text());
     else
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle block message transaction found : %s",
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed merkle block message transaction found : %s",
           transactionHash.hex().text());
         return false;
     }
 
     BitCoin::Message::Interpreter interpreter;
-    ArcMist::Buffer messageBuffer;
+    NextCash::Buffer messageBuffer;
 
     interpreter.write(&merkleBlockMessage, &messageBuffer);
 
@@ -377,39 +377,39 @@ bool merkleTest2()
 
     if(messageData == NULL)
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message read");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle block message read");
         return false;
     }
     else if(messageData->type != BitCoin::Message::MERKLE_BLOCK)
     {
         delete messageData;
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message read type");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle block message read type");
         return false;
     }
 
-    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed merkle block message read");
+    NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed merkle block message read");
 
     BitCoin::Message::MerkleBlockData *message = (BitCoin::Message::MerkleBlockData *)messageData;
 
-    ArcMist::HashList confirmedTransactionHashes;
+    NextCash::HashList confirmedTransactionHashes;
     if(message->validate(confirmedTransactionHashes))
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message validate : %d trans",
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed merkle block message validate : %d trans",
           confirmedTransactionHashes.size());
     }
     else
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed merkle block message validate");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle block message validate");
         delete messageData;
         return false;
     }
 
     if(confirmedTransactionHashes.contains(transactionHash))
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed merkle block message transaction confirmed : %s",
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed merkle block message transaction confirmed : %s",
           transactionHash.hex().text());
     else
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed merkle block message transaction confirmed : %s",
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed merkle block message transaction confirmed : %s",
           transactionHash.hex().text());
         delete messageData;
         return false;
@@ -419,10 +419,10 @@ bool merkleTest2()
     return true;
 }
 
-const ArcMist::Hash &addBlock(BitCoin::Chain &pChain, const ArcMist::Hash &pPreviousHash, const ArcMist::Hash &pCoinbaseKeyHash,
-  int pBlockHeight, uint32_t pBlockTime, uint32_t pTargetBits, ArcMist::Hash &pTransactionID)
+const NextCash::Hash &addBlock(BitCoin::Chain &pChain, const NextCash::Hash &pPreviousHash, const NextCash::Hash &pCoinbaseKeyHash,
+  int pBlockHeight, uint32_t pBlockTime, uint32_t pTargetBits, NextCash::Hash &pTransactionID)
 {
-    const static ArcMist::Hash zeroHash;
+    const static NextCash::Hash zeroHash;
     BitCoin::Block *newBlock = new BitCoin::Block();
     newBlock->time = pBlockTime;
     newBlock->targetBits = pTargetBits;
@@ -436,7 +436,7 @@ const ArcMist::Hash &addBlock(BitCoin::Chain &pChain, const ArcMist::Hash &pPrev
 
     if(!pChain.addPendingBlock(newBlock))
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed to add pending block %d : %s",
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed to add pending block %d : %s",
           pBlockHeight, newBlock->hash.hex().text());
         return zeroHash;
     }
@@ -449,20 +449,20 @@ bool chainTest()
 {
     // Highest target bits = 0x2100ffff
     uint32_t maxTargetBits = 0x2100ffff; // Genesis 0x203fffc0 ?
-    ArcMist::Hash difficulty;
+    NextCash::Hash difficulty;
     difficulty.setDifficulty(maxTargetBits);
-    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, "Test", "Min difficulty : %s", difficulty.hex().text());
+    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, "Test", "Min difficulty : %s", difficulty.hex().text());
 
-    ArcMist::removeDirectory("chain_test");
-    ArcMist::createDirectory("chain_test");
+    NextCash::removeDirectory("chain_test");
+    NextCash::createDirectory("chain_test");
     BitCoin::setNetwork(BitCoin::MAINNET);
     BitCoin::Info::instance().setPath("chain_test");
 
-    std::vector<ArcMist::Hash> branchHashes;
+    std::vector<NextCash::Hash> branchHashes;
     int height = 0;
-    ArcMist::Hash lastHash, preBranchHash, transactionID;
-    ArcMist::HashList transactionHashes;
-    ArcMist::Hash publicKeyHash;
+    NextCash::Hash lastHash, preBranchHash, transactionID;
+    NextCash::HashList transactionHashes;
+    NextCash::Hash publicKeyHash;
     std::vector<BitCoin::FullOutputData> coinbaseOutputs;
     std::vector<BitCoin::FullOutputData>::iterator fullOutput;
     BitCoin::Key privateKey;
@@ -475,7 +475,7 @@ bool chainTest()
 
         privateKey.generatePrivate(BitCoin::MAINNET);
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Using coinbase payment address : %s", privateKey.hash().hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Using coinbase payment address : %s", privateKey.hash().hex().text());
 
         // Genesis block time
         uint32_t time = chain.blockStats().time(0);
@@ -485,40 +485,40 @@ bool chainTest()
         {
             if(addBlock(chain, chain.lastPendingBlockHash(), privateKey.hash(), i + 1, time, maxTargetBits, transactionID).isEmpty())
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed to add block");
+                NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to add block");
                 return false;
             }
             transactionHashes.push_back(transactionID);
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
             chain.process();
             time += 605; // a little over 10 minutes to adjust for the 2015 block skew so difficulty doesn't increase
         }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain previous last hash before branch : %s",
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain previous last hash before branch : %s",
           chain.lastPendingBlockHash().hex().text());
 
         // Add a branch 5 blocks back
         int branchHeight = chain.height() - 5;
-        ArcMist::Hash branchHash;
+        NextCash::Hash branchHash;
         chain.getBlockHash(branchHeight, branchHash);
         preBranchHash = branchHash;
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain hash before branch : %s", branchHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain hash before branch : %s", branchHash.hex().text());
         branchHash = addBlock(chain, branchHash, privateKey.hash(), ++branchHeight, time, maxTargetBits, transactionID);
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
         const BitCoin::Branch *branch;
         for(unsigned int i=0;i<chain.branchCount();++i)
         {
             branch = chain.branchAt(i);
             if(branch == NULL)
                 break;
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test",
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test",
               "Branch %d work: %s", i + 1, branch->accumulatedWork.hex().text());
         }
         if(branchHash.isEmpty())
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed to add branch block");
+            NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to add branch block");
             return false;
         }
         for(unsigned int j=0;j<20;++j)
@@ -534,17 +534,17 @@ bool chainTest()
             branchHash = addBlock(chain, branchHash, privateKey.hash(), ++branchHeight, time, maxTargetBits, transactionID);
             if(branchHash.isEmpty())
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed to add branch block");
+                NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to add branch block");
                 return false;
             }
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
             for(unsigned int i=0;i<chain.branchCount();++i)
             {
                 branch = chain.branchAt(i);
                 if(branch == NULL)
                     break;
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test",
+                NextCash::Log::addFormatted(NextCash::Log::INFO, "Test",
                   "Branch %d work: %s", i + 1, branch->accumulatedWork.hex().text());
             }
             branchHashes.push_back(branchHash);
@@ -560,13 +560,13 @@ bool chainTest()
         // Confirm the branch is the main chain now
         if(chain.lastBlockHash() != branchHash)
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Chain last hash doesn't match branch");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Last Hash   : %s", chain.lastBlockHash().hex().text());
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Branch Hash : %s", branchHash.hex().text());
+            NextCash::Log::add(NextCash::Log::ERROR, "Test", "Chain last hash doesn't match branch");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Last Hash   : %s", chain.lastBlockHash().hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Branch Hash : %s", branchHash.hex().text());
             return false;
         }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Chain final last hash : %s",
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Chain final last hash : %s",
           chain.lastBlockHash().hex().text());
 
         height = chain.height();
@@ -575,10 +575,10 @@ bool chainTest()
         chain.addresses().getOutputs(publicKeyHash, coinbaseOutputs);
 
         if(coinbaseOutputs.size() == (unsigned int)chain.height())
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Passed transaction address output count : %d", coinbaseOutputs.size());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed transaction address output count : %d", coinbaseOutputs.size());
         else
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed transaction address output count : %d != %d",
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed transaction address output count : %d != %d",
               coinbaseOutputs.size(), chain.height());
             return false;
         }
@@ -589,17 +589,17 @@ bool chainTest()
                 ++checkCount;
 
         if(checkCount == transactionHashes.size())
-            ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed transaction address outputs check");
+            NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed transaction address outputs check");
         else
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed transaction address output trans ID for block %d : %s",
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed transaction address output trans ID for block %d : %s",
               fullOutput->blockHeight, fullOutput->transactionID.hex().text());
             return false;
         }
 
         if(!chain.save())
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed to save chain");
+            NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to save chain");
             return false;
         }
     }
@@ -609,61 +609,61 @@ bool chainTest()
 
     if(!chain2.load(true))
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed to load chain2");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to load chain2");
         return false;
     }
 
-    ArcMist::Log::addFormatted(ArcMist::Log::INFO, "Test", "Reloaded chain last hash : %s", chain2.lastBlockHash().hex().text());
+    NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Reloaded chain last hash : %s", chain2.lastBlockHash().hex().text());
 
     if(chain2.height() != height)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Reloaded height doesn't match : original %d != reloaded %d",
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Reloaded height doesn't match : original %d != reloaded %d",
           height, chain2.height());
         return false;
     }
 
-    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed reloaded chain height");
+    NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed reloaded chain height");
 
-    ArcMist::Hash hash;
-    for(std::vector<ArcMist::Hash>::reverse_iterator branchHash=branchHashes.rbegin();branchHash!=branchHashes.rend();++branchHash)
+    NextCash::Hash hash;
+    for(std::vector<NextCash::Hash>::reverse_iterator branchHash=branchHashes.rbegin();branchHash!=branchHashes.rend();++branchHash)
     {
         chain2.getBlockHash(height, hash);
         if(hash != *branchHash)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Reloaded height %d hash doesn't match", height);
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Chain Hash  : %s", hash.hex().text());
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Branch Hash : %s", branchHash->hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Reloaded height %d hash doesn't match", height);
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Chain Hash  : %s", hash.hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Branch Hash : %s", branchHash->hex().text());
             return false;
         }
         --height;
     }
 
-    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed reloaded branch hashes");
+    NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed reloaded branch hashes");
 
     chain2.getBlockHash(height, hash);
     if(hash != preBranchHash)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Reloaded height %d hash doesn't match pre branch hash", height);
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Chain Hash      : %s", hash.hex().text());
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Pre Branch Hash : %s", preBranchHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Reloaded height %d hash doesn't match pre branch hash", height);
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Chain Hash      : %s", hash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Pre Branch Hash : %s", preBranchHash.hex().text());
         return false;
     }
 
-    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed reloaded pre branch hash");
+    NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed reloaded pre branch hash");
 
     if(!chain2.save())
     {
-        ArcMist::Log::add(ArcMist::Log::ERROR, "Test", "Failed to save reloaded");
+        NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to save reloaded");
         return false;
     }
 
     chain2.addresses().getOutputs(privateKey.hash(), coinbaseOutputs);
 
     if(coinbaseOutputs.size() == (unsigned int)chain2.height())
-        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed transaction address output count after save");
+        NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed transaction address output count after save");
     else
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed transaction address output count after save : %d != %d",
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed transaction address output count after save : %d != %d",
           coinbaseOutputs.size(), chain2.height());
         return false;
     }
@@ -674,17 +674,17 @@ bool chainTest()
             ++checkCount;
 
     if(checkCount == transactionHashes.size())
-        ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed transaction address outputs check");
+        NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed transaction address outputs check");
     else
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, "Test", "Failed transaction address output trans ID after save for block %d : %s",
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed transaction address output trans ID after save for block %d : %s",
           fullOutput->blockHeight, fullOutput->transactionID.hex().text());
         return false;
     }
 
-    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed transaction address outputs check after save");
+    NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed transaction address outputs check after save");
 
-    ArcMist::Log::add(ArcMist::Log::INFO, "Test", "Passed chain test");
+    NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed chain test");
     return true;
 }
 
@@ -694,11 +694,11 @@ bool chainTest()
     // uint32_t maxTargetBits = 0x2100ffff; // Genesis 0x203fffc0 ?
     // BitCoin::Hash difficulty;
     // difficulty.setDifficulty(maxTargetBits);
-    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, "Test", "Min difficulty : %s", difficulty.hex().text());
+    // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, "Test", "Min difficulty : %s", difficulty.hex().text());
     // bool success = true;
 
-    // ArcMist::removeDirectory("cash_test");
-    // ArcMist::createDirectory("cash_test");
+    // NextCash::removeDirectory("cash_test");
+    // NextCash::createDirectory("cash_test");
     // BitCoin::setNetwork(BitCoin::MAINNET);
     // BitCoin::Info::instance().setPath("cash_test");
 

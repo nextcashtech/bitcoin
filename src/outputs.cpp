@@ -1,14 +1,14 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #include "outputs.hpp"
 
 #ifdef PROFILER_ON
-#include "arcmist/dev/profiler.hpp"
+#include "nextcash/dev/profiler.hpp"
 #endif
 
 #include "info.hpp"
@@ -20,7 +20,7 @@
 
 namespace BitCoin
 {
-    void Output::write(ArcMist::OutputStream *pStream, bool pBlockFile)
+    void Output::write(NextCash::OutputStream *pStream, bool pBlockFile)
     {
         if(pBlockFile)
             blockFileOffset = pStream->writeOffset();
@@ -30,7 +30,7 @@ namespace BitCoin
         pStream->writeStream(&script, script.length());
     }
 
-    bool Output::read(ArcMist::InputStream *pStream, bool pBlockFile)
+    bool Output::read(NextCash::InputStream *pStream, bool pBlockFile)
     {
         if(pBlockFile)
             blockFileOffset = pStream->readOffset();
@@ -50,7 +50,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Output::skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream)
+    bool Output::skip(NextCash::InputStream *pInputStream, NextCash::OutputStream *pOutputStream)
     {
         // Amount
         if(pInputStream->remaining() < 8)
@@ -73,12 +73,12 @@ namespace BitCoin
         return true;
     }
 
-    void Output::print(ArcMist::Log::Level pLevel)
+    void Output::print(NextCash::Log::Level pLevel)
     {
-        ArcMist::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "Output");
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Amount : %.08f", bitcoins(amount));
+        NextCash::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "Output");
+        NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Amount : %.08f", bitcoins(amount));
         script.setReadOffset(0);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Script : (%d bytes)", script.length());
+        NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Script : (%d bytes)", script.length());
         ScriptInterpreter::printScript(script, pLevel);
     }
 
@@ -107,7 +107,7 @@ namespace BitCoin
                 }
                 catch(std::bad_alloc &pBadAlloc)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                       "Bad allocation (Allocate %d Outputs) : %s", mOutputCount, pBadAlloc.what());
                     return false;
                 }
@@ -125,7 +125,7 @@ namespace BitCoin
         mOutputs = NULL;
     }
 
-    bool TransactionReference::read(ArcMist::InputStream *pStream)
+    bool TransactionReference::read(NextCash::InputStream *pStream)
     {
         if(pStream->remaining() < 8)
             return false;
@@ -133,7 +133,7 @@ namespace BitCoin
         blockHeight = pStream->readUnsignedInt();
         if(blockHeight > MAX_BLOCK_HEIGHT)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
               "Block height too high : %d", blockHeight);
             return false;
         }
@@ -141,7 +141,7 @@ namespace BitCoin
         unsigned int outputCount = pStream->readUnsignedInt();
         if(outputCount > MAX_OUTPUT_COUNT)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
               "Output Count too high : %d", outputCount);
             return false;
         }
@@ -156,7 +156,7 @@ namespace BitCoin
         return true;
     }
 
-    bool TransactionReference::write(ArcMist::OutputStream *pStream)
+    bool TransactionReference::write(NextCash::OutputStream *pStream)
     {
         pStream->writeUnsignedInt(blockHeight);
         pStream->writeUnsignedInt(mOutputCount);
@@ -182,13 +182,13 @@ namespace BitCoin
         OutputReference *output = outputAt(pIndex);
         if(output == NULL)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
               "Spend index %d not found", pIndex);
             return;
         }
         else if(output->spentBlockHeight != 0)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
               "Spend index %d already spent at block height %d", pIndex, output->spentBlockHeight);
             return;
         }
@@ -231,7 +231,7 @@ namespace BitCoin
     {
         if(mOutputCount != pOutputs.size())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_OUTPUTS_LOG_NAME,
               "Mismatched transaction outputs on commit %d != %d", mOutputCount, pOutputs.size());
             return;
         }
@@ -242,29 +242,29 @@ namespace BitCoin
                 setModified();
     }
 
-    void TransactionReference::print(ArcMist::Log::Level pLevel)
+    void TransactionReference::print(NextCash::Log::Level pLevel)
     {
-        ArcMist::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "Transaction Reference");
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Height         : %d", blockHeight);
+        NextCash::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "Transaction Reference");
+        NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Height         : %d", blockHeight);
 
         OutputReference *output = mOutputs;
         for(unsigned int i=0;i<mOutputCount;++i,++output)
         {
-            ArcMist::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Output Reference %d", i);
-            ArcMist::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "    File Offset : %d", output->blockFileOffset);
-            ArcMist::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "    Spent       : %d", output->spentBlockHeight);
+            NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Output Reference %d", i);
+            NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "    File Offset : %d", output->blockFileOffset);
+            NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "    Spent       : %d", output->spentBlockHeight);
         }
     }
 
     const unsigned int TransactionOutputPool::BIP0030_HEIGHTS[BIP0030_HASH_COUNT] = { 91842, 91880 };
-    const ArcMist::Hash TransactionOutputPool::BIP0030_HASHES[BIP0030_HASH_COUNT] =
+    const NextCash::Hash TransactionOutputPool::BIP0030_HASHES[BIP0030_HASH_COUNT] =
     {
-        ArcMist::Hash("00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"),
-        ArcMist::Hash("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
+        NextCash::Hash("00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"),
+        NextCash::Hash("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
     };
 
     bool TransactionOutputPool::checkDuplicates(const std::vector<Transaction *> &pBlockTransactions,
-      unsigned int pBlockHeight, const ArcMist::Hash &pBlockHash)
+      unsigned int pBlockHeight, const NextCash::Hash &pBlockHash)
     {
         Iterator reference;
         for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
@@ -282,13 +282,13 @@ namespace BitCoin
                             exceptionFound = true;
                     if(exceptionFound)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
                           "BIP-0030 Exception for duplicate transaction ID at block height %d : transaction %s",
                           ((TransactionReference *)(*reference))->blockHeight, (*transaction)->hash.hex().text());
                     }
                     else
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                           "Matching transaction output hash from block height %d has unspent outputs : %s",
                           ((TransactionReference *)(*reference))->blockHeight, (*transaction)->hash.hex().text());
                         return false;
@@ -306,14 +306,14 @@ namespace BitCoin
     bool TransactionOutputPool::add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Outputs Add Block");
+        NextCash::Profiler profiler("Outputs Add Block");
 #endif
         mToCommit.clear();
         mToCommitHashes.clear();
 
         if(pBlockHeight != mNextBlockHeight)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
               "Can't add transaction outputs for non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight);
             return false;
         }
@@ -339,7 +339,7 @@ namespace BitCoin
                     if(transactionReference->valuesMatch(*item) && (*item)->markedRemove())
                     {
                         // Unmark the matching item for removal
-                        ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
                           "Reversing removal of transaction output for block height %d : %s", pBlockHeight,
                           (*transaction)->hash.hex().text());
                         (*item)->clearRemove();
@@ -360,7 +360,7 @@ namespace BitCoin
             }
             else
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                   "Failed to insert transaction output for block height %d : %s", pBlockHeight,
                   (*transaction)->hash.hex().text());
                 success = false;
@@ -375,29 +375,29 @@ namespace BitCoin
     {
         if(!mIsValid)
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Can't commit invalid unspent pool");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME, "Can't commit invalid unspent pool");
             return false;
         }
 
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Outputs Commit");
+        NextCash::Profiler profiler("Outputs Commit");
 #endif
         if(pBlockHeight != mNextBlockHeight)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
               "Can't commit non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight - 1);
             return false;
         }
 
         if(mToCommit.size() != pBlockTransactions.size())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
               "Can't commit non matching transaction set");
             return false;
         }
 
         std::vector<TransactionReference *>::iterator reference = mToCommit.begin();
-        ArcMist::HashList::iterator hash = mToCommitHashes.begin();
+        NextCash::HashList::iterator hash = mToCommitHashes.begin();
         for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
         {
             if(*hash == (*transaction)->hash)
@@ -408,7 +408,7 @@ namespace BitCoin
             }
             else
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                   "Can't commit non matching transaction");
                 return false;
             }
@@ -429,14 +429,14 @@ namespace BitCoin
         {
             if(pBlockHeight != mNextBlockHeight)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                   "Can't revert non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight);
                 return false;
             }
         }
         else if(pBlockHeight != mNextBlockHeight - 1)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
               "Can't revert non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight - 1);
             return false;
         }
@@ -463,7 +463,7 @@ namespace BitCoin
                             outputReference = ((TransactionReference *)(*reference))->outputAt((*input)->outpoint.index);
                             if(outputReference != NULL && outputReference->spentBlockHeight != 0)
                             {
-                                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
+                                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
                                   "Reverting spend on input transaction : index %d %s", (*input)->outpoint.index,
                                   (*input)->outpoint.transactionID.hex().text());
                                 outputReference->spentBlockHeight = 0;
@@ -478,7 +478,7 @@ namespace BitCoin
 
                     if(!found)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                           "Input transaction not found to revert spend : index %d %s", (*input)->outpoint.index,
                           (*input)->outpoint.transactionID.hex().text());
                         success = false;
@@ -493,7 +493,7 @@ namespace BitCoin
             {
                 if(!((TransactionReference *)(*reference))->markedRemove())
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
                       "Removing transaction : %s", (*transaction)->hash.hex().text());
                     reference->setRemove();
                     found = true;
@@ -505,7 +505,7 @@ namespace BitCoin
 
             if(!found)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                   "Transaction not found to remove for revert : %s", (*transaction)->hash.hex().text());
                 success = false;
                 break;
@@ -519,13 +519,13 @@ namespace BitCoin
         return success;
     }
 
-    TransactionReference *TransactionOutputPool::findUnspent(const ArcMist::Hash &pTransactionID, uint32_t pIndex)
+    TransactionReference *TransactionOutputPool::findUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex)
     {
         if(!mIsValid)
             return NULL;
 
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Find Unspent");
+        NextCash::Profiler profiler("Find Unspent");
 #endif
         Iterator reference = get(pTransactionID);
         while(reference && reference.hash() == pTransactionID)
@@ -540,13 +540,13 @@ namespace BitCoin
         return NULL;
     }
 
-    TransactionReference *TransactionOutputPool::find(const ArcMist::Hash &pTransactionID, uint32_t pIndex)
+    TransactionReference *TransactionOutputPool::find(const NextCash::Hash &pTransactionID, uint32_t pIndex)
     {
         if(!mIsValid)
             return NULL;
 
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Find Unspent");
+        NextCash::Profiler profiler("Find Unspent");
 #endif
         Iterator reference = get(pTransactionID);
         TransactionReference *result = NULL;
@@ -574,22 +574,22 @@ namespace BitCoin
 
     bool TransactionOutputPool::load(const char *pFilePath, uint64_t pCacheDataTargetSize)
     {
-        ArcMist::String filePath = pFilePath;
+        NextCash::String filePath = pFilePath;
         filePath.pathAppend("outputs");
 
         if(!HashDataSet::load("Outputs", filePath))
             return false;
 
-        ArcMist::String filePathName = filePath;
+        NextCash::String filePathName = filePath;
         filePathName.pathAppend("height");
-        if(!ArcMist::fileExists(filePathName))
+        if(!NextCash::fileExists(filePathName))
             mNextBlockHeight = 0;
         else
         {
-            ArcMist::FileInputStream file(filePathName);
+            NextCash::FileInputStream file(filePathName);
             if(!file.isValid())
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                   "Failed to open height file to load");
                 mIsValid = false;
                 return false;
@@ -601,7 +601,7 @@ namespace BitCoin
 
         if(mIsValid)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
               "Loaded %d transaction outputs at block height %d (%d KiB cached)",
               size(), mNextBlockHeight - 1, cacheDataSize() / 1024);
             mSavedBlockHeight = mNextBlockHeight;
@@ -614,19 +614,19 @@ namespace BitCoin
 
     bool TransactionOutputPool::save()
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
           "Saving transaction outputs at block height %d (%d KiB cached)", mNextBlockHeight - 1,
           cacheDataSize() / 1024);
 
         if(!HashDataSet::save())
             return false;
 
-        ArcMist::String filePathName = path();
+        NextCash::String filePathName = path();
         filePathName.pathAppend("height");
-        ArcMist::FileOutputStream file(filePathName, true);
+        NextCash::FileOutputStream file(filePathName, true);
         if(!file.isValid())
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
               "Failed to open height file to save");
             return false;
         }
@@ -636,7 +636,7 @@ namespace BitCoin
         file.flush();
 
         mSavedBlockHeight = mNextBlockHeight;
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
           "Saved %d transaction outputs at block height %d (%d KiB cached)", size(), mNextBlockHeight - 1, cacheDataSize() / 1024);
         return true;
     }

@@ -1,15 +1,15 @@
 /**************************************************************************
- * Copyright 2018 ArcMist, LLC                                            *
+ * Copyright 2018 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_ADDRESS_BLOCK_HPP
 #define BITCOIN_ADDRESS_BLOCK_HPP
 
-#include "arcmist/base/hash.hpp"
-#include "arcmist/io/stream.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/io/stream.hpp"
 #include "block.hpp"
 #include "transaction.hpp"
 #include "chain.hpp"
@@ -30,8 +30,8 @@ namespace BitCoin
         Monitor();
         ~Monitor();
 
-        void write(ArcMist::OutputStream *pStream);
-        bool read(ArcMist::InputStream *pStream);
+        void write(NextCash::OutputStream *pStream);
+        bool read(NextCash::InputStream *pStream);
 
         int64_t balance(bool pLocked);
         unsigned int size() const { return mAddressHashes.size(); }
@@ -40,7 +40,7 @@ namespace BitCoin
         void clear();
 
         // Load and add any new addresses from a text file.
-        bool loadAddresses(ArcMist::InputStream *pStream);
+        bool loadAddresses(NextCash::InputStream *pStream);
 
         // Sets up monitoring on a key store.
         // Each key in the key store must be "primed". Meaning there must be some address keys
@@ -50,7 +50,7 @@ namespace BitCoin
         unsigned int setupBloomFilter(BloomFilter &pFilter);
 
         // Get hashes for blocks that need merkle blocks
-        void getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain, ArcMist::HashList &pBlockHashes,
+        void getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain, NextCash::HashList &pBlockHashes,
           unsigned int pMaxCount = 250);
 
         bool filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID);
@@ -59,7 +59,7 @@ namespace BitCoin
 
         // Used for zero confirmation approval
         // Returns true if transaction should be requested
-        bool addTransactionAnnouncement(const ArcMist::Hash &pTransactionHash, unsigned int pNodeID);
+        bool addTransactionAnnouncement(const NextCash::Hash &pTransactionHash, unsigned int pNodeID);
 
         // Add data from a received merkle block
         bool addMerkleBlock(Chain &pChain, Message::MerkleBlockData *pData, unsigned int pNodeID);
@@ -67,7 +67,7 @@ namespace BitCoin
         // Add a received transaction if it was confirmed in a merkle block
         bool addTransaction(Chain &pChain, Message::TransactionData *pTransactionData); // Return true if added
 
-        void revertBlock(const ArcMist::Hash &pBlockHash, unsigned int pBlockHeight);
+        void revertBlock(const NextCash::Hash &pBlockHash, unsigned int pBlockHeight);
 
         void process(Chain &pChain);
 
@@ -101,14 +101,14 @@ namespace BitCoin
                 amount = pCopy.amount;
                 announceTime = pCopy.announceTime;
             }
-            SPVTransactionData(const ArcMist::Hash &pBlockHash)
+            SPVTransactionData(const NextCash::Hash &pBlockHash)
             {
                 blockHash = pBlockHash;
                 transaction = NULL;
                 amount = 0;
                 announceTime = getTime();
             }
-            SPVTransactionData(const ArcMist::Hash &pBlockHash, Transaction *pTransaction)
+            SPVTransactionData(const NextCash::Hash &pBlockHash, Transaction *pTransaction)
             {
                 blockHash = pBlockHash;
                 transaction = pTransaction;
@@ -117,8 +117,8 @@ namespace BitCoin
             }
             ~SPVTransactionData() { if(transaction != NULL) delete transaction; }
 
-            void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream);
+            void write(NextCash::OutputStream *pStream);
+            bool read(NextCash::InputStream *pStream);
 
             bool addNode(unsigned int pNodeID)
             {
@@ -129,7 +129,7 @@ namespace BitCoin
                 return true;
             }
 
-            ArcMist::Hash blockHash; // Hash of block containing transaction
+            NextCash::Hash blockHash; // Hash of block containing transaction
             Transaction *transaction;
             int64_t amount;
             std::vector<unsigned int> payOutputs, spendInputs;
@@ -164,7 +164,7 @@ namespace BitCoin
             unsigned int node;
             int32_t requestTime, receiveTime;
             unsigned int totalTransactions; // Total transaction count of full block
-            ArcMist::HashContainerList<SPVTransactionData *> transactions;
+            NextCash::HashContainerList<SPVTransactionData *> transactions;
             bool complete;
 
             bool isComplete();
@@ -192,8 +192,8 @@ namespace BitCoin
 
             void clear() { beginBlockHeight = 0; blockHeight = 0; addressesIncluded = 0; complete = false; }
 
-            void write(ArcMist::OutputStream *pStream);
-            bool read(ArcMist::InputStream *pStream);
+            void write(NextCash::OutputStream *pStream);
+            bool read(NextCash::InputStream *pStream);
 
         };
 
@@ -203,8 +203,8 @@ namespace BitCoin
 
         void refreshBloomFilter(bool pLocked);
         void refreshTransaction(SPVTransactionData *pTransaction, bool pAllowPending);
-        Output *getOutput(ArcMist::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending);
-        bool getPayAddresses(Output *pOutput, ArcMist::HashList &pAddresses, bool pBlockOnly);
+        Output *getOutput(NextCash::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending);
+        bool getPayAddresses(Output *pOutput, NextCash::HashList &pAddresses, bool pBlockOnly);
 
         // Start a new "pass" to check new addresses for previous transactions
         void startNewPass();
@@ -212,18 +212,18 @@ namespace BitCoin
         // Cancel all pending merkle requests and update the bloom filter.
         void restartBloomFilter();
 
-        ArcMist::Mutex mMutex;
+        NextCash::Mutex mMutex;
         KeyStore *mKeyStore;
-        ArcMist::HashList mAddressHashes;
+        NextCash::HashList mAddressHashes;
         unsigned int mFilterID;
         BloomFilter mFilter;
         std::vector<unsigned int> mNodesToResendFilter, mNodesToClose;
         std::vector<PassData> mPasses;
-        ArcMist::HashContainerList<MerkleRequestData *> mMerkleRequests;
+        NextCash::HashContainerList<MerkleRequestData *> mMerkleRequests;
 
         // Transactions relating to the addresses in this block that have been confirmed in a block
-        ArcMist::HashContainerList<SPVTransactionData *> mTransactions;
-        ArcMist::HashContainerList<SPVTransactionData *> mPendingTransactions;
+        NextCash::HashContainerList<SPVTransactionData *> mTransactions;
+        NextCash::HashContainerList<SPVTransactionData *> mPendingTransactions;
 
     };
 }

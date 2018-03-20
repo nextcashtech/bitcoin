@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2018 ArcMist, LLC                                            *
+ * Copyright 2018 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -96,7 +96,7 @@ namespace BitCoin
         }
     }
 
-    void BloomFilter::add(const ArcMist::Hash &pHash)
+    void BloomFilter::add(const NextCash::Hash &pHash)
     {
         if(mIsFull || mDataSize == 0)
             return;
@@ -116,7 +116,7 @@ namespace BitCoin
         if(mIsFull || mDataSize == 0)
             return;
 
-        ArcMist::Buffer data;
+        NextCash::Buffer data;
         pOutpoint.write(&data);
 
         unsigned int offset;
@@ -129,7 +129,7 @@ namespace BitCoin
         mIsEmpty = false;
     }
 
-    void BloomFilter::addData(ArcMist::Buffer &pData)
+    void BloomFilter::addData(NextCash::Buffer &pData)
     {
         if(mIsFull || mDataSize == 0)
             return;
@@ -144,7 +144,7 @@ namespace BitCoin
         mIsEmpty = false;
     }
 
-    void BloomFilter::addScript(ArcMist::Buffer &pScript)
+    void BloomFilter::addScript(NextCash::Buffer &pScript)
     {
         if(mIsFull || mDataSize == 0)
             return;
@@ -152,7 +152,7 @@ namespace BitCoin
         pScript.setReadOffset(0);
 
         unsigned int offset;
-        ArcMist::Buffer data;
+        NextCash::Buffer data;
         uint8_t opCode;
         unsigned int byteCount, i;
         while(pScript.remaining())
@@ -185,7 +185,7 @@ namespace BitCoin
         }
     }
 
-    bool BloomFilter::contains(const ArcMist::Hash &pHash) const
+    bool BloomFilter::contains(const NextCash::Hash &pHash) const
     {
         if(mIsFull)
             return true;
@@ -210,7 +210,7 @@ namespace BitCoin
         if(mIsEmpty || mDataSize == 0)
             return false;
 
-        ArcMist::Buffer data;
+        NextCash::Buffer data;
         pOutpoint.write(&data);
 
         unsigned int offset;
@@ -245,7 +245,7 @@ namespace BitCoin
         return false;
     }
 
-    bool BloomFilter::containsScript(ArcMist::Buffer &pScript) const
+    bool BloomFilter::containsScript(NextCash::Buffer &pScript) const
     {
         if(mIsFull)
             return true;
@@ -254,7 +254,7 @@ namespace BitCoin
 
         pScript.setReadOffset(0);
 
-        ArcMist::Buffer data;
+        NextCash::Buffer data;
         uint8_t opCode;
         unsigned int byteCount, i, offset;
         bool matches;
@@ -300,7 +300,7 @@ namespace BitCoin
         return false;
     }
 
-    void BloomFilter::write(ArcMist::OutputStream *pStream) const
+    void BloomFilter::write(NextCash::OutputStream *pStream) const
     {
         writeCompactInteger(pStream, mDataSize);
         pStream->write(mData, mDataSize);
@@ -309,7 +309,7 @@ namespace BitCoin
         pStream->writeByte(mFlags);
     }
 
-    bool BloomFilter::read(ArcMist::InputStream *pStream)
+    bool BloomFilter::read(NextCash::InputStream *pStream)
     {
         if(mData != NULL)
         {
@@ -398,33 +398,33 @@ namespace BitCoin
     {
         bool result = true;
 
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOOM_LOG_NAME, "------------- Starting Bloom Filter Tests -------------");
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_BLOOM_LOG_NAME, "------------- Starting Bloom Filter Tests -------------");
 
         /***********************************************************************************************
          * Bloom Random Hash
          ***********************************************************************************************/
         BloomFilter filter(100);
-        ArcMist::Hash randomHash(32);
+        NextCash::Hash randomHash(32);
 
         randomHash.randomize();
 
         filter.add(randomHash);
 
         if(filter.contains(randomHash))
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOOM_LOG_NAME, "Passed Bloom Filter Random Hash Contained");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_BLOOM_LOG_NAME, "Passed Bloom Filter Random Hash Contained");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOOM_LOG_NAME, "Failed Bloom Filter Random Hash Contained");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_BLOOM_LOG_NAME, "Failed Bloom Filter Random Hash Contained");
             result = false;
         }
 
         randomHash.randomize();
 
         if(!filter.contains(randomHash))
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BLOOM_LOG_NAME, "Passed Bloom Filter Random Hash Not Contained");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_BLOOM_LOG_NAME, "Passed Bloom Filter Random Hash Not Contained");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BLOOM_LOG_NAME, "Failed Bloom Filter Random Hash Not Contained");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_BLOOM_LOG_NAME, "Failed Bloom Filter Random Hash Not Contained");
             result = false;
         }
 
@@ -432,10 +432,10 @@ namespace BitCoin
          * Bloom Random Hash Set
          ***********************************************************************************************/
         const unsigned int SET_CHECK_SIZE = 1000;
-        ArcMist::Hash hashes[SET_CHECK_SIZE];
+        NextCash::Hash hashes[SET_CHECK_SIZE];
         BloomFilter setFilter(SET_CHECK_SIZE, 0.01);
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOOM_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOOM_LOG_NAME,
           "Created bloom filter with %d bytes and %d functions", filter.size(), filter.functionCount());
 
         for(unsigned int i=0;i<SET_CHECK_SIZE;i++)
@@ -449,7 +449,7 @@ namespace BitCoin
         for(unsigned int i=0;i<SET_CHECK_SIZE;i++)
             if(!setFilter.contains(randomHash))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOOM_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOOM_LOG_NAME,
                   "Failed Bloom Filter Random Hash Set Contained : %d", SET_CHECK_SIZE);
                 result = false;
                 setCheckFailed = true;
@@ -457,7 +457,7 @@ namespace BitCoin
             }
 
         if(!setCheckFailed)
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOOM_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOOM_LOG_NAME,
               "Passed Bloom Filter Random Hash Set Contained : %d", SET_CHECK_SIZE);
 
         unsigned int falsePositiveCount = 0;
@@ -469,11 +469,11 @@ namespace BitCoin
         }
 
         if(falsePositiveCount <= 15)
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOOM_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOOM_LOG_NAME,
               "Passed Bloom Filter Random Hash Set False Positives : %d/%d", falsePositiveCount, SET_CHECK_SIZE);
         else
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOOM_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOOM_LOG_NAME,
               "Failed Bloom Filter Random Hash Set False Positives : %d/%d", falsePositiveCount, SET_CHECK_SIZE);
             result = false;
         }

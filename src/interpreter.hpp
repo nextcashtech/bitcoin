@@ -1,16 +1,16 @@
 /**************************************************************************
- * Copyright 2017-2018 ArcMist, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                       *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_INTERPRETER_HPP
 #define BITCOIN_INTERPRETER_HPP
 
-#include "arcmist/base/hash.hpp"
-#include "arcmist/base/log.hpp"
-#include "arcmist/io/buffer.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/io/buffer.hpp"
 #include "base.hpp"
 #include "key.hpp"
 #include "forks.hpp"
@@ -218,7 +218,7 @@ namespace BitCoin
         }
 
         // Process script
-        bool process(ArcMist::Buffer &pScript, int32_t pBlockVersion, const Forks &pForks);
+        bool process(NextCash::Buffer &pScript, int32_t pBlockVersion, const Forks &pForks);
 
         // No issues processing script
         bool isValid()
@@ -228,7 +228,7 @@ namespace BitCoin
 
             if(mIfStack.size() > 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                   "Not all if statements ended : %d", mIfStack.size());
                 return false;;
             }
@@ -267,7 +267,7 @@ namespace BitCoin
             mOutputAmount  = 0;
             mHash.clear();
 
-            std::list<ArcMist::Buffer *>::iterator iter;
+            std::list<NextCash::Buffer *>::iterator iter;
             for(iter=mStack.begin();iter!=mStack.end();++iter)
                 delete *iter;
             mStack.clear();
@@ -323,30 +323,30 @@ namespace BitCoin
              */
         };
 
-        static bool bufferIsZero(ArcMist::Buffer *pBuffer);
+        static bool bufferIsZero(NextCash::Buffer *pBuffer);
 
-        static bool isPushOnly(ArcMist::Buffer &pScript);
-        static ScriptType parseOutputScript(ArcMist::Buffer &pScript, ArcMist::HashList &pHashes);
-        static bool readFirstDataPush(ArcMist::Buffer &pScript, ArcMist::Buffer &pData);
+        static bool isPushOnly(NextCash::Buffer &pScript);
+        static ScriptType parseOutputScript(NextCash::Buffer &pScript, NextCash::HashList &pHashes);
+        static bool readFirstDataPush(NextCash::Buffer &pScript, NextCash::Buffer &pData);
 
         static bool isSmallInteger(uint8_t pOpCode);
         static unsigned int smallIntegerValue(uint8_t pOpCode);
-        static bool writeSmallInteger(unsigned int pValue, ArcMist::Buffer &pScript);
+        static bool writeSmallInteger(unsigned int pValue, NextCash::Buffer &pScript);
 
-        static void removeCodeSeparators(ArcMist::Buffer &pInputScript, ArcMist::Buffer &pOutputScript);
+        static void removeCodeSeparators(NextCash::Buffer &pInputScript, NextCash::Buffer &pOutputScript);
 
-        static void printScript(ArcMist::Buffer &pScript, ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG);
+        static void printScript(NextCash::Buffer &pScript, NextCash::Log::Level pLevel = NextCash::Log::DEBUG);
 
         // Write to a script to push the following size of data to the stack
-        static void writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput);
-        static unsigned int pullDataSize(uint8_t pOpCode, ArcMist::Buffer &pScript);
-        static bool pullData(uint8_t pOpCode, ArcMist::Buffer &pScript, ArcMist::Buffer &pData);
+        static void writePushDataSize(unsigned int pSize, NextCash::OutputStream *pOutput);
+        static unsigned int pullDataSize(uint8_t pOpCode, NextCash::Buffer &pScript);
+        static bool pullData(uint8_t pOpCode, NextCash::Buffer &pScript, NextCash::Buffer &pData);
 
-        static bool arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue);
-        static void arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue);
+        static bool arithmeticRead(NextCash::Buffer *pBuffer, int64_t &pValue);
+        static void arithmeticWrite(NextCash::Buffer *pBuffer, int64_t pValue);
 
         static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset, int64_t pOutputAmount,
-          const Key &pPublicKey, const Signature &pSignature, ArcMist::Buffer &pCurrentOutputScript,
+          const Key &pPublicKey, const Signature &pSignature, NextCash::Buffer &pCurrentOutputScript,
           unsigned int pSignatureStartOffset, const Forks &pForks);
 
         static bool test();
@@ -356,13 +356,13 @@ namespace BitCoin
         bool mValid;
         bool mVerified;
         bool mStandard;
-        ArcMist::Hash mHash;
+        NextCash::Hash mHash;
         Transaction *mTransaction;
         unsigned int mInputOffset;
         uint32_t mInputSequence;
         int64_t mOutputAmount;
 
-        std::list<ArcMist::Buffer *> mStack, mAltStack;
+        std::list<NextCash::Buffer *> mStack, mAltStack;
         std::list<bool> mIfStack, mAltIfStack;
 
         bool ifStackTrue()
@@ -382,7 +382,7 @@ namespace BitCoin
 
         unsigned int popInteger()
         {
-            ArcMist::Buffer *buffer = top();
+            NextCash::Buffer *buffer = top();
             unsigned int result = 0;
             buffer->setReadOffset(0);
             if(buffer->length() == 1)
@@ -396,27 +396,27 @@ namespace BitCoin
         }
 
         // Stack manipulation
-        ArcMist::Buffer *push()
+        NextCash::Buffer *push()
         {
-            mStack.push_back(new ArcMist::Buffer());
-            mStack.back()->setInputEndian(ArcMist::Endian::LITTLE); // Needed for arithmetic op codes to work
+            mStack.push_back(new NextCash::Buffer());
+            mStack.back()->setInputEndian(NextCash::Endian::LITTLE); // Needed for arithmetic op codes to work
             return mStack.back();
         }
-        void push(ArcMist::Buffer *pValue) { mStack.push_back(pValue); }
+        void push(NextCash::Buffer *pValue) { mStack.push_back(pValue); }
         void pop(bool pDelete = true) { if(pDelete) delete mStack.back(); mStack.pop_back(); }
-        ArcMist::Buffer *top() { return mStack.back(); }
+        NextCash::Buffer *top() { return mStack.back(); }
         bool stackIsEmpty() { return mStack.size() == 0; }
 
         // Alt Stack manipulation
-        ArcMist::Buffer *pushAlt()
+        NextCash::Buffer *pushAlt()
         {
-            mAltStack.push_back(new ArcMist::Buffer());
-            mStack.back()->setInputEndian(ArcMist::Endian::LITTLE); // Needed for arithmetic op codes to work
+            mAltStack.push_back(new NextCash::Buffer());
+            mStack.back()->setInputEndian(NextCash::Endian::LITTLE); // Needed for arithmetic op codes to work
             return mAltStack.back();
         }
-        void pushAlt(ArcMist::Buffer *pValue) { mAltStack.push_back(pValue); }
+        void pushAlt(NextCash::Buffer *pValue) { mAltStack.push_back(pValue); }
         void popAlt(bool pDelete = true) { if(pDelete) delete mAltStack.back(); mAltStack.pop_back(); }
-        ArcMist::Buffer *topAlt() { return mAltStack.back(); }
+        NextCash::Buffer *topAlt() { return mAltStack.back(); }
         bool stackAltIsEmpty() { return mAltStack.size() == 0; }
 
     };

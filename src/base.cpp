@@ -1,16 +1,16 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #include "base.hpp"
 
-#include "arcmist/base/endian.hpp"
-#include "arcmist/base/log.hpp"
-#include "arcmist/io/buffer.hpp"
-#include "arcmist/crypto/digest.hpp"
+#include "nextcash/base/endian.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/io/buffer.hpp"
+#include "nextcash/crypto/digest.hpp"
 
 #include <cstring>
 
@@ -91,26 +91,26 @@ namespace BitCoin
         return 0;
     }
 
-    void IPAddress::write(ArcMist::OutputStream *pStream) const
+    void IPAddress::write(NextCash::OutputStream *pStream) const
     {
         // IP
         pStream->write(ip, 16);
 
         // Port
-        ArcMist::Endian::Type previousType = pStream->outputEndian();
-        pStream->setOutputEndian(ArcMist::Endian::BIG);
+        NextCash::Endian::Type previousType = pStream->outputEndian();
+        pStream->setOutputEndian(NextCash::Endian::BIG);
         pStream->writeUnsignedShort(port);
         pStream->setOutputEndian(previousType);
     }
 
-    bool IPAddress::read(ArcMist::InputStream *pStream)
+    bool IPAddress::read(NextCash::InputStream *pStream)
     {
         // IP
         pStream->read(ip, 16);
 
         // Port
-        ArcMist::Endian::Type previousType = pStream->inputEndian();
-        pStream->setInputEndian(ArcMist::Endian::BIG);
+        NextCash::Endian::Type previousType = pStream->inputEndian();
+        pStream->setInputEndian(NextCash::Endian::BIG);
         port = pStream->readUnsignedShort();
         pStream->setInputEndian(previousType);
 
@@ -130,7 +130,7 @@ namespace BitCoin
             // value <<= 8;
         // }
 
-        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+        // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
           // "Initial : length %02x value %08x", length, value);
 
         if(pFactor < 1.0) // Reduce
@@ -138,11 +138,11 @@ namespace BitCoin
             // Decrease length to handle a reduction in value
             --length;
             value <<= 8;
-            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
               // "After shift up : length %02x value %08x", length, value);
 
             value *= pFactor;
-            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
               // "After factor : length %02x value %08x", length, value);
 
             if(value & 0xff000000)
@@ -150,14 +150,14 @@ namespace BitCoin
                 // Increase length
                 ++length;
                 value >>= 8;
-                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
                   // "After shift down : length %02x value %08x", length, value);
             }
         }
         else // Increase
         {
             value *= pFactor;
-            // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
               // "After factor : length %02x value %08x", length, value);
 
             if(value & 0xff000000)
@@ -165,7 +165,7 @@ namespace BitCoin
                 // Increase length
                 ++length;
                 value >>= 8;
-                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BASE_LOG_NAME,
                   // "After shift down : length %02x value %08x", length, value);
             }
         }
@@ -216,7 +216,7 @@ namespace BitCoin
             return 9;
     }
 
-    unsigned int writeCompactInteger(ArcMist::OutputStream *pStream, uint64_t pValue)
+    unsigned int writeCompactInteger(NextCash::OutputStream *pStream, uint64_t pValue)
     {
         unsigned int result = 0;
 
@@ -241,7 +241,7 @@ namespace BitCoin
         return result;
     }
 
-    uint64_t readCompactInteger(ArcMist::InputStream *pStream)
+    uint64_t readCompactInteger(NextCash::InputStream *pStream)
     {
         if(pStream->remaining() < 1)
             return 0xffffffff;
@@ -289,13 +289,13 @@ namespace BitCoin
 
             if(previousTarget != correctNewTarget)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Multiply High Bit");
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Multiply High Bit");
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
                 success = false;
             }
             else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Multiply High Bit");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Multiply High Bit");
 
             /***********************************************************************************************
              * Target Bits Multiply No High Bit - TestNet Block 4,032 Difficulty Adjustment
@@ -307,13 +307,13 @@ namespace BitCoin
 
             if(previousTarget != correctNewTarget)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Multiply No High Bit");
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Multiply No High Bit");
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
                 success = false;
             }
             else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Multiply No High Bit");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Multiply No High Bit");
 
             /***********************************************************************************************
              * Target Bits Multiply Over Max
@@ -325,13 +325,13 @@ namespace BitCoin
 
             if(previousTarget != correctNewTarget)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Multiply Over Max");
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Multiply Over Max");
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
                 success = false;
             }
             else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Multiply Over Max");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Multiply Over Max");
 
             /***********************************************************************************************
              * Target Bits Multiply by 4
@@ -343,13 +343,13 @@ namespace BitCoin
 
             if(previousTarget != correctNewTarget)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Multiply by 4");
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Multiply by 4");
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
                 success = false;
             }
             else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Multiply by 4");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Multiply by 4");
 
             /***********************************************************************************************
              * Target Bits Block 415296 Adjustment
@@ -364,13 +364,13 @@ namespace BitCoin
 
             if(previousTarget != correctNewTarget)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Block 415296 Adjustment");
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Failed Target Bits Block 415296 Adjustment");
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Result  : %08x", previousTarget);
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BASE_LOG_NAME, "Correct : %08x", correctNewTarget);
                 success = false;
             }
             else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Block 415296 Adjustment");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_BASE_LOG_NAME, "Passed Target Bits Block 415296 Adjustment");
 
             return success;
         }

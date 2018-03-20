@@ -1,11 +1,11 @@
 
 COMPILER=g++
-COMPILE_FLAGS=-I./include -I../ArcMist/include -I../secp256k1/include -std=c++11 -Wall
+COMPILE_FLAGS=-I./include -I../Base/include -I../secp256k1/include -std=c++11 -Wall
 # To disable Bitcoin Cash add this to the end if COMPILE_FLAGS : -DDISABLE_CASH
 # To Turn profiler on add this to the end of the previous line -DPROFILER_ON
-LIBRARY_PATHS=-L../ArcMist -L../secp256k1/.libs
-LIBRARIES=-larcmist -lsecp256k1
-DEBUG_LIBRARIES=-larcmist.debug -lsecp256k1
+LIBRARY_PATHS=-L../Base -L../secp256k1/.libs
+LIBRARIES=-lnextcash -lsecp256k1
+DEBUG_LIBRARIES=-lnextcash.debug -lsecp256k1
 # secp256k1 lib Downloaded source from github, ran ./configure, found in .libs directory
 LINK_FLAGS=-pthread
 HEADER_FILES=$(wildcard src/*.hpp)

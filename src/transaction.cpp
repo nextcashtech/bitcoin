@@ -1,20 +1,20 @@
 /**************************************************************************
- * Copyright 2017-2018 ArcMist, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                       *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #include "transaction.hpp"
 
 #ifdef PROFILER_ON
-#include "arcmist/dev/profiler.hpp"
+#include "nextcash/dev/profiler.hpp"
 #endif
 
-#include "arcmist/base/endian.hpp"
-#include "arcmist/base/math.hpp"
-#include "arcmist/base/log.hpp"
-#include "arcmist/crypto/digest.hpp"
+#include "nextcash/base/endian.hpp"
+#include "nextcash/base/math.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/crypto/digest.hpp"
 #include "interpreter.hpp"
 #include "block.hpp"
 
@@ -78,50 +78,50 @@ namespace BitCoin
         mOutputHash.clear();
     }
 
-    void Transaction::print(ArcMist::Log::Level pLevel)
+    void Transaction::print(NextCash::Log::Level pLevel)
     {
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Hash      : %s", hash.hex().text());
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Version   : %d", version);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Hash      : %s", hash.hex().text());
+        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Version   : %d", version);
         if(lockTime > LOCKTIME_THRESHOLD)
         {
-            ArcMist::String lockTimeText;
+            NextCash::String lockTimeText;
             lockTimeText.writeFormattedTime(lockTime);
-            ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME,
               "Lock Time : time stamp %d - %s", lockTime, lockTimeText.text());
         }
         else
-            ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME,
               "Lock Time : block height %d", lockTime);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Fee       : %f", bitcoins(mFee));
+        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Fee       : %f", bitcoins(mFee));
 
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "%d Inputs", inputs.size());
+        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "%d Inputs", inputs.size());
         unsigned int index = 1;
         for(std::vector<Input *>::iterator input=inputs.begin();input!=inputs.end();++input)
         {
-            ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Input %d", index++);
+            NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Input %d", index++);
             (*input)->print(pLevel);
         }
 
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "%d Outputs", outputs.size());
+        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "%d Outputs", outputs.size());
         index = 1;
         for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
         {
-            ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Output %d", index++);
+            NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Output %d", index++);
             (*output)->print(pLevel);
         }
     }
 
-    void Input::print(ArcMist::Log::Level pLevel)
+    void Input::print(NextCash::Log::Level pLevel)
     {
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Outpoint Trans : %s", outpoint.transactionID.hex().text());
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Outpoint Index : %d", outpoint.index);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Sequence       : 0x%08x", sequence);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Outpoint Trans : %s", outpoint.transactionID.hex().text());
+        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Outpoint Index : %d", outpoint.index);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Sequence       : 0x%08x", sequence);
         script.setReadOffset(0);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Script         : (%d bytes)",script.length());
+        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Script         : (%d bytes)",script.length());
         ScriptInterpreter::printScript(script, pLevel);
     }
 
-    bool Transaction::addInput(const ArcMist::Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence)
+    bool Transaction::addInput(const NextCash::Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence)
     {
         // Add input
         Input *newInput = new Input();
@@ -140,7 +140,7 @@ namespace BitCoin
         Input *newInput = new Input();
         inputs.push_back(newInput);
 
-        ArcMist::Buffer blockHeight;
+        NextCash::Buffer blockHeight;
         ScriptInterpreter::arithmeticWrite(&blockHeight, pBlockHeight); // Write block height into coinbase input
         ScriptInterpreter::writePushDataSize(blockHeight.length(), &newInput->script);
         blockHeight.readStream(&newInput->script, blockHeight.length());
@@ -151,29 +151,29 @@ namespace BitCoin
     bool Transaction::signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
       const Key &pPublicKey, Signature::HashType pHashType)
     {
-        ArcMist::HashList outputHashes;
+        NextCash::HashList outputHashes;
         if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHashes) != ScriptInterpreter::P2PKH)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2PKH");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2PKH");
             return false;
         }
 
         if(outputHashes.size() != 1 || pPublicKey.hash() != outputHashes.front())
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public key hash doesn't match");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public key hash doesn't match");
             return false;
         }
 
         if(inputs.size() <= pInputOffset)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Invalid input offset");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Invalid input offset");
             return false;
         }
         Input *thisInput = inputs[pInputOffset];
 
         // Create input script
         // Get signature hash
-        ArcMist::Hash signatureHash;
+        NextCash::Hash signatureHash;
         pOutput.script.setReadOffset(0);
         if(!getSignatureHash(signatureHash, pInputOffset, pOutput.script, pOutput.amount, pHashType))
             return false;
@@ -182,7 +182,7 @@ namespace BitCoin
         Signature signature;
         if(!pPrivateKey.sign(signatureHash, signature))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to sign script hash");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to sign script hash");
             return false;
         }
         signature.setHashType(pHashType);
@@ -197,7 +197,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::addP2PKHOutput(const ArcMist::Hash &pPublicKeyHash, uint64_t pAmount)
+    bool Transaction::addP2PKHOutput(const NextCash::Hash &pPublicKeyHash, uint64_t pAmount)
     {
         Output *newOutput = new Output();
         newOutput->amount = pAmount;
@@ -226,58 +226,58 @@ namespace BitCoin
     bool Transaction::signP2PKInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
       const Key &pPublicKey, Signature::HashType pHashType)
     {
-        ArcMist::HashList outputHashes;
+        NextCash::HashList outputHashes;
         pOutput.script.setReadOffset(0);
         if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHashes) != ScriptInterpreter::P2PK)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2PK");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2PK");
             return false;
         }
 
         if(outputHashes.size() != 1)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public keys don't match");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public keys don't match");
             return false;
         }
 
         if(pPublicKey.hash() != outputHashes.front())
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public key doesn't match");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script public key doesn't match");
             return false;
         }
 
         // Check Public Key in output
-        ArcMist::Buffer publicKeyData;
+        NextCash::Buffer publicKeyData;
         pOutput.script.setReadOffset(0);
         if(ScriptInterpreter::readFirstDataPush(pOutput.script, publicKeyData) == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Failed to read public key");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Failed to read public key");
             return false;
         }
 
         Key checkPublicKey;
         if(!checkPublicKey.readPublic(&publicKeyData))
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Failed to parse public key");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Failed to parse public key");
             return false;
         }
 
         if(checkPublicKey != pPublicKey)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Non matching public key");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Non matching public key");
             return false;
         }
 
         if(inputs.size() <= pInputOffset)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Invalid input offset");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Invalid input offset");
             return false;
         }
         Input *thisInput = inputs[pInputOffset];
 
         // Create input script
         // Get signature hash
-        ArcMist::Hash signatureHash;
+        NextCash::Hash signatureHash;
         pOutput.script.setReadOffset(0);
         if(!getSignatureHash(signatureHash, pInputOffset, pOutput.script, pOutput.amount, pHashType))
             return false;
@@ -286,7 +286,7 @@ namespace BitCoin
         Signature signature;
         if(!pPrivateKey.sign(signatureHash, signature))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to sign script hash");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to sign script hash");
             return false;
         }
         signature.setHashType(pHashType);
@@ -313,31 +313,31 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::authorizeP2SHInput(Output &pOutput, unsigned int pInputOffset, ArcMist::Buffer &pRedeemScript)
+    bool Transaction::authorizeP2SHInput(Output &pOutput, unsigned int pInputOffset, NextCash::Buffer &pRedeemScript)
     {
-        ArcMist::HashList outputHashes;
+        NextCash::HashList outputHashes;
         pOutput.script.setReadOffset(0);
         if(ScriptInterpreter::parseOutputScript(pOutput.script, outputHashes) != ScriptInterpreter::P2SH)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2SH");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Output script is not P2SH");
             return false;
         }
 
         // Check redeem script hash
-        ArcMist::Digest scriptDigest(ArcMist::Digest::SHA256_RIPEMD160);
+        NextCash::Digest scriptDigest(NextCash::Digest::SHA256_RIPEMD160);
         pRedeemScript.setReadOffset(0);
         scriptDigest.writeStream(&pRedeemScript, pRedeemScript.length());
-        ArcMist::Hash scriptHash;
+        NextCash::Hash scriptHash;
         scriptDigest.getResult(&scriptHash);
         if(outputHashes.size() != 1 || scriptHash != outputHashes.front())
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Non matching script hash");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Non matching script hash");
             return false;
         }
 
         if(inputs.size() <= pInputOffset)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Invalid input offset");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Invalid input offset");
             return false;
         }
         Input *thisInput = inputs[pInputOffset];
@@ -351,7 +351,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::addP2SHOutput(const ArcMist::Hash &pScriptHash, uint64_t pAmount)
+    bool Transaction::addP2SHOutput(const NextCash::Hash &pScriptHash, uint64_t pAmount)
     {
         Output *newOutput = new Output();
         newOutput->amount = pAmount;
@@ -381,7 +381,7 @@ namespace BitCoin
 
         if(pInputOffset >= inputs.size())
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
               "MultiSig input offset too high");
             return false;
         }
@@ -396,7 +396,7 @@ namespace BitCoin
         opCode = pOutput.script.readByte();
         if(!ScriptInterpreter::isSmallInteger(opCode))
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
               "MultiSig doesn't start with a small integer");
             return false;
         }
@@ -404,13 +404,13 @@ namespace BitCoin
         requiredSignatures = ScriptInterpreter::smallIntegerValue(opCode);
         if(requiredSignatures == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
               "MultiSig has zero required signatures");
             return false;
         }
 
         // Parse public keys
-        ArcMist::Buffer data;
+        NextCash::Buffer data;
         Key *publicKey;
         std::vector<Key *> publicKeys;
         bool success = true;
@@ -425,7 +425,7 @@ namespace BitCoin
                 // At least one public key is provided and the count matches the count specified
                 if(scriptKeyCount == 0 || scriptKeyCount != publicKeys.size())
                 {
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                       "MultiSig has invalid public key count");
                     success = false;
                     break;
@@ -434,7 +434,7 @@ namespace BitCoin
                 // Script must end with OP_CHECKMULTISIG
                 if(pOutput.script.readByte() != OP_CHECKMULTISIG && pOutput.script.remaining() == 0)
                 {
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                       "MultiSig doesn't end with OP_CHECKMULTISIG");
                     success = false;
                 }
@@ -452,7 +452,7 @@ namespace BitCoin
                     else
                     {
                         delete publicKey;
-                        ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                           "MultiSig failed to read public key");
                         success = false;
                         break;
@@ -460,7 +460,7 @@ namespace BitCoin
                 }
                 else
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                       "MultiSig public key with invalid length : %d", data.length());
                     success = false;
                     break;
@@ -486,7 +486,7 @@ namespace BitCoin
         opCode = input->script.readByte();
         if(!ScriptInterpreter::isSmallInteger(opCode))
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
               "MultiSig doesn't start with a small integer");
             success = false;
         }
@@ -502,7 +502,7 @@ namespace BitCoin
                 {
                     delete signature;
                     signature = NULL;
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                       "MultiSig failed to read signature");
                     success = false;
                     break;
@@ -512,7 +512,7 @@ namespace BitCoin
             }
             else
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "MultiSig public key with invalid length : %d", data.length());
                 success = false;
                 break;
@@ -529,7 +529,7 @@ namespace BitCoin
             bool signatureVerified;
             bool publicKeyFound = false;
             int signatureOffset = 0;
-            ArcMist::Hash signatureHash;
+            NextCash::Hash signatureHash;
 
             while(publicKeyIter!=publicKeys.end())
             {
@@ -542,7 +542,7 @@ namespace BitCoin
                     {
                         if(**publicKeyIter == pPublicKey)
                         {
-                            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Public key already signed");
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Public key already signed");
                             publicKeyFound = true;
                         }
 
@@ -572,7 +572,7 @@ namespace BitCoin
                         // Sign Hash
                         if(!pPrivateKey.sign(signatureHash, *signature))
                         {
-                            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to sign signature hash");
+                            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to sign signature hash");
                             success = false;
                             signatureVerified = true; // To avoid signature verfied message below
                             break;
@@ -595,10 +595,10 @@ namespace BitCoin
                 if(!signatureVerified)
                 {
                     if(signatureIter != signatures.end())
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                           "MultiSig signature %d didn't verify : %s", signatureOffset, (*signatureIter)->hex().text());
                     else
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                           "MultiSig public key not found in output script : %s", pPublicKey.hash().hex().text());
                     success = false;
                     break;
@@ -660,7 +660,7 @@ namespace BitCoin
     }
 
     Transaction *Transaction::createCoinbaseTransaction(int pBlockHeight, int64_t pFees,
-      const ArcMist::Hash &pPublicKeyHash)
+      const NextCash::Hash &pPublicKeyHash)
     {
         Transaction *result = new Transaction();
         result->addCoinbaseInput(pBlockHeight);
@@ -675,13 +675,13 @@ namespace BitCoin
     {
         if(inputs.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
             return false;
         }
 
         if(outputs.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
             return false;
         }
 
@@ -697,7 +697,7 @@ namespace BitCoin
 
                 if(reference == NULL)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction not found : trans %s index %d", index + 1,
                       (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
                     return false;
@@ -735,7 +735,7 @@ namespace BitCoin
                 {
                     if(outpointTransaction->outputs.size() <= (*input)->outpoint.index)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d outpoint index too high : index %d trans %s", index,
                           (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
                         return mStatus;
@@ -753,7 +753,7 @@ namespace BitCoin
                         (*input)->outpoint.output = NULL;
                     }
                     (*input)->outpoint.signatureStatus = 0;
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint not found : index %d trans %s", index,
                       (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
                     outpointsFound = false;
@@ -768,10 +768,10 @@ namespace BitCoin
                   (*input)->outpoint.index, *(*input)->outpoint.output))
                 {
                     //TODO This should be a system failure, not an invalid transaction
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction failed to read : index %d trans %s", index,
                       (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
-                    reference->print(ArcMist::Log::WARNING);
+                    reference->print(NextCash::Log::WARNING);
                     if((*input)->outpoint.output != NULL)
                     {
                         delete (*input)->outpoint.output;
@@ -792,7 +792,7 @@ namespace BitCoin
     }
 
     bool Transaction::check(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
-      ArcMist::HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks)
+      NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks)
     {
         pOutpointsNeeded.clear();
         mStatus = IS_VALID | IS_STANDARD | WAS_CHECKED;
@@ -800,7 +800,7 @@ namespace BitCoin
 
         if(size() > 100000)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
               "Transaction over standard size of 100000 : trans %s", hash.hex().text());
             if(mStatus & IS_STANDARD)
                 mStatus ^= IS_STANDARD;
@@ -808,7 +808,7 @@ namespace BitCoin
 
         if(inputs.size() == 0)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
               "Zero inputs : trans %s", hash.hex().text());
             mStatus ^= IS_VALID;
             return true;
@@ -816,7 +816,7 @@ namespace BitCoin
 
         if(outputs.size() == 0)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
               "Zero outputs : trans %s", hash.hex().text());
             mStatus ^= IS_VALID;
             return true;
@@ -828,7 +828,7 @@ namespace BitCoin
         {
             if((*input)->outpoint.index == 0xffffffff)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d has no outpoint transaction : trans %s", index, hash.hex().text());
                 mStatus ^= IS_VALID;
                 return true; // Coinbase transactions not allowed in mempool
@@ -836,7 +836,7 @@ namespace BitCoin
 
             if((*input)->script.length() > 1650)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d script over standard size of 1650 : trans %s", index, hash.hex().text());
                 if(mStatus & IS_STANDARD)
                     mStatus ^= IS_STANDARD;
@@ -846,7 +846,7 @@ namespace BitCoin
             (*input)->script.setReadOffset(0);
             if(!ScriptInterpreter::isPushOnly((*input)->script))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d script is not push only : trans %s", index, hash.hex().text());
                 if(mStatus & IS_STANDARD)
                     mStatus ^= IS_STANDARD;
@@ -857,15 +857,15 @@ namespace BitCoin
         // Check Outputs
         index = 0;
         ScriptInterpreter::ScriptType scriptType;
-        ArcMist::HashList hashes;
+        NextCash::HashList hashes;
         for(std::vector<Output *>::iterator output=outputs.begin();output!=outputs.end();++output)
         {
             if((*output)->amount < 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d amount is less than zero (%d) : trans %s", index, (*output)->amount, hash.hex().text());
-                (*output)->print(ArcMist::Log::VERBOSE);
-                print(ArcMist::Log::VERBOSE);
+                (*output)->print(NextCash::Log::VERBOSE);
+                print(NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -874,25 +874,25 @@ namespace BitCoin
             scriptType = ScriptInterpreter::parseOutputScript((*output)->script, hashes);
             if(scriptType == ScriptInterpreter::NON_STANDARD)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d is non standard : trans %s", index, hash.hex().text());
-                print(ArcMist::Log::VERBOSE);
+                print(NextCash::Log::VERBOSE);
                 if(mStatus & IS_STANDARD)
                     mStatus ^= IS_STANDARD;
             }
             //TODO Find out why NULL DATA transactions are allowed and what to do with them
             // else if(scriptType == ScriptInterpreter::NULL_DATA)
             // {
-                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   // "Output %d is null data", index);
-                // print(ArcMist::Log::VERBOSE);
+                // print(NextCash::Log::VERBOSE);
                 // isStandard = false;
             // }
             else if(scriptType == ScriptInterpreter::INVALID)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d is invalid : trans %s", index, hash.hex().text());
-                print(ArcMist::Log::VERBOSE);
+                print(NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -936,7 +936,7 @@ namespace BitCoin
                     {
                         if(outpointTransaction->outputs.size() <= (*input)->outpoint.index)
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                               "Input %d outpoint index too high : index %d trans %s", index,
                               (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
                             mStatus ^= IS_VALID;
@@ -949,7 +949,7 @@ namespace BitCoin
                     }
                     else
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d outpoint not found : index %d trans %s", index,
                           (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
                         pOutpointsNeeded.push_back((*input)->outpoint.transactionID);
@@ -966,10 +966,10 @@ namespace BitCoin
                         delete (*input)->outpoint.output;
                         (*input)->outpoint.output = NULL;
 
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d outpoint transaction failed to read : index %d trans %s", index,
                           (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
-                        reference->print(ArcMist::Log::VERBOSE);
+                        reference->print(NextCash::Log::VERBOSE);
                         return false;
                     }
                 }
@@ -984,9 +984,9 @@ namespace BitCoin
             (*input)->script.setReadOffset(0);
             if(!interpreter.process((*input)->script, pBlockVersion, pForks))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d signature script is invalid : trans %s", index, hash.hex().text());
-                (*input)->print(ArcMist::Log::VERBOSE);
+                (*input)->print(NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -996,30 +996,30 @@ namespace BitCoin
             if(!interpreter.process((*input)->outpoint.output->script, pBlockVersion, pForks) ||
               !interpreter.isValid())
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d outpoint script is not valid : trans %s", index, hash.hex().text());
-                (*input)->print(ArcMist::Log::VERBOSE);
+                (*input)->print(NextCash::Log::VERBOSE);
                 if(reference != NULL)
                 {
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
-                    reference->print(ArcMist::Log::VERBOSE);
+                    NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                    reference->print(NextCash::Log::VERBOSE);
                 }
-                (*input)->outpoint.output->print(ArcMist::Log::VERBOSE);
+                (*input)->outpoint.output->print(NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
             }
             else if(!interpreter.isVerified())
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d script did not verify : trans %s", index, hash.hex().text());
-                (*input)->print(ArcMist::Log::VERBOSE);
+                (*input)->print(NextCash::Log::VERBOSE);
                 interpreter.printStack("After fail verify");
                 if(reference != NULL)
                 {
-                    ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
-                    reference->print(ArcMist::Log::VERBOSE);
+                    NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                    reference->print(NextCash::Log::VERBOSE);
                 }
-                (*input)->outpoint.output->print(ArcMist::Log::VERBOSE);
+                (*input)->outpoint.output->print(NextCash::Log::VERBOSE);
                 sigsVerified = false;
             }
             else
@@ -1033,9 +1033,9 @@ namespace BitCoin
         {
             if(mFee < 0)
             {
-                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Outputs amounts are more than inputs amounts");
-                print(ArcMist::Log::VERBOSE);
+                print(NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -1054,26 +1054,26 @@ namespace BitCoin
       const Forks &pForks, std::vector<unsigned int> &pSpentAges)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Transaction Process");
-        ArcMist::Profiler verifyProfiler("Transaction Inputs", false);
+        NextCash::Profiler profiler("Transaction Process");
+        NextCash::Profiler verifyProfiler("Transaction Inputs", false);
 #endif
         mFee = 0;
 
         if(inputs.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
             return false;
         }
         else if(pCoinBase && inputs.size() != 1)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
               "Coinbase has more than one input : %d", inputs.size());
             return false;
         }
 
         if(outputs.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
             return false;
         }
 
@@ -1090,7 +1090,7 @@ namespace BitCoin
             {
                 if((*input)->outpoint.index != 0xffffffff)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Coinbase Input %d outpoint index is not 0xffffffff : %08x", index, (*input)->outpoint.index);
                     return false;
                 }
@@ -1100,10 +1100,10 @@ namespace BitCoin
                 {
                     // Read block height
                     (*input)->script.setReadOffset(0);
-                    ArcMist::Buffer blockHeightData;
+                    NextCash::Buffer blockHeightData;
                     if(!ScriptInterpreter::readFirstDataPush((*input)->script, blockHeightData))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Coinbase input doesn't start with data push");
                         return false;
                     }
@@ -1112,7 +1112,7 @@ namespace BitCoin
                     ScriptInterpreter::arithmeticRead(&blockHeightData, blockHeight);
                     if(blockHeight < 0 || (uint64_t)blockHeight != pBlockHeight)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Non matching coinbase block height : actual %d, coinbase %d",
                           pBlockHeight, blockHeight);
                         return false;
@@ -1121,14 +1121,14 @@ namespace BitCoin
             }
             else
             {
-                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
                   // "Processing input %d", index);
 
                 // Find unspent transaction for input
                 reference = pOutputs.findUnspent((*input)->outpoint.transactionID, (*input)->outpoint.index);
                 if(reference == NULL)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint not found : index %d trans %s", index,
                       (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
                     return false;
@@ -1138,7 +1138,7 @@ namespace BitCoin
 
                 if(outputReference == NULL)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint output index not found : index %d trans %s", index,
                       (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
                     return false;
@@ -1162,19 +1162,19 @@ namespace BitCoin
 
                     if(!found)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d outpoint transaction not found in current block : index %d trans %s", index,
                           (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
-                        reference->print(ArcMist::Log::WARNING);
+                        reference->print(NextCash::Log::WARNING);
                         return false;
                     }
                 }
                 else if(!BlockFile::readOutput(reference->blockHeight, outputReference, (*input)->outpoint.index, output))
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction failed to read : index %d trans %s", index,
                       (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
-                    reference->print(ArcMist::Log::WARNING);
+                    reference->print(NextCash::Log::WARNING);
                     return false;
                 }
 
@@ -1195,15 +1195,15 @@ namespace BitCoin
                         uint32_t spentBlockMedianTime = pBlockStats.getMedianPastTime(reference->blockHeight, 11);
                         if(currentBlockMedianTime < spentBlockMedianTime + lock)
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                               "Input %d sequence not valid. Required spent block time age %d, actual %d : index %d trans %s",
                               index, lock, currentBlockMedianTime - spentBlockMedianTime,
                               (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
-                            ArcMist::String timeText;
+                            NextCash::String timeText;
                             timeText.writeFormattedTime(spentBlockMedianTime + lock);
-                            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                               "Not valid until median block time %s", timeText.text());
-                            reference->print(ArcMist::Log::WARNING);
+                            reference->print(NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                             verifyProfiler.stop();
 #endif
@@ -1212,13 +1212,13 @@ namespace BitCoin
                     }
                     else if(pBlockHeight < reference->blockHeight + lock) // Number of blocks since outpoint
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d sequence not valid. Required block height age %d. actual %d : index %d trans %s",
                           index, lock, pBlockHeight - reference->blockHeight,
                           (*input)->outpoint.index, (*input)->outpoint.transactionID.hex().text());
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Not valid until block %d", reference->blockHeight + lock);
-                        reference->print(ArcMist::Log::WARNING);
+                        reference->print(NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                         verifyProfiler.stop();
 #endif
@@ -1230,7 +1230,7 @@ namespace BitCoin
                     sequenceFound = true;
 
                 pOutputs.spend(reference, (*input)->outpoint.index, pBlockHeight);
-                // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   // "Transaction %s Input %d spent transaction output %s index %d", hash.hex().text(), index + 1,
                   // (*input)->outpoint.transactionID.hex().text(), (*input)->outpoint.index);
 
@@ -1238,16 +1238,16 @@ namespace BitCoin
                 interpreter.initialize(this, index, (*input)->sequence, output.amount);
 
                 // Process signature script
-                //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "Input %d script : ", index);
+                //NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "Input %d script : ", index);
                 //(*input)->script.setReadOffset(0);
-                //ScriptInterpreter::printScript((*input)->script, ArcMist::Log::DEBUG);
+                //ScriptInterpreter::printScript((*input)->script, NextCash::Log::DEBUG);
                 (*input)->script.setReadOffset(0);
                 if(!interpreter.process((*input)->script, pBlockVersion, pForks))
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d signature script failed : ", index);
-                    (*input)->print(ArcMist::Log::WARNING);
-                    reference->print(ArcMist::Log::WARNING);
+                    (*input)->print(NextCash::Log::WARNING);
+                    reference->print(NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
@@ -1255,18 +1255,18 @@ namespace BitCoin
                 }
 
                 // Process unspent transaction output script
-                //ArcMist::Log::add(ArcMist::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "UTXO script : ");
+                //NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "UTXO script : ");
                 //output.script.setReadOffset(0);
-                //ScriptInterpreter::printScript(output.script, ArcMist::Log::DEBUG);
+                //ScriptInterpreter::printScript(output.script, NextCash::Log::DEBUG);
                 output.script.setReadOffset(0);
                 if(!interpreter.process(output.script, pBlockVersion, pForks))
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d unspent transaction output script failed : ", index);
-                    (*input)->print(ArcMist::Log::WARNING);
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
-                    reference->print(ArcMist::Log::WARNING);
-                    output.print(ArcMist::Log::WARNING);
+                    (*input)->print(NextCash::Log::WARNING);
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                    reference->print(NextCash::Log::WARNING);
+                    output.print(NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
@@ -1275,13 +1275,13 @@ namespace BitCoin
 
                 if(!interpreter.isValid())
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d script is not valid : ", index);
-                    (*input)->print(ArcMist::Log::WARNING);
+                    (*input)->print(NextCash::Log::WARNING);
                     interpreter.printStack("After fail validate");
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
-                    reference->print(ArcMist::Log::WARNING);
-                    output.print(ArcMist::Log::WARNING);
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                    reference->print(NextCash::Log::WARNING);
+                    output.print(NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
@@ -1290,13 +1290,13 @@ namespace BitCoin
 
                 if(!interpreter.isVerified())
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d script did not verify : ", index);
-                    (*input)->print(ArcMist::Log::WARNING);
+                    (*input)->print(NextCash::Log::WARNING);
                     interpreter.printStack("After fail verify");
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
-                    reference->print(ArcMist::Log::WARNING);
-                    output.print(ArcMist::Log::WARNING);
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
+                    reference->print(NextCash::Log::WARNING);
+                    output.print(NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
@@ -1321,13 +1321,13 @@ namespace BitCoin
                 {
                     if(lockTime > pBlockStats.getMedianPastTime(pBlockHeight, 11))
                     {
-                        ArcMist::String lockTimeText, blockTimeText;
+                        NextCash::String lockTimeText, blockTimeText;
                         lockTimeText.writeFormattedTime(lockTime);
                         blockTimeText.writeFormattedTime(pBlockStats.getMedianPastTime(pBlockHeight, 11));
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Lock time stamp is not valid. Lock time %s > block median time %s",
                           lockTimeText.text(), blockTimeText.text());
-                        print(ArcMist::Log::VERBOSE);
+                        print(NextCash::Log::VERBOSE);
                         return false;
                     }
                 }
@@ -1337,13 +1337,13 @@ namespace BitCoin
                     //   Block 357903 transaction 98 has a lock time about 3 minutes after the block time
                     if(lockTime > pBlockStats.time(pBlockHeight) + 600)
                     {
-                        ArcMist::String lockTimeText, blockTimeText;
+                        NextCash::String lockTimeText, blockTimeText;
                         lockTimeText.writeFormattedTime(lockTime);
                         blockTimeText.writeFormattedTime(pBlockStats.time(pBlockHeight));
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Lock time stamp is not valid. Lock time %s > block time %s",
                           lockTimeText.text(), blockTimeText.text());
-                        print(ArcMist::Log::VERBOSE);
+                        print(NextCash::Log::VERBOSE);
                         return false;
                     }
                 }
@@ -1353,17 +1353,17 @@ namespace BitCoin
                 // Lock time is a block height
                 if(lockTime > pBlockHeight)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Lock time block height is not valid. Lock height %d > block height %d",
                       lockTime, pBlockHeight);
-                    print(ArcMist::Log::VERBOSE);
+                    print(NextCash::Log::VERBOSE);
                     return false;
                 }
             }
         }
 
 #ifdef PROFILER_ON
-        ArcMist::Profiler outputsProfiler("Transaction Outputs");
+        NextCash::Profiler outputsProfiler("Transaction Outputs");
 #endif
         // Process Outputs
         index = 0;
@@ -1371,17 +1371,17 @@ namespace BitCoin
         {
             if((*output)->amount < 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d amount is negative %d : ", index + 1, (*output)->amount);
-                (*output)->print(ArcMist::Log::WARNING);
-                print(ArcMist::Log::VERBOSE);
+                (*output)->print(NextCash::Log::WARNING);
+                print(NextCash::Log::VERBOSE);
                 return false;
             }
 
             if(!pCoinBase && (*output)->amount > 0 && (*output)->amount > mFee)
             {
-                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Outputs are more than inputs");
-                print(ArcMist::Log::VERBOSE);
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Outputs are more than inputs");
+                print(NextCash::Log::VERBOSE);
                 return false;
             }
 
@@ -1427,13 +1427,13 @@ namespace BitCoin
         return (mFee * 1000) / (uint64_t)currentSize; // Satoshis per KB
     }
 
-    void Outpoint::write(ArcMist::OutputStream *pStream)
+    void Outpoint::write(NextCash::OutputStream *pStream)
     {
         transactionID.write(pStream);
         pStream->writeUnsignedInt(index);
     }
 
-    bool Outpoint::read(ArcMist::InputStream *pStream)
+    bool Outpoint::read(NextCash::InputStream *pStream)
     {
         if(!transactionID.read(pStream))
             return false;
@@ -1444,7 +1444,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Outpoint::skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream)
+    bool Outpoint::skip(NextCash::InputStream *pInputStream, NextCash::OutputStream *pOutputStream)
     {
         if(pInputStream->remaining() < 36)
             return false;
@@ -1455,7 +1455,7 @@ namespace BitCoin
         return true;
     }
 
-    void Input::write(ArcMist::OutputStream *pStream)
+    void Input::write(NextCash::OutputStream *pStream)
     {
         outpoint.write(pStream);
         writeCompactInteger(pStream, script.length());
@@ -1464,7 +1464,7 @@ namespace BitCoin
         pStream->writeUnsignedInt(sequence);
     }
 
-    bool Input::read(ArcMist::InputStream *pStream)
+    bool Input::read(NextCash::InputStream *pStream)
     {
         // Outpoint
         if(!outpoint.read(pStream))
@@ -1486,7 +1486,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Input::skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream)
+    bool Input::skip(NextCash::InputStream *pInputStream, NextCash::OutputStream *pOutputStream)
     {
         // Outpoint
         if(!Outpoint::skip(pInputStream, pOutputStream))
@@ -1514,7 +1514,7 @@ namespace BitCoin
         return true;
     }
 
-    void Transaction::write(ArcMist::OutputStream *pStream, bool pBlockFile)
+    void Transaction::write(NextCash::OutputStream *pStream, bool pBlockFile)
     {
         unsigned int startOffset = pStream->writeOffset();
         mSize = 0;
@@ -1542,7 +1542,7 @@ namespace BitCoin
         mSize = pStream->writeOffset() - startOffset;
     }
 
-    bool Input::writeSignatureData(ArcMist::OutputStream *pStream, ArcMist::Buffer *pSubScript, bool pZeroSequence)
+    bool Input::writeSignatureData(NextCash::OutputStream *pStream, NextCash::Buffer *pSubScript, bool pZeroSequence)
     {
         outpoint.write(pStream);
         if(pSubScript == NULL)
@@ -1561,11 +1561,11 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
-      ArcMist::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType)
+    bool Transaction::writeSignatureData(NextCash::OutputStream *pStream, unsigned int pInputOffset,
+      NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Transaction Sign Data");
+        NextCash::Profiler profiler("Transaction Sign Data");
 #endif
         Signature::HashType hashType = pHashType;
         // Extract FORKID (0x40) flag from hash type
@@ -1580,9 +1580,9 @@ namespace BitCoin
         if(forkID)
         {
             // BIP-0143 Signature Hash Algorithm
-            ArcMist::Hash hash(32);
-            ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
-            digest.setOutputEndian(ArcMist::Endian::LITTLE);
+            NextCash::Hash hash(32);
+            NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+            digest.setOutputEndian(NextCash::Endian::LITTLE);
 
             // Version
             pStream->writeUnsignedInt(version);
@@ -1630,7 +1630,7 @@ namespace BitCoin
                 inputs[pInputOffset]->outpoint.write(pStream);
             else
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                   "Failed to write transaction signature data. Input offset out of range %d/%d",
                   pInputOffset, inputs.size());
                 return false;
@@ -1684,7 +1684,7 @@ namespace BitCoin
         {
             // Build subscript from unspent/output script
             unsigned int offset;
-            ArcMist::Buffer subScript;
+            NextCash::Buffer subScript;
             ScriptInterpreter::removeCodeSeparators(pOutputScript, subScript);
 
             // Version
@@ -1694,7 +1694,7 @@ namespace BitCoin
             {
             default:
             case Signature::INVALID:
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Unsupported signature hash type : 0x%02x", pHashType);
             case Signature::ALL:
             {
@@ -1783,7 +1783,7 @@ namespace BitCoin
                     }
                     else
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Failed to write transaction signature data. Invalid number of outputs %d/%d",
                           pInputOffset+1, outputs.size());
                         return false;
@@ -1803,13 +1803,13 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::getSignatureHash(ArcMist::Hash &pHash, unsigned int pInputOffset,
-      ArcMist::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType)
+    bool Transaction::getSignatureHash(NextCash::Hash &pHash, unsigned int pInputOffset,
+      NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType)
     {
         // Write appropriate data to a digest
-        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+        NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
         unsigned int previousReadOffset = pOutputScript.readOffset();
-        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
         if(writeSignatureData(&digest, pInputOffset, pOutputScript, pOutputAmount, pHashType))
         {
             digest.getResult(&pHash); // Get digest result
@@ -1827,7 +1827,7 @@ namespace BitCoin
         }
     }
 
-    bool Transaction::skip(ArcMist::InputStream *pStream)
+    bool Transaction::skip(NextCash::InputStream *pStream)
     {
         // Version
         if(pStream->remaining() < 4)
@@ -1862,11 +1862,11 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::readOutput(ArcMist::InputStream *pStream, unsigned int pOutputIndex,
-      ArcMist::Hash &pTransactionID, Output &pOutput, bool pBlockFile)
+    bool Transaction::readOutput(NextCash::InputStream *pStream, unsigned int pOutputIndex,
+      NextCash::Hash &pTransactionID, Output &pOutput, bool pBlockFile)
     {
-        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
-        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
 
         // Version
         if(pStream->remaining() < 5)
@@ -1910,20 +1910,20 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::read(ArcMist::InputStream *pStream, bool pCalculateHash, bool pBlockFile)
+    bool Transaction::read(NextCash::InputStream *pStream, bool pCalculateHash, bool pBlockFile)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Transaction Read");
+        NextCash::Profiler profiler("Transaction Read");
 #endif
         unsigned int startOffset = pStream->readOffset();
         mSize = 0;
 
         // Create hash
-        ArcMist::Digest *digest = NULL;
+        NextCash::Digest *digest = NULL;
         if(pCalculateHash)
         {
-            digest = new ArcMist::Digest(ArcMist::Digest::SHA256_SHA256);
-            digest->setOutputEndian(ArcMist::Endian::LITTLE);
+            digest = new NextCash::Digest(NextCash::Digest::SHA256_SHA256);
+            digest->setOutputEndian(NextCash::Endian::LITTLE);
         }
         hash.clear();
 
@@ -1931,7 +1931,7 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
               "Transaction read failed : stream remaining less than 5");
             return false;
         }
@@ -1949,7 +1949,7 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
               "Transaction read failed : stream remaining less than input count %d", count);
             return false;
         }
@@ -1965,7 +1965,7 @@ namespace BitCoin
             {
                 if(digest != NULL)
                     delete digest;
-                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Transaction read failed : input read failed");
                 return false;
             }
@@ -1989,7 +1989,7 @@ namespace BitCoin
             {
                 if(digest != NULL)
                     delete digest;
-                ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Transaction read failed : output read failed");
                 return false;
             }
@@ -2001,7 +2001,7 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
               "Transaction read failed : stream remaining less than 4");
             return false;
         }
@@ -2026,8 +2026,8 @@ namespace BitCoin
         hash.clear();
 
         // Write into digest
-        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
-        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
         write(&digest);
 
         digest.getResult(&hash);
@@ -2039,7 +2039,7 @@ namespace BitCoin
             delete *item;
     }
 
-    Transaction *TransactionList::getSorted(const ArcMist::Hash &pHash)
+    Transaction *TransactionList::getSorted(const NextCash::Hash &pHash)
     {
         // Search sorted
         if(size() == 0 || back()->hash < pHash)
@@ -2154,7 +2154,7 @@ namespace BitCoin
         return true;
     }
 
-    bool TransactionList::removeSorted(const ArcMist::Hash &pHash)
+    bool TransactionList::removeSorted(const NextCash::Hash &pHash)
     {
         // Remove sorted
         if(size() == 0 || back()->hash < pHash)
@@ -2217,7 +2217,7 @@ namespace BitCoin
 
     bool Transaction::test()
     {
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME,
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME,
           "------------- Starting Transaction Tests -------------");
 
         bool success = true;
@@ -2226,7 +2226,7 @@ namespace BitCoin
         Signature signature;
         Key privateKey2;
         Key publicKey2;
-        ArcMist::Buffer data;
+        NextCash::Buffer data;
         Forks forks;
 
         // Initialize private key
@@ -2271,32 +2271,32 @@ namespace BitCoin
 
         transaction.calculateHash();
 
-        ArcMist::HashList checkHashes;
+        NextCash::HashList checkHashes;
         if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHashes) == ScriptInterpreter::P2PKH)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2PKH script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2PKH script");
             success = false;
         }
 
         if(checkHashes.size() != 1 || publicKey1.hash() == checkHashes.front())
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script hash");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script hash");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2PKH script hash");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2PKH script hash");
             success = false;
         }
 
         // Process the script
         ScriptInterpreter interpreter;
 
-        //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0]->sequence, spendable.outputs[0]->amount);
         if(!interpreter.process(transaction.inputs[0]->script, 4, forks))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
         }
         else
@@ -2304,16 +2304,16 @@ namespace BitCoin
             spendable.outputs[0]->script.setReadOffset(0);
             if(!interpreter.process(spendable.outputs[0]->script, 4, forks))
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
             }
             else
             {
                 if(interpreter.isValid() && interpreter.isVerified())
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process valid P2PKH transaction");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process valid P2PKH transaction");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process valid P2PKH transaction");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process valid P2PKH transaction");
                     success = false;
                 }
             }
@@ -2333,40 +2333,40 @@ namespace BitCoin
 
         // Sign the input
         if(!transaction.signP2PKHInput(*spendable.outputs[0], 0, privateKey1, publicKey2, Signature::ALL))
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed P2PKH sign with wrong public key");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed P2PKH sign with wrong public key");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed P2PKH sign with wrong public key");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed P2PKH sign with wrong public key");
             success = false;
         }
 
         transaction.calculateHash();
 
         if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHashes) == ScriptInterpreter::P2PKH)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script bad PK");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script bad PK");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2PKH script bad PK");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2PKH script bad PK");
             success = false;
         }
 
         if(checkHashes.size() != 1 || publicKey1.hash() == checkHashes.front())
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script bad PK hash");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script bad PK hash");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2PKH script bad PK hash");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2PKH script bad PK hash");
             success = false;
         }
 
         // transaction.inputs[0]->script.setReadOffset(0);
         // transaction.calculateHash();
-        // //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        // //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         // transaction.inputs[0]->script.setReadOffset(0);
         // interpreter.setTransaction(&transaction);
         // interpreter.setInputSequence(transaction.inputs[0]->sequence);
         // if(!interpreter.process(transaction.inputs[0]->script, 4, forks))
         // {
-            // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
+            // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             // success = false;
         // }
         // else
@@ -2374,16 +2374,16 @@ namespace BitCoin
             // spendable.outputs[0]->script.setReadOffset(0);
             // if(!interpreter.process(spendable.outputs[0]->script, 4, forks))
             // {
-                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
+                // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 // success = false;
             // }
             // else
             // {
                 // if(interpreter.isValid() && !interpreter.isVerified())
-                    // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process P2PKH transaction with bad PK");
+                    // NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process P2PKH transaction with bad PK");
                 // else
                 // {
-                    // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process P2PKH transaction with bad PK ");
+                    // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process P2PKH transaction with bad PK ");
                     // success = false;
                 // }
             // }
@@ -2403,21 +2403,21 @@ namespace BitCoin
 
         // Sign the input
         if(transaction.signP2PKHInput(*spendable.outputs[0], 0, privateKey2, publicKey1, Signature::ALL))
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed P2PKH sign with wrong private key");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed P2PKH sign with wrong private key");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed P2PKH sign with wrong private key");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed P2PKH sign with wrong private key");
             success = false;
         }
 
         transaction.inputs[0]->script.setReadOffset(0);
         transaction.calculateHash();
-        //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0]->sequence, spendable.outputs[0]->amount);
         if(!interpreter.process(transaction.inputs[0]->script, 4, forks))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
         }
         else
@@ -2425,16 +2425,16 @@ namespace BitCoin
             spendable.outputs[0]->script.setReadOffset(0);
             if(!interpreter.process(spendable.outputs[0]->script, 4, forks))
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
             }
             else
             {
                 if(interpreter.isValid() && !interpreter.isVerified())
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process P2PKH transaction bad sig");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process P2PKH transaction bad sig");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process P2PKH transaction bad sig");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process P2PKH transaction bad sig");
                     success = false;
                 }
             }
@@ -2444,13 +2444,13 @@ namespace BitCoin
          * Process Valid P2SH Transaction
          ***********************************************************************************************/
         // Create random redeemScript
-        ArcMist::Buffer redeemScript;
+        NextCash::Buffer redeemScript;
         for(unsigned int i=0;i<100;i+=4)
-            redeemScript.writeUnsignedInt(ArcMist::Math::randomInt());
+            redeemScript.writeUnsignedInt(NextCash::Math::randomInt());
 
         // Create hash of redeemScript
-        ArcMist::Hash redeemHash(20);
-        ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
+        NextCash::Hash redeemHash(20);
+        NextCash::Digest digest(NextCash::Digest::SHA256_RIPEMD160);
         digest.writeStream(&redeemScript, redeemScript.length());
         digest.getResult(&redeemHash);
 
@@ -2469,37 +2469,37 @@ namespace BitCoin
         // Create signature script
         redeemScript.setReadOffset(0);
         if(transaction.authorizeP2SHInput(*spendable.outputs[0], 0, redeemScript))
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed sign P2SH script");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed sign P2SH script");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed sign P2SH script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed sign P2SH script");
             success = false;
         }
 
         if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHashes) == ScriptInterpreter::P2SH)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2SH script");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2SH script");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2SH script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2SH script");
             success = false;
         }
 
         if(checkHashes.size() != 1 || redeemHash == checkHashes.front())
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2SH script hash");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2SH script hash");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2SH script hash");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2SH script hash");
             success = false;
         }
 
         transaction.inputs[0]->script.setReadOffset(0);
         transaction.calculateHash();
-        //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0]->sequence, spendable.outputs[0]->amount);
         if(!interpreter.process(transaction.inputs[0]->script, 4, forks))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
         }
         else
@@ -2507,16 +2507,16 @@ namespace BitCoin
             spendable.outputs[0]->script.setReadOffset(0);
             if(!interpreter.process(spendable.outputs[0]->script, 4, forks))
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
             }
             else
             {
                 if(interpreter.isValid() && interpreter.isVerified())
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process valid P2SH transaction");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process valid P2SH transaction");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process valid P2SH transaction");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process valid P2SH transaction");
                     success = false;
                 }
             }
@@ -2529,7 +2529,7 @@ namespace BitCoin
         transaction.clear();
         spendable.clear();
 
-        ArcMist::Hash testOutHash(20);
+        NextCash::Hash testOutHash(20);
         std::vector<Key *> publicKeys;
 
         publicKeys.push_back(&publicKey1);
@@ -2546,54 +2546,54 @@ namespace BitCoin
 
         if(transaction.addMultiSigInputSignature(*spendable.outputs[0], 0, privateKey1,
           publicKey1, Signature::ALL, forks, signatureAdded, transactionComplete))
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign");
             success = false;
         }
 
         if(signatureAdded)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign added");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign added");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign added");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign added");
             success = false;
         }
 
         if(transactionComplete)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign complete");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign complete");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign complete");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign complete");
             success = false;
         }
 
         if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHashes) == ScriptInterpreter::MULTI_SIG)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 1 of 2 script");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 1 of 2 script");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check MULTISIG 1 of 2 script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check MULTISIG 1 of 2 script");
             success = false;
         }
 
         if(checkHashes.size() == 2)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 1 of 2 script hash count");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 1 of 2 script hash count");
         else
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
               "Failed check MULTISIG 1 of 2 script hash count : %d", checkHashes.size());
             success = false;
         }
 
         transaction.inputs[0]->script.setReadOffset(0);
         transaction.calculateHash();
-        //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0]->sequence, spendable.outputs[0]->amount);
         if(!interpreter.process(transaction.inputs[0]->script, 4, forks))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 1 of 2 input script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 1 of 2 input script");
             success = false;
         }
         else
@@ -2601,16 +2601,16 @@ namespace BitCoin
             spendable.outputs[0]->script.setReadOffset(0);
             if(!interpreter.process(spendable.outputs[0]->script, 4, forks))
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 1 of 2 output script");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 1 of 2 output script");
                 success = false;
             }
             else
             {
                 if(interpreter.isValid() && interpreter.isVerified())
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process valid MULTISIG 1 of 2 transaction");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process valid MULTISIG 1 of 2 transaction");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process valid MULTISIG 1 of 2 transaction");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process valid MULTISIG 1 of 2 transaction");
                     success = false;
                 }
             }
@@ -2640,104 +2640,104 @@ namespace BitCoin
 
         if(transaction.addMultiSigInputSignature(*spendable.outputs[0], 0, privateKey2,
           publicKey2, Signature::ALL, forks, signatureAdded, transactionComplete))
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2");
             success = false;
         }
 
         if(signatureAdded)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2 added");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2 added");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2 added");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2 added");
             success = false;
         }
 
         if(!transactionComplete)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2 not complete");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2 not complete");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2 not complete");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2 not complete");
             success = false;
         }
 
         if(transaction.addMultiSigInputSignature(*spendable.outputs[0], 0, privateKey2,
           publicKey2, Signature::ALL, forks, signatureAdded, transactionComplete))
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2 again");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2 again");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2 again");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2 again");
             success = false;
         }
 
         if(!signatureAdded)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2 added again");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2 added again");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2 added again");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2 added again");
             success = false;
         }
 
         if(!transactionComplete)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2 again not complete");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 2 again not complete");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2 again not complete");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 2 again not complete");
             success = false;
         }
 
         if(transaction.addMultiSigInputSignature(*spendable.outputs[0], 0, privateKey1,
           publicKey1, Signature::ALL, forks, signatureAdded, transactionComplete))
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 1");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign 1");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 1");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign 1");
             success = false;
         }
 
         if(signatureAdded)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign added 1");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign added 1");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign added 1");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign added 1");
             success = false;
         }
 
         if(transactionComplete)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign complete 1");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed add multisig sign complete 1");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign complete 1");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed add multisig sign complete 1");
             success = false;
         }
 
         if(ScriptInterpreter::parseOutputScript(spendable.outputs[0]->script, checkHashes) == ScriptInterpreter::MULTI_SIG)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 2 of 3 script");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 2 of 3 script");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check MULTISIG 2 of 3 script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check MULTISIG 2 of 3 script");
             success = false;
         }
 
         if(checkHashes.size() == 3)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 2 of 3 script hash count");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check MULTISIG 2 of 3 script hash count");
         else
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
               "Failed check MULTISIG 2 of 3 script hash count : %d", checkHashes.size());
             success = false;
         }
 
         transaction.inputs[0]->script.setReadOffset(0);
         transaction.calculateHash();
-        //ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0]->script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0]->sequence, spendable.outputs[0]->amount);
         if(!interpreter.process(transaction.inputs[0]->script, 4, forks))
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 2 of 3 input script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 2 of 3 input script");
             success = false;
         }
         else
@@ -2745,16 +2745,16 @@ namespace BitCoin
             spendable.outputs[0]->script.setReadOffset(0);
             if(!interpreter.process(spendable.outputs[0]->script, 4, forks))
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 2 of 3 output script");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 2 of 3 output script");
                 success = false;
             }
             else
             {
                 if(interpreter.isValid() && interpreter.isVerified())
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process valid MULTISIG 2 of 3 transaction");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process valid MULTISIG 2 of 3 transaction");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process valid MULTISIG 2 of 3 transaction");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process valid MULTISIG 2 of 3 transaction");
                     success = false;
                 }
             }

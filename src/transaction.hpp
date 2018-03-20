@@ -1,17 +1,17 @@
 /**************************************************************************
- * Copyright 2017-2018 ArcMist, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                       *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_TRANSACTION_HPP
 #define BITCOIN_TRANSACTION_HPP
 
-#include "arcmist/base/log.hpp"
-#include "arcmist/base/hash.hpp"
-#include "arcmist/io/stream.hpp"
-#include "arcmist/io/buffer.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/io/stream.hpp"
+#include "nextcash/io/buffer.hpp"
 #include "base.hpp"
 #include "forks.hpp"
 #include "key.hpp"
@@ -28,7 +28,7 @@ namespace BitCoin
     public:
 
         Outpoint() : transactionID(32) { index = 0xffffffff; output = NULL; signatureStatus = 0; }
-        Outpoint(const ArcMist::Hash &pTransactionID, uint32_t pIndex)
+        Outpoint(const NextCash::Hash &pTransactionID, uint32_t pIndex)
         {
             transactionID = pTransactionID;
             index = pIndex;
@@ -46,17 +46,17 @@ namespace BitCoin
         }
         ~Outpoint() { if(output != NULL) delete output; }
 
-        void write(ArcMist::OutputStream *pStream);
-        bool read(ArcMist::InputStream *pStream);
+        void write(NextCash::OutputStream *pStream);
+        bool read(NextCash::InputStream *pStream);
 
-        static bool skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream = NULL);
+        static bool skip(NextCash::InputStream *pInputStream, NextCash::OutputStream *pOutputStream = NULL);
 
         bool operator == (const Outpoint &pRight)
         {
             return transactionID == pRight.transactionID && index == pRight.index;
         }
 
-        ArcMist::Hash transactionID; // Double SHA256 of signed transaction that paid the input of this transaction.
+        NextCash::Hash transactionID; // Double SHA256 of signed transaction that paid the input of this transaction.
         uint32_t index;
 
         // Verification data
@@ -87,22 +87,22 @@ namespace BitCoin
         // Outpoint (32 trans id + 4 index), + 4 sequence, + script length size + script length
         unsigned int size() { return 40 + compactIntegerSize(script.length()) + script.length(); }
 
-        void write(ArcMist::OutputStream *pStream);
-        bool read(ArcMist::InputStream *pStream);
+        void write(NextCash::OutputStream *pStream);
+        bool read(NextCash::InputStream *pStream);
 
         // Skip over input in stream (The input stream's read offset must be at the beginning of an input)
-        static bool skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream = NULL);
+        static bool skip(NextCash::InputStream *pInputStream, NextCash::OutputStream *pOutputStream = NULL);
 
         // BIP-0068 Relative time lock sequence
         bool sequenceDisabled() const { return SEQUENCE_DISABLE & sequence; }
 
         // Print human readable version to log
-        void print(ArcMist::Log::Level pLevel = ArcMist::Log::VERBOSE);
+        void print(NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
 
-        bool writeSignatureData(ArcMist::OutputStream *pStream, ArcMist::Buffer *pSubScript, bool pZeroSequence);
+        bool writeSignatureData(NextCash::OutputStream *pStream, NextCash::Buffer *pSubScript, bool pZeroSequence);
 
         Outpoint outpoint;
-        ArcMist::Buffer script;
+        NextCash::Buffer script;
         // BIP-0068 Minimum time/blocks since outpoint creation before this transaction is valid
         uint32_t sequence;
 
@@ -118,9 +118,9 @@ namespace BitCoin
 
         ~TransactionList();
 
-        Transaction *getSorted(const ArcMist::Hash &pHash);
+        Transaction *getSorted(const NextCash::Hash &pHash);
         bool insertSorted(Transaction *pTransaction);
-        bool removeSorted(const ArcMist::Hash &pHash);
+        bool removeSorted(const NextCash::Hash &pHash);
 
         void clear();
         void clearNoDelete();
@@ -146,26 +146,26 @@ namespace BitCoin
         Transaction(const Transaction &pCopy);
         ~Transaction();
 
-        void write(ArcMist::OutputStream *pStream, bool pBlockFile = false);
+        void write(NextCash::OutputStream *pStream, bool pBlockFile = false);
 
         // pCalculateHash will calculate the hash of the transaction data while it reads it
-        bool read(ArcMist::InputStream *pStream, bool pCalculateHash = true, bool pBlockFile = false);
+        bool read(NextCash::InputStream *pStream, bool pCalculateHash = true, bool pBlockFile = false);
 
         // Skip over transaction in stream (The input stream's read offset must be at the beginning of a transaction)
-        static bool skip(ArcMist::InputStream *pStream);
+        static bool skip(NextCash::InputStream *pStream);
 
         // Read the script of the output at the specified offset (The input stream's read offset must be at the beginning of a transaction)
-        static bool readOutput(ArcMist::InputStream *pStream, unsigned int pOutputIndex,
-          ArcMist::Hash &pTransactionID, Output &pOutput, bool pBlockFile = false);
+        static bool readOutput(NextCash::InputStream *pStream, unsigned int pOutputIndex,
+          NextCash::Hash &pTransactionID, Output &pOutput, bool pBlockFile = false);
 
         void clear();
         void clearCache();
 
         // Print human readable version to log
-        void print(ArcMist::Log::Level pLevel = ArcMist::Log::VERBOSE);
+        void print(NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
 
         // Hash
-        ArcMist::Hash hash;
+        NextCash::Hash hash;
 
         // Data
         uint32_t version;
@@ -211,7 +211,7 @@ namespace BitCoin
 
         // Check validity and return status
         bool check(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
-          ArcMist::HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks);
+          NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks);
 
         // Check that none of the outpoints are spent and return status
         uint8_t checkOutpoints(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions);
@@ -219,7 +219,7 @@ namespace BitCoin
         bool updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           uint64_t pBlockHeight, std::vector<unsigned int> &pSpentAges);
 
-        bool getSignatureHash(ArcMist::Hash &pHash, unsigned int pInputOffset, ArcMist::Buffer &pOutputScript,
+        bool getSignatureHash(NextCash::Hash &pHash, unsigned int pInputOffset, NextCash::Buffer &pOutputScript,
           int64_t pOutputAmount, Signature::HashType pHashType);
 
         /***********************************************************************************************
@@ -230,13 +230,13 @@ namespace BitCoin
          * 2. Call addXXXOutput to add all the outputs to be created.
          * 3. Call signXXXInput to sign each input and pass in the output being spent.
          ***********************************************************************************************/
-        bool addInput(const ArcMist::Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence = 0xffffffff);
+        bool addInput(const NextCash::Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence = 0xffffffff);
         bool addCoinbaseInput(int pBlockHeight);
 
         // P2PKH Pay to Public Key Hash
         bool signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
           const Key &pPublicKey, Signature::HashType pType);
-        bool addP2PKHOutput(const ArcMist::Hash &pPublicKeyHash, uint64_t pAmount);
+        bool addP2PKHOutput(const NextCash::Hash &pPublicKeyHash, uint64_t pAmount);
 
         // P2PK Pay to Public Key (not as secure as P2PKH)
         bool signP2PKInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
@@ -244,8 +244,8 @@ namespace BitCoin
         bool addP2PKOutput(const Key &pPublicKey, uint64_t pAmount);
 
         // P2SH Pay to Script Hash
-        bool authorizeP2SHInput(Output &pOutput, unsigned int pInputOffset, ArcMist::Buffer &pRedeemScript);
-        bool addP2SHOutput(const ArcMist::Hash &pScriptHash, uint64_t pAmount);
+        bool authorizeP2SHInput(Output &pOutput, unsigned int pInputOffset, NextCash::Buffer &pRedeemScript);
+        bool addP2SHOutput(const NextCash::Hash &pScriptHash, uint64_t pAmount);
 
         // MultiSig
         bool addMultiSigInputSignature(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
@@ -254,7 +254,7 @@ namespace BitCoin
         bool addMultiSigOutput(unsigned int pRequiredSignatureCount, std::vector<Key *> pPublicKeys,
           uint64_t pAmount);
 
-        static Transaction *createCoinbaseTransaction(int pBlockHeight, int64_t pFees, const ArcMist::Hash &pPublicKeyHash);
+        static Transaction *createCoinbaseTransaction(int pBlockHeight, int64_t pFees, const NextCash::Hash &pPublicKeyHash);
 
         // Run unit tests
         static bool test();
@@ -266,10 +266,10 @@ namespace BitCoin
         unsigned int mSize;
         uint8_t mStatus;
 
-        ArcMist::Hash mOutpointHash, mSequenceHash, mOutputHash;
+        NextCash::Hash mOutpointHash, mSequenceHash, mOutputHash;
 
-        bool writeSignatureData(ArcMist::OutputStream *pStream, unsigned int pInputOffset,
-          ArcMist::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType);
+        bool writeSignatureData(NextCash::OutputStream *pStream, unsigned int pInputOffset,
+          NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType);
 
         Transaction &operator = (const Transaction &pRight);
 

@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -11,7 +11,7 @@
 #include "interpreter.hpp"
 
 #ifdef PROFILER_ON
-#include "arcmist/dev/profiler.hpp"
+#include "nextcash/dev/profiler.hpp"
 #endif
 
 
@@ -19,7 +19,7 @@ namespace BitCoin
 {
     void FullOutputData::print()
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
           "Output %d for %f bitcoins in block %d : %s",
           index, bitcoins(output.amount), blockHeight, transactionID.hex().text());
     }
@@ -32,7 +32,7 @@ namespace BitCoin
           pOutput.transactionID, pOutput.output);
     }
 
-    bool Addresses::getOutputs(const ArcMist::Hash &pAddress, std::vector<FullOutputData> &pOutputs)
+    bool Addresses::getOutputs(const NextCash::Hash &pAddress, std::vector<FullOutputData> &pOutputs)
     {
         pOutputs.clear();
         Iterator item = get(pAddress, true);
@@ -57,7 +57,7 @@ namespace BitCoin
         {
             if(!(*item)->markedRemove())
             {
-                // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
                   // "Fetching transaction %d output %d from block at height %d",
                   // ((AddressOutputReference *)(*item))->transactionOffset,
                   // ((AddressOutputReference *)(*item))->outputIndex, ((AddressOutputReference *)(*item))->blockHeight);
@@ -74,20 +74,20 @@ namespace BitCoin
     bool Addresses::add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Addresses Add");
+        NextCash::Profiler profiler("Addresses Add");
 #endif
         if(pBlockHeight != mNextBlockHeight)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
               "Can't add transaction addresses for non matching block height %d. Should be %d",
               pBlockHeight, mNextBlockHeight);
             return false;
         }
 
-        ArcMist::HashList hashes;
+        NextCash::HashList hashes;
         Iterator newItem;
         unsigned int transactionOffset = 0, outputOffset;
-        ArcMist::HashData *newAddress;
+        NextCash::HashData *newAddress;
         bool success = true;
         for(std::vector<Transaction *>::const_iterator trans=pBlockTransactions.begin();trans!=pBlockTransactions.end();++trans,++transactionOffset)
         {
@@ -100,7 +100,7 @@ namespace BitCoin
                     case ScriptInterpreter::P2PK:
                     case ScriptInterpreter::P2SH:
                     case ScriptInterpreter::MULTI_SIG:
-                        for(ArcMist::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                        for(NextCash::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
                         {
                             newAddress = new AddressOutputReference(pBlockHeight, transactionOffset, outputOffset);
                             if(!insert(*hash, newAddress))
@@ -124,16 +124,16 @@ namespace BitCoin
     {
         if(pBlockHeight != mNextBlockHeight - 1)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
               "Can't remove transaction addresses for non matching block height %d. Should be %d",
               pBlockHeight, mNextBlockHeight - 1);
             return false;
         }
 
         bool success = true;
-        ArcMist::HashData *newAddress;
+        NextCash::HashData *newAddress;
         unsigned int transactionOffset = 0, outputOffset;
-        ArcMist::HashList hashes;
+        NextCash::HashList hashes;
         Iterator item;
         bool found;
 
@@ -149,7 +149,7 @@ namespace BitCoin
                     case ScriptInterpreter::P2PK:
                     case ScriptInterpreter::P2SH:
                     case ScriptInterpreter::MULTI_SIG:
-                        for(ArcMist::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                        for(NextCash::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
                         {
                             newAddress = new AddressOutputReference(pBlockHeight, transactionOffset, outputOffset);
 
@@ -161,7 +161,7 @@ namespace BitCoin
                             {
                                 if(newAddress->valuesMatch(*item) && !(*item)->markedRemove())
                                 {
-                                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_ADDRESSES_LOG_NAME,
+                                    NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_ADDRESSES_LOG_NAME,
                                       "Removing transaction address for block height %d : %s", pBlockHeight,
                                       item.hash().hex().text());
                                     (*item)->setRemove();
@@ -175,7 +175,7 @@ namespace BitCoin
 
                             if(!found)
                             {
-                                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
+                                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
                                   "Failed to remove transaction address for block height %d : %s", pBlockHeight,
                                   item.hash().hex().text());
                                 success = false;
@@ -201,7 +201,7 @@ namespace BitCoin
                     // case ScriptInterpreter::P2PK:
                     // case ScriptInterpreter::P2SH:
                     // case ScriptInterpreter::MULTI_SIG:
-                        // for(ArcMist::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                        // for(NextCash::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
                         // {
                             // newAddress = new AddressOutputReference(pBlockHeight, transactionOffset, outputOffset);
 
@@ -213,7 +213,7 @@ namespace BitCoin
                                 // if(newAddress->valuesMatch(*item) && (*item)->markedRemove())
                                 // {
                                     // // Unmark the matching item for removal
-                                    // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_ADDRESSES_LOG_NAME,
+                                    // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_ADDRESSES_LOG_NAME,
                                       // "Reversing removal of transaction address for block height %d : %s", pBlockHeight,
                                       // item.hash().hex().text());
                                     // (*item)->clearRemove();
@@ -237,22 +237,22 @@ namespace BitCoin
 
     bool Addresses::load(const char *pFilePath, uint64_t pCacheDataTargetSize)
     {
-        ArcMist::String filePath = pFilePath;
+        NextCash::String filePath = pFilePath;
         filePath.pathAppend("addresses");
 
         if(!HashDataSet::load("Addresses", filePath))
             return false;
 
-        ArcMist::String filePathName = filePath;
+        NextCash::String filePathName = filePath;
         filePathName.pathAppend("height");
-        if(!ArcMist::fileExists(filePathName))
+        if(!NextCash::fileExists(filePathName))
             mNextBlockHeight = 0;
         else
         {
-            ArcMist::FileInputStream file(filePathName);
+            NextCash::FileInputStream file(filePathName);
             if(!file.isValid())
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
                   "Failed to open height file to load");
                 mIsValid = false;
                 return false;
@@ -266,7 +266,7 @@ namespace BitCoin
         {
             setTargetCacheDataSize(pCacheDataTargetSize);
 
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
               "Loaded %d transaction addresses at block height %d (cached %d KiB)",
               size(), mNextBlockHeight - 1, cacheDataSize() / 1024);
         }
@@ -276,19 +276,19 @@ namespace BitCoin
 
     bool Addresses::save()
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
           "Saving transaction addresses at block height %d (%d KiB cached)", mNextBlockHeight - 1,
           cacheDataSize() / 1024);
 
         if(!HashDataSet::save())
             return false;
 
-        ArcMist::String filePathName = path();
+        NextCash::String filePathName = path();
         filePathName.pathAppend("height");
-        ArcMist::FileOutputStream file(filePathName, true);
+        NextCash::FileOutputStream file(filePathName, true);
         if(!file.isValid())
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
               "Failed to open height file to save");
             return false;
         }
@@ -297,7 +297,7 @@ namespace BitCoin
         file.writeUnsignedInt(mNextBlockHeight);
         file.flush();
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
           "Saved %d transaction addresses at block height %d (cache %d KiB)", size(),
           mNextBlockHeight - 1, cacheDataSize() / 1024);
         return true;

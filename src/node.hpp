@@ -1,18 +1,18 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_NODE_HPP
 #define BITCOIN_NODE_HPP
 
-#include "arcmist/base/mutex.hpp"
-#include "arcmist/base/thread.hpp"
-#include "arcmist/base/hash.hpp"
-#include "arcmist/io/buffer.hpp"
-#include "arcmist/io/network.hpp"
+#include "nextcash/base/mutex.hpp"
+#include "nextcash/base/thread.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/io/buffer.hpp"
+#include "nextcash/io/network.hpp"
 #include "base.hpp"
 #include "message.hpp"
 #include "chain.hpp"
@@ -29,7 +29,7 @@ namespace BitCoin
     {
     public:
 
-        Node(ArcMist::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
+        Node(NextCash::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
           bool pIsSeed, uint64_t pServices, Monitor &pMonitor);
         ~Node();
 
@@ -64,16 +64,16 @@ namespace BitCoin
 
         bool waitingForRequests() { return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty(); }
         bool requestHeaders();
-        bool requestBlocks(ArcMist::HashList &pList);
-        bool requestTransactions(ArcMist::HashList &pList);
+        bool requestBlocks(NextCash::HashList &pList);
+        bool requestTransactions(NextCash::HashList &pList);
         unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
         void releaseBlockRequests();
 
-        const ArcMist::Hash &lastHeader() const { return mLastHeader; }
+        const NextCash::Hash &lastHeader() const { return mLastHeader; }
 
         void setMonitor(Monitor &pMonitor);
 
-        bool hasTransaction(const ArcMist::Hash &pHash);
+        bool hasTransaction(const NextCash::Hash &pHash);
 
         bool requestPeers();
 
@@ -101,7 +101,7 @@ namespace BitCoin
         void check();
 
         unsigned int mActiveMerkleRequests;
-        bool requestMerkleBlock(ArcMist::Hash &pHash);
+        bool requestMerkleBlock(NextCash::Hash &pHash);
 
         bool sendMessage(Message::Data *pData);
         bool sendVersion();
@@ -109,20 +109,20 @@ namespace BitCoin
         bool sendFeeFilter();
         bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
         bool sendRejectWithHash(const char *pCommand, Message::RejectData::Code pCode, const char *pReason,
-          const ArcMist::Hash &pHash);
+          const NextCash::Hash &pHash);
         bool sendBlock(Block &pBlock);
         bool sendBloomFilter();
-        bool sendMerkleBlock(const ArcMist::Hash &pBlockHash);
+        bool sendMerkleBlock(const NextCash::Hash &pBlockHash);
 
         unsigned int mID;
-        ArcMist::String mName;
-        ArcMist::Thread *mThread;
+        NextCash::String mName;
+        NextCash::Thread *mThread;
         IPAddress mAddress;
         Chain *mChain;
         Monitor *mMonitor;
-        ArcMist::Mutex mConnectionMutex;
-        ArcMist::Network::Connection *mConnection;
-        ArcMist::Buffer mReceiveBuffer;
+        NextCash::Mutex mConnectionMutex;
+        NextCash::Network::Connection *mConnection;
+        NextCash::Buffer mReceiveBuffer;
         Statistics mStatistics;
         bool mStop, mStopped;
         bool mIsIncoming, mIsSeed;
@@ -149,18 +149,18 @@ namespace BitCoin
         unsigned int mBlockDownloadSize;
         unsigned int mBlockDownloadTime;
 
-        ArcMist::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested, mLastHeader;
+        NextCash::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested, mLastHeader;
         uint32_t mHeaderRequestTime;
 
-        ArcMist::Mutex mBlockRequestMutex;
-        ArcMist::HashList mBlocksRequested;
+        NextCash::Mutex mBlockRequestMutex;
+        NextCash::HashList mBlocksRequested;
         int32_t mBlockRequestTime, mBlockReceiveTime;
 
-        ArcMist::Mutex mAnnounceMutex;
-        ArcMist::HashList mAnnounceBlocks, mAnnounceTransactions;
+        NextCash::Mutex mAnnounceMutex;
+        NextCash::HashList mAnnounceBlocks, mAnnounceTransactions;
 
-        void addAnnouncedBlock(const ArcMist::Hash &pHash);
-        bool addAnnouncedTransaction(const ArcMist::Hash &pHash);
+        void addAnnouncedBlock(const NextCash::Hash &pHash);
+        bool addAnnouncedTransaction(const NextCash::Hash &pHash);
 
         bool mConnected;
         int32_t mConnectedTime;

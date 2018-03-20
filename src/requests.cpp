@@ -1,15 +1,15 @@
 /**************************************************************************
- * Copyright 2017-2018 ArcMist, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                       *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #include "requests.hpp"
 
-#include "arcmist/base/log.hpp"
-#include "arcmist/base/hash.hpp"
-#include "arcmist/crypto/digest.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/crypto/digest.hpp"
 
 #include "key.hpp"
 #include "info.hpp"
@@ -21,7 +21,7 @@ namespace BitCoin
 {
     unsigned int RequestChannel::mNextID = 256;
 
-    RequestChannel::RequestChannel(ArcMist::Network::Connection *pConnection, Chain *pChain) : mID(mNextID++), mConnectionMutex("Request Connection")
+    RequestChannel::RequestChannel(NextCash::Network::Connection *pConnection, Chain *pChain) : mID(mNextID++), mConnectionMutex("Request Connection")
     {
         mThread = NULL;
         mConnection = NULL;
@@ -38,17 +38,17 @@ namespace BitCoin
         mConnectionMutex.lock();
         mConnection = pConnection;
         mConnectionMutex.unlock();
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName, "Requests Connection %s : %d",
+        NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Requests Connection %s : %d",
           mConnection->ipv6Address(), mConnection->port());
 
         // Start thread
-        mThread = new ArcMist::Thread("Request", run, this);
-        ArcMist::Thread::sleep(100); // Give the thread a chance to initialize
+        mThread = new NextCash::Thread("Request", run, this);
+        NextCash::Thread::sleep(100); // Give the thread a chance to initialize
     }
 
     RequestChannel::~RequestChannel()
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
           "Disconnecting %s", mConnection->ipv6Address());
 
         requestStop();
@@ -62,16 +62,16 @@ namespace BitCoin
 
     void RequestChannel::run()
     {
-        RequestChannel *requestChannel = (RequestChannel *)ArcMist::Thread::getParameter();
+        RequestChannel *requestChannel = (RequestChannel *)NextCash::Thread::getParameter();
         if(requestChannel == NULL)
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, "Request", "Thread parameter is null. Stopping");
+            NextCash::Log::add(NextCash::Log::ERROR, "Request", "Thread parameter is null. Stopping");
             return;
         }
 
         if(requestChannel->mStop)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, requestChannel->mName,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, requestChannel->mName,
               "Request channel stopped before thread started");
             requestChannel->mStopped = true;
             return;
@@ -82,7 +82,7 @@ namespace BitCoin
             requestChannel->process();
             if(requestChannel->mStop)
                 break;
-            ArcMist::Thread::sleep(100);
+            NextCash::Thread::sleep(100);
         }
 
         requestChannel->mStopped = true;
@@ -95,7 +95,7 @@ namespace BitCoin
         mConnectionMutex.lock();
         if(mConnection != NULL && mConnection->isOpen())
         {
-            ArcMist::Buffer closeBuffer;
+            NextCash::Buffer closeBuffer;
             closeBuffer.writeString("clse:");
             mConnection->send(&closeBuffer);
         }
@@ -123,7 +123,7 @@ namespace BitCoin
 
         if(getTime() - mLastReceiveTime > 120)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, mName,
+            NextCash::Log::add(NextCash::Log::VERBOSE, mName,
               "Timed out waiting for message");
             requestStop();
             return;
@@ -133,7 +133,7 @@ namespace BitCoin
         {
             if(getTime() - mConnectedTime > 60)
             {
-                ArcMist::Log::add(ArcMist::Log::VERBOSE, mName,
+                NextCash::Log::add(NextCash::Log::VERBOSE, mName,
                   "Timed out waiting for authentication");
                 requestStop();
                 return;
@@ -144,10 +144,10 @@ namespace BitCoin
             if(mReceiveBuffer.remaining() < 5)
                 return;
 
-            ArcMist::String authString = mReceiveBuffer.readString(5);
+            NextCash::String authString = mReceiveBuffer.readString(5);
             if(authString != "auth:")
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   "Invalid authentication command : %s", authString.text());
                 requestStop();
                 return;
@@ -160,7 +160,7 @@ namespace BitCoin
             if(mReceiveBuffer.readByte() != 0x30)
             {
                 mReceiveBuffer.setReadOffset(mReceiveBuffer.readOffset() - 1);
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   "Signature doesn't start with compound header byte : %02x", mReceiveBuffer.readByte());
                 requestStop();
                 return;
@@ -176,26 +176,26 @@ namespace BitCoin
             uint32_t value = getTime();
             value -= value % 10;
             value -= 30;
-            ArcMist::Hash hashes[5];
-            ArcMist::Digest digest(ArcMist::Digest::SHA256);
+            NextCash::Hash hashes[5];
+            NextCash::Digest digest(NextCash::Digest::SHA256);
             for(int i=0;i<5;++i)
             {
                 digest.initialize();
                 digest.writeUnsignedInt(value);
                 digest.getResult(&hashes[i]);
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
+                NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
                   "Auth hash %d : %s", value, hashes[i].hex().text());
                 value += 10;
             }
 
             // Open public keys file
-            ArcMist::String keysFilePathName = Info::instance().path();
+            NextCash::String keysFilePathName = Info::instance().path();
             keysFilePathName.pathAppend("keys");
-            ArcMist::FileInputStream keysFile(keysFilePathName);
+            NextCash::FileInputStream keysFile(keysFilePathName);
 
             if(!keysFile.isValid())
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   "Failed to open keys file : %s", keysFilePathName.text());
                 requestStop();
                 return;
@@ -203,11 +203,11 @@ namespace BitCoin
 
             // Check signature against authorized public keys
             Key publicKey;
-            ArcMist::String keyText, keyName;
-            ArcMist::Buffer keyBuffer, keyData;
+            NextCash::String keyText, keyName;
+            NextCash::Buffer keyBuffer, keyData;
             char nextChar;
             unsigned int authorizedCount = 0;
-            ArcMist::Hash validHash;
+            NextCash::Hash validHash;
             while(keysFile.remaining())
             {
                 keyName.clear();
@@ -246,7 +246,7 @@ namespace BitCoin
                     break;
                 keyBuffer.clear();
                 publicKey.writePublic(&keyBuffer, false);
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
+                NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
                   "Checking public key %s : %s", keyName.text(), keyBuffer.readHexString(keyBuffer.remaining()).text());
                 ++authorizedCount;
 
@@ -255,7 +255,7 @@ namespace BitCoin
                     {
                         validHash = hashes[i];
                         mAuthenticated = true;
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                           "Connection authorized : %s", keyName.text());
                         break;
                     }
@@ -279,20 +279,20 @@ namespace BitCoin
 
             if(!mAuthenticated)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   "Failed to authenticate : %d authorized users", authorizedCount);
                 requestStop();
                 return;
             }
 
             // Send signature back to prove identity
-            ArcMist::String privateKeyFilePathName = Info::instance().path();
+            NextCash::String privateKeyFilePathName = Info::instance().path();
             privateKeyFilePathName.pathAppend(".private_key");
-            ArcMist::FileInputStream privateKeyFile(privateKeyFilePathName);
+            NextCash::FileInputStream privateKeyFile(privateKeyFilePathName);
 
             if(!privateKeyFile.isValid())
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   "Failed to open private key file : %s", privateKeyFilePathName.text());
                 requestStop();
                 return;
@@ -301,7 +301,7 @@ namespace BitCoin
             keyText = privateKeyFile.readString(64);
             if(keyData.writeHex(keyText) != 32)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   "Failed to read private key from file : %s", privateKeyFilePathName.text());
                 requestStop();
                 return;
@@ -312,7 +312,7 @@ namespace BitCoin
             privateKey.readPrivate(&keyData);
             if(!privateKey.sign(validHash, returnSignature))
             {
-                ArcMist::Log::add(ArcMist::Log::VERBOSE, mName,
+                NextCash::Log::add(NextCash::Log::VERBOSE, mName,
                   "Failed to sign return value");
                 requestStop();
                 return;
@@ -320,12 +320,12 @@ namespace BitCoin
 
             mReceiveBuffer.flush();
 
-            ArcMist::Buffer sendData;
+            NextCash::Buffer sendData;
             sendData.writeString("acpt:");
             returnSignature.write(&sendData, false);
             keyBuffer.clear();
             returnSignature.write(&keyBuffer, false);
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName,
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
               "Sending accept signature : %s", keyBuffer.readHexString(keyBuffer.remaining()).text());
 
             mConnectionMutex.lock();
@@ -335,7 +335,7 @@ namespace BitCoin
         }
 
         // Parse message from receive buffer
-        ArcMist::String command;
+        NextCash::String command;
         while(mReceiveBuffer.remaining())
             if(mReceiveBuffer.readByte() == ':' && mReceiveBuffer.readOffset() >= 5)
             {
@@ -348,11 +348,11 @@ namespace BitCoin
         if(command.length() != 4)
             return;
 
-        ArcMist::Buffer sendData;
+        NextCash::Buffer sendData;
 
         if(command == "clse")
         {
-            ArcMist::Log::add(ArcMist::Log::INFO, mName, "Connection closed");
+            NextCash::Log::add(NextCash::Log::INFO, mName, "Connection closed");
             requestStop();
             return;
         }
@@ -370,22 +370,22 @@ namespace BitCoin
             sendData.writeUnsignedInt(mChain->memPool().count());
             sendData.writeUnsignedInt(mChain->memPool().size());
 
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Sending status");
+            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Sending status");
         }
         else if(command == "addr")
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Received address request");
+            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received address request");
 
             // Return address data message (UTXOs, balances, spent/unspent)
             unsigned int addressLength = mReceiveBuffer.readByte();
-            ArcMist::String address = mReceiveBuffer.readString(addressLength);
-            ArcMist::Hash addressHash;
+            NextCash::String address = mReceiveBuffer.readString(addressLength);
+            NextCash::Hash addressHash;
             AddressType addressType;
             AddressFormat addressFormat;
 
             if(!decodeAddress(address, addressHash, addressType, addressFormat))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                   "Invalid address (%d bytes) : %s", addressLength, address.text());
                 sendData.writeString("fail:Invalid Address Format", true);
             }
@@ -393,7 +393,7 @@ namespace BitCoin
             {
                 if(addressType != PUB_KEY_HASH)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                       "Wrong address type (%d bytes) : %s", addressLength, address.text());
                     sendData.writeString("fail:Not Public Key Hash", true);
                 }
@@ -402,7 +402,7 @@ namespace BitCoin
                     std::vector<FullOutputData> outputs;
                     if(!mChain->addresses().getOutputs(addressHash, outputs))
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, mName,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                           "Failed to get outputs for address : %s", address.text());
                         sendData.writeString("fail:No transactions found", true);
                     }
@@ -434,14 +434,14 @@ namespace BitCoin
                         }
                     }
 
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                       "Sending %d outputs for address : %s", outputs.size(), address.text());
                 }
             }
         }
         else if(command == "blkd")
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Received block details request");
+            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received block details request");
 
             // Return block details
             int height = mReceiveBuffer.readInt(); // Start height
@@ -486,12 +486,12 @@ namespace BitCoin
             sendData.setWriteOffset(5);
             sendData.writeByte(resultCount);
 
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
               "Sending %d block details starting at height %d", resultCount, height);
         }
         else if(command == "bkst")
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, mName, "Received block statistics request");
+            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received block statistics request");
 
             // Return statistics
             int height = mReceiveBuffer.readInt(); // Start height
@@ -612,7 +612,7 @@ namespace BitCoin
             sendData.writeUnsignedLong(totalFees); // Total Fees
             sendData.writeUnsignedLong(medianFees); // Median Fees
 
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
               "Sending block statistics for %d blocks starting at height %d going back %d hours", blockCount, height, hours);
         }
         else if(command == "trxn")
@@ -636,7 +636,7 @@ namespace BitCoin
 
         }
         else
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, mName,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
               "Unknown command : %s", command.text());
 
         sendData.setReadOffset(0);

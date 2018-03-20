@@ -1,18 +1,18 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #include "message.hpp"
 
-#include "arcmist/io/stream.hpp"
-#include "arcmist/io/buffer.hpp"
-#include "arcmist/base/log.hpp"
-#include "arcmist/base/endian.hpp"
-#include "arcmist/base/math.hpp"
-#include "arcmist/crypto/digest.hpp"
+#include "nextcash/io/stream.hpp"
+#include "nextcash/io/buffer.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/base/endian.hpp"
+#include "nextcash/base/math.hpp"
+#include "nextcash/crypto/digest.hpp"
 #include "base.hpp"
 
 #include <cstring>
@@ -148,10 +148,10 @@ namespace BitCoin
                 return UNKNOWN;
         }
 
-        Data *Interpreter::read(ArcMist::Buffer *pInput, const char *pName)
+        Data *Interpreter::read(NextCash::Buffer *pInput, const char *pName)
         {
             unsigned int startReadOffset = pInput->readOffset();
-            pInput->setInputEndian(ArcMist::Endian::LITTLE);
+            pInput->setInputEndian(NextCash::Endian::LITTLE);
 
             // Start String
             const uint8_t *startBytes = networkStartBytes();
@@ -181,14 +181,14 @@ namespace BitCoin
             // Check if header is complete
             if(pInput->remaining() < 20)
             {
-                //ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, mName, "Header not fully received : %d / %d",
+                //NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName, "Header not fully received : %d / %d",
                 //  pInput->remaining() + 4, 24); // Add 4 for start string that is already read
                 pInput->setReadOffset(startReadOffset);
                 return NULL;
             }
 
             // Command Name (12 bytes padded with nulls)
-            ArcMist::String command = pInput->readString(12);
+            NextCash::String command = pInput->readString(12);
 
             // Payload Size (4 bytes)
             uint32_t payloadSize = pInput->readUnsignedInt();
@@ -226,7 +226,7 @@ namespace BitCoin
                         if(getTime() - pendingBlockLastReportTime >= 30)
                         {
                             pendingBlockLastReportTime = getTime();
-                            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, pName,
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, pName,
                               "Block downloading %d / %d (%ds) : %s", pInput->remaining(), payloadSize,
                               pendingBlockUpdateTime - pendingBlockStartTime, block.hash.hex().text());
                         }
@@ -234,7 +234,7 @@ namespace BitCoin
                     else
                     {
                         // New block started without finishing last block
-                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, pName,
+                        NextCash::Log::addFormatted(NextCash::Log::ERROR, pName,
                           "Failed block download : %s", pendingBlockHash.hex().text());
 
                         // Starting new block
@@ -246,7 +246,7 @@ namespace BitCoin
                     }
                 }
                 // else
-                    // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, pName,
+                    // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, pName,
                       // "Payload not fully received <%s> : %d / %d", command, pInput->remaining(), payloadSize);
 
                 // Set read offset back to beginning of message
@@ -262,14 +262,14 @@ namespace BitCoin
 
             // Validate check sum
             uint8_t checkSum[4];
-            ArcMist::Buffer checkSumData(32);
-            ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+            NextCash::Buffer checkSumData(32);
+            NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
             digest.writeStream(pInput, payloadSize);
             digest.getResult(&checkSumData);
             checkSumData.read(checkSum, 4);
             if(std::memcmp(checkSum, receivedCheckSum, 4) != 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, pName,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, pName,
                   "Invalid message check sum. rec %08x != comp %08x",
                   *((uint32_t *)receivedCheckSum), *((uint32_t *)checkSum));
                 return NULL;
@@ -362,7 +362,7 @@ namespace BitCoin
                     break;
                 default:
                 case UNKNOWN:
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, pName,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, pName,
                       "Unknown command name (%s). Discarding.", command.text());
                     result = NULL;
                     break;
@@ -370,7 +370,7 @@ namespace BitCoin
 
             if(result != NULL && !result->read(pInput, payloadSize, version))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
                   "Failed to read <%s> message", command.text());
                 delete result;
                 result = NULL;
@@ -389,9 +389,9 @@ namespace BitCoin
             return result;
         }
 
-        void Interpreter::write(Data *pData, ArcMist::Buffer *pOutput)
+        void Interpreter::write(Data *pData, NextCash::Buffer *pOutput)
         {
-            pOutput->setOutputEndian(ArcMist::Endian::LITTLE);
+            pOutput->setOutputEndian(NextCash::Endian::LITTLE);
 
             // Write header
             // Start String (4 bytes)
@@ -406,16 +406,16 @@ namespace BitCoin
                 pOutput->writeByte(0);
 
             // Write payload to buffer
-            ArcMist::Buffer payload;
-            payload.setOutputEndian(ArcMist::Endian::LITTLE);
+            NextCash::Buffer payload;
+            payload.setOutputEndian(NextCash::Endian::LITTLE);
             pData->write(&payload);
 
             // Payload Size (4 bytes)
             pOutput->writeUnsignedInt(payload.length());
 
             // Check Sum (4 bytes) SHA256(SHA256(payload))
-            ArcMist::Buffer checkSum(32);
-            ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+            NextCash::Buffer checkSum(32);
+            NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
             digest.writeStream(&payload, payload.length());
             digest.getResult(&checkSum);
             pOutput->writeStream(&checkSum, 4);
@@ -425,7 +425,7 @@ namespace BitCoin
             pOutput->writeStream(&payload, payload.length());
         }
 
-        void InventoryHash::write(ArcMist::OutputStream *pStream) const
+        void InventoryHash::write(NextCash::OutputStream *pStream) const
         {
             // Type
             pStream->writeUnsignedInt(type);
@@ -434,7 +434,7 @@ namespace BitCoin
             hash.write(pStream);
         }
 
-        bool InventoryHash::read(ArcMist::InputStream *pStream)
+        bool InventoryHash::read(NextCash::InputStream *pStream)
         {
             // Type
             type = static_cast<InventoryHash::Type>(pStream->readUnsignedInt());
@@ -449,7 +449,7 @@ namespace BitCoin
                 delete *item;
         }
 
-        void Inventory::write(ArcMist::OutputStream *pStream) const
+        void Inventory::write(NextCash::OutputStream *pStream) const
         {
             // Inventory Hash Count
             writeCompactInteger(pStream, size());
@@ -459,7 +459,7 @@ namespace BitCoin
                 (*item)->write(pStream);
         }
 
-        bool Inventory::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool Inventory::read(NextCash::InputStream *pStream, unsigned int pSize)
         {
             // Inventory Hash Count
             unsigned int startReadOffset = pStream->readOffset();
@@ -514,7 +514,7 @@ namespace BitCoin
             transmittingPort = pTransmittingPort;
 
             // Nonce
-            nonce = ArcMist::Math::randomLong();
+            nonce = NextCash::Math::randomLong();
 
             // User Agent
             userAgent = BITCOIN_USER_AGENT;
@@ -524,7 +524,7 @@ namespace BitCoin
             relay = !pSPVNode && pRelay;
         }
 
-        void VersionData::write(ArcMist::OutputStream *pStream)
+        void VersionData::write(NextCash::OutputStream *pStream)
         {
             // Version
             pStream->writeInt(version);
@@ -542,9 +542,9 @@ namespace BitCoin
             pStream->write(receivingIPv6, 16);
 
             // Receiving Port
-            pStream->setOutputEndian(ArcMist::Endian::BIG);
+            pStream->setOutputEndian(NextCash::Endian::BIG);
             pStream->writeUnsignedShort(receivingPort);
-            pStream->setOutputEndian(ArcMist::Endian::LITTLE);
+            pStream->setOutputEndian(NextCash::Endian::LITTLE);
 
             // Transmitting Services (Same as Services Supported above)
             pStream->writeUnsignedLong(transmittingServices);
@@ -553,9 +553,9 @@ namespace BitCoin
             pStream->write(transmittingIPv6, 16);
 
             // Transmitting Port
-            pStream->setOutputEndian(ArcMist::Endian::BIG);
+            pStream->setOutputEndian(NextCash::Endian::BIG);
             pStream->writeUnsignedShort(transmittingPort);
-            pStream->setOutputEndian(ArcMist::Endian::LITTLE);
+            pStream->setOutputEndian(NextCash::Endian::LITTLE);
 
             // Nonce (Random)
             pStream->writeUnsignedLong(nonce);
@@ -573,7 +573,7 @@ namespace BitCoin
             pStream->writeByte(relay);
         }
 
-        bool VersionData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool VersionData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             unsigned int startReadOffset = pStream->readOffset();
 
@@ -596,9 +596,9 @@ namespace BitCoin
             pStream->read(receivingIPv6, 16);
 
             // Receiving Port
-            pStream->setInputEndian(ArcMist::Endian::BIG);
+            pStream->setInputEndian(NextCash::Endian::BIG);
             receivingPort = pStream->readUnsignedShort();
-            pStream->setInputEndian(ArcMist::Endian::LITTLE);
+            pStream->setInputEndian(NextCash::Endian::LITTLE);
 
             // Transmitting Services (Same as Services Supported above)
             transmittingServices = pStream->readUnsignedLong();
@@ -607,9 +607,9 @@ namespace BitCoin
             pStream->read(transmittingIPv6, 16);
 
             // Transmitting Port
-            pStream->setInputEndian(ArcMist::Endian::BIG);
+            pStream->setInputEndian(NextCash::Endian::BIG);
             transmittingPort = pStream->readUnsignedShort();
-            pStream->setInputEndian(ArcMist::Endian::LITTLE);
+            pStream->setInputEndian(NextCash::Endian::LITTLE);
 
             // Nonce (Random)
             nonce = pStream->readUnsignedLong();
@@ -618,7 +618,7 @@ namespace BitCoin
             uint64_t userAgentLength = readCompactInteger(pStream);
             if(userAgentLength > 512)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "User Agent too long : %d", userAgentLength);
                 return false;
             }
@@ -638,13 +638,13 @@ namespace BitCoin
             return true;
         }
 
-        void PingData::write(ArcMist::OutputStream *pStream)
+        void PingData::write(NextCash::OutputStream *pStream)
         {
             // Nonce (Random)
             pStream->writeUnsignedLong(nonce);
         }
 
-        bool PingData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool PingData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 4)
                 return false;
@@ -654,13 +654,13 @@ namespace BitCoin
             return true;
         }
 
-        void PongData::write(ArcMist::OutputStream *pStream)
+        void PongData::write(NextCash::OutputStream *pStream)
         {
             // Nonce (Random)
             pStream->writeUnsignedLong(nonce);
         }
 
-        bool PongData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool PongData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             // No nonce before version 60000
             if(pVersion <= 60000)
@@ -677,7 +677,7 @@ namespace BitCoin
             return true;
         }
 
-        void RejectData::write(ArcMist::OutputStream *pStream)
+        void RejectData::write(NextCash::OutputStream *pStream)
         {
             // User Command
             writeCompactInteger(pStream, strlen(command));
@@ -699,7 +699,7 @@ namespace BitCoin
             pStream->writeStream(&extra, extra.length());
         }
 
-        bool RejectData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool RejectData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 1)
                 return false;
@@ -710,7 +710,7 @@ namespace BitCoin
             uint64_t commandLength = readCompactInteger(pStream);
             if(pStream->readOffset() + commandLength + 1 > startReadOffset + pSize)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
                   "Reject message not big enough for command + code %d/%d", commandLength + 1,
                   pStream->readOffset() + pSize - startReadOffset);
                 return false;
@@ -726,7 +726,7 @@ namespace BitCoin
             uint64_t reasonLength = readCompactInteger(pStream);
             if(pStream->readOffset() + reasonLength > startReadOffset + pSize)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
                   "Reject message (%s) not big enough for reason %d/%d", command.text(), reasonLength,
                   pStream->readOffset() + pSize - startReadOffset);
                 return false;
@@ -741,15 +741,15 @@ namespace BitCoin
             return true;
         }
 
-        void Address::write(ArcMist::OutputStream *pStream) const
+        void Address::write(NextCash::OutputStream *pStream) const
         {
             pStream->writeUnsignedInt(time);
             pStream->writeUnsignedLong(services);
             pStream->write(ip, 16);
-            pStream->writeUnsignedShort(ArcMist::Endian::convert(port, ArcMist::Endian::BIG));
+            pStream->writeUnsignedShort(NextCash::Endian::convert(port, NextCash::Endian::BIG));
         }
 
-        bool Address::read(ArcMist::InputStream *pStream)
+        bool Address::read(NextCash::InputStream *pStream)
         {
             if(pStream->remaining() < 30)
                 return false;
@@ -757,11 +757,11 @@ namespace BitCoin
             time = pStream->readUnsignedInt();
             services = pStream->readUnsignedLong();
             pStream->read(ip, 16);
-            port = ArcMist::Endian::convert(pStream->readUnsignedShort(), ArcMist::Endian::BIG);
+            port = NextCash::Endian::convert(pStream->readUnsignedShort(), NextCash::Endian::BIG);
             return true;
         }
 
-        void AddressesData::write(ArcMist::OutputStream *pStream)
+        void AddressesData::write(NextCash::OutputStream *pStream)
         {
             // Address Count
             writeCompactInteger(pStream, addresses.size());
@@ -771,7 +771,7 @@ namespace BitCoin
                 address->write(pStream);
         }
 
-        bool AddressesData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool AddressesData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 1)
                 return false;
@@ -793,13 +793,13 @@ namespace BitCoin
             return true;
         }
 
-        void FeeFilterData::write(ArcMist::OutputStream *pStream)
+        void FeeFilterData::write(NextCash::OutputStream *pStream)
         {
             // Fee
             pStream->writeUnsignedLong(minimumFeeRate);
         }
 
-        bool FeeFilterData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool FeeFilterData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 8)
                 return false;
@@ -809,14 +809,14 @@ namespace BitCoin
             return true;
         }
 
-        void FilterAddData::write(ArcMist::OutputStream *pStream)
+        void FilterAddData::write(NextCash::OutputStream *pStream)
         {
             data.setReadOffset(0);
             writeCompactInteger(pStream, data.length());
             pStream->writeStream(&data, data.length());
         }
 
-        bool FilterAddData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool FilterAddData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 1)
                 return false;
@@ -833,17 +833,17 @@ namespace BitCoin
             return true;
         }
 
-        void FilterLoadData::write(ArcMist::OutputStream *pStream)
+        void FilterLoadData::write(NextCash::OutputStream *pStream)
         {
             filter.write(pStream);
         }
 
-        bool FilterLoadData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool FilterLoadData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             return filter.read(pStream);
         }
 
-        void GetBlocksData::write(ArcMist::OutputStream *pStream)
+        void GetBlocksData::write(NextCash::OutputStream *pStream)
         {
             // Version
             pStream->writeUnsignedInt(version);
@@ -861,7 +861,7 @@ namespace BitCoin
             stopHeaderHash.write(pStream);
         }
 
-        bool GetBlocksData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool GetBlocksData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 5)
                 return false;
@@ -889,7 +889,7 @@ namespace BitCoin
             return true;
         }
 
-        void GetHeadersData::write(ArcMist::OutputStream *pStream)
+        void GetHeadersData::write(NextCash::OutputStream *pStream)
         {
             // Version
             pStream->writeUnsignedInt(version);
@@ -907,7 +907,7 @@ namespace BitCoin
             stopHeaderHash.write(pStream);
         }
 
-        bool GetHeadersData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool GetHeadersData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 5)
                 return false;
@@ -935,7 +935,7 @@ namespace BitCoin
             return true;
         }
 
-        void HeadersData::write(ArcMist::OutputStream *pStream)
+        void HeadersData::write(NextCash::OutputStream *pStream)
         {
             // Header count
             writeCompactInteger(pStream, headers.size());
@@ -945,7 +945,7 @@ namespace BitCoin
                 headers[i]->write(pStream, false, true);
         }
 
-        bool HeadersData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool HeadersData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             if(pSize < 1)
                 return false;
@@ -976,7 +976,7 @@ namespace BitCoin
         void MerkleBlockData::addNode(MerkleNode *pNode, unsigned int pDepth, unsigned int &pNextBitOffset,
           unsigned char &pNextByte, std::vector<Transaction *> &pIncludedTransactions)
         {
-            // ArcMist::String padding;
+            // NextCash::String padding;
             // for(unsigned int i=0;i<pDepth;i++)
                 // padding += "  ";
 
@@ -1006,10 +1006,10 @@ namespace BitCoin
             if(pNode->matches && pNode->transaction == NULL)
             {
                 // Descend into children
-                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                   // "%s  Left", padding.text(), pNode->hash.hex().text());
                 addNode(pNode->left, pDepth + 1, pNextBitOffset, pNextByte, pIncludedTransactions);
-                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                   // "%s  Right", padding.text(), pNode->hash.hex().text());
                 addNode(pNode->right, pDepth + 1, pNextBitOffset, pNextByte, pIncludedTransactions);
             }
@@ -1018,11 +1018,11 @@ namespace BitCoin
                 if(pNode->matches)
                 {
                     pIncludedTransactions.push_back(pNode->transaction);
-                    // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                    // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                       // "%s  Included Transaction : %s", padding.text(), pNode->hash.hex().text());
                 }
                 // else
-                    // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                    // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                       // "%s  Excluded Hash : %s", padding.text(), pNode->hash.hex().text());
                 hashes.push_back(pNode->hash);
             }
@@ -1047,7 +1047,7 @@ namespace BitCoin
             delete merkleRoot;
         }
 
-        void MerkleBlockData::write(ArcMist::OutputStream *pStream)
+        void MerkleBlockData::write(NextCash::OutputStream *pStream)
         {
             // Block Header
             block->write(pStream, false, false);
@@ -1070,7 +1070,7 @@ namespace BitCoin
             pStream->writeStream(&flags, flags.length());
         }
 
-        bool MerkleBlockData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool MerkleBlockData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             unsigned int startReadOffset = pStream->readOffset();
 
@@ -1119,13 +1119,13 @@ namespace BitCoin
         }
 
         bool MerkleBlockData::parse(MerkleNode *pNode, unsigned int pDepth, unsigned int &pHashesOffset, unsigned int &pBitOffset,
-          unsigned char &pByte, ArcMist::HashList &pIncludedTransactionHashes)
+          unsigned char &pByte, NextCash::HashList &pIncludedTransactionHashes)
         {
             if(pBitOffset == 8)
             {
                 if(!flags.remaining())
                 {
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                       "Merkle Block over consumed flags");
                     return false;
                 }
@@ -1138,7 +1138,7 @@ namespace BitCoin
             }
 
             bool bitIsSet = (pByte >> pBitOffset++) & 0x01;
-            ArcMist::String padding;
+            NextCash::String padding;
             for(unsigned int i=0;i<pDepth;i++)
                 padding += "  ";
 
@@ -1149,29 +1149,29 @@ namespace BitCoin
                     // Included leaf
                     if(pHashesOffset >= hashes.size())
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                           "Merkle Block over consumed hashes");
                         return false;
                     }
                     pNode->hash = hashes[pHashesOffset++];
                     pIncludedTransactionHashes.push_back(pNode->hash);
-                    // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                    // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                       // "%s  Included : %s", padding.text(), pNode->hash.hex().text());
                     return true;
                 }
                 else
                 {
-                    // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                    // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                       // "%s  Left", padding.text());
                     parse(pNode->left, pDepth + 1, pHashesOffset, pBitOffset, pByte, pIncludedTransactionHashes);
                     if(pNode->left != pNode->right)
                     {
-                        // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                        // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                           // "%s  Right", padding.text());
                         parse(pNode->right, pDepth + 1, pHashesOffset, pBitOffset, pByte, pIncludedTransactionHashes);
                         if(pNode->left->hash == pNode->right->hash)
                         {
-                            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                               "Merkle Block left and right hashes match");
                             return false;
                         }
@@ -1184,22 +1184,22 @@ namespace BitCoin
                 // Non-included leaf
                 if(pHashesOffset >= hashes.size())
                 {
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                       "Merkle Block over consumed hashes");
                     return false;
                 }
                 pNode->hash = hashes[pHashesOffset++];
-                // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                   // "%s  Not Included : %s", padding.text(), pNode->hash.hex().text());
                 return true;
             }
         }
 
-        bool MerkleBlockData::validate(ArcMist::HashList &pIncludedTransactionHashes)
+        bool MerkleBlockData::validate(NextCash::HashList &pIncludedTransactionHashes)
         {
             if(block == NULL || block->transactionCount == 0)
             {
-                ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "Merkle Block has zero transaction count");
                 return false;
             }
@@ -1218,7 +1218,7 @@ namespace BitCoin
 
             if(hashesOffset != hashes.size())
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "Merkle Block failed to consume hashes : %d/%d", hashesOffset, hashes.size());
                 delete merkleRoot;
                 return false; // Not all hashes consumed
@@ -1226,7 +1226,7 @@ namespace BitCoin
 
             if(flags.remaining())
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "Merkle Block failed to consume flags : %d/%d", flags.length() - flags.remaining(), flags.length());
                 delete merkleRoot;
                 return false; // Not all flags were consumed
@@ -1235,7 +1235,7 @@ namespace BitCoin
             // Verify merkle tree root hash from block header
             if(merkleRoot->hash != block->merkleHash)
             {
-                ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "Merkle Block root hash doesn't match");
                 delete merkleRoot;
                 return false;
@@ -1245,7 +1245,7 @@ namespace BitCoin
             return true;
         }
 
-        void PrefilledTransaction::write(ArcMist::OutputStream *pStream)
+        void PrefilledTransaction::write(NextCash::OutputStream *pStream)
         {
             // Offset
             writeCompactInteger(pStream, offset);
@@ -1254,7 +1254,7 @@ namespace BitCoin
             transaction->write(pStream);
         }
 
-        bool PrefilledTransaction::read(ArcMist::InputStream *pStream, unsigned int pSize)
+        bool PrefilledTransaction::read(NextCash::InputStream *pStream, unsigned int pSize)
         {
             // Offset
             offset = readCompactInteger(pStream);
@@ -1282,9 +1282,9 @@ namespace BitCoin
             if(block == NULL)
                 return false;
 
-            ArcMist::Digest digest(ArcMist::Digest::SHA256);
-            ArcMist::Hash sha256;
-            ArcMist::Hash shortID;
+            NextCash::Digest digest(NextCash::Digest::SHA256);
+            NextCash::Hash sha256;
+            NextCash::Hash shortID;
             bool found;
 
             // SHA256 of block header and nonce
@@ -1326,7 +1326,7 @@ namespace BitCoin
             block = pBlock;
 
             // Nonce
-            nonce = ArcMist::Math::randomLong();
+            nonce = NextCash::Math::randomLong();
 
             // Short IDs
             shortIDs.clear();
@@ -1342,7 +1342,7 @@ namespace BitCoin
             if(block == NULL)
                 return false;
 
-            // ArcMist::Digest digest(ArcMist::Digest::SHA256);
+            // NextCash::Digest digest(NextCash::Digest::SHA256);
             // Hash sha256;
             // Hash shortID;
             // bool found;
@@ -1361,7 +1361,7 @@ namespace BitCoin
             return false;
         }
 
-        void CompactBlockData::write(ArcMist::OutputStream *pStream)
+        void CompactBlockData::write(NextCash::OutputStream *pStream)
         {
             if(block == NULL)
                 return;
@@ -1378,7 +1378,7 @@ namespace BitCoin
             writeCompactInteger(pStream, shortIDs.size());
 
             // Short IDs
-            for(ArcMist::HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
+            for(NextCash::HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
                 shortID->write(pStream);
 
             // Number of prefilled transactions
@@ -1389,7 +1389,7 @@ namespace BitCoin
                 trans->write(pStream);
         }
 
-        bool CompactBlockData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool CompactBlockData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             unsigned int startOffset = pStream->readOffset();
 
@@ -1419,7 +1419,7 @@ namespace BitCoin
 
             shortIDs.resize(count);
             unsigned int readCount = 0;
-            for(ArcMist::HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
+            for(NextCash::HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
             {
                 if(!shortID->read(pStream, 6))
                 {
@@ -1461,23 +1461,23 @@ namespace BitCoin
             return true;
         }
 
-        void GetBlockTransactionsData::write(ArcMist::OutputStream *pStream)
+        void GetBlockTransactionsData::write(NextCash::OutputStream *pStream)
         {
             //TODO
         }
 
-        bool GetBlockTransactionsData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool GetBlockTransactionsData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             //TODO
             return false;
         }
 
-        void BlockTransactionsData::write(ArcMist::OutputStream *pStream)
+        void BlockTransactionsData::write(NextCash::OutputStream *pStream)
         {
             //TODO
         }
 
-        bool BlockTransactionsData::read(ArcMist::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool BlockTransactionsData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
             //TODO
             return false;
@@ -1485,7 +1485,7 @@ namespace BitCoin
 
         bool test()
         {
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "------------- Starting Message Tests -------------");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "------------- Starting Message Tests -------------");
 
             bool result = true;
             Interpreter interpreter;
@@ -1496,7 +1496,7 @@ namespace BitCoin
             uint8_t rIP[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x04, 0x03, 0x02, 0x01 };
             uint8_t tIP[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x08, 0x07, 0x06, 0x05 };
             VersionData versionSendData(rIP, 1333, 3, tIP, 1333, false, false, 125, false);
-            ArcMist::Buffer messageBuffer;
+            NextCash::Buffer messageBuffer;
 
             interpreter.write(&versionSendData, &messageBuffer);
 
@@ -1504,12 +1504,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version message read");
                 result = false;
             }
             else if(messageReceiveData->type != VERSION)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version message read type");
                 result = false;
             }
             else
@@ -1558,10 +1558,10 @@ namespace BitCoin
                     versionDataMatches = false;
 
                 if(versionDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed version message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed version message");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version message compare");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version message compare");
                     result = false;
                 }
             }
@@ -1577,16 +1577,16 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version acknowledge message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version acknowledge message read");
                 result = false;
             }
             else if(messageReceiveData->type != VERACK)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version acknowledge message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version acknowledge message read type");
                 result = false;
             }
             else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed version acknowledge message");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed version acknowledge message");
 
             /***********************************************************************************************
              * PING
@@ -1599,16 +1599,16 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed ping message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed ping message read");
                 result = false;
             }
             else if(messageReceiveData->type != PING)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed ping message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed ping message read type");
                 result = false;
             }
             else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed ping message");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed ping message");
 
             /***********************************************************************************************
              * PONG
@@ -1621,16 +1621,16 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed pong message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed pong message read");
                 result = false;
             }
             else if(messageReceiveData->type != PONG)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed pong message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed pong message read type");
                 result = false;
             }
             else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed pong message");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed pong message");
 
             /***********************************************************************************************
              * REJECT
@@ -1643,12 +1643,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed reject message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed reject message read");
                 result = false;
             }
             else if(messageReceiveData->type != REJECT)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed reject message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed reject message read type");
                 result = false;
             }
             else
@@ -1666,10 +1666,10 @@ namespace BitCoin
                     rejectDataMatches = false;
 
                 if(rejectDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed reject message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed reject message");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed reject message compare");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed reject message compare");
                     result = false;
                 }
             }
@@ -1685,16 +1685,16 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get addresses message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get addresses message read");
                 result = false;
             }
             else if(messageReceiveData->type != GET_ADDRESSES)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get addresses message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get addresses message read type");
                 result = false;
             }
             else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed get addresses message");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed get addresses message");
 
             /***********************************************************************************************
              * ADDRESSES
@@ -1726,12 +1726,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed addresses message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed addresses message read");
                 result = false;
             }
             else if(messageReceiveData->type != ADDRESSES)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed addresses message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed addresses message read type");
                 result = false;
             }
             else
@@ -1755,10 +1755,10 @@ namespace BitCoin
                     addressesDataMatches = false;
 
                 if(addressesDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed addresses message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed addresses message");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed addresses message compare");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed addresses message compare");
                     result = false;
                 }
             }
@@ -1774,12 +1774,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed fee filter message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed fee filter message read");
                 result = false;
             }
             else if(messageReceiveData->type != FEE_FILTER)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed fee filter message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed fee filter message read type");
                 result = false;
             }
             else
@@ -1791,10 +1791,10 @@ namespace BitCoin
                     feeFilterDataMatches = false;
 
                 if(feeFilterDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed fee filter message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed fee filter message");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed fee filter message compare");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed fee filter message compare");
                     result = false;
                 }
             }
@@ -1803,7 +1803,7 @@ namespace BitCoin
              * FILTER_ADD
              ***********************************************************************************************/
             FilterAddData filterAddData;
-            ArcMist::Hash filterRandomHash(32), filterCheckHash(32);
+            NextCash::Hash filterRandomHash(32), filterCheckHash(32);
 
             filterRandomHash.randomize();
             filterRandomHash.write(&filterAddData.data);
@@ -1814,12 +1814,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter add message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter add message read");
                 result = false;
             }
             else if(messageReceiveData->type != FILTER_ADD)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter add message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter add message read type");
                 result = false;
             }
             else
@@ -1828,16 +1828,16 @@ namespace BitCoin
 
                 if(!filterCheckHash.read(&receivedFilterAddData->data))
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter add message read hash");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter add message read hash");
                     result = false;
                 }
                 else if(filterRandomHash != filterCheckHash)
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter add message hash not matching");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter add message hash not matching");
                     result = false;
                 }
                 else
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed filter add message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed filter add message");
             }
 
             /***********************************************************************************************
@@ -1860,12 +1860,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message read");
                 result = false;
             }
             else if(messageReceiveData->type != FILTER_LOAD)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message read type");
                 result = false;
             }
             else
@@ -1874,31 +1874,31 @@ namespace BitCoin
 
                 if(receivedFilterLoadData->filter.size() != filter.size())
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message filter size");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message filter size");
                     result = false;
                 }
                 else if(receivedFilterLoadData->filter.functionCount() != filter.functionCount())
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message filter function count");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message filter function count");
                     result = false;
                 }
                 else if(receivedFilterLoadData->filter.tweak() != filter.tweak())
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message filter tweak");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message filter tweak");
                     result = false;
                 }
                 else if(receivedFilterLoadData->filter.flags() != filter.flags())
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message filter flags");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message filter flags");
                     result = false;
                 }
                 else if(std::memcmp(receivedFilterLoadData->filter.data(), filter.data(), filter.size()) != 0)
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message filter data");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message filter data");
                     result = false;
                 }
                 else
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed filter load message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed filter load message");
             }
 
             /***********************************************************************************************
@@ -1912,12 +1912,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get blocks message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get blocks message read");
                 result = false;
             }
             else if(messageReceiveData->type != GET_BLOCKS)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get blocks message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get blocks message read type");
                 result = false;
             }
             else
@@ -1939,10 +1939,10 @@ namespace BitCoin
                     getBlocksDataMatches = false;
 
                 if(getBlocksDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed get blocks message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed get blocks message");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get blocks message compare");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get blocks message compare");
                     result = false;
                 }
             }
@@ -1959,12 +1959,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed block message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed block message read");
                 result = false;
             }
             else if(messageReceiveData->type != BLOCK)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed block message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed block message read type");
                 result = false;
             }
             else
@@ -1998,10 +1998,10 @@ namespace BitCoin
                 //        blockDataMatches = false;
 
                 if(blockDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed block message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed block message");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed block message compare");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed block message compare");
                     result = false;
                 }
             }
@@ -2017,12 +2017,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get data message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get data message read");
                 result = false;
             }
             else if(messageReceiveData->type != GET_DATA)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get data message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get data message read type");
                 result = false;
             }
             else
@@ -2040,10 +2040,10 @@ namespace BitCoin
                         getDataDataMatches = false;
 
                 if(getDataDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed get data message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed get data message");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get data message compare");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get data message compare");
                     result = false;
                 }
             }
@@ -2059,12 +2059,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get headers message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get headers message read");
                 result = false;
             }
             else if(messageReceiveData->type != GET_HEADERS)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get headers message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get headers message read type");
                 result = false;
             }
             else
@@ -2086,10 +2086,10 @@ namespace BitCoin
                     getHeadersDataMatches = false;
 
                 if(getHeadersDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed get headers message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed get headers message");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get headers message compare");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get headers message compare");
                     result = false;
                 }
             }
@@ -2105,12 +2105,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed headers message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed headers message read");
                 result = false;
             }
             else if(messageReceiveData->type != HEADERS)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed headers message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed headers message read type");
                 result = false;
             }
             else
@@ -2126,10 +2126,10 @@ namespace BitCoin
                 //        headersDataMatches = false;
 
                 if(headersDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed headers message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed headers message");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed headers message compare");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed headers message compare");
                     result = false;
                 }
             }
@@ -2145,12 +2145,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed inventory message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed inventory message read");
                 result = false;
             }
             else if(messageReceiveData->type != INVENTORY)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed inventory message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed inventory message read type");
                 result = false;
             }
             else
@@ -2168,10 +2168,10 @@ namespace BitCoin
                         inventoryDataMatches = false;
 
                 if(inventoryDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed inventory message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed inventory message");
                 else
                 {
-                    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed inventory message compare");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed inventory message compare");
                     result = false;
                 }
             }
@@ -2187,16 +2187,16 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed mem pool message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed mem pool message read");
                 result = false;
             }
             else if(messageReceiveData->type != MEM_POOL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed mem pool message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed mem pool message read type");
                 result = false;
             }
             else
-                ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed mem pool message");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed mem pool message");
 
             /***********************************************************************************************
              * MERKLE_BLOCK
@@ -2210,12 +2210,12 @@ namespace BitCoin
 
             // if(messageReceiveData == NULL)
             // {
-                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed merkle block message read");
+                // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed merkle block message read");
                 // result = false;
             // }
             // else if(messageReceiveData->type != MERKLE_BLOCK)
             // {
-                // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed merkle block message read type");
+                // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed merkle block message read type");
                 // result = false;
             // }
             // else
@@ -2237,10 +2237,10 @@ namespace BitCoin
                     // merkleBlockDataMatches = false;
 
                 // if(merkleBlockDataMatches)
-                    // ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed merkle block message");
+                    // NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed merkle block message");
                 // else
                 // {
-                    // ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed merkle block message compare");
+                    // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed merkle block message compare");
                     // result = false;
                 // }
             // }
@@ -2258,12 +2258,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed transaction message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed transaction message read");
                 result = false;
             }
             else if(messageReceiveData->type != TRANSACTION)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed transaction message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed transaction message read type");
                 result = false;
             }
             else
@@ -2276,10 +2276,10 @@ namespace BitCoin
                 //    transactionDataMatches = false;
 
                 //if(transactionDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed transaction message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed transaction message");
                 //else
                 //{
-                //    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed transaction message compare");
+                //    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed transaction message compare");
                 //    result = false;
                 //}
             }
@@ -2295,12 +2295,12 @@ namespace BitCoin
 
             if(messageReceiveData == NULL)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed not found message read");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed not found message read");
                 result = false;
             }
             else if(messageReceiveData->type != NOT_FOUND)
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed not found message read type");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed not found message read type");
                 result = false;
             }
             else
@@ -2313,10 +2313,10 @@ namespace BitCoin
                 //    notFoundDataMatches = false;
 
                 //if(notFoundDataMatches)
-                    ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed not found message");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed not found message");
                 //else
                 //{
-                //    ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed not found message compare");
+                //    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed not found message compare");
                 //    result = false;
                 //}
             }

@@ -1,17 +1,17 @@
 /**************************************************************************
- * Copyright 2017-2018 ArcMist, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                       *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_REQUESTS_HPP
 #define BITCOIN_REQUESTS_HPP
 
-#include "arcmist/base/mutex.hpp"
-#include "arcmist/base/thread.hpp"
-#include "arcmist/io/network.hpp"
-#include "arcmist/io/buffer.hpp"
+#include "nextcash/base/mutex.hpp"
+#include "nextcash/base/thread.hpp"
+#include "nextcash/io/network.hpp"
+#include "nextcash/io/buffer.hpp"
 
 #include "chain.hpp"
 
@@ -22,7 +22,7 @@ namespace BitCoin
     {
     public:
 
-        RequestChannel(ArcMist::Network::Connection *pConnection, Chain *pChain);
+        RequestChannel(NextCash::Network::Connection *pConnection, Chain *pChain);
         ~RequestChannel();
 
         static void run();
@@ -36,11 +36,11 @@ namespace BitCoin
         void process();
 
         unsigned int mID;
-        ArcMist::String mName;
-        ArcMist::Thread *mThread;
-        ArcMist::Mutex mConnectionMutex;
-        ArcMist::Network::Connection *mConnection;
-        ArcMist::Buffer mReceiveBuffer;
+        NextCash::String mName;
+        NextCash::Thread *mThread;
+        NextCash::Mutex mConnectionMutex;
+        NextCash::Network::Connection *mConnection;
+        NextCash::Buffer mReceiveBuffer;
         bool mStop, mStopped, mAuthenticated;
 
         int32_t mLastReceiveTime;

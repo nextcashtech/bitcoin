@@ -1,20 +1,20 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #include "block.hpp"
 
 #ifdef PROFILER_ON
-#include "arcmist/dev/profiler.hpp"
+#include "nextcash/dev/profiler.hpp"
 #endif
 
-#include "arcmist/base/log.hpp"
-#include "arcmist/base/endian.hpp"
-#include "arcmist/base/thread.hpp"
-#include "arcmist/crypto/digest.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/base/endian.hpp"
+#include "nextcash/base/thread.hpp"
+#include "nextcash/crypto/digest.hpp"
 #include "interpreter.hpp"
 #include "info.hpp"
 
@@ -44,12 +44,12 @@ namespace BitCoin
 
     bool Block::hasProofOfWork()
     {
-        ArcMist::Hash target;
+        NextCash::Hash target;
         target.setDifficulty(targetBits);
         return hash <= target;
     }
 
-    void Block::write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
+    void Block::write(NextCash::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
       bool pBlockFile)
     {
         unsigned int startOffset = pStream->writeOffset();
@@ -96,18 +96,18 @@ namespace BitCoin
         mSize = pStream->writeOffset() - startOffset;
     }
 
-    bool Block::read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
+    bool Block::read(NextCash::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
       bool pCalculateHash, bool pBlockFile)
     {
         unsigned int startOffset = pStream->readOffset();
         mSize = 0;
 
         // Create hash
-        ArcMist::Digest *digest = NULL;
+        NextCash::Digest *digest = NULL;
         if(pCalculateHash)
         {
-            digest = new ArcMist::Digest(ArcMist::Digest::SHA256_SHA256);
-            digest->setOutputEndian(ArcMist::Endian::LITTLE);
+            digest = new NextCash::Digest(NextCash::Digest::SHA256_SHA256);
+            digest->setOutputEndian(NextCash::Endian::LITTLE);
         }
         hash.clear();
 
@@ -116,7 +116,7 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block read failed : stream too short for transaction count");
             return false;
         }
@@ -131,7 +131,7 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block read failed : read previous hash failed");
             return false;
         }
@@ -143,7 +143,7 @@ namespace BitCoin
         {
             if(digest != NULL)
                 delete digest;
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block read failed : read merkle hash failed");
             return false;
         }
@@ -191,7 +191,7 @@ namespace BitCoin
 
         if(pStream->remaining() < transactionCount)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block read failed : stream remaining less than transaction count");
             return false;
         }
@@ -207,7 +207,7 @@ namespace BitCoin
             ++actualCount;
             if(!(*transaction)->read(pStream, true, pBlockFile))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
                   "Block read failed : transaction %d read failed", actualCount);
                 success = false;
                 break;
@@ -238,20 +238,20 @@ namespace BitCoin
         mSize = 0;
     }
 
-    void Block::print(ArcMist::Log::Level pLevel, bool pIncludeTransactions)
+    void Block::print(NextCash::Log::Level pLevel, bool pIncludeTransactions)
     {
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Hash          : %s", hash.hex().text());
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Version       : 0x%08x", version);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Previous Hash : %s", previousHash.hex().text());
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "MerkleHash    : %s", merkleHash.hex().text());
-        ArcMist::String timeText;
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Hash          : %s", hash.hex().text());
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Version       : 0x%08x", version);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Previous Hash : %s", previousHash.hex().text());
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "MerkleHash    : %s", merkleHash.hex().text());
+        NextCash::String timeText;
         timeText.writeFormattedTime(time);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Time          : %s (%d)", timeText.text(), time);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Bits          : 0x%08x", targetBits);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Nonce         : 0x%08x", nonce);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Total Fees    : %f", bitcoins(mFees));
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Size (KiB)    : %d", mSize / 1024);
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "%d Transactions", transactionCount);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Time          : %s (%d)", timeText.text(), time);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Bits          : 0x%08x", targetBits);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Nonce         : 0x%08x", nonce);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Total Fees    : %f", bitcoins(mFees));
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Size (KiB)    : %d", mSize / 1024);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "%d Transactions", transactionCount);
 
         if(!pIncludeTransactions)
             return;
@@ -260,9 +260,9 @@ namespace BitCoin
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
             if(index == 0)
-                ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Coinbase Transaction", index++);
+                NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Coinbase Transaction", index++);
             else
-                ArcMist::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Transaction %d", index++);
+                NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Transaction %d", index++);
             (*transaction)->print(pLevel);
         }
     }
@@ -273,27 +273,27 @@ namespace BitCoin
             return;
 
         // Write into digest
-        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
-        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
         write(&digest, false, false);
 
         // Get SHA256_SHA256 of block data
         digest.getResult(&hash);
     }
 
-    void concatHash(const ArcMist::Hash &pLeft, const ArcMist::Hash &pRight, ArcMist::Hash &pResult)
+    void concatHash(const NextCash::Hash &pLeft, const NextCash::Hash &pRight, NextCash::Hash &pResult)
     {
-        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
-        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
         pLeft.write(&digest);
         pRight.write(&digest);
         pResult.setSize(32);
         digest.getResult(&pResult);
     }
 
-    void calculateMerkleHashLevel(std::vector<ArcMist::Hash> &pHashes, ArcMist::Hash &pResult)
+    void calculateMerkleHashLevel(std::vector<NextCash::Hash> &pHashes, NextCash::Hash &pResult)
     {
-        std::vector<ArcMist::Hash>::iterator next = pHashes.begin();
+        std::vector<NextCash::Hash>::iterator next = pHashes.begin();
         ++next;
         if(next == pHashes.end())
         {
@@ -302,7 +302,7 @@ namespace BitCoin
             return;
         }
 
-        std::vector<ArcMist::Hash>::iterator nextNext = next;
+        std::vector<NextCash::Hash>::iterator nextNext = next;
         ++nextNext;
         if(nextNext == pHashes.end())
         {
@@ -312,9 +312,9 @@ namespace BitCoin
         }
 
         // More than two entries. Move up the tree a level.
-        std::vector<ArcMist::Hash> nextLevel;
-        ArcMist::Hash one, two, newHash;
-        std::vector<ArcMist::Hash>::iterator hash = pHashes.begin();
+        std::vector<NextCash::Hash> nextLevel;
+        NextCash::Hash one, two, newHash;
+        std::vector<NextCash::Hash>::iterator hash = pHashes.begin();
 
         while(hash != pHashes.end())
         {
@@ -339,7 +339,7 @@ namespace BitCoin
         calculateMerkleHashLevel(nextLevel, pResult);
     }
 
-    void Block::calculateMerkleHash(ArcMist::Hash &pMerkleHash)
+    void Block::calculateMerkleHash(NextCash::Hash &pMerkleHash)
     {
         pMerkleHash.setSize(32);
         if(transactions.size() == 0)
@@ -349,7 +349,7 @@ namespace BitCoin
         else
         {
             // Collect transaction hashes
-            std::vector<ArcMist::Hash> hashes;
+            std::vector<NextCash::Hash> hashes;
             for(std::vector<Transaction *>::iterator trans=transactions.begin();trans!=transactions.end();++trans)
                 hashes.push_back((*trans)->hash);
 
@@ -370,8 +370,8 @@ namespace BitCoin
         if(left->hash.isEmpty() || right->hash.isEmpty())
             return false;
 
-        ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
-        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
         left->hash.write(&digest);
         right->hash.write(&digest);
         hash.setSize(32);
@@ -469,30 +469,30 @@ namespace BitCoin
 
     void MerkleNode::print(unsigned int pDepth)
     {
-        ArcMist::String padding;
+        NextCash::String padding;
         for(unsigned int i=0;i<pDepth;i++)
             padding += "  ";
 
         if(transaction != NULL)
         {
             if(matches)
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sTrans (match) : %s",
+                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sTrans (match) : %s",
                   padding.text(), hash.hex().text());
             else
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sTrans (no)    : %s",
+                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sTrans (no)    : %s",
                   padding.text(), hash.hex().text());
         }
         else if(matches)
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sHash (match) : %s",
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sHash (match) : %s",
               padding.text(), hash.hex().text());
         else
-            ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sHash (no)    : %s",
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%sHash (no)    : %s",
               padding.text(), hash.hex().text());
 
         if(matches && left != NULL)
         {
             if(matches)
-                ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%s  Left",
+                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%s  Left",
                   padding.text(), hash.hex().text());
 
             left->print(pDepth + 1);
@@ -500,7 +500,7 @@ namespace BitCoin
             if(left != right)
             {
                 if(matches)
-                    ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%s  Right",
+                    NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME, "%s  Right",
                       padding.text(), hash.hex().text());
                 right->print(pDepth + 1);
             }
@@ -511,7 +511,7 @@ namespace BitCoin
     {
         if(transactions.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
             return false;
         }
 
@@ -524,7 +524,7 @@ namespace BitCoin
         {
             if(!(*transaction)->updateOutputs(pOutputs, transactions, pBlockHeight, spentAges))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Transaction %d update failed",
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Transaction %d update failed",
                   transactionOffset);
                 return false;
             }
@@ -537,7 +537,7 @@ namespace BitCoin
             for(std::vector<unsigned int>::iterator spentAge=spentAges.begin();spentAge!=spentAges.end();++spentAge)
                 totalSpentAge += *spentAge;
             unsigned int averageSpentAge = totalSpentAge / spentAges.size();
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Average spent age for block %d is %d for %d inputs", pBlockHeight, averageSpentAge, spentAges.size());
         }
         return true;
@@ -547,47 +547,47 @@ namespace BitCoin
       const Forks &pForks)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Block Process");
+        NextCash::Profiler profiler("Block Process");
 #endif
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block at height %d (%d trans) (%d KiB) : %s", pBlockHeight, transactionCount,
           size() / 1024, hash.hex().text());
 
         if(transactions.size() == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "No transactions. At least a coin base is required");
             return false;
         }
 
         if(pForks.requiredVersion() > version)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Version %d required",
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Version %d required",
               pForks.requiredVersion());
             return false;
         }
 
         if(pForks.cashForkBlockHeight() == pBlockHeight && size() < Forks::HARD_MAX_BLOCK_SIZE)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Cash fork block size must be greater than %d bytes : %d bytes", Forks::HARD_MAX_BLOCK_SIZE, size());
             return false;
         }
 
         if(size() > pForks.blockMaxSize())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Block size must be less than %d bytes : %d", pForks.blockMaxSize(), size());
             return false;
         }
 
         // Validate Merkle Hash
-        ArcMist::Hash calculatedMerkleHash;
+        NextCash::Hash calculatedMerkleHash;
         calculateMerkleHash(calculatedMerkleHash);
         if(calculatedMerkleHash != merkleHash)
         {
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Block merkle root hash is invalid");
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Included   : %s", merkleHash.hex().text());
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Calculated : %s", merkleHash.hex().text());
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Block merkle root hash is invalid");
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Included   : %s", merkleHash.hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Calculated : %s", merkleHash.hex().text());
             return false;
         }
 
@@ -606,12 +606,12 @@ namespace BitCoin
         std::vector<unsigned int> spentAges;
         for(std::vector<Transaction *>::iterator transaction=transactions.begin();transaction!=transactions.end();++transaction)
         {
-            // ArcMist::Log::addFormatted(ArcMist::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
+            // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
               // "Processing transaction %d", transactionOffset);
             if(!(*transaction)->process(pOutputs, transactions, pBlockHeight, isCoinBase, version,
               pBlockStats, pForks, spentAges))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Transaction %d failed", transactionOffset);
                 return false;
             }
@@ -627,18 +627,18 @@ namespace BitCoin
             for(std::vector<unsigned int>::iterator spentAge=spentAges.begin();spentAge!=spentAges.end();++spentAge)
                 totalSpentAge += *spentAge;
             unsigned int averageSpentAge = totalSpentAge / spentAges.size();
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Average spent age for block %d is %d for %d inputs", pBlockHeight, averageSpentAge, spentAges.size());
         }
 
         // Check that coinbase output amount - fees is correct for block height
         if(-transactions.front()->fee() - mFees > coinBaseAmount(pBlockHeight))
         {
-            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Coinbase outputs are too high");
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Coinbase %.08f",
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Coinbase outputs are too high");
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Coinbase %.08f",
               bitcoins(-transactions.front()->fee()));
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Fees     %.08f", bitcoins(mFees));
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME, "Fees     %.08f", bitcoins(mFees));
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Block %d Coinbase amount should be %.08f", pBlockHeight, bitcoins(coinBaseAmount(pBlockHeight)));
             return false;
         }
@@ -703,14 +703,14 @@ namespace BitCoin
 
         while(!hasProofOfWork())
         {
-            nonce = ArcMist::Math::randomLong();
+            nonce = NextCash::Math::randomLong();
             calculateHash();
         }
     }
 
-    ArcMist::Mutex BlockFile::mBlockFileMutex("Block File");
+    NextCash::Mutex BlockFile::mBlockFileMutex("Block File");
     std::vector<unsigned int> BlockFile::mLockedBlockFileIDs;
-    ArcMist::String BlockFile::mBlockFilePath;
+    NextCash::String BlockFile::mBlockFilePath;
 
     BlockFile::BlockFile(unsigned int pID, bool pValidate)
     {
@@ -724,19 +724,19 @@ namespace BitCoin
 
         if(!openFile())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
               "Failed to open block file : %s", mFilePathName.text());
             mValid = false;
             return;
         }
 
         // Read start string
-        ArcMist::String startString = mInputFile->readString(8);
+        NextCash::String startString = mInputFile->readString(8);
 
         // Check start string
         if(startString != START_STRING)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x missing start string", mID);
             mValid = false;
             return;
@@ -748,20 +748,20 @@ namespace BitCoin
         if(pValidate)
         {
             // Calculate CRC
-            ArcMist::Digest digest(ArcMist::Digest::CRC32);
-            digest.setOutputEndian(ArcMist::Endian::LITTLE);
+            NextCash::Digest digest(NextCash::Digest::CRC32);
+            digest.setOutputEndian(NextCash::Endian::LITTLE);
             digest.writeStream(mInputFile, mInputFile->remaining());
 
             // Get Calculated CRC
-            ArcMist::Buffer crcBuffer;
-            crcBuffer.setEndian(ArcMist::Endian::LITTLE);
+            NextCash::Buffer crcBuffer;
+            crcBuffer.setEndian(NextCash::Endian::LITTLE);
             digest.getResult(&crcBuffer);
             unsigned int calculatedCRC = crcBuffer.readUnsignedInt();
 
             // Check CRC
             if(crc != calculatedCRC)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
                   "Block file %08x has invalid CRC : %08x != %08x", mID, crc, calculatedCRC);
                 mValid = false;
                 return;
@@ -777,8 +777,8 @@ namespace BitCoin
         if(mInputFile != NULL)
             delete mInputFile;
 
-        mInputFile = new ArcMist::FileInputStream(mFilePathName);
-        mInputFile->setInputEndian(ArcMist::Endian::LITTLE);
+        mInputFile = new NextCash::FileInputStream(mFilePathName);
+        mInputFile->setInputEndian(NextCash::Endian::LITTLE);
         mInputFile->setReadOffset(0);
 
         return mInputFile->isValid();
@@ -786,9 +786,9 @@ namespace BitCoin
 
     BlockFile *BlockFile::create(unsigned int pID)
     {
-        ArcMist::createDirectory(path());
-        ArcMist::FileOutputStream *outputFile = new ArcMist::FileOutputStream(fileName(pID), true);
-        outputFile->setOutputEndian(ArcMist::Endian::LITTLE);
+        NextCash::createDirectory(path());
+        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(fileName(pID), true);
+        outputFile->setOutputEndian(NextCash::Endian::LITTLE);
 
         if(!outputFile->isValid())
         {
@@ -803,9 +803,9 @@ namespace BitCoin
         outputFile->writeUnsignedInt(0);
 
         // Write zero hashes
-        ArcMist::Digest digest(ArcMist::Digest::CRC32);
-        digest.setOutputEndian(ArcMist::Endian::LITTLE);
-        ArcMist::Hash zeroHash(32);
+        NextCash::Digest digest(NextCash::Digest::CRC32);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
+        NextCash::Hash zeroHash(32);
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
             zeroHash.write(outputFile);
@@ -817,8 +817,8 @@ namespace BitCoin
         }
 
         // Get CRC
-        ArcMist::Buffer crcBuffer;
-        crcBuffer.setEndian(ArcMist::Endian::LITTLE);
+        NextCash::Buffer crcBuffer;
+        crcBuffer.setEndian(NextCash::Endian::LITTLE);
         digest.getResult(&crcBuffer);
         unsigned int crc = crcBuffer.readUnsignedInt();
 
@@ -827,7 +827,7 @@ namespace BitCoin
         outputFile->writeUnsignedInt(crc);
         delete outputFile;
 
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Block file %08x created with CRC : %08x", pID, crc);
 
         // Create and return block file object
@@ -843,9 +843,9 @@ namespace BitCoin
 
     bool BlockFile::remove(unsigned int pID)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
           "Removing block file %08x", pID);
-        return ArcMist::removeFile(fileName(pID));
+        return NextCash::removeFile(fileName(pID));
     }
 
     void BlockFile::getLastCount()
@@ -885,7 +885,7 @@ namespace BitCoin
     bool BlockFile::addBlock(Block &pBlock)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Block Add");
+        NextCash::Profiler profiler("Block Add");
 #endif
         if(!openFile())
             return false;
@@ -894,13 +894,13 @@ namespace BitCoin
 
         if(count == MAX_BLOCKS)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x is already full", mID);
             return false;
         }
 
         // Find offset of after the last block
-        ArcMist::stream_size nextBlockOffset = mInputFile->length();
+        NextCash::stream_size nextBlockOffset = mInputFile->length();
 
         if(count > 0)
         {
@@ -909,7 +909,7 @@ namespace BitCoin
             unsigned int offset = mInputFile->readUnsignedInt();
             if(offset == 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Block file %08x offset %d is zero", mID, count - 1);
                 return false;
             }
@@ -918,7 +918,7 @@ namespace BitCoin
             mInputFile->setReadOffset(offset);
             if(!block.read(mInputFile, !mSPVMode, !mSPVMode, false, true))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Block file %08x offset %d has invalid block", mID, count - 1);
                 return false;
             }
@@ -929,11 +929,11 @@ namespace BitCoin
             delete mInputFile;
         mInputFile = NULL;
 
-        ArcMist::FileOutputStream *outputFile = new ArcMist::FileOutputStream(mFilePathName);
-        outputFile->setOutputEndian(ArcMist::Endian::LITTLE);
+        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(mFilePathName);
+        outputFile->setOutputEndian(NextCash::Endian::LITTLE);
         if(!outputFile->isValid())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x output file failed to open", mID);
             delete outputFile;
             return false;
@@ -958,7 +958,7 @@ namespace BitCoin
     bool BlockFile::removeBlocksAbove(unsigned int pOffset)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Block Remove Above");
+        NextCash::Profiler profiler("Block Remove Above");
 #endif
         if(!openFile())
             return false;
@@ -966,7 +966,7 @@ namespace BitCoin
         unsigned int count = blockCount();
         if(count <= pOffset || pOffset >= (MAX_BLOCKS - 1))
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x offset not above %d", mID, pOffset);
             return false;
         }
@@ -981,7 +981,7 @@ namespace BitCoin
             mInputFile->setReadOffset(HASHES_OFFSET + (pOffset * HEADER_ITEM_SIZE));
             if(!mLastHash.read(mInputFile, 32))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Block file %08x failed to read hash at offset %d", mID, pOffset);
                 return false;
             }
@@ -991,18 +991,18 @@ namespace BitCoin
             delete mInputFile;
         mInputFile = NULL;
 
-        ArcMist::FileOutputStream *outputFile = new ArcMist::FileOutputStream(mFilePathName);
-        outputFile->setOutputEndian(ArcMist::Endian::LITTLE);
+        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(mFilePathName);
+        outputFile->setOutputEndian(NextCash::Endian::LITTLE);
         if(!outputFile->isValid())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x output file failed to open", mID);
             delete outputFile;
             return false;
         }
 
         // Zeroize hashes and offsets above the specified block offset
-        ArcMist::Hash zeroHash(32);
+        NextCash::Hash zeroHash(32);
         outputFile->setWriteOffset(HASHES_OFFSET + ((pOffset + 1) * HEADER_ITEM_SIZE));
         for(unsigned int i=pOffset+1;i<count;++i)
         {
@@ -1016,7 +1016,7 @@ namespace BitCoin
         return true;
     }
 
-    bool BlockFile::readBlockHashes(ArcMist::HashList &pHashes)
+    bool BlockFile::readBlockHashes(NextCash::HashList &pHashes)
     {
         pHashes.clear();
         if(!openFile())
@@ -1025,7 +1025,7 @@ namespace BitCoin
             return false;
         }
 
-        ArcMist::Hash hash(32);
+        NextCash::Hash hash(32);
         mInputFile->setReadOffset(HASHES_OFFSET);
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
@@ -1086,8 +1086,8 @@ namespace BitCoin
     }
 
     // If pStartingHash is empty then start with first block in file
-    bool BlockFile::readBlockHeaders(BlockList &pBlockHeaders, const ArcMist::Hash &pStartingHash,
-      const ArcMist::Hash &pStoppingHash, unsigned int pCount)
+    bool BlockFile::readBlockHeaders(BlockList &pBlockHeaders, const NextCash::Hash &pStartingHash,
+      const NextCash::Hash &pStoppingHash, unsigned int pCount)
     {
         if(!openFile())
         {
@@ -1095,7 +1095,7 @@ namespace BitCoin
             return false;
         }
 
-        ArcMist::Hash hash(32);
+        NextCash::Hash hash(32);
         Block *newBlockHeader;
         unsigned int fileOffset;
         unsigned int fileHashOffset = 0;
@@ -1156,7 +1156,7 @@ namespace BitCoin
         return pBlockHeaders.size() > 0;
     }
 
-    bool BlockFile::readHash(unsigned int pOffset, ArcMist::Hash &pHash)
+    bool BlockFile::readHash(unsigned int pOffset, NextCash::Hash &pHash)
     {
         pHash.clear();
         if(!openFile())
@@ -1176,7 +1176,7 @@ namespace BitCoin
     {
         if(mSPVMode)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x can't read block in SPV mode", mID);
             return false;
         }
@@ -1200,11 +1200,11 @@ namespace BitCoin
         return success;
     }
 
-    bool BlockFile::readBlock(const ArcMist::Hash &pHash, Block &pBlock, bool pIncludeTransactions)
+    bool BlockFile::readBlock(const NextCash::Hash &pHash, Block &pBlock, bool pIncludeTransactions)
     {
         if(mSPVMode)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x can't read block in SPV mode", mID);
             return false;
         }
@@ -1212,21 +1212,21 @@ namespace BitCoin
         pBlock.clear();
         if(!openFile())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x read block from hash failed : invalid file", mID);
             mValid = false;
             return false;
         }
 
         // Find offset
-        ArcMist::Hash hash(32);
+        NextCash::Hash hash(32);
         unsigned int fileOffset;
         mInputFile->setReadOffset(HASHES_OFFSET);
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
             if(!hash.read(mInputFile))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
                   "Block file %08x read block from hash failed : hash read failed", mID);
                 return false;
             }
@@ -1234,7 +1234,7 @@ namespace BitCoin
             fileOffset = mInputFile->readUnsignedInt();
             if(fileOffset == 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
                   "Block file %08x read block from hash failed : zero file offset", mID);
                 return false;
             }
@@ -1246,7 +1246,7 @@ namespace BitCoin
                 bool success = pBlock.read(mInputFile, pIncludeTransactions, pIncludeTransactions, true, true);
                 if(!success)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
                       "Block file %08x read block from hash failed : block read failed", mID);
                 }
                 return success;
@@ -1257,18 +1257,18 @@ namespace BitCoin
     }
 
     bool BlockFile::readTransactionOutput(unsigned int pBlockOffset, unsigned int pTransactionOffset,
-      unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput)
+      unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput)
     {
         if(mSPVMode)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x can't read transaction output in SPV mode", mID);
             return false;
         }
 
         if(!openFile())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Failed to read output. Block file 0x%08x couldn't be opened.", mID);
             mValid = false;
             return false;
@@ -1287,7 +1287,7 @@ namespace BitCoin
 
         if(transactionCount <= pTransactionOffset)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block at offset %d doesn't have enough transactions %d/%d. Block file 0x%08x couldn't be opened.",
               pBlockOffset, pTransactionOffset, transactionCount, mID);
             return false;
@@ -1308,14 +1308,14 @@ namespace BitCoin
     {
         if(mSPVMode)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x can't read transaction in SPV mode", mID);
             return false;
         }
 
         if(!openFile())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Failed to read output. Block file 0x%08x couldn't be opened.", mID);
             mValid = false;
             return false;
@@ -1334,7 +1334,7 @@ namespace BitCoin
 
         if(transactionCount <= pTransactionOffset)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block at offset %d doesn't have enough transactions %d/%d. Block file 0x%08x couldn't be opened.",
               pBlockOffset, pTransactionOffset, transactionCount, mID);
             return false;
@@ -1354,14 +1354,14 @@ namespace BitCoin
     {
         if(mSPVMode)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x can't read transaction output in SPV mode", mID);
             return false;
         }
 
         if(!openFile())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Failed to read output. Block file 0x%08x couldn't be opened.", mID);
             mValid = false;
             return false;
@@ -1372,13 +1372,13 @@ namespace BitCoin
             return true;
         else
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Failed to read output. Block file 0x%08x file read failed.", mID);
             return false;
         }
     }
 
-    unsigned int BlockFile::hashOffset(const ArcMist::Hash &pHash)
+    unsigned int BlockFile::hashOffset(const NextCash::Hash &pHash)
     {
         if(!openFile())
         {
@@ -1387,7 +1387,7 @@ namespace BitCoin
         }
 
         // Find offset
-        ArcMist::Hash hash(32);
+        NextCash::Hash hash(32);
         mInputFile->setReadOffset(HASHES_OFFSET);
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
@@ -1410,7 +1410,7 @@ namespace BitCoin
             return;
 
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Block Update CRC", false);
+        NextCash::Profiler profiler("Block Update CRC", false);
         profiler.start();
 #endif
         if(!openFile())
@@ -1420,8 +1420,8 @@ namespace BitCoin
         }
 
         // Calculate new CRC
-        ArcMist::Digest digest(ArcMist::Digest::CRC32);
-        digest.setOutputEndian(ArcMist::Endian::LITTLE);
+        NextCash::Digest digest(NextCash::Digest::CRC32);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
 
         // Read file into digest
         mInputFile->setReadOffset(HASHES_OFFSET);
@@ -1432,16 +1432,16 @@ namespace BitCoin
         mInputFile = NULL;
 
         // Get CRC result
-        ArcMist::Buffer crcBuffer;
-        crcBuffer.setEndian(ArcMist::Endian::LITTLE);
+        NextCash::Buffer crcBuffer;
+        crcBuffer.setEndian(NextCash::Endian::LITTLE);
         digest.getResult(&crcBuffer);
         unsigned int crc = crcBuffer.readUnsignedInt();
 
         // Open output file
-        ArcMist::FileOutputStream *outputFile = new ArcMist::FileOutputStream(mFilePathName);
+        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(mFilePathName);
 
         // Write CRC to file
-        outputFile->setOutputEndian(ArcMist::Endian::LITTLE);
+        outputFile->setOutputEndian(NextCash::Endian::LITTLE);
         outputFile->setWriteOffset(CRC_OFFSET);
         outputFile->writeUnsignedInt(crc);
 
@@ -1449,7 +1449,7 @@ namespace BitCoin
         delete outputFile;
         mModified = false;
 
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Block file %08x CRC updated : %08x", mID, crc);
     }
 
@@ -1473,7 +1473,7 @@ namespace BitCoin
                 return;
             }
             mBlockFileMutex.unlock();
-            ArcMist::Thread::sleep(100);
+            NextCash::Thread::sleep(100);
         }
     }
 
@@ -1489,7 +1489,7 @@ namespace BitCoin
         mBlockFileMutex.unlock();
     }
 
-    const ArcMist::String &BlockFile::path()
+    const NextCash::String &BlockFile::path()
     {
         if(!mBlockFilePath)
         {
@@ -1504,11 +1504,11 @@ namespace BitCoin
         return mBlockFilePath;
     }
 
-    ArcMist::String BlockFile::fileName(unsigned int pID)
+    NextCash::String BlockFile::fileName(unsigned int pID)
     {
         // Build path
-        ArcMist::String result;
-        result.writeFormatted("%s%s%08x", path().text(), ArcMist::PATH_SEPARATOR, pID);
+        NextCash::String result;
+        result.writeFormatted("%s%s%08x", path().text(), NextCash::PATH_SEPARATOR, pID);
         return result;
     }
 
@@ -1541,7 +1541,7 @@ namespace BitCoin
     }
 
     bool BlockFile::readBlockTransactionOutput(unsigned int pHeight, unsigned int pTransactionOffset,
-      unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput)
+      unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput)
     {
         unsigned int fileID = pHeight / MAX_BLOCKS;
         unsigned int blockOffset = pHeight - (fileID * MAX_BLOCKS);
@@ -1559,18 +1559,18 @@ namespace BitCoin
     bool BlockFile::readOutput(unsigned int pBlockHeight, OutputReference *pReference, unsigned int pIndex, Output &pOutput)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Block Read Output");
+        NextCash::Profiler profiler("Block Read Output");
 #endif
         if(pReference == NULL)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Failed to read output. Reference is null.");
             return false;
         }
 
         if(pReference->blockFileOffset == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Failed to read output. Block file offset is zero.");
             return false;
         }
@@ -1583,7 +1583,7 @@ namespace BitCoin
         bool success = true;
         if(!blockFile->isValid())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Failed to read output. Block file 0x%08x is invalid.", fileID);
             success = false;
         }

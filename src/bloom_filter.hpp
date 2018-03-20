@@ -1,18 +1,18 @@
 /**************************************************************************
- * Copyright 2018 ArcMist, LLC                                            *
+ * Copyright 2018 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_BLOOM_HPP
 #define BITCOIN_BLOOM_HPP
 
-#include "arcmist/base/hash.hpp"
-#include "arcmist/base/math.hpp"
-#include "arcmist/io/buffer.hpp"
-#include "arcmist/io/stream.hpp"
-#include "arcmist/crypto/digest.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/base/math.hpp"
+#include "nextcash/io/buffer.hpp"
+#include "nextcash/io/stream.hpp"
+#include "nextcash/crypto/digest.hpp"
 #include "transaction.hpp"
 
 
@@ -60,13 +60,13 @@ namespace BitCoin
             }
         }
         BloomFilter(unsigned int pElementCount, unsigned int pFlags = UPDATE_ALL,
-          double pFalsePositiveRate = 0.0001, unsigned int pTweak = ArcMist::Math::randomInt());
+          double pFalsePositiveRate = 0.0001, unsigned int pTweak = NextCash::Math::randomInt());
         ~BloomFilter();
 
         const BloomFilter &operator = (const BloomFilter &pRight);
 
         void setup(unsigned int pElementCount, unsigned int pFlags = UPDATE_ALL,
-          double pFalsePositiveRate = 0.0001, unsigned int pTweak = ArcMist::Math::randomInt());
+          double pFalsePositiveRate = 0.0001, unsigned int pTweak = NextCash::Math::randomInt());
 
         bool isEmpty() const { return mIsEmpty; }
         bool isFull() const { return mIsFull; }
@@ -78,18 +78,18 @@ namespace BitCoin
         unsigned int tweak() const { return mTweak; }
         void updateStatus();
 
-        void add(const ArcMist::Hash &pHash);
+        void add(const NextCash::Hash &pHash);
         void add(Outpoint &pOutpoint);
-        void addData(ArcMist::Buffer &pData);
-        void addScript(ArcMist::Buffer &pScript);
+        void addData(NextCash::Buffer &pData);
+        void addScript(NextCash::Buffer &pScript);
 
-        bool contains(const ArcMist::Hash &pHash) const;
+        bool contains(const NextCash::Hash &pHash) const;
         bool contains(Outpoint &pOutpoint) const;
         bool contains(Transaction &pTransaction) const;
-        bool containsScript(ArcMist::Buffer &pScript) const;
+        bool containsScript(NextCash::Buffer &pScript) const;
 
-        void write(ArcMist::OutputStream *pStream) const;
-        bool read(ArcMist::InputStream *pStream);
+        void write(NextCash::OutputStream *pStream) const;
+        bool read(NextCash::InputStream *pStream);
 
         void clear();
         void assign(BloomFilter &pValue); // Removes data from pValue
@@ -99,17 +99,17 @@ namespace BitCoin
 
     private:
 
-        unsigned int bitOffset(unsigned int pHashNum, const ArcMist::Hash &pHash) const
+        unsigned int bitOffset(unsigned int pHashNum, const NextCash::Hash &pHash) const
         {
-            ArcMist::Digest digest(ArcMist::Digest::MURMUR3);
+            NextCash::Digest digest(NextCash::Digest::MURMUR3);
             digest.initialize(pHashNum * 0xFBA4C795 + mTweak);
             pHash.write(&digest);
             return digest.getResult() % (mDataSize * 8);
         }
 
-        unsigned int bitOffset(unsigned int pHashNum, ArcMist::Buffer &pData) const
+        unsigned int bitOffset(unsigned int pHashNum, NextCash::Buffer &pData) const
         {
-            ArcMist::Digest digest(ArcMist::Digest::MURMUR3);
+            NextCash::Digest digest(NextCash::Digest::MURMUR3);
             digest.initialize(pHashNum * 0xFBA4C795 + mTweak);
             pData.setReadOffset(0);
             digest.writeStream(&pData, pData.length());

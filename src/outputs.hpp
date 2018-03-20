@@ -1,19 +1,19 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_OUTPUTS_HPP
 #define BITCOIN_OUTPUTS_HPP
 
-#include "arcmist/base/mutex.hpp"
-#include "arcmist/base/hash.hpp"
-#include "arcmist/base/hash_data_set.hpp"
-#include "arcmist/base/log.hpp"
-#include "arcmist/io/buffer.hpp"
-#include "arcmist/io/file_stream.hpp"
+#include "nextcash/base/mutex.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/base/hash_data_set.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/io/buffer.hpp"
+#include "nextcash/io/file_stream.hpp"
 #include "base.hpp"
 
 #include <vector>
@@ -42,17 +42,17 @@ namespace BitCoin
         // 8 amount + script length size + script length
         unsigned int size() { return 8 + compactIntegerSize(script.length()) + script.length(); }
 
-        void write(ArcMist::OutputStream *pStream, bool pBlockFile = false);
-        bool read(ArcMist::InputStream *pStream, bool pBlockFile = false);
+        void write(NextCash::OutputStream *pStream, bool pBlockFile = false);
+        bool read(NextCash::InputStream *pStream, bool pBlockFile = false);
 
         // Skip over output in stream (The input stream's read offset must be at the beginning of an output)
-        static bool skip(ArcMist::InputStream *pInputStream, ArcMist::OutputStream *pOutputStream = NULL);
+        static bool skip(NextCash::InputStream *pInputStream, NextCash::OutputStream *pOutputStream = NULL);
 
         // Print human readable version to log
-        void print(ArcMist::Log::Level pLevel = ArcMist::Log::VERBOSE);
+        void print(NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
 
         int64_t amount; // Number of Satoshis spent (documentation says this should be signed)
-        ArcMist::Buffer script;
+        NextCash::Buffer script;
 
         // Collected when reading/writing and used for output references
         unsigned int blockFileOffset;
@@ -87,7 +87,7 @@ namespace BitCoin
     };
 
     // Reference to a transaction's outputs with information to get them quickly
-    class TransactionReference : public ArcMist::HashData
+    class TransactionReference : public NextCash::HashData
     {
     public:
 
@@ -126,7 +126,7 @@ namespace BitCoin
         // Negative means this object is older than pRight.
         // Zero means both objects are the same age.
         // Positive means this object is newer than pRight.
-        int compareAge(ArcMist::HashData *pRight)
+        int compareAge(NextCash::HashData *pRight)
         {
             // Spent transactions are "older" than unspent transactions
             bool spent = !hasUnspentOutputs();
@@ -156,10 +156,10 @@ namespace BitCoin
         }
 
         // Reads object data from a stream
-        bool read(ArcMist::InputStream *pStream);
+        bool read(NextCash::InputStream *pStream);
 
         // Writes object data to a stream
-        bool write(ArcMist::OutputStream *pStream);
+        bool write(NextCash::OutputStream *pStream);
 
         bool hasUnspentOutput(unsigned int pIndex) const
           { return mOutputCount > pIndex && mOutputs[pIndex].spentBlockHeight == 0; }
@@ -188,9 +188,9 @@ namespace BitCoin
         void commit(std::vector<Output *> &pOutputs);
 
         // Unmark any outputs spent above a specified block height
-        bool revert(const ArcMist::Hash &pHash, unsigned int pBlockHeight);
+        bool revert(const NextCash::Hash &pHash, unsigned int pBlockHeight);
 
-        void print(ArcMist::Log::Level pLevel = ArcMist::Log::Level::VERBOSE);
+        void print(NextCash::Log::Level pLevel = NextCash::Log::Level::VERBOSE);
 
         unsigned int blockHeight; // Block height of transaction
 
@@ -209,33 +209,33 @@ namespace BitCoin
     };
 
     // Container for all unspent transaction outputs
-    class TransactionOutputPool : public ArcMist::HashDataSet<TransactionReference, 32, 1024, 1024>
+    class TransactionOutputPool : public NextCash::HashDataSet<TransactionReference, 32, 1024, 1024>
     {
     public:
 
-        unsigned int subSetOffset(const ArcMist::Hash &pLookupValue)
+        unsigned int subSetOffset(const NextCash::Hash &pLookupValue)
         {
             return pLookupValue.lookup16() >> 6;
         }
 
         static const unsigned int BIP0030_HASH_COUNT = 2;
         static const unsigned int BIP0030_HEIGHTS[BIP0030_HASH_COUNT];
-        static const ArcMist::Hash BIP0030_HASHES[BIP0030_HASH_COUNT];
+        static const NextCash::Hash BIP0030_HASHES[BIP0030_HASH_COUNT];
 
         TransactionOutputPool() { mNextBlockHeight = 0; mSavedBlockHeight = 0; }
         ~TransactionOutputPool() {}
 
         // Find an unspent transaction output
-        TransactionReference *findUnspent(const ArcMist::Hash &pTransactionID, uint32_t pIndex);
+        TransactionReference *findUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex);
 
         // Find a transaction output. Return unspent if found, otherwise return spent.
-        TransactionReference *find(const ArcMist::Hash &pTransactionID, uint32_t pIndex);
+        TransactionReference *find(const NextCash::Hash &pTransactionID, uint32_t pIndex);
 
         // BIP-0030 Check if this block's transactions match any existing unspent transaction IDs
         //   This is expensive since it is a negative lookup and has to search a file for every transaction.
         //   Positive lookups can be limited extremely by cacheing transactions from recent (a few thousand) blocks
         bool checkDuplicates(const std::vector<Transaction *> &pBlockTransactions,
-          unsigned int pBlockHeight, const ArcMist::Hash &pBlockHash);
+          unsigned int pBlockHeight, const NextCash::Hash &pBlockHash);
 
         // Add all the outputs from a block (pending since they have no block file IDs or offsets yet)
         // Returns false if one of the transaction IDs is currently unspent BIP-0030
@@ -254,7 +254,7 @@ namespace BitCoin
         int height() const { return mNextBlockHeight - 1; }
         unsigned int transactionCount() const;
 
-        bool needsPurge() { return cacheDataSize() > (ArcMist::stream_size)((double)targetCacheDataSize() * 1.5); }
+        bool needsPurge() { return cacheDataSize() > (NextCash::stream_size)((double)targetCacheDataSize() * 1.5); }
 
         bool load(const char *pFilePath, uint64_t pCacheDataTargetSize);
         bool save();
@@ -268,7 +268,7 @@ namespace BitCoin
         unsigned int mSavedBlockHeight;
 
         std::vector<TransactionReference *> mToCommit;
-        ArcMist::HashList mToCommitHashes;
+        NextCash::HashList mToCommitHashes;
 
     };
 }

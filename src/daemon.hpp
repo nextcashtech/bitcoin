@@ -1,17 +1,17 @@
 /**************************************************************************
- * Copyright 2017-2018 ArcMist, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                       *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_DAEMON_HPP
 #define BITCOIN_DAEMON_HPP
 
-#include "arcmist/io/stream.hpp"
-#include "arcmist/base/thread.hpp"
-#include "arcmist/base/mutex.hpp"
-#include "arcmist/base/hash.hpp"
+#include "nextcash/io/stream.hpp"
+#include "nextcash/base/thread.hpp"
+#include "nextcash/base/mutex.hpp"
+#include "nextcash/base/hash.hpp"
 #include "base.hpp"
 #include "info.hpp"
 #include "node.hpp"
@@ -40,7 +40,7 @@ namespace BitCoin
         static void manage();
         static void process();
 
-        void run(ArcMist::String &pSeed, bool pInDaemonMode = true);
+        void run(NextCash::String &pSeed, bool pInDaemonMode = true);
 
         bool start(bool pInDaemonMode);
         bool isRunning() { return mRunning; }
@@ -70,10 +70,10 @@ namespace BitCoin
         bool mRunning, mStopping, mStopRequested, mLoaded;
 
         // Threads
-        ArcMist::Thread *mConnectionThread;
-        ArcMist::Thread *mRequestsThread;
-        ArcMist::Thread *mManagerThread;
-        ArcMist::Thread *mProcessThread;
+        NextCash::Thread *mConnectionThread;
+        NextCash::Thread *mRequestsThread;
+        NextCash::Thread *mManagerThread;
+        NextCash::Thread *mProcessThread;
 
         // Timers
         uint32_t mLastHeaderRequestTime;
@@ -85,13 +85,13 @@ namespace BitCoin
         void (*previousSigPipeHandler)(int);
 
 
-        ArcMist::String mSeed;
+        NextCash::String mSeed;
         // Query peers from a seed
         // Returns number of peers actually connected
         unsigned int querySeed(const char *pName);
 
         // Nodes
-        ArcMist::ReadersLock mNodeLock;
+        NextCash::ReadersLock mNodeLock;
         std::vector<Node *> mNodes;
         unsigned int mNodeCount, mIncomingNodes, mOutgoingNodes;
         unsigned int mMaxIncoming;
@@ -117,12 +117,12 @@ namespace BitCoin
 
         void addRejectedIP(const uint8_t *pIP);
 
-        bool addNode(ArcMist::Network::Connection *pConnection, bool pIncoming, bool pIsSeed, uint64_t pServices);
+        bool addNode(NextCash::Network::Connection *pConnection, bool pIncoming, bool pIsSeed, uint64_t pServices);
         unsigned int recruitPeers(unsigned int pCount);
         void cleanNodes();
 
         Node *nodeWithInventory();
-        Node *nodeWithBlock(const ArcMist::Hash &pHash);
+        Node *nodeWithBlock(const NextCash::Hash &pHash);
         void checkSync();
         void sendRequests();
         void sendHeaderRequest();
@@ -144,9 +144,9 @@ namespace BitCoin
         bool saveMonitor();
 
         // Request Channels
-        ArcMist::ReadersLock mRequestsLock;
+        NextCash::ReadersLock mRequestsLock;
         std::vector<RequestChannel *> mRequestChannels;
-        bool addRequestChannel(ArcMist::Network::Connection *pConnection);
+        bool addRequestChannel(NextCash::Network::Connection *pConnection);
         void cleanRequestChannels();
 
         Statistics mStatistics;

@@ -1,16 +1,16 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_INFO_HPP
 #define BITCOIN_INFO_HPP
 
-#include "arcmist/base/string.hpp"
-#include "arcmist/base/mutex.hpp"
-#include "arcmist/io/buffer.hpp"
+#include "nextcash/base/string.hpp"
+#include "nextcash/base/mutex.hpp"
+#include "nextcash/io/buffer.hpp"
 #include "base.hpp"
 #include "block.hpp"
 
@@ -36,8 +36,8 @@ namespace BitCoin
             address = pCopy.address;
         }
 
-        void write(ArcMist::OutputStream *pStream) const;
-        bool read(ArcMist::InputStream *pStream);
+        void write(NextCash::OutputStream *pStream) const;
+        bool read(NextCash::InputStream *pStream);
 
         void updateTime() { time = getTime(); }
 
@@ -53,7 +53,7 @@ namespace BitCoin
 
         uint32_t time;
         uint64_t services;
-        ArcMist::String userAgent;
+        NextCash::String userAgent;
         int32_t rating;
         IPAddress address;
     };
@@ -65,7 +65,7 @@ namespace BitCoin
         static Info &instance();
         static void destroy();
         static void setPath(const char *pPath);
-        static ArcMist::String path() { return sPath; }
+        static NextCash::String path() { return sPath; }
 
         uint8_t *ip;
         uint16_t port;
@@ -97,7 +97,7 @@ namespace BitCoin
         // Number of peers that an unconfirmed transaction must be announced from before it has zero confirm trust.
         unsigned int spvMemPoolCountRequired;
 
-        ArcMist::String notifyEmail;
+        NextCash::String notifyEmail;
 
         // Return list of peers in random order
         void getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating, uint64_t mServicesRequiredMask = 0);
@@ -114,7 +114,7 @@ namespace BitCoin
         ~Info();
 
         void readSettingsFile(const char *pPath);
-        void applyValue(ArcMist::Buffer &pName, ArcMist::Buffer &pValue);
+        void applyValue(NextCash::Buffer &pName, NextCash::Buffer &pValue);
 
         void writeDataFile();
 
@@ -123,10 +123,10 @@ namespace BitCoin
 
         // Peers
         bool mPeersModified;
-        ArcMist::ReadersLock mPeerLock;
+        NextCash::ReadersLock mPeerLock;
         std::list<Peer *> mPeers;
 
-        static ArcMist::String sPath;
+        static NextCash::String sPath;
         static Info *sInstance;
 
     private:

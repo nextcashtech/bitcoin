@@ -1,23 +1,23 @@
 /**************************************************************************
- * Copyright 2017-2018 ArcMist, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                       *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #include "interpreter.hpp"
 
 #ifdef PROFILER_ON
-#include "arcmist/dev/profiler.hpp"
+#include "nextcash/dev/profiler.hpp"
 #endif
 
-#include "arcmist/crypto/digest.hpp"
+#include "nextcash/crypto/digest.hpp"
 #include "key.hpp"
 
 
 namespace BitCoin
 {
-    bool ScriptInterpreter::bufferIsZero(ArcMist::Buffer *pBuffer)
+    bool ScriptInterpreter::bufferIsZero(NextCash::Buffer *pBuffer)
     {
         pBuffer->setReadOffset(0);
         while(pBuffer->remaining() > 0)
@@ -26,7 +26,7 @@ namespace BitCoin
         return true;
     }
 
-    bool ScriptInterpreter::isPushOnly(ArcMist::Buffer &pScript)
+    bool ScriptInterpreter::isPushOnly(NextCash::Buffer &pScript)
     {
         uint8_t opCode;
 
@@ -52,7 +52,7 @@ namespace BitCoin
         return (pOpCode - OP_1) + 1;
     }
 
-    bool ScriptInterpreter::writeSmallInteger(unsigned int pValue, ArcMist::Buffer &pScript)
+    bool ScriptInterpreter::writeSmallInteger(unsigned int pValue, NextCash::Buffer &pScript)
     {
         if(pValue > 16)
             return false;
@@ -65,15 +65,15 @@ namespace BitCoin
     }
 
     // Parse output script for standard type and hash
-    ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(ArcMist::Buffer &pScript, ArcMist::HashList &pHashes)
+    ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(NextCash::Buffer &pScript, NextCash::HashList &pHashes)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Interpreter Parse Output");
+        NextCash::Profiler profiler("Interpreter Parse Output");
 #endif
         uint8_t opCode;
-        ArcMist::Hash tempHash;
-        ArcMist::Buffer data;
-        ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
+        NextCash::Hash tempHash;
+        NextCash::Buffer data;
+        NextCash::Digest digest(NextCash::Digest::SHA256_RIPEMD160);
 
         pHashes.clear();
         pScript.setReadOffset(0);
@@ -170,7 +170,7 @@ namespace BitCoin
         return NON_STANDARD;
     }
 
-    unsigned int ScriptInterpreter::pullDataSize(uint8_t pOpCode, ArcMist::Buffer &pScript)
+    unsigned int ScriptInterpreter::pullDataSize(uint8_t pOpCode, NextCash::Buffer &pScript)
     {
         if(pOpCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
         {
@@ -238,7 +238,7 @@ namespace BitCoin
         }
     }
 
-    bool ScriptInterpreter::pullData(uint8_t pOpCode, ArcMist::Buffer &pScript, ArcMist::Buffer &pData)
+    bool ScriptInterpreter::pullData(uint8_t pOpCode, NextCash::Buffer &pScript, NextCash::Buffer &pData)
     {
         pData.clear();
 
@@ -309,7 +309,7 @@ namespace BitCoin
         }
     }
 
-    void ScriptInterpreter::writePushDataSize(unsigned int pSize, ArcMist::OutputStream *pOutput)
+    void ScriptInterpreter::writePushDataSize(unsigned int pSize, NextCash::OutputStream *pOutput)
     {
         if(pSize <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
             pOutput->writeByte(pSize);
@@ -330,16 +330,16 @@ namespace BitCoin
         }
     }
 
-    void ScriptInterpreter::printScript(ArcMist::Buffer &pScript, ArcMist::Log::Level pLevel)
+    void ScriptInterpreter::printScript(NextCash::Buffer &pScript, NextCash::Log::Level pLevel)
     {
         if(pScript.remaining() == 0)
         {
-            ArcMist::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, "EMPTY SCRIPT");
+            NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, "EMPTY SCRIPT");
             return;
         }
 
         uint8_t opCode;
-        ArcMist::String result;
+        NextCash::String result;
 
         while(pScript.remaining())
         {
@@ -743,15 +743,15 @@ namespace BitCoin
 
                 default:
                     result += "<!!!UNDEFINED!!!>";
-                    ArcMist::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, "Undefined : %x", opCode);
+                    NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, "Undefined : %x", opCode);
                     break;
             }
         }
 
-        ArcMist::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, result);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, result);
     }
 
-    bool ScriptInterpreter::readFirstDataPush(ArcMist::Buffer &pScript, ArcMist::Buffer &pData)
+    bool ScriptInterpreter::readFirstDataPush(NextCash::Buffer &pScript, NextCash::Buffer &pData)
     {
         uint8_t opCode = pScript.readByte();
 
@@ -771,7 +771,7 @@ namespace BitCoin
         return true;
     }
 
-    void ScriptInterpreter::removeCodeSeparators(ArcMist::Buffer &pInputScript, ArcMist::Buffer &pOutputScript)
+    void ScriptInterpreter::removeCodeSeparators(NextCash::Buffer &pInputScript, NextCash::Buffer &pOutputScript)
     {
         uint8_t opCode;
         while(pInputScript.remaining())
@@ -828,29 +828,29 @@ namespace BitCoin
 
     bool ScriptInterpreter::checkSignature(Transaction &pTransaction, unsigned int pInputOffset,
       int64_t pOutputAmount, const Key &pPublicKey, const Signature &pSignature,
-      ArcMist::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset, const Forks &pForks)
+      NextCash::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset, const Forks &pForks)
     {
         if(pForks.cashActive() && !(pSignature.hashType() & Signature::FORKID))
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Signature hash type missing required fork ID flag : %02x", pSignature.hashType());
             return false;
         }
         else if(!pForks.cashActive() && pSignature.hashType() & Signature::FORKID)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Signature hash type has disabled fork ID flag : %02x", pSignature.hashType());
             return false;
         }
 
         // Get signature hash
-        ArcMist::Hash signatureHash(32);
-        ArcMist::stream_size previousOffset = pCurrentOutputScript.readOffset();
+        NextCash::Hash signatureHash(32);
+        NextCash::stream_size previousOffset = pCurrentOutputScript.readOffset();
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
         if(!pTransaction.getSignatureHash(signatureHash, pInputOffset, pCurrentOutputScript,
           pOutputAmount, pSignature.hashType()))
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to get signature hash : 0x%02x - %s", (int)pSignature.hashType(), pSignature.hex().text());
             pCurrentOutputScript.setReadOffset(previousOffset);
             return false;
@@ -861,7 +861,7 @@ namespace BitCoin
             return true;
         else
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Signature check failed : 0x%02x - %s", (int)pSignature.hashType(), pSignature.hex().text());
             return false;
         }
@@ -870,25 +870,25 @@ namespace BitCoin
 
     void ScriptInterpreter::printStack(const char *pText)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack : %s", pText);
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack : %s", pText);
 
         unsigned int index = 1;
-        for(std::list<ArcMist::Buffer *>::reverse_iterator i = mStack.rbegin();i!=mStack.rend();++i,index++)
+        for(std::list<NextCash::Buffer *>::reverse_iterator i = mStack.rbegin();i!=mStack.rend();++i,index++)
         {
             (*i)->setReadOffset(0);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
               "    %d (%d bytes) : %s", index, (*i)->length(), (*i)->readHexString((*i)->length()).text());
         }
     }
 
-    bool ScriptInterpreter::arithmeticRead(ArcMist::Buffer *pBuffer, int64_t &pValue)
+    bool ScriptInterpreter::arithmeticRead(NextCash::Buffer *pBuffer, int64_t &pValue)
     {
         //TODO This is a still messy and should be cleaned up. Unit test below should cover it.
         pBuffer->setReadOffset(0);
         if(pBuffer->length() > 8)
         {
             pBuffer->setReadOffset(0);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Arithmetic read to many bytes : %s", pBuffer->readHexString(pBuffer->length()).text());
             return false;
         }
@@ -903,7 +903,7 @@ namespace BitCoin
         uint8_t bytes[8];
         pBuffer->setReadOffset(0);
         std::memset(bytes, 0, 8);
-        if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
+        if(NextCash::Endian::sSystemType == NextCash::Endian::LITTLE)
         {
             for(unsigned int i=7;pBuffer->remaining();i--)
                 bytes[i] = pBuffer->readByte();
@@ -944,7 +944,7 @@ namespace BitCoin
             if(pBuffer->length() > 5)
             {
                 pBuffer->setReadOffset(0);
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                   "Arithmetic read to many bytes (negative with 0x80) : %s",
                   pBuffer->readHexString(pBuffer->length()).text());
                 return false;
@@ -953,14 +953,14 @@ namespace BitCoin
         else if(pBuffer->length() > 4)
         {
             pBuffer->setReadOffset(0);
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Arithmetic read to many bytes : %s", pBuffer->readHexString(pBuffer->length()).text());
             return false;
         }
 
         // Adjust for system endian
-        if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
-            ArcMist::Endian::reverse(bytes, 8);
+        if(NextCash::Endian::sSystemType == NextCash::Endian::LITTLE)
+            NextCash::Endian::reverse(bytes, 8);
         std::memcpy(&pValue, bytes, 8);
 
         if(negative)
@@ -970,13 +970,13 @@ namespace BitCoin
         }
 
         pBuffer->setReadOffset(0);
-        //ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+        //NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
         //  "Arithmetic read : %s -> %08x%08x (%d)", pBuffer->readHexString(pBuffer->length()).text(),
         //  pValue >> 32, pValue, pValue & 0xffffffff);
         return true;
     }
 
-    void ScriptInterpreter::arithmeticWrite(ArcMist::Buffer *pBuffer, int64_t pValue)
+    void ScriptInterpreter::arithmeticWrite(NextCash::Buffer *pBuffer, int64_t pValue)
     {
         //TODO This is a still messy and should be cleaned up. Unit test below should cover it.
         uint8_t bytes[8];
@@ -994,8 +994,8 @@ namespace BitCoin
         pBuffer->clear();
 
         std::memcpy(bytes, &value, 8);
-        if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
-            ArcMist::Endian::reverse(bytes, 8);
+        if(NextCash::Endian::sSystemType == NextCash::Endian::LITTLE)
+            NextCash::Endian::reverse(bytes, 8);
 
         // Skip zero bytes
         for(int i=startOffset;i<8;i++)
@@ -1018,7 +1018,7 @@ namespace BitCoin
             {
                 if(startOffset == 0)
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "Arithmetic write (too many bytes) : %08x%08x -> %s", pValue >> 32, pValue);
                     return;
                 }
@@ -1033,7 +1033,7 @@ namespace BitCoin
         {
             if(startOffset == 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                   "Arithmetic write (too many bytes) : %08x%08x -> %s", pValue >> 32, pValue);
                 return;
             }
@@ -1042,23 +1042,23 @@ namespace BitCoin
             bytes[--startOffset] = 0x00;
         }
 
-        if(ArcMist::Endian::sSystemType == ArcMist::Endian::LITTLE)
+        if(NextCash::Endian::sSystemType == NextCash::Endian::LITTLE)
         {
-            ArcMist::Endian::reverse(bytes, 8);
+            NextCash::Endian::reverse(bytes, 8);
             pBuffer->write(bytes, 8 - startOffset);
         }
         else
             pBuffer->write(bytes + startOffset, 8 - startOffset);
         pBuffer->setReadOffset(0);
-        //ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+        //NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
         //  "Arithmetic write : %08x%08x (%d) -> %s", pValue >> 32, pValue, pValue & 0xffffffff,
         //  pBuffer->readHexString(pBuffer->length()).text());
     }
 
-    bool ScriptInterpreter::process(ArcMist::Buffer &pScript, int32_t pBlockVersion, const Forks &pForks)
+    bool ScriptInterpreter::process(NextCash::Buffer &pScript, int32_t pBlockVersion, const Forks &pForks)
     {
 #ifdef PROFILER_ON
-        ArcMist::Profiler profiler("Interpreter Process");
+        NextCash::Profiler profiler("Interpreter Process");
 #endif
         unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;
@@ -1069,7 +1069,7 @@ namespace BitCoin
         {
             if(mStack.size() > 1000)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                   "Stack overflow %d items", mStack.size());
                 mValid = false;
                 return false;
@@ -1077,7 +1077,7 @@ namespace BitCoin
 
             if(mIfStack.size() > 20)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                   "If Stack overflow %d items", mIfStack.size());
                 mValid = false;
                 return false;
@@ -1099,14 +1099,14 @@ namespace BitCoin
             {
                 if(opCode > pScript.remaining())
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "Push data size more than remaining script : %d/%d", opCode, pScript.remaining());
                     mValid = false;
                     return false;
                 }
 
 #ifdef PROFILER_ON
-                ArcMist::Profiler profiler("Interpreter Push");
+                NextCash::Profiler profiler("Interpreter Push");
 #endif
                 // Push opCode value bytes onto stack from input
                 if(!ifStackTrue())
@@ -1124,16 +1124,16 @@ namespace BitCoin
                 case OP_IF: // If the top stack value is not OP_FALSE the statements are executed. The top stack value is removed
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IF");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IF");
                         mValid = false;
                         return false;
                     }
 
                     // if(!bufferIsZero(top()))
-                        // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           // "OP_IF pushing to on");
                     // else
-                        // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           // "OP_IF pushing to off");
                     if(ifStackTrue())
                     {
@@ -1146,16 +1146,16 @@ namespace BitCoin
                 case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NOTIF");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NOTIF");
                         mValid = false;
                         return false;
                     }
 
                     // if(bufferIsZero(top()))
-                        // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           // "OP_NOTIF pushing to on");
                     // else
-                        // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           // "OP_NOTIF pushing to off");
                     if(ifStackTrue())
                     {
@@ -1169,27 +1169,27 @@ namespace BitCoin
                     if(mIfStack.size() > 0)
                     {
                         // if(mIfStack.back())
-                            // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                            // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               // "OP_ELSE switching to off");
                         // else
-                            // ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                            // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               // "OP_ELSE switching to on");
                         mIfStack.back() = !mIfStack.back();
                     }
                     else
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "No if before else");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "No if before else");
                         mValid = false;
                         return false;
                     }
                     break;
                 case OP_ENDIF: // Ends an if/else block. All blocks must end, or the transaction is invalid. An OP_ENDIF without OP_IF earlier is also invalid.
-                    //ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "OP_ENDIF");
+                    //NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "OP_ENDIF");
                     if(mIfStack.size() > 0)
                         mIfStack.pop_back();
                     else
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "No if before endif");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "No if before endif");
                         mValid = false;
                         return false;
                     }
@@ -1201,7 +1201,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_VERIFY");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_VERIFY");
                         mValid = false;
                         return false;
                     }
@@ -1217,7 +1217,7 @@ namespace BitCoin
                 case OP_RETURN: // Marks transaction as invalid
                     if(!ifStackTrue())
                         break;
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
                     mVerified = false;
                     return true;
                 case OP_EQUAL: // Returns 1 if the the top two stack items are exactly equal, 0 otherwise
@@ -1228,13 +1228,13 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
                         mValid = false;
                         return false;
                     }
 
                     // Compare top 2 stack entries
-                    std::list<ArcMist::Buffer *>::iterator secondToLast = mStack.end();
+                    std::list<NextCash::Buffer *>::iterator secondToLast = mStack.end();
                     --secondToLast;
                     --secondToLast;
                     mStack.back()->setReadOffset(0);
@@ -1266,14 +1266,14 @@ namespace BitCoin
                 case OP_RIPEMD160:
                 {
 #ifdef PROFILER_ON
-                    ArcMist::Profiler profiler("Interpreter RipeMD160");
+                    NextCash::Profiler profiler("Interpreter RipeMD160");
 #endif
                     if(!ifStackTrue())
                         break;
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_SHA1");
                         mValid = false;
                         return false;
@@ -1281,7 +1281,7 @@ namespace BitCoin
 
                     // Hash top stack item and pop it
                     top()->setReadOffset(0);
-                    ArcMist::Digest digest(ArcMist::Digest::RIPEMD160);
+                    NextCash::Digest digest(NextCash::Digest::RIPEMD160);
                     digest.writeStream(top(), top()->length());
                     digest.getResult(&mHash);
                     pop();
@@ -1293,14 +1293,14 @@ namespace BitCoin
                 case OP_SHA1:
                 {
 #ifdef PROFILER_ON
-                    ArcMist::Profiler profiler("Interpreter SHA1");
+                    NextCash::Profiler profiler("Interpreter SHA1");
 #endif
                     if(!ifStackTrue())
                         break;
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_SHA1");
                         mValid = false;
                         return false;
@@ -1308,7 +1308,7 @@ namespace BitCoin
 
                     // Hash top stack item and pop it
                     top()->setReadOffset(0);
-                    ArcMist::Digest digest(ArcMist::Digest::SHA1);
+                    NextCash::Digest digest(NextCash::Digest::SHA1);
                     digest.writeStream(top(), top()->length());
                     digest.getResult(&mHash);
                     pop();
@@ -1320,14 +1320,14 @@ namespace BitCoin
                 case OP_SHA256:
                 {
 #ifdef PROFILER_ON
-                    ArcMist::Profiler profiler("Interpreter SHA256");
+                    NextCash::Profiler profiler("Interpreter SHA256");
 #endif
                     if(!ifStackTrue())
                         break;
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_SHA256");
                         mValid = false;
                         return false;
@@ -1335,7 +1335,7 @@ namespace BitCoin
 
                     // Hash top stack item and pop it
                     top()->setReadOffset(0);
-                    ArcMist::Digest digest(ArcMist::Digest::SHA256);
+                    NextCash::Digest digest(NextCash::Digest::SHA256);
                     digest.writeStream(top(), top()->length());
                     digest.getResult(&mHash);
                     pop();
@@ -1347,21 +1347,21 @@ namespace BitCoin
                 case OP_HASH160: // The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
                 {
 #ifdef PROFILER_ON
-                    ArcMist::Profiler profiler("Interpreter Hash160");
+                    NextCash::Profiler profiler("Interpreter Hash160");
 #endif
                     if(!ifStackTrue())
                         break;
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
                         mValid = false;
                         return false;
                     }
 
                     // Hash top stack item and pop it
                     top()->setReadOffset(0);
-                    ArcMist::Digest digest(ArcMist::Digest::SHA256_RIPEMD160);
+                    NextCash::Digest digest(NextCash::Digest::SHA256_RIPEMD160);
                     digest.writeStream(top(), top()->length());
                     digest.getResult(&mHash);
                     pop();
@@ -1373,14 +1373,14 @@ namespace BitCoin
                 case OP_HASH256: // The input is hashed two times with SHA-256.
                 {
 #ifdef PROFILER_ON
-                    ArcMist::Profiler profiler("Interpreter Hash256");
+                    NextCash::Profiler profiler("Interpreter Hash256");
 #endif
                     if(!ifStackTrue())
                         break;
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_HASH256");
                         mValid = false;
                         return false;
@@ -1388,7 +1388,7 @@ namespace BitCoin
 
                     // Hash top stack item and pop it
                     top()->setReadOffset(0);
-                    ArcMist::Digest digest(ArcMist::Digest::SHA256_SHA256);
+                    NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
                     digest.writeStream(top(), top()->length());
                     digest.getResult(&mHash);
                     pop();
@@ -1408,7 +1408,7 @@ namespace BitCoin
                 case OP_CHECKSIGVERIFY: // Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
                 {
 #ifdef PROFILER_ON
-                    ArcMist::Profiler profiler("Interpreter CheckSig");
+                    NextCash::Profiler profiler("Interpreter CheckSig");
 #endif
                     /* The entire transaction's outputs, inputs, and script (from the most recently-executed OP_CODESEPARATOR
                      *   to the end) are hashed. The signature used by OP_CHECKSIG must be a valid signature for this hash and
@@ -1418,7 +1418,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKSIG");
                         mValid = false;
                         return false;
@@ -1460,7 +1460,7 @@ namespace BitCoin
                 case OP_CHECKMULTISIGVERIFY:
                 {
 #ifdef PROFILER_ON
-                    ArcMist::Profiler profiler("Interpreter CheckMultiSig");
+                    NextCash::Profiler profiler("Interpreter CheckMultiSig");
 #endif
                     /* Compares the first signature against each public key until it finds an ECDSA match. Starting with the
                      *   subsequent public key, it compares the second signature against each remaining public key until it
@@ -1479,7 +1479,7 @@ namespace BitCoin
 
                     if(!checkStackSize(4))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKMULTISIG");
                         mValid = false;
                         return false;
@@ -1489,7 +1489,7 @@ namespace BitCoin
                     unsigned int publicKeyCount = popInteger();
                     if(!checkStackSize(publicKeyCount))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKMULTISIG public keys");
                         mValid = false;
                         return false;
@@ -1509,7 +1509,7 @@ namespace BitCoin
                     unsigned int signatureCount = popInteger();
                     if(!checkStackSize(signatureCount + 1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKMULTISIG signatures");
                         mValid = false;
                         return false;
@@ -1556,7 +1556,7 @@ namespace BitCoin
 
                     if(failed)
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Multiple Signature check failed");
                         if(opCode == OP_CHECKMULTISIG)
                             push(); // Push false onto the stack
@@ -1584,7 +1584,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKLOCKTIMEVERIFY");
                         mValid = false;
                         return false;
@@ -1599,7 +1599,7 @@ namespace BitCoin
 
                     if(value < 0)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY top stack value can't be negative : %d", (int)value);
                         mValid = false;
                         return false;
@@ -1607,7 +1607,7 @@ namespace BitCoin
 
                     if(mInputSequence == 0xffffffff)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY input sequence not 0xffffffff : %08x", mInputSequence);
                         mVerified = false;
                         return true;
@@ -1615,7 +1615,7 @@ namespace BitCoin
 
                     if(mTransaction == NULL)
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY Transaction not set");
                         mVerified = false;
                         return true;
@@ -1625,7 +1625,7 @@ namespace BitCoin
                     if(((uint32_t)value < Transaction::LOCKTIME_THRESHOLD && mTransaction->lockTime > Transaction::LOCKTIME_THRESHOLD) ||
                       ((uint32_t)value > Transaction::LOCKTIME_THRESHOLD && mTransaction->lockTime < Transaction::LOCKTIME_THRESHOLD))
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY value and lock time are different \"types\" : value %d > lock time %d",
                           (uint32_t)value, mTransaction->lockTime);
                         mVerified = false;
@@ -1635,7 +1635,7 @@ namespace BitCoin
                     // Check that the lock time has passed
                     if(mTransaction == NULL || (uint32_t)value > mTransaction->lockTime)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY value greater than lock time : value %d > lock time %d", (uint32_t)value,
                           mTransaction->lockTime);
                         mVerified = false;
@@ -1654,7 +1654,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKSEQUENCEVERIFY");
                         mValid = false;
                         return false;
@@ -1669,7 +1669,7 @@ namespace BitCoin
 
                     if(value < 0)
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Negative script sequence : OP_CHECKSEQUENCEVERIFY");
                         mValid = false;
                         return false;
@@ -1680,7 +1680,7 @@ namespace BitCoin
                         // Transaction version doesn't support OP_CHECKSEQUENCEVERIFY
                         if(mTransaction->version < 2)
                         {
-                            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               "Transaction version less than 2 : OP_CHECKSEQUENCEVERIFY");
                             mVerified = false;
                             return true;
@@ -1688,7 +1688,7 @@ namespace BitCoin
 
                         if(mInputSequence & Input::SEQUENCE_DISABLE) // Input sequence disable bit set
                         {
-                            ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               "Input sequence disable bit set : OP_CHECKSEQUENCEVERIFY");
                             mVerified = false;
                             return true;
@@ -1696,7 +1696,7 @@ namespace BitCoin
 
                         if((value & Input::SEQUENCE_TYPE) != (mInputSequence & Input::SEQUENCE_TYPE))
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               "Script sequence type doesn't match input sequence type %d != %d : OP_CHECKSEQUENCEVERIFY",
                               (value & Input::SEQUENCE_TYPE) >> 22, (mInputSequence & Input::SEQUENCE_TYPE) >> 22);
                             mVerified = false;
@@ -1705,7 +1705,7 @@ namespace BitCoin
 
                         if((value & Input::SEQUENCE_LOCKTIME_MASK) > (mInputSequence & Input::SEQUENCE_LOCKTIME_MASK))
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               "Script sequence greater than input sequence %d > %d : OP_CHECKSEQUENCEVERIFY",
                               value & Input::SEQUENCE_LOCKTIME_MASK, mInputSequence & Input::SEQUENCE_LOCKTIME_MASK);
                             mVerified = false;
@@ -1720,13 +1720,13 @@ namespace BitCoin
                     count = pScript.readByte();
                     if(count > pScript.remaining())
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Push data size more than remaining script : %d/%d", count, pScript.remaining());
                         mValid = false;
                         return false;
                     }
 #ifdef PROFILER_ON
-                    ArcMist::Profiler profiler("Interpreter Push");
+                    NextCash::Profiler profiler("Interpreter Push");
 #endif
                     if(!ifStackTrue())
                         pScript.setReadOffset(pScript.readOffset() + count);
@@ -1739,13 +1739,13 @@ namespace BitCoin
                     count = pScript.readUnsignedShort();
                     if(count > pScript.remaining())
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Push data size more than remaining script : %d/%d", count, pScript.remaining());
                         mValid = false;
                         return false;
                     }
 #ifdef PROFILER_ON
-                    ArcMist::Profiler profiler("Interpreter Push");
+                    NextCash::Profiler profiler("Interpreter Push");
 #endif
                     if(!ifStackTrue())
                         pScript.setReadOffset(pScript.readOffset() + count);
@@ -1758,13 +1758,13 @@ namespace BitCoin
                     count = pScript.readUnsignedInt();
                     if(count > pScript.remaining())
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Push data size more than remaining script : %d/%d", count, pScript.remaining());
                         mValid = false;
                         return false;
                     }
 #ifdef PROFILER_ON
-                    ArcMist::Profiler profiler("Interpreter Push");
+                    NextCash::Profiler profiler("Interpreter Push");
 #endif
                     if(!ifStackTrue())
                         pScript.setReadOffset(pScript.readOffset() + count);
@@ -1869,7 +1869,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_1ADD");
                         mValid = false;
                         return false;
@@ -1892,7 +1892,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_1SUB");
                         mValid = false;
                         return false;
@@ -1909,12 +1909,12 @@ namespace BitCoin
                     break;
                 }
                 case OP_2MUL: //    in    out    The input is multiplied by 2. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_2MUL is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_2DIV: //    in    out    The input is divided by 2. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_2DIV is a disabled op code");
                     mValid = false;
                     return false;
@@ -1925,7 +1925,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_NEGATE");
                         mValid = false;
                         return false;
@@ -1948,7 +1948,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_ABS");
                         mValid = false;
                         return false;
@@ -1972,7 +1972,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_NOT");
                         mValid = false;
                         return false;
@@ -1997,7 +1997,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_0NOTEQUAL");
                         mValid = false;
                         return false;
@@ -2022,7 +2022,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_ADD");
                         mValid = false;
                         return false;
@@ -2053,7 +2053,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_SUB");
                         mValid = false;
                         return false;
@@ -2078,27 +2078,27 @@ namespace BitCoin
                     break;
                 }
                 case OP_MUL: //    a b   out    a is multiplied by b. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_MUL is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_DIV: //    a b   out    a is divided by b. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_DIV is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_MOD: //    a b   out    Returns the remainder after dividing a by b. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_MOD is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_LSHIFT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RSHIFT is a disabled op code");
                     mValid = false;
                     return false;
@@ -2109,7 +2109,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_BOOLAND");
                         mValid = false;
                         return false;
@@ -2142,7 +2142,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_BOOLOR");
                         mValid = false;
                         return false;
@@ -2175,7 +2175,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_NUMEQUAL");
                         mValid = false;
                         return false;
@@ -2208,7 +2208,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_NUMEQUALVERIFY");
                         mValid = false;
                         return false;
@@ -2244,7 +2244,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_NUMNOTEQUAL");
                         mValid = false;
                         return false;
@@ -2277,7 +2277,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_LESSTHAN");
                         mValid = false;
                         return false;
@@ -2310,7 +2310,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_GREATERTHAN");
                         mValid = false;
                         return false;
@@ -2343,7 +2343,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_LESSTHANOREQUAL");
                         mValid = false;
                         return false;
@@ -2376,7 +2376,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_GREATERTHANOREQUAL");
                         mValid = false;
                         return false;
@@ -2409,7 +2409,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_MIN");
                         mValid = false;
                         return false;
@@ -2444,7 +2444,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_MAX");
                         mValid = false;
                         return false;
@@ -2479,7 +2479,7 @@ namespace BitCoin
 
                     if(!checkStackSize(3))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_WITHIN");
                         mValid = false;
                         return false;
@@ -2522,7 +2522,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TOALTSTACK");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TOALTSTACK");
                         mValid = false;
                         return false;
                     }
@@ -2536,7 +2536,7 @@ namespace BitCoin
 
                     if(!checkAltStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack not large enough for OP_FROMALTSTACK");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack not large enough for OP_FROMALTSTACK");
                         mValid = false;
                         return false;
                     }
@@ -2551,12 +2551,12 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DUP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DUP");
                         mValid = false;
                         return false;
                     }
 
-                    push(new ArcMist::Buffer(*top()));
+                    push(new NextCash::Buffer(*top()));
                     break;
                 }
                 case OP_IFDUP: // 0x73//     x    x / x x    If the top stack value is not 0, duplicate it.
@@ -2565,13 +2565,13 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IFDUP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IFDUP");
                         mValid = false;
                         return false;
                     }
 
                     if(!bufferIsZero(top()))
-                        push(new ArcMist::Buffer(*top()));
+                        push(new NextCash::Buffer(*top()));
                     break;
                 case OP_DEPTH: // 0x74//     Nothing    <Stack size>    Puts the number of stack items onto the stack.
                 {
@@ -2588,7 +2588,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DROP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DROP");
                         mValid = false;
                         return false;
                     }
@@ -2602,12 +2602,12 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NIP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NIP");
                         mValid = false;
                         return false;
                     }
 
-                    std::list<ArcMist::Buffer *>::iterator secondToLast = mStack.end();
+                    std::list<NextCash::Buffer *>::iterator secondToLast = mStack.end();
                     --secondToLast;
                     --secondToLast;
                     delete *secondToLast;
@@ -2621,16 +2621,16 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_OVER");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_OVER");
                         mValid = false;
                         return false;
                     }
 
-                    std::list<ArcMist::Buffer *>::iterator secondToLast = mStack.end();
+                    std::list<NextCash::Buffer *>::iterator secondToLast = mStack.end();
                     --secondToLast;
                     --secondToLast;
 
-                    push(new ArcMist::Buffer(**secondToLast));
+                    push(new NextCash::Buffer(**secondToLast));
                     break;
                 }
                 case OP_PICK: // 0x79//     xn ... x2 x1 x0 <n>    xn ... x2 x1 x0 xn    The item n back in the stack is copied to the top.
@@ -2640,7 +2640,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_PICK");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_PICK");
                         mValid = false;
                         return false;
                     }
@@ -2655,18 +2655,18 @@ namespace BitCoin
 
                     if(!checkStackSize(n))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
 
-                    std::list<ArcMist::Buffer *>::iterator item = mStack.end();
+                    std::list<NextCash::Buffer *>::iterator item = mStack.end();
                     --item; // get last item
 
                     for(unsigned int i=0;i<n;i++)
                         --item;
 
-                    push(new ArcMist::Buffer(**item));
+                    push(new NextCash::Buffer(**item));
                     break;
                 }
                 case OP_ROLL: // 0x7a//     xn ... x2 x1 x0 <n>    ... x2 x1 x0 xn    The item n back in the stack is moved to the top.
@@ -2676,7 +2676,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2691,12 +2691,12 @@ namespace BitCoin
 
                     if(!checkStackSize(n))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
 
-                    std::list<ArcMist::Buffer *>::iterator item = mStack.end();
+                    std::list<NextCash::Buffer *>::iterator item = mStack.end();
                     --item; // get last item
 
                     for(unsigned int i=0;i<n;i++)
@@ -2713,16 +2713,16 @@ namespace BitCoin
 
                     if(!checkStackSize(3))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROT");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROT");
                         mValid = false;
                         return false;
                     }
 
-                    ArcMist::Buffer *three = top();
+                    NextCash::Buffer *three = top();
                     pop(false);
-                    ArcMist::Buffer *two = top();
+                    NextCash::Buffer *two = top();
                     pop(false);
-                    ArcMist::Buffer *one = top();
+                    NextCash::Buffer *one = top();
                     pop(false);
 
                     push(two);
@@ -2737,14 +2737,14 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_SWAP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_SWAP");
                         mValid = false;
                         return false;
                     }
 
-                    ArcMist::Buffer *two = top();
+                    NextCash::Buffer *two = top();
                     pop(false);
-                    ArcMist::Buffer *one = top();
+                    NextCash::Buffer *one = top();
                     pop(false);
 
                     push(two);
@@ -2758,17 +2758,17 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TUCK");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TUCK");
                         mValid = false;
                         return false;
                     }
 
-                    ArcMist::Buffer *two = top();
+                    NextCash::Buffer *two = top();
                     pop(false);
-                    ArcMist::Buffer *one = top();
+                    NextCash::Buffer *one = top();
                     pop(false);
 
-                    push(new ArcMist::Buffer(*two));
+                    push(new NextCash::Buffer(*two));
                     push(one);
                     push(two);
                     break;
@@ -2780,7 +2780,7 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_2DROP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_2DROP");
                         mValid = false;
                         return false;
                     }
@@ -2796,18 +2796,18 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
 
-                    std::list<ArcMist::Buffer *>::iterator two = mStack.end();
+                    std::list<NextCash::Buffer *>::iterator two = mStack.end();
                     --two; // get last item
-                    std::list<ArcMist::Buffer *>::iterator one = two;
+                    std::list<NextCash::Buffer *>::iterator one = two;
                     --one; // get the second to last item
 
-                    push(new ArcMist::Buffer(**one));
-                    push(new ArcMist::Buffer(**two));
+                    push(new NextCash::Buffer(**one));
+                    push(new NextCash::Buffer(**two));
                     break;
                 }
                 case OP_3DUP: // 0x6f//     x1 x2 x3    x1 x2 x3 x1 x2 x3    Duplicates the top three stack items.
@@ -2817,21 +2817,21 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_3DUP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_3DUP");
                         mValid = false;
                         return false;
                     }
 
-                    std::list<ArcMist::Buffer *>::iterator three = mStack.end();
+                    std::list<NextCash::Buffer *>::iterator three = mStack.end();
                     --three; // get last item
-                    std::list<ArcMist::Buffer *>::iterator two = three;
+                    std::list<NextCash::Buffer *>::iterator two = three;
                     --two; // get second to last item
-                    std::list<ArcMist::Buffer *>::iterator one = two;
+                    std::list<NextCash::Buffer *>::iterator one = two;
                     --one; // get the third to last item
 
-                    push(new ArcMist::Buffer(**one));
-                    push(new ArcMist::Buffer(**two));
-                    push(new ArcMist::Buffer(**three));
+                    push(new NextCash::Buffer(**one));
+                    push(new NextCash::Buffer(**two));
+                    push(new NextCash::Buffer(**three));
                     break;
                 }
                 case OP_2OVER: // 0x70//     x1 x2 x3 x4    x1 x2 x3 x4 x1 x2    Copies the pair of items two spaces back in the stack to the front.
@@ -2841,20 +2841,20 @@ namespace BitCoin
 
                     if(!checkStackSize(4))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_2OVER");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_2OVER");
                         mValid = false;
                         return false;
                     }
 
-                    std::list<ArcMist::Buffer *>::iterator two = mStack.end();
+                    std::list<NextCash::Buffer *>::iterator two = mStack.end();
                     --two; // 4
                     --two; // 3
                     --two; // 2
-                    std::list<ArcMist::Buffer *>::iterator one = two;
+                    std::list<NextCash::Buffer *>::iterator one = two;
                     --one; // 1
 
-                    push(new ArcMist::Buffer(**one));
-                    push(new ArcMist::Buffer(**two));
+                    push(new NextCash::Buffer(**one));
+                    push(new NextCash::Buffer(**two));
                     break;
                 }
                 case OP_2ROT: // 0x71//     x1 x2 x3 x4 x5 x6    x3 x4 x5 x6 x1 x2    The fifth and sixth items back are moved to the top of the stack.
@@ -2864,22 +2864,22 @@ namespace BitCoin
 
                     if(!checkStackSize(6))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
 
-                    std::list<ArcMist::Buffer *>::iterator two = mStack.end();
+                    std::list<NextCash::Buffer *>::iterator two = mStack.end();
                     --two; // 6
                     --two; // 5
                     --two; // 4
                     --two; // 3
                     --two; // 2
-                    std::list<ArcMist::Buffer *>::iterator one = two;
+                    std::list<NextCash::Buffer *>::iterator one = two;
                     --one; // 1
 
-                    ArcMist::Buffer *itemTwo = *two;
-                    ArcMist::Buffer *itemOne = *one;
+                    NextCash::Buffer *itemTwo = *two;
+                    NextCash::Buffer *itemOne = *one;
 
                     mStack.erase(one);
                     mStack.erase(two);
@@ -2895,20 +2895,20 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
 
-                    std::list<ArcMist::Buffer *>::iterator two = mStack.end();
+                    std::list<NextCash::Buffer *>::iterator two = mStack.end();
                     --two; // 4
                     --two; // 3
                     --two; // 2
-                    std::list<ArcMist::Buffer *>::iterator one = two;
+                    std::list<NextCash::Buffer *>::iterator one = two;
                     --one; // 1
 
-                    ArcMist::Buffer *itemTwo = *two;
-                    ArcMist::Buffer *itemOne = *one;
+                    NextCash::Buffer *itemTwo = *two;
+                    NextCash::Buffer *itemOne = *one;
 
                     mStack.erase(one);
                     mStack.erase(two);
@@ -2921,22 +2921,22 @@ namespace BitCoin
 
                 // Splice
                 case OP_CAT: //  x1 x2  out  Concatenates two strings. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_CAT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_SUBSTR: //  in begin size  out  Returns a section of a string. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_SUBSTR is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_LEFT: //  in size  out  Keeps only characters left of the specified point in a string. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_LEFT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_RIGHT: //  in size  out  Keeps only characters right of the specified point in a string. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
@@ -2947,7 +2947,7 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_SIZE");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_SIZE");
                         mValid = false;
                         return false;
                     }
@@ -2961,22 +2961,22 @@ namespace BitCoin
 
                 // Bitwise logic
                 case OP_INVERT: //  in  out  Flips all of the bits in the input. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
                 case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs. disabled.
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
@@ -2991,7 +2991,7 @@ namespace BitCoin
                 case OP_RESERVED2: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
                     if(!ifStackTrue())
                         break;
-                    ArcMist::Log::add(ArcMist::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RESERVED op code executed");
                     mValid = false;
                     return false;
@@ -3015,11 +3015,11 @@ namespace BitCoin
 
     bool ScriptInterpreter::test()
     {
-        ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
           "------------- Starting Script Interpreter Tests -------------");
 
         bool success = true;
-        ArcMist::Buffer data, testData;
+        NextCash::Buffer data, testData;
         int64_t value, testValue;
 
         /***********************************************************************************************
@@ -3030,13 +3030,13 @@ namespace BitCoin
         value = 0x7fffffff;
 
         if(arithmeticRead(&testData, testValue) && value == testValue)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0x7fffffff");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0x7fffffff");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0x7fffffff");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0x7fffffff");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %08x%08x", value >> 32, value);
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Read    : %08x%08x", testValue >> 32, testValue);
             success = false;
         }
@@ -3051,13 +3051,13 @@ namespace BitCoin
 
         data.setReadOffset(0);
         if(data == testData)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0x7fffffff");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0x7fffffff");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0x7fffffff");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0x7fffffff");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %s", testData.readHexString(testData.length()).text());
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Written : %s", data.readHexString(data.length()).text());
             success = false;
         }
@@ -3070,13 +3070,13 @@ namespace BitCoin
         value = 0xffffffff80000001; //0xffffffffffffffff;
 
         if(arithmeticRead(&testData, testValue) && value == testValue)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xffffffff");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xffffffff");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xffffffff");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xffffffff");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %08x%08x", value >> 32, value);
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Read    : %08x%08x", testValue >> 32, testValue);
             success = false;
         }
@@ -3091,13 +3091,13 @@ namespace BitCoin
 
         data.setReadOffset(0);
         if(data == testData)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xffffffff");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xffffffff");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xffffffff");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xffffffff");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %s", testData.readHexString(testData.length()).text());
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Written : %s", data.readHexString(data.length()).text());
             success = false;
         }
@@ -3112,13 +3112,13 @@ namespace BitCoin
 
         data.setReadOffset(0);
         if(data == testData)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xffffffff80");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xffffffff80");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xffffffff80");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xffffffff80");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %s", testData.readHexString(testData.length()).text());
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Written : %s", data.readHexString(data.length()).text());
             success = false;
         }
@@ -3131,13 +3131,13 @@ namespace BitCoin
         value = 0xffffffff00000001;
 
         if(arithmeticRead(&testData, testValue) && value == testValue)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xffffffff80");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xffffffff80");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xffffffff80");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xffffffff80");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %08x%08x", value >> 32, value);
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Read    : %08x%08x", testValue >> 32, testValue);
             success = false;
         }
@@ -3150,13 +3150,13 @@ namespace BitCoin
         value = 0xffffffff00000002;
 
         if(arithmeticRead(&testData, testValue) && value == testValue)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xfeffffff80");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xfeffffff80");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xfeffffff80");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xfeffffff80");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %08x%08x", value >> 32, value);
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Read    : %08x%08x", testValue >> 32, testValue);
             success = false;
         }
@@ -3171,13 +3171,13 @@ namespace BitCoin
 
         data.setReadOffset(0);
         if(data == testData)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xfeffffff80");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xfeffffff80");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xfeffffff80");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xfeffffff80");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %s", testData.readHexString(testData.length()).text());
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Written : %s", data.readHexString(data.length()).text());
             success = false;
         }
@@ -3190,13 +3190,13 @@ namespace BitCoin
         value = 0x000000000000006e;
 
         if(arithmeticRead(&testData, testValue) && value == testValue)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0x6e");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0x6e");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0x6e");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0x6e");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %08x%08x", value >> 32, value);
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Read    : %08x%08x", testValue >> 32, testValue);
             success = false;
         }
@@ -3211,13 +3211,13 @@ namespace BitCoin
 
         data.setReadOffset(0);
         if(data == testData)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0x6e");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0x6e");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0x6e");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0x6e");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %s", testData.readHexString(testData.length()).text());
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Written : %s", data.readHexString(data.length()).text());
             success = false;
         }
@@ -3230,13 +3230,13 @@ namespace BitCoin
         value = 0x00000000fffffffe;
 
         if(arithmeticRead(&testData, testValue) && value == testValue)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xfeffffff00");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0xfeffffff00");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xfeffffff00");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0xfeffffff00");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %08x%08x", value >> 32, value);
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Read    : %08x%08x", testValue >> 32, testValue);
             success = false;
         }
@@ -3251,13 +3251,13 @@ namespace BitCoin
 
         data.setReadOffset(0);
         if(data == testData)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xfeffffff00");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0xfeffffff00");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xfeffffff00");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0xfeffffff00");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct   : %s", testData.readHexString(testData.length()).text());
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Written : %s", data.readHexString(data.length()).text());
             success = false;
         }
@@ -3270,13 +3270,13 @@ namespace BitCoin
         value = -2;
 
         if(arithmeticRead(&testData, testValue) && value == testValue)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0x82");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic read 0x82");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0x82");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic read 0x82");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct : %08x%08x", value >> 32, value);
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Read    : %08x%08x", testValue >> 32, testValue);
             success = false;
         }
@@ -3291,13 +3291,13 @@ namespace BitCoin
 
         data.setReadOffset(0);
         if(data == testData)
-            ArcMist::Log::add(ArcMist::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0x82");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME, "Passed Arithmetic write 0x82");
         else
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0x82");
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME, "Failed Arithmetic write 0x82");
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Correct   : %s", testData.readHexString(testData.length()).text());
-            ArcMist::Log::addFormatted(ArcMist::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Written : %s", data.readHexString(data.length()).text());
             success = false;
         }

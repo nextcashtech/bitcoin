@@ -1,17 +1,17 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_BLOCK_HPP
 #define BITCOIN_BLOCK_HPP
 
-#include "arcmist/base/hash.hpp"
-#include "arcmist/base/log.hpp"
-#include "arcmist/io/stream.hpp"
-#include "arcmist/io/file_stream.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/io/stream.hpp"
+#include "nextcash/io/file_stream.hpp"
 #include "base.hpp"
 #include "forks.hpp"
 #include "transaction.hpp"
@@ -31,25 +31,25 @@ namespace BitCoin
         // Verify hash is lower than target difficulty specified by targetBits
         bool hasProofOfWork();
 
-        void write(ArcMist::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
+        void write(NextCash::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
           bool pBlockFile = false);
 
         // pCalculateHash will calculate the hash of the block data while it reads it
-        bool read(ArcMist::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
+        bool read(NextCash::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
           bool pCalculateHash, bool pBlockFile = false);
 
         void clear();
 
         // Print human readable version to log
-        void print(ArcMist::Log::Level pLevel = ArcMist::Log::DEBUG, bool pIncludeTransactions = true);
+        void print(NextCash::Log::Level pLevel = NextCash::Log::DEBUG, bool pIncludeTransactions = true);
 
         // Hash
-        ArcMist::Hash hash;
+        NextCash::Hash hash;
 
         // Header
         int32_t version;
-        ArcMist::Hash previousHash;
-        ArcMist::Hash merkleHash;
+        NextCash::Hash previousHash;
+        NextCash::Hash merkleHash;
         uint32_t time;
         uint32_t targetBits;
         uint32_t nonce;
@@ -65,7 +65,7 @@ namespace BitCoin
         uint64_t actualCoinbaseAmount(); // Amount from coinbase transaction
 
         void calculateHash();
-        void calculateMerkleHash(ArcMist::Hash &pMerkleHash);
+        void calculateMerkleHash(NextCash::Hash &pMerkleHash);
 
         bool process(TransactionOutputPool &pOutputs, int pBlockHeight, const BlockStats &pBlockStats,
           const Forks &pForks);
@@ -128,7 +128,7 @@ namespace BitCoin
 
         void print(unsigned int pDepth = 0);
 
-        ArcMist::Hash hash;
+        NextCash::Hash hash;
         Transaction *transaction;
         MerkleNode *left, *right;
         bool matches;
@@ -166,8 +166,8 @@ namespace BitCoin
     public:
 
         // Blocks
-        static const ArcMist::String &path();
-        static ArcMist::String fileName(unsigned int pID);
+        static const NextCash::String &path();
+        static NextCash::String fileName(unsigned int pID);
         static void lock(unsigned int pFileID);
         static void unlock(unsigned int pFileID);
 
@@ -180,7 +180,7 @@ namespace BitCoin
         static bool readBlockTransaction(unsigned int pHeight, unsigned int pTransactionOffset, Transaction &pTransaction);
 
         static bool readBlockTransactionOutput(unsigned int pHeight, unsigned int pTransactionOffset,
-          unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput);
+          unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput);
 
         // Get transaction output from appropriate block file
         static bool readOutput(unsigned int pBlockHeight, OutputReference *pReference, unsigned int pIndex, Output &pOutput);
@@ -198,7 +198,7 @@ namespace BitCoin
         bool isValid() const { return mValid; }
         bool isFull() { return blockCount() == MAX_BLOCKS; }
         unsigned int blockCount() { getLastCount(); return mCount; }
-        const ArcMist::Hash &lastHash() { getLastCount(); return mLastHash; }
+        const NextCash::Hash &lastHash() { getLastCount(); return mLastHash; }
 
         // Add a block to the file
         bool addBlock(Block &pBlock);
@@ -207,21 +207,21 @@ namespace BitCoin
         bool removeBlocksAbove(unsigned int pOffset);
 
         // Read block at specified offset in file. Return false if the offset is too high.
-        bool readHash(unsigned int pOffset, ArcMist::Hash &pHash);
+        bool readHash(unsigned int pOffset, NextCash::Hash &pHash);
         bool readBlock(unsigned int pOffset, Block &pBlock, bool pIncludeTransactions);
 
         // Read list of block hashes from this file. If pStartingHash is empty then start with first block
-        bool readBlockHashes(ArcMist::HashList &pHashes);
+        bool readBlockHashes(NextCash::HashList &pHashes);
 
         // Append block stats from this file to the list specified
         bool readStats(BlockStats &pStats, unsigned int pOffset);
 
         // Read list of block headers from this file. If pStartingHash is empty then start with first block
-        bool readBlockHeaders(BlockList &pBlockHeaders, const ArcMist::Hash &pStartingHash,
-          const ArcMist::Hash &pStoppingHash, unsigned int pCount);
+        bool readBlockHeaders(BlockList &pBlockHeaders, const NextCash::Hash &pStartingHash,
+          const NextCash::Hash &pStoppingHash, unsigned int pCount);
 
         // Read block for specified hash
-        bool readBlock(const ArcMist::Hash &pHash, Block &pBlock, bool pIncludeTransactions);
+        bool readBlock(const NextCash::Hash &pHash, Block &pBlock, bool pIncludeTransactions);
 
         // Read only transaction at specified offset of block
         bool readTransaction(unsigned int pBlockOffset, unsigned int pTransactionOffset, Transaction &pTransaction);
@@ -230,10 +230,10 @@ namespace BitCoin
         bool readTransactionOutput(unsigned int pFileOffset, Output &pTransactionOutput);
 
         bool readTransactionOutput(unsigned int pBlockOffset, unsigned int pTransactionOffset,
-          unsigned int pOutputIndex, ArcMist::Hash &pTransactionID, Output &pOutput);
+          unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput);
 
         // Give the offset of a specific hash into the file
-        unsigned int hashOffset(const ArcMist::Hash &pHash);
+        unsigned int hashOffset(const NextCash::Hash &pHash);
 
         void updateCRC();
 
@@ -255,19 +255,19 @@ namespace BitCoin
         bool openFile();
 
         unsigned int mID;
-        ArcMist::FileInputStream *mInputFile;
-        ArcMist::String mFilePathName;
+        NextCash::FileInputStream *mInputFile;
+        NextCash::String mFilePathName;
         bool mValid;
         bool mModified;
         bool mSPVMode;
 
         void getLastCount();
         unsigned int mCount;
-        ArcMist::Hash mLastHash;
+        NextCash::Hash mLastHash;
 
-        static ArcMist::Mutex mBlockFileMutex;
+        static NextCash::Mutex mBlockFileMutex;
         static std::vector<unsigned int> mLockedBlockFileIDs;
-        static ArcMist::String mBlockFilePath;
+        static NextCash::String mBlockFilePath;
 
         BlockFile(BlockFile &pCopy);
         BlockFile &operator = (BlockFile &pRight);

@@ -1,13 +1,13 @@
 /**************************************************************************
- * Copyright 2018 ArcMist, LLC                                            *
+ * Copyright 2018 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #include "monitor.hpp"
 
-#include "arcmist/base/log.hpp"
+#include "nextcash/base/log.hpp"
 #include "base.hpp"
 #include "key.hpp"
 #include "interpreter.hpp"
@@ -26,18 +26,18 @@ namespace BitCoin
     Monitor::~Monitor()
     {
         mMutex.lock();
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
             delete *trans;
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator transData=mPendingTransactions.begin();transData!=mPendingTransactions.end();++transData)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator transData=mPendingTransactions.begin();transData!=mPendingTransactions.end();++transData)
             delete *transData;
-        for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
+        for(NextCash::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
             delete *request;
         mMutex.unlock();
     }
 
     Monitor::MerkleRequestData::~MerkleRequestData()
     {
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=transactions.begin();trans!=transactions.end();++trans)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=transactions.begin();trans!=transactions.end();++trans)
             delete *trans;
     }
 
@@ -49,7 +49,7 @@ namespace BitCoin
         if(complete || transactions.size() == 0)
             return true;
 
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=transactions.begin();trans!=transactions.end();++trans)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=transactions.begin();trans!=transactions.end();++trans)
             if((*trans)->transaction == NULL)
                 return false;
 
@@ -70,12 +70,12 @@ namespace BitCoin
         receiveTime = 0;
         totalTransactions = 0;
         complete = false;
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=transactions.begin();trans!=transactions.end();++trans)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=transactions.begin();trans!=transactions.end();++trans)
             delete *trans;
         transactions.clear();
     }
 
-    void Monitor::write(ArcMist::OutputStream *pStream)
+    void Monitor::write(NextCash::OutputStream *pStream)
     {
         mMutex.lock();
 
@@ -89,18 +89,18 @@ namespace BitCoin
 
         // Addresses
         pStream->writeUnsignedInt(mAddressHashes.size());
-        for(ArcMist::HashList::iterator hash=mAddressHashes.begin();hash!=mAddressHashes.end();++hash)
+        for(NextCash::HashList::iterator hash=mAddressHashes.begin();hash!=mAddressHashes.end();++hash)
             hash->write(pStream);
 
         // Transactions
         pStream->writeUnsignedInt(mTransactions.size());
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
             (*trans)->write(pStream);
 
         mMutex.unlock();
     }
 
-    bool Monitor::read(ArcMist::InputStream *pStream)
+    bool Monitor::read(NextCash::InputStream *pStream)
     {
         clear();
 
@@ -130,7 +130,7 @@ namespace BitCoin
         // Addresses
         unsigned int addressCount = pStream->readUnsignedInt();
         mAddressHashes.reserve(addressCount);
-        ArcMist::Hash addressHash(ADDRESS_HASH_SIZE);
+        NextCash::Hash addressHash(ADDRESS_HASH_SIZE);
         for(unsigned int i=0;i<addressCount;++i)
         {
             if(!addressHash.read(pStream, ADDRESS_HASH_SIZE))
@@ -159,7 +159,7 @@ namespace BitCoin
         }
 
         // Update transactions
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
             refreshTransaction(*trans, true);
 
         refreshBloomFilter(true);
@@ -168,7 +168,7 @@ namespace BitCoin
         return true;
     }
 
-    void Monitor::SPVTransactionData::write(ArcMist::OutputStream *pStream)
+    void Monitor::SPVTransactionData::write(NextCash::OutputStream *pStream)
     {
         // Block hash
         blockHash.write(pStream);
@@ -190,7 +190,7 @@ namespace BitCoin
             pStream->writeUnsignedInt(*spend);
     }
 
-    bool Monitor::SPVTransactionData::read(ArcMist::InputStream *pStream)
+    bool Monitor::SPVTransactionData::read(NextCash::InputStream *pStream)
     {
         // Block hash
         if(!blockHash.read(pStream, 32))
@@ -260,7 +260,7 @@ namespace BitCoin
         return *this;
     }
 
-    void Monitor::PassData::write(ArcMist::OutputStream *pStream)
+    void Monitor::PassData::write(NextCash::OutputStream *pStream)
     {
         pStream->writeUnsignedInt(beginBlockHeight);
         pStream->writeUnsignedInt(blockHeight);
@@ -271,7 +271,7 @@ namespace BitCoin
             pStream->writeByte(0);
     }
 
-    bool Monitor::PassData::read(ArcMist::InputStream *pStream)
+    bool Monitor::PassData::read(NextCash::InputStream *pStream)
     {
         if(pStream->remaining() < 13)
             return false;
@@ -286,9 +286,9 @@ namespace BitCoin
         return true;
     }
 
-    Output *Monitor::getOutput(ArcMist::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending)
+    Output *Monitor::getOutput(NextCash::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending)
     {
-        ArcMist::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction = mTransactions.get(pTransactionHash);
+        NextCash::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction = mTransactions.get(pTransactionHash);
         if(confirmedTransaction != mTransactions.end() && (*confirmedTransaction)->transaction != NULL &&
           (*confirmedTransaction)->transaction->outputs.size() > pIndex)
                 return (*confirmedTransaction)->transaction->outputs[pIndex];
@@ -296,7 +296,7 @@ namespace BitCoin
         if(!pAllowPending)
             return NULL;
 
-        ArcMist::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionHash);
+        NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionHash);
         if(pendingTransaction != mPendingTransactions.end() && (*pendingTransaction)->transaction != NULL &&
           (*pendingTransaction)->transaction->outputs.size() > pIndex)
                 return (*pendingTransaction)->transaction->outputs[pIndex];
@@ -304,7 +304,7 @@ namespace BitCoin
         return NULL;
     }
 
-    bool Monitor::getPayAddresses(Output *pOutput, ArcMist::HashList &pAddresses, bool pBlockOnly)
+    bool Monitor::getPayAddresses(Output *pOutput, NextCash::HashList &pAddresses, bool pBlockOnly)
     {
         pAddresses.clear();
 
@@ -321,7 +321,7 @@ namespace BitCoin
 
 
         if(pBlockOnly) // Check the output addresses against block addresses
-            for(ArcMist::HashList::iterator hash=pAddresses.begin();hash!=pAddresses.end();)
+            for(NextCash::HashList::iterator hash=pAddresses.begin();hash!=pAddresses.end();)
             {
                 if(mAddressHashes.contains(*hash))
                     ++hash;
@@ -343,7 +343,7 @@ namespace BitCoin
 
         // Check for spends
         Output *spentOutput;
-        ArcMist::HashList payAddresses;
+        NextCash::HashList payAddresses;
         unsigned int index = 0;
         for(std::vector<Input *>::iterator input=pTransaction->transaction->inputs.begin();input!=pTransaction->transaction->inputs.end();++input)
         {
@@ -366,7 +366,7 @@ namespace BitCoin
             {
                 if(mKeyStore != NULL)
                 {
-                    for(ArcMist::HashList::iterator hash=payAddresses.begin();hash!=payAddresses.end();++hash)
+                    for(NextCash::HashList::iterator hash=payAddresses.begin();hash!=payAddresses.end();++hash)
                     {
                         mKeyStore->markUsed(*hash, 20, newAddressesCreated);
                         if(newAddressesCreated)
@@ -395,15 +395,15 @@ namespace BitCoin
         mNodesToResendFilter.clear();
         mNodesToClose.clear();
 
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
             delete *trans;
         mTransactions.clear();
 
-        for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
+        for(NextCash::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
             delete *request;
         mMerkleRequests.clear();
 
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator transData=mPendingTransactions.begin();transData!=mPendingTransactions.end();++transData)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator transData=mPendingTransactions.begin();transData!=mPendingTransactions.end();++transData)
             delete *transData;
         mPendingTransactions.clear();
 
@@ -416,7 +416,7 @@ namespace BitCoin
         for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass,++passIndex)
             if(!pass->complete && pass->blockHeight > 0)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                   "Pass %d marked complete at block height %d to start new pass for new addresses",
                   passIndex, pass->blockHeight);
                 pass->complete = true;
@@ -424,13 +424,13 @@ namespace BitCoin
 
         if(mPasses.size() == 0)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
               "Starting first pass %d for %d addresses", mPasses.size() + 1, mAddressHashes.size());
             mPasses.push_back(PassData());
         }
         else if(mPasses.back().blockHeight > 0)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
               "Starting new pass %d for new addresses", mPasses.size() + 1);
             mPasses.push_back(PassData());
         }
@@ -442,21 +442,21 @@ namespace BitCoin
 
     void Monitor::restartBloomFilter()
     {
-        for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
+        for(NextCash::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
             delete *request;
         mMerkleRequests.clear();
 
         refreshBloomFilter(true);
     }
 
-    bool Monitor::loadAddresses(ArcMist::InputStream *pStream)
+    bool Monitor::loadAddresses(NextCash::InputStream *pStream)
     {
         mMutex.lock();
 
         unsigned int addedCount = 0;
-        ArcMist::String line;
+        NextCash::String line;
         unsigned char nextChar;
-        ArcMist::Hash addressHash;
+        NextCash::Hash addressHash;
         AddressType addressType;
         AddressFormat addressFormat;
 
@@ -480,7 +480,7 @@ namespace BitCoin
                 {
                     mAddressHashes.push_back(addressHash);
                     ++addedCount;
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                       "Adding address hash : %s", line.text());
                 }
             }
@@ -520,7 +520,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Added new BIP0044 external address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -535,7 +535,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Added new BIP0044 internal address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -550,7 +550,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Added new BIP0032 external address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -565,7 +565,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Added new BIP0032 internal address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -580,7 +580,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Added new SIMPLE external address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -595,7 +595,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Added new SIMPLE internal address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -606,7 +606,7 @@ namespace BitCoin
             {
                 if(!mAddressHashes.contains((*key)->hash()))
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                       "Added new individual address from key store : %s", (*key)->address().text());
                     mAddressHashes.push_back((*key)->hash());
                     ++addedCount;
@@ -620,7 +620,7 @@ namespace BitCoin
                 for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                     if(!mAddressHashes.contains((*child)->hash()))
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                           "Added new immediate child address from key store : %s", (*child)->address().text());
                         mAddressHashes.push_back((*child)->hash());
                         ++addedCount;
@@ -628,7 +628,7 @@ namespace BitCoin
             }
         }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
           "Added %d new addresses from key store", addedCount);
         return addedCount;
     }
@@ -641,14 +641,14 @@ namespace BitCoin
             mMutex.lock();
 
         // Add outpoints to monitor for spending
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
             for(std::vector<unsigned int>::iterator index=(*trans)->payOutputs.begin();index!=(*trans)->payOutputs.end();++index)
                 outpoints.push_back(new Outpoint((*trans)->transaction->hash, *index));
 
         mFilter.setup(mAddressHashes.size() + outpoints.size(), BloomFilter::UPDATE_NONE, 0.00001);
 
         // Add Address hashes to monitor for "pay to" transactions
-        for(ArcMist::HashList::iterator hash=mAddressHashes.begin();hash!=mAddressHashes.end();++hash)
+        for(NextCash::HashList::iterator hash=mAddressHashes.begin();hash!=mAddressHashes.end();++hash)
             mFilter.add(*hash);
 
         // Add outpoints of UTXOs to monitor for "spend from" transactions
@@ -669,7 +669,7 @@ namespace BitCoin
         if(!pLocked)
             mMutex.lock();
         int64_t result = 0;
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
             result += (*trans)->amount;
         if(!pLocked)
             mMutex.unlock();
@@ -716,7 +716,7 @@ namespace BitCoin
     {
         mMutex.lock();
 
-        for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
+        for(NextCash::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
             if((*request)->node == pNodeID)
                 (*request)->release();
 
@@ -747,10 +747,10 @@ namespace BitCoin
         return result;
     }
 
-    void Monitor::getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain, ArcMist::HashList &pBlockHashes, unsigned int pMaxCount)
+    void Monitor::getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain, NextCash::HashList &pBlockHashes, unsigned int pMaxCount)
     {
-        ArcMist::Hash nextBlockHash;
-        ArcMist::HashContainerList<MerkleRequestData *>::Iterator request;
+        NextCash::Hash nextBlockHash;
+        NextCash::HashContainerList<MerkleRequestData *>::Iterator request;
         MerkleRequestData *newMerkleRequest;
         unsigned int blockHeight;
         int32_t time = getTime();
@@ -803,7 +803,7 @@ namespace BitCoin
 
                         if(!found)
                         {
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Node [%d] needs closed. Merkle blocks too slow", (*request)->node);
                             mNodesToClose.push_back((*request)->node);
                         }
@@ -827,7 +827,7 @@ namespace BitCoin
     {
         mMutex.lock();
 
-        ArcMist::HashContainerList<MerkleRequestData *>::Iterator requestIter = mMerkleRequests.get(pData->block->hash);
+        NextCash::HashContainerList<MerkleRequestData *>::Iterator requestIter = mMerkleRequests.get(pData->block->hash);
         if(requestIter == mMerkleRequests.end())
         {
             mMutex.unlock();
@@ -845,7 +845,7 @@ namespace BitCoin
         }
 
         // Validate
-        ArcMist::HashList transactionHashes;
+        NextCash::HashList transactionHashes;
         if(!pData->validate(transactionHashes))
         {
             request->release();
@@ -853,7 +853,7 @@ namespace BitCoin
             return false;
         }
 
-        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+        // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
           // "Received merkle block from node [%d] with %d transaction hashes : %s", pNodeID,
           // transactionHashes.size(), pData->block->hash.hex().text());
 
@@ -863,10 +863,10 @@ namespace BitCoin
         //   nodes, then they might have different bloom filters and different false positive
         //   transactions.
         SPVTransactionData *newSPVTransaction;
-        ArcMist::HashContainerList<SPVTransactionData *>::Iterator transaction;
-        ArcMist::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
-        ArcMist::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
-        for(ArcMist::HashList::iterator hash=transactionHashes.begin();hash!=transactionHashes.end();++hash)
+        NextCash::HashContainerList<SPVTransactionData *>::Iterator transaction;
+        NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
+        NextCash::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
+        for(NextCash::HashList::iterator hash=transactionHashes.begin();hash!=transactionHashes.end();++hash)
         {
             transaction = request->transactions.get(*hash);
             if(transaction == request->transactions.end())
@@ -875,7 +875,7 @@ namespace BitCoin
                 pendingTransaction = mPendingTransactions.get(*hash);
                 if(pendingTransaction != mPendingTransactions.end())
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                       "Transaction pulled from pending into merkle request : %s", hash->hex().text());
                     request->transactions.insert(*hash, *pendingTransaction);
                     (*pendingTransaction)->blockHash = pData->block->hash;
@@ -886,7 +886,7 @@ namespace BitCoin
                     confirmedTransaction = mTransactions.get(*hash);
                     if(confirmedTransaction != mTransactions.end())
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                           "Transaction found in confirmed for merkle request : %s", hash->hex().text());
                         newSPVTransaction = new SPVTransactionData(**confirmedTransaction);
                         request->transactions.insert(*hash, newSPVTransaction);
@@ -923,7 +923,7 @@ namespace BitCoin
 
         // Mark receive time
         if(request->receiveTime != 0)
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
               "Repeated merkle block from node [%d] with %d transaction (%d sec ago) : %s", pNodeID,
               request->transactions.size(), getTime() - request->receiveTime, pData->block->hash.hex().text());
 
@@ -958,8 +958,8 @@ namespace BitCoin
             // Check that it has been proven by a merkle block
             MerkleRequestData *request;
             bool processNeeded = false;
-            ArcMist::HashContainerList<SPVTransactionData *>::Iterator transactionIter;
-            for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator requestIter=mMerkleRequests.begin();requestIter!=mMerkleRequests.end();++requestIter)
+            NextCash::HashContainerList<SPVTransactionData *>::Iterator transactionIter;
+            for(NextCash::HashContainerList<MerkleRequestData *>::Iterator requestIter=mMerkleRequests.begin();requestIter!=mMerkleRequests.end();++requestIter)
             {
                 request = *requestIter;
                 transactionIter = request->transactions.get(pTransactionData->transaction->hash);
@@ -972,7 +972,7 @@ namespace BitCoin
                         pTransactionData->transaction = NULL; // Prevent it from being deleted
                         refreshTransaction(*transactionIter, true);
                         processNeeded = request->isComplete();
-                        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                           // "Added confirmed transaction to merkle block request : %s", transaction->hash.hex().text());
 
                         // Note: Bloom filter updated when merkle block is processed
@@ -986,7 +986,7 @@ namespace BitCoin
             }
 
             // Check pending transactions
-            ArcMist::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionData->transaction->hash);
+            NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionData->transaction->hash);
             if(pendingTransaction != mPendingTransactions.end())
             {
                 result = true;
@@ -1000,13 +1000,13 @@ namespace BitCoin
                     if((*pendingTransaction)->payOutputs.size() > 0 || (*pendingTransaction)->spendInputs.size() > 0)
                     {
                         // Needed this transaction
-                        ArcMist::String subject, message;
+                        NextCash::String subject, message;
                         if((*pendingTransaction)->amount > 0)
                         {
                             subject = "Bitcoin Cash Payment Pending";
                             message.writeFormatted("Payment pending for %0.8f bitcoins.\nTransaction : %s",
                               -bitcoins((*pendingTransaction)->amount), (*pendingTransaction)->transaction->hash.hex().text());
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Pending transaction paying %0.8f bitcoins : %s", bitcoins((*pendingTransaction)->amount),
                               (*pendingTransaction)->transaction->hash.hex().text());
                         }
@@ -1015,7 +1015,7 @@ namespace BitCoin
                             subject = "Bitcoin Cash Spend Pending";
                             message.writeFormatted("Spend pending for %0.8f bitcoins.\nTransaction : %s",
                               -bitcoins((*pendingTransaction)->amount), (*pendingTransaction)->transaction->hash.hex().text());
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                               "Pending transaction spending %0.8f bitcoins : %s", -bitcoins((*pendingTransaction)->amount),
                               (*pendingTransaction)->transaction->hash.hex().text());
                         }
@@ -1024,7 +1024,7 @@ namespace BitCoin
                     }
                     else
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                           "Pending transaction (unrelated) : %s", (*pendingTransaction)->transaction->hash.hex().text());
                         //delete *pendingTransaction;
                         //mPendingTransactions.erase(pendingTransaction);
@@ -1033,7 +1033,7 @@ namespace BitCoin
             }
 
             if(!result)
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                   "Transaction not found in merkle block or pending : %s", pTransactionData->transaction->hash.hex().text());
 
             mMutex.unlock();
@@ -1049,14 +1049,14 @@ namespace BitCoin
                 // // Needed this transaction
                 // result = true;
                 // (*pendingTransaction)->transaction = pTransaction;
-                // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                   // "Received pending transaction : %s", pTransaction->hash.hex().text());
             // }
             // else
             // {
                 // delete *pendingTransaction;
                 // mPendingTransactions.erase(pendingTransaction);
-                // ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                   // "Removed unrelated pending transaction : %s", pTransaction->hash.hex().text());
             // }
 
@@ -1065,19 +1065,19 @@ namespace BitCoin
         }
     }
 
-    bool Monitor::addTransactionAnnouncement(const ArcMist::Hash &pTransactionHash, unsigned int pNodeID)
+    bool Monitor::addTransactionAnnouncement(const NextCash::Hash &pTransactionHash, unsigned int pNodeID)
     {
         bool result = false;
         mMutex.lock();
 
         if(Info::instance().spvMode)
         {
-            ArcMist::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionHash);
+            NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction = mPendingTransactions.get(pTransactionHash);
             if(pendingTransaction == mPendingTransactions.end())
             {
                 // Add new pending transaction
                 SPVTransactionData *newPendingTransaction = new SPVTransactionData();
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                   "Pending transaction accepted on first node [%d] : %s", pNodeID, pTransactionHash.hex().text());
                 newPendingTransaction->nodes.push_back(pNodeID);
                 refreshTransaction(newPendingTransaction, true);
@@ -1100,7 +1100,7 @@ namespace BitCoin
                 if(!found)
                 {
                     (*pendingTransaction)->nodes.push_back(pNodeID);
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                       "Pending transaction accepted on %d nodes. [%d] : %s", (*pendingTransaction)->nodes.size(),
                       pNodeID, pTransactionHash.hex().text());
                 }
@@ -1116,12 +1116,12 @@ namespace BitCoin
         return result;
     }
 
-    void Monitor::revertBlock(const ArcMist::Hash &pBlockHash, unsigned int pBlockHeight)
+    void Monitor::revertBlock(const NextCash::Hash &pBlockHash, unsigned int pBlockHeight)
     {
         mMutex.lock();
 
         // If there is an active request then remove it and that is all
-        ArcMist::HashContainerList<MerkleRequestData *>::Iterator request = mMerkleRequests.get(pBlockHash);
+        NextCash::HashContainerList<MerkleRequestData *>::Iterator request = mMerkleRequests.get(pBlockHash);
         if(request != mMerkleRequests.end())
         {
             // TODO Move transactions back to pending
@@ -1133,7 +1133,7 @@ namespace BitCoin
 
         // Remove any transactions associated with this block
         unsigned int transactionCount = 0;
-        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();)
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();)
         {
             if((*trans)->blockHash == pBlockHash)
             {
@@ -1145,7 +1145,7 @@ namespace BitCoin
                 ++trans;
         }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
           "Reverted block with %d transactions at height %d : %s", transactionCount,
           pBlockHeight, pBlockHash.hex().text());
 
@@ -1168,16 +1168,16 @@ namespace BitCoin
 
             unsigned int falsePositiveCount;
             bool resetNeeded = false, balanceUpdated = false;
-            ArcMist::Hash nextBlockHash;
-            ArcMist::HashContainerList<MerkleRequestData *>::Iterator request;
+            NextCash::Hash nextBlockHash;
+            NextCash::HashContainerList<MerkleRequestData *>::Iterator request;
             MerkleRequestData *merkleRequest;
-            ArcMist::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
-            ArcMist::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
+            NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
+            NextCash::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
             unsigned int passIndex = mPasses.size();
 
             if(pChain.isInSync() && pChain.height() > 5000 && mPasses.back().blockHeight < (unsigned int)pChain.height() - 5000)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                   "Starting new pass at block height %d to monitor new blocks", pChain.height());
                 PassData newPass;
                 newPass.beginBlockHeight = pChain.height();
@@ -1194,7 +1194,7 @@ namespace BitCoin
 
                 if(pass->blockHeight == (unsigned int)pChain.height() && passIndex < mPasses.size())
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                       "Pass %d completed at block height %d", passIndex, pass->blockHeight);
                     pass->complete = true;
                     continue;
@@ -1215,7 +1215,7 @@ namespace BitCoin
 
                         // Process transactions
                         falsePositiveCount = 0;
-                        for(ArcMist::HashContainerList<SPVTransactionData *>::Iterator trans=merkleRequest->transactions.begin();trans!=merkleRequest->transactions.end();++trans)
+                        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=merkleRequest->transactions.begin();trans!=merkleRequest->transactions.end();++trans)
                         {
                             // Remove from pending
                             pendingTransaction = mPendingTransactions.get((*trans)->transaction->hash);
@@ -1241,7 +1241,7 @@ namespace BitCoin
                                 {
                                     balanceUpdated = true;
                                     mTransactions.insert((*trans)->transaction->hash, *trans);
-                                    ArcMist::String subject, message;
+                                    NextCash::String subject, message;
 
                                     if((*trans)->amount > 0)
                                     {
@@ -1249,7 +1249,7 @@ namespace BitCoin
                                         message.writeFormatted("Payment confirmed for %0.8f bitcoins in block %d\nNew Balance : %0.8f\nTransaction : %s",
                                           bitcoins((*trans)->amount), pass->blockHeight + 1, bitcoins(balance(true)),
                                           (*trans)->transaction->hash.hex().text());
-                                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                                           "Confirmed transaction paying %0.8f bitcoins : %s", bitcoins((*trans)->amount),
                                           (*trans)->transaction->hash.hex().text());
                                     }
@@ -1259,7 +1259,7 @@ namespace BitCoin
                                         message.writeFormatted("Spend confirmed for %0.8f bitcoins in block %d.\nNew Balance : %0.8f\nTransaction : %s",
                                           -bitcoins((*trans)->amount), pass->blockHeight + 1, bitcoins(balance(true)),
                                           (*trans)->transaction->hash.hex().text());
-                                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                                           "Confirmed transaction spending %0.8f bitcoins : %s", -bitcoins((*trans)->amount),
                                           (*trans)->transaction->hash.hex().text());
                                     }
@@ -1276,7 +1276,7 @@ namespace BitCoin
                                 delete *trans; // Transaction already confirmed
                         }
 
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                           "Adding merkle block from node [%d] with %d/%d trans at height %d : %s", merkleRequest->node,
                           merkleRequest->transactions.size() - falsePositiveCount, merkleRequest->transactions.size(),
                           pass->blockHeight + 1, request.hash().hex().text());
@@ -1300,7 +1300,7 @@ namespace BitCoin
 
                                 if(!found)
                                 {
-                                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                                       "Node [%d] needs closed. False positive rate %d/%d", merkleRequest->node,
                                       falsePositiveCount, merkleRequest->totalTransactions);
                                     mNodesToClose.push_back(merkleRequest->node);
@@ -1319,7 +1319,7 @@ namespace BitCoin
                                 //TODO Add delay so bloom filter doesn't get sent after every merkle block received before it actually updates
                                 if(!found)
                                 {
-                                    ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                                       "Node [%d] needs bloom filter resend. False positive rate %d/%d", merkleRequest->node,
                                       falsePositiveCount, merkleRequest->totalTransactions);
                                     mNodesToResendFilter.push_back(merkleRequest->node);
@@ -1339,14 +1339,14 @@ namespace BitCoin
 
                     if(balanceUpdated)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                           "Total balance updated to %0.8f bitcoins", bitcoins(balance(true)));
                         balanceUpdated = false;
                     }
 
                     if(resetNeeded)
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
                           "New UTXO found. Resetting bloom filters and merkle requests");
 
                         // Update bloom filter and reset all node bloom filters
@@ -1354,7 +1354,7 @@ namespace BitCoin
                         refreshBloomFilter(true);
 
                         // Reset all merkle requests so they are only received with updated bloom filters
-                        for(ArcMist::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
+                        for(NextCash::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
                             (*request)->clear();
 
                         break;

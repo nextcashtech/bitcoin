@@ -1,16 +1,16 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_CHAIN_HPP
 #define BITCOIN_CHAIN_HPP
 
-#include "arcmist/base/string.hpp"
-#include "arcmist/base/hash.hpp"
-#include "arcmist/base/mutex.hpp"
+#include "nextcash/base/string.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/base/mutex.hpp"
 #include "base.hpp"
 #include "message.hpp"
 #include "forks.hpp"
@@ -31,14 +31,14 @@ namespace BitCoin
     class BlockInfo
     {
     public:
-        BlockInfo(const ArcMist::Hash &pHash, unsigned int pFileID, unsigned int pHeight)
+        BlockInfo(const NextCash::Hash &pHash, unsigned int pFileID, unsigned int pHeight)
         {
             hash   = pHash;
             fileID = pFileID;
             height = pHeight;
         }
 
-        ArcMist::Hash hash;
+        NextCash::Hash hash;
         unsigned int  fileID;
         unsigned int  height;
 
@@ -47,7 +47,7 @@ namespace BitCoin
         BlockInfo &operator = (BlockInfo &pRight);
     };
 
-    class BlockSet : public std::list<BlockInfo *>, public ArcMist::Mutex
+    class BlockSet : public std::list<BlockInfo *>, public NextCash::Mutex
     {
     public:
         BlockSet() : Mutex("Block Set") {}
@@ -57,7 +57,7 @@ namespace BitCoin
                 delete *info;
         }
 
-        bool contains(const ArcMist::Hash &pHash) const
+        bool contains(const NextCash::Hash &pHash) const
         {
             for(const_iterator info=begin();info!=end();++info)
                 if((*info)->hash == pHash)
@@ -72,7 +72,7 @@ namespace BitCoin
             std::list<BlockInfo *>::clear();
         }
 
-        bool remove(const ArcMist::Hash &pHash)
+        bool remove(const NextCash::Hash &pHash)
         {
             for(iterator info=begin();info!=end();++info)
                 if((*info)->hash == pHash)
@@ -94,7 +94,7 @@ namespace BitCoin
     {
     public:
 
-        PendingHeaderData(const ArcMist::Hash &pHash, unsigned int pNodeID, uint32_t pTime)
+        PendingHeaderData(const NextCash::Hash &pHash, unsigned int pNodeID, uint32_t pTime)
         {
             hash = pHash;
             requestedTime = pTime;
@@ -102,7 +102,7 @@ namespace BitCoin
             requestingNode = pNodeID;
         }
 
-        ArcMist::Hash hash;
+        NextCash::Hash hash;
         uint32_t requestedTime;
         uint32_t updateTime;
         unsigned int requestingNode;
@@ -161,14 +161,14 @@ namespace BitCoin
     {
     public:
 
-        Branch(unsigned int pHeight, const ArcMist::Hash &pWork) : accumulatedWork(pWork) { height = pHeight + 1; }
+        Branch(unsigned int pHeight, const NextCash::Hash &pWork) : accumulatedWork(pWork) { height = pHeight + 1; }
         ~Branch();
 
         void addBlock(Block *pBlock)
         {
             pendingBlocks.push_back(new PendingBlockData(pBlock));
-            ArcMist::Hash work(32);
-            ArcMist::Hash target(32);
+            NextCash::Hash work(32);
+            NextCash::Hash target(32);
             target.setDifficulty(pBlock->targetBits);
             target.getWork(work);
             accumulatedWork += work;
@@ -176,7 +176,7 @@ namespace BitCoin
 
         unsigned int height; // The chain height of the first block in the branch
         std::list<PendingBlockData *> pendingBlocks;
-        ArcMist::Hash accumulatedWork;
+        NextCash::Hash accumulatedWork;
     };
 
     class Chain
@@ -187,12 +187,12 @@ namespace BitCoin
         ~Chain();
 
         int height() const { return mNextBlockHeight - 1; }
-        const ArcMist::Hash &lastBlockHash() const { return mLastBlockHash; }
+        const NextCash::Hash &lastBlockHash() const { return mLastBlockHash; }
         unsigned int pendingChainHeight() const { return mNextBlockHeight - 1 + mPendingBlocks.size(); }
-        const ArcMist::Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
+        const NextCash::Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
-        const ArcMist::Hash &accumulatedWork() { return mBlockStats.accumulatedWork(mBlockStats.height()); }
-        const ArcMist::Hash &pendingAccumulatedWork() { return mPendingAccumulatedWork; }
+        const NextCash::Hash &accumulatedWork() { return mBlockStats.accumulatedWork(mBlockStats.height()); }
+        const NextCash::Hash &pendingAccumulatedWork() { return mPendingAccumulatedWork; }
 
         TransactionOutputPool &outputs() { return mOutputs; }
         const BlockStats &blockStats() const { return mBlockStats; }
@@ -215,12 +215,12 @@ namespace BitCoin
         Block *blockToAnnounce();
 
         // Check if a block is already in the chain
-        bool blockInChain(const ArcMist::Hash &pHash) const { return mBlockLookup[pHash.lookup16()].contains(pHash); }
+        bool blockInChain(const NextCash::Hash &pHash) const { return mBlockLookup[pHash.lookup16()].contains(pHash); }
         // Check if a header has been downloaded
-        bool headerAvailable(const ArcMist::Hash &pHash);
+        bool headerAvailable(const NextCash::Hash &pHash);
 
         // Branches
-        bool headerInBranch(const ArcMist::Hash &pHash);
+        bool headerInBranch(const NextCash::Hash &pHash);
 
         // Return true if a header request at the top of the chain is needed
         bool headersNeeded();
@@ -234,19 +234,19 @@ namespace BitCoin
         // Bytes used by pending blocks
         unsigned int pendingSize();
 
-        bool getPendingHeaderHashes(ArcMist::HashList &pList);
+        bool getPendingHeaderHashes(NextCash::HashList &pList);
 
         enum HashStatus { ALREADY_HAVE, NEED_HEADER, NEED_BLOCK, BLACK_LISTED };
 
         // Return the status of the specified block hash
-        HashStatus addPendingHash(const ArcMist::Hash &pHash, unsigned int pNodeID);
+        HashStatus addPendingHash(const NextCash::Hash &pHash, unsigned int pNodeID);
 
         // Builds a list of blocks that need to be requested and marks them as requested by the node specified
-        bool getBlocksNeeded(ArcMist::HashList &pHashes, unsigned int pCount, bool pReduceOnly);
+        bool getBlocksNeeded(NextCash::HashList &pHashes, unsigned int pCount, bool pReduceOnly);
         // Mark that download progress has increased for this block
-        void updateBlockProgress(const ArcMist::Hash &pHash, unsigned int pNodeID, uint32_t pTime);
+        void updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, uint32_t pTime);
         // Mark blocks as requested by the specified node
-        void markBlocksForNode(ArcMist::HashList &pHashes, unsigned int pNodeID);
+        void markBlocksForNode(NextCash::HashList &pHashes, unsigned int pNodeID);
         // Release all blocks requested by a specified node so they will be requested again
         void releaseBlocksForNode(unsigned int pNodeID);
 
@@ -254,23 +254,23 @@ namespace BitCoin
         bool addPendingBlock(Block *pBlock);
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
-        bool getBlockHashes(ArcMist::HashList &pHashes, const ArcMist::Hash &pStartingHash, unsigned int pCount);
+        bool getBlockHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash, unsigned int pCount);
         // Retrieve list of block hashes starting at top, going down and skipping around 100 between each.
-        bool getReverseBlockHashes(ArcMist::HashList &pHashes, unsigned int pCount);
+        bool getReverseBlockHashes(NextCash::HashList &pHashes, unsigned int pCount);
 
         // Retrieve block headers starting at a specific hash. (empty starting hash for first block)
-        bool getBlockHeaders(BlockList &pBlockHeaders, const ArcMist::Hash &pStartingHash, const ArcMist::Hash &pStoppingHash,
+        bool getBlockHeaders(BlockList &pBlockHeaders, const NextCash::Hash &pStartingHash, const NextCash::Hash &pStoppingHash,
           unsigned int pCount);
 
         // Get block or hash at specific height
-        bool getBlockHash(unsigned int pHeight, ArcMist::Hash &pHash);
+        bool getBlockHash(unsigned int pHeight, NextCash::Hash &pHash);
         bool getBlock(unsigned int pHeight, Block &pBlock);
         bool getHeader(unsigned int pHeight, Block &pBlockHeader);
 
         // Get the block or height for a specific hash
-        int blockHeight(const ArcMist::Hash &pHash); // Returns -1 when hash is not found
-        bool getBlock(const ArcMist::Hash &pHash, Block &pBlock);
-        bool getHeader(const ArcMist::Hash &pHash, Block &pBlockHeader);
+        int blockHeight(const NextCash::Hash &pHash); // Returns -1 when hash is not found
+        bool getBlock(const NextCash::Hash &pHash, Block &pBlock);
+        bool getHeader(const NextCash::Hash &pHash, Block &pBlockHeader);
 
         // Load block data from file system
         //   If pList is true then all the block hashes will be output
@@ -298,18 +298,18 @@ namespace BitCoin
 
     private:
 
-        static ArcMist::Hash sBTCForkBlockHash;
+        static NextCash::Hash sBTCForkBlockHash;
 
         TransactionOutputPool mOutputs;
         Addresses mAddresses;
         Info &mInfo;
-        ArcMist::HashList mBlockHashes;
+        NextCash::HashList mBlockHashes;
         BlockSet mBlockLookup[0x10000];
 
         // Block headers for blocks not yet on chain
-        ArcMist::ReadersLock mPendingLock;
+        NextCash::ReadersLock mPendingLock;
         std::list<PendingBlockData *> mPendingBlocks;
-        ArcMist::Hash mLastPendingHash, mPendingAccumulatedWork;
+        NextCash::Hash mLastPendingHash, mPendingAccumulatedWork;
         unsigned int mPendingSize, mPendingBlockCount, mLastFullPendingOffset;
         uint32_t mBlockProcessStartTime;
 
@@ -327,7 +327,7 @@ namespace BitCoin
         Monitor *mMonitor;
 
         // Verify and process block then add it to the chain
-        ArcMist::Mutex mProcessMutex;
+        NextCash::Mutex mProcessMutex;
         bool mStop;
         bool mIsInSync;
         bool mAnnouncedAdded;
@@ -339,9 +339,9 @@ namespace BitCoin
         bool revertBlockFileHeight(int pHeight);
 
         static const unsigned int INVALID_FILE_ID = 0xffffffff;
-        unsigned int blockFileID(const ArcMist::Hash &pHash);
+        unsigned int blockFileID(const NextCash::Hash &pHash);
 
-        ArcMist::Hash mLastBlockHash; // Hash of last/top block on chain
+        NextCash::Hash mLastBlockHash; // Hash of last/top block on chain
         int32_t mNextBlockHeight; // Number of next block that will be added to the chain
         BlockFile *mLastBlockFile;
         unsigned int mLastFileID;
@@ -353,7 +353,7 @@ namespace BitCoin
         bool updateTargetBits(); // Update target bits based on new block header
         bool processHeader(Block *pBlock); // Process header only (SPV mode)
         bool writeBlock(Block *pBlock); // Write block to block file
-        void addBlockHash(ArcMist::Hash &pHash); // Add a verified block hash to the lookup
+        void addBlockHash(NextCash::Hash &pHash); // Add a verified block hash to the lookup
 
         // Last BLOCK_STATS_SIZE block's statistics
         Forks mForks;
@@ -362,13 +362,13 @@ namespace BitCoin
         uint64_t mAccumulatedProofOfWork;
 
         std::list<PendingHeaderData *> mPendingHeaders;
-        ArcMist::HashList mBlocksToAnnounce;
+        NextCash::HashList mBlocksToAnnounce;
         Block *mAnnounceBlock;
 
-        ArcMist::HashList mBlackListBlocks;
+        NextCash::HashList mBlackListBlocks;
         std::vector<unsigned int> mBlackListedNodeIDs;
 
-        void addBlackListedBlock(const ArcMist::Hash &pHash);
+        void addBlackListedBlock(const NextCash::Hash &pHash);
 
         std::vector<Branch *> mBranches;
 

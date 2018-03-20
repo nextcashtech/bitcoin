@@ -1,23 +1,23 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 
 #ifdef PROFILER_ON
-#include "arcmist/dev/profiler.hpp"
+#include "nextcash/dev/profiler.hpp"
 #endif
 
-#include "arcmist/base/string.hpp"
-#include "arcmist/base/math.hpp"
-#include "arcmist/base/hash.hpp"
-#include "arcmist/base/log.hpp"
-#include "arcmist/io/file_stream.hpp"
-#include "arcmist/io/buffer.hpp"
-#include "arcmist/io/network.hpp"
-#include "arcmist/base/endian.hpp"
+#include "nextcash/base/string.hpp"
+#include "nextcash/base/math.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/base/log.hpp"
+#include "nextcash/io/file_stream.hpp"
+#include "nextcash/io/buffer.hpp"
+#include "nextcash/io/network.hpp"
+#include "nextcash/base/endian.hpp"
 #include "info.hpp"
 #include "chain.hpp"
 #include "daemon.hpp"
@@ -39,7 +39,7 @@ void printHelp(const char *pPath);
 int main(int pArgumentCount, char **pArguments)
 {
     bool nextIsPath = false, nextIsSeed = false;
-    ArcMist::String path, seed;
+    NextCash::String path, seed;
     bool start = false;
     bool noDaemon = false;
     bool stop = false;
@@ -47,7 +47,7 @@ int main(int pArgumentCount, char **pArguments)
     bool rebuild = false;
     bool listblocks = false;
     bool testnet = false;
-    ArcMist::String printBlock, address;
+    NextCash::String printBlock, address;
     bool nextIsPrintBlock = false;
     bool nextIsAddress = false;
 
@@ -107,9 +107,9 @@ int main(int pArgumentCount, char **pArguments)
             nextIsAddress = false;
         }
         else if(std::strcmp(pArguments[i], "-v") == 0)
-            ArcMist::Log::setLevel(ArcMist::Log::VERBOSE);
+            NextCash::Log::setLevel(NextCash::Log::VERBOSE);
         else if(std::strcmp(pArguments[i], "-vv") == 0)
-            ArcMist::Log::setLevel(ArcMist::Log::DEBUG);
+            NextCash::Log::setLevel(NextCash::Log::DEBUG);
         else if(std::strcmp(pArguments[i], "--nodaemon") == 0)
             noDaemon = true;
         else if(std::strcmp(pArguments[i], "--path") == 0)
@@ -144,7 +144,7 @@ int main(int pArgumentCount, char **pArguments)
             path = "/var/bitcoin/mainnet/";
     }
 
-    ArcMist::createDirectory(path);
+    NextCash::createDirectory(path);
     BitCoin::Info::setPath(path);
 
     if(printBlock)
@@ -153,16 +153,16 @@ int main(int pArgumentCount, char **pArguments)
 
         if(printBlock.length() == 64)
         {
-            ArcMist::Hash hash;
+            NextCash::Hash hash;
             BitCoin::Chain chain;
             chain.load(false);
-            ArcMist::Buffer buffer;
+            NextCash::Buffer buffer;
             buffer.writeHex(printBlock.text());
             hash.read(&buffer, 32);
 
             if(!chain.getBlock(hash, block))
             {
-                ArcMist::Log::add(ArcMist::Log::ERROR, MAIN_LOG_NAME, "Failed to read block");
+                NextCash::Log::add(NextCash::Log::ERROR, MAIN_LOG_NAME, "Failed to read block");
                 return 1;
             }
         }
@@ -171,22 +171,22 @@ int main(int pArgumentCount, char **pArguments)
             unsigned int height = std::stol(printBlock.text());
             if(!BitCoin::BlockFile::readBlock(height, block))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::ERROR, MAIN_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, MAIN_LOG_NAME,
                   "Failed to find block at height %d", height);
                 return 1;
             }
         }
 
-        block.print(ArcMist::Log::INFO, false);
+        block.print(NextCash::Log::INFO, false);
         return 0;
     }
 
     if(address)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME,
           "Checking address : %s", address.text());
 
-        ArcMist::Hash keyHash;
+        NextCash::Hash keyHash;
         BitCoin::AddressType addressType;
         BitCoin::AddressFormat addressFormat;
 
@@ -195,12 +195,12 @@ int main(int pArgumentCount, char **pArguments)
 
         if(addressType != BitCoin::PUB_KEY_HASH)
         {
-            ArcMist::Log::add(ArcMist::Log::INFO, MAIN_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::INFO, MAIN_LOG_NAME,
               "Not a public key hash address");
             return 1;
         }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME,
           "Public key hash : %s", keyHash.hex().text());
 
         if(!keyHash.isEmpty())
@@ -229,16 +229,16 @@ int main(int pArgumentCount, char **pArguments)
                     {
                         if(outputReference->spentBlockHeight == 0)
                         {
-                            ArcMist::Log::add(ArcMist::Log::INFO, MAIN_LOG_NAME, "Unspent");
+                            NextCash::Log::add(NextCash::Log::INFO, MAIN_LOG_NAME, "Unspent");
                             balance += output->output.amount;
                         }
                         else
-                            ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME,
                               "Spent at block height %d", outputReference->spentBlockHeight);
                     }
                     else
                     {
-                        ArcMist::Log::addFormatted(ArcMist::Log::ERROR, MAIN_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::ERROR, MAIN_LOG_NAME,
                           "Transaction Output Reference not found : index %d - %s", output->index,
                           output->transactionID.hex().text());
                         return 1;
@@ -246,13 +246,13 @@ int main(int pArgumentCount, char **pArguments)
                 }
                 else
                 {
-                    ArcMist::Log::addFormatted(ArcMist::Log::ERROR, MAIN_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, MAIN_LOG_NAME,
                       "Transaction Reference not found : %s", output->transactionID.hex().text());
                     return 1;
                 }
             }
 
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME,
               "Balance : %f bitcoins", BitCoin::bitcoins(balance));
         }
 
@@ -264,7 +264,7 @@ int main(int pArgumentCount, char **pArguments)
 
     if(listblocks)
     {
-        ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
+        NextCash::Log::setOutput(new NextCash::FileOutputStream(std::cout), true);
         if(chain.load(true))
             return 0;
         else
@@ -273,7 +273,7 @@ int main(int pArgumentCount, char **pArguments)
 
     if(validate || rebuild)
     {
-        ArcMist::Log::setOutput(new ArcMist::FileOutputStream(std::cout), true);
+        NextCash::Log::setOutput(new NextCash::FileOutputStream(std::cout), true);
         if(!chain.validate(rebuild))
             return 1;
 
@@ -289,29 +289,29 @@ int main(int pArgumentCount, char **pArguments)
         return 0;
     }
 
-    ArcMist::String logFilePath = BitCoin::Info::path();
+    NextCash::String logFilePath = BitCoin::Info::path();
     logFilePath.pathAppend("logs");
-    ArcMist::createDirectory(logFilePath);
+    NextCash::createDirectory(logFilePath);
     logFilePath.pathAppend("daemon.log");
-    ArcMist::String pidFilePath = BitCoin::Info::path();
+    NextCash::String pidFilePath = BitCoin::Info::path();
     pidFilePath.pathAppend("pid");
 
     if(stop)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "PID file : %s", pidFilePath.text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME, "PID file : %s", pidFilePath.text());
         pid_t killPID = daemonPID(pidFilePath.text());
 
         if(killPID == 0)
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, MAIN_LOG_NAME, "PID not found");
+            NextCash::Log::add(NextCash::Log::ERROR, MAIN_LOG_NAME, "PID not found");
             return 1;
         }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "Killing daemon PID %d", killPID);
+        NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME, "Killing daemon PID %d", killPID);
 
         if(kill(killPID, SIGTERM) < 0)
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, MAIN_LOG_NAME, "Kill PID failed. Deleting PID file");
+            NextCash::Log::add(NextCash::Log::ERROR, MAIN_LOG_NAME, "Kill PID failed. Deleting PID file");
             std::remove(pidFilePath.text());
         }
 
@@ -323,18 +323,18 @@ int main(int pArgumentCount, char **pArguments)
         return 1;
     }
 
-    ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "Log file : %s", logFilePath.text());
+    NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME, "Log file : %s", logFilePath.text());
 
     if(!noDaemon)
     {
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "PID file : %s", pidFilePath.text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME, "PID file : %s", pidFilePath.text());
 
         // Check if already running
         pid_t currentPID = daemonPID(pidFilePath.text());
         if(currentPID != 0)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, MAIN_LOG_NAME, "Daemon is already running under PID %d", currentPID);
-            ArcMist::Log::add(ArcMist::Log::WARNING, MAIN_LOG_NAME, "Call with \"stop\" command");
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, MAIN_LOG_NAME, "Daemon is already running under PID %d", currentPID);
+            NextCash::Log::add(NextCash::Log::WARNING, MAIN_LOG_NAME, "Call with \"stop\" command");
             return 1;
         }
     }
@@ -349,7 +349,7 @@ int main(int pArgumentCount, char **pArguments)
 
         if(pid < 0)
         {
-            ArcMist::Log::add(ArcMist::Log::ERROR, MAIN_LOG_NAME, "Fork failed");
+            NextCash::Log::add(NextCash::Log::ERROR, MAIN_LOG_NAME, "Fork failed");
             return 1;
         }
 
@@ -358,25 +358,25 @@ int main(int pArgumentCount, char **pArguments)
 
         // From here down is the forked child process
         pid = getpid();
-        ArcMist::Log::addFormatted(ArcMist::Log::INFO, MAIN_LOG_NAME, "Daemon pid is %d", pid);
+        NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME, "Daemon pid is %d", pid);
 
         if(setsid() < 0)
             return 1;
     }
 
     // Set up daemon to log to a file
-    ArcMist::Log::setOutputFile(logFilePath);
+    NextCash::Log::setOutputFile(logFilePath);
 
     // Write pid to file
     if(!noDaemon)
     {
-        ArcMist::FileOutputStream pidStream(pidFilePath.text(), true);
+        NextCash::FileOutputStream pidStream(pidFilePath.text(), true);
         pidStream.writeFormatted("%d", pid);
         pidStream.writeByte('\n');
     }
 
 #ifdef PROFILER_ON
-    ArcMist::Profiler profiler("Main"); // Attempt to trigger destroy of profiler instance after daemon instance
+    NextCash::Profiler profiler("Main"); // Attempt to trigger destroy of profiler instance after daemon instance
 #endif
     BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
 
@@ -388,26 +388,26 @@ int main(int pArgumentCount, char **pArguments)
     daemon.run(seed, !noDaemon);
 
     if(!noDaemon)
-        ArcMist::removeFile(pidFilePath.text());
+        NextCash::removeFile(pidFilePath.text());
 
     return 0;
 }
 
 pid_t daemonPID(const char *pPath)
 {
-    ArcMist::FileInputStream pidStream(pPath);
+    NextCash::FileInputStream pidStream(pPath);
     if(!pidStream.isValid())
         return 0;
-    ArcMist::Buffer pidBuffer;
+    NextCash::Buffer pidBuffer;
     uint8_t byte;
     while(pidStream.remaining())
     {
         byte = pidStream.readByte();
-        if(ArcMist::isWhiteSpace(byte))
+        if(NextCash::isWhiteSpace(byte))
             break;
         pidBuffer.writeByte(byte);
     }
-    ArcMist::String pidString = pidBuffer.readString(pidBuffer.length());
+    NextCash::String pidString = pidBuffer.readString(pidBuffer.length());
     if(!pidString)
         return 0;
     return std::stol(pidString.text());

@@ -1,18 +1,18 @@
 /**************************************************************************
- * Copyright 2017-2018 ArcMist, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                       *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_KEY_HPP
 #define BITCOIN_KEY_HPP
 
-#include "arcmist/base/string.hpp"
-#include "arcmist/base/hash.hpp"
-#include "arcmist/base/mutex.hpp"
-#include "arcmist/io/stream.hpp"
-#include "arcmist/io/buffer.hpp"
+#include "nextcash/base/string.hpp"
+#include "nextcash/base/hash.hpp"
+#include "nextcash/base/mutex.hpp"
+#include "nextcash/io/stream.hpp"
+#include "nextcash/io/buffer.hpp"
 #include "base.hpp"
 #include "mnemonics.hpp"
 
@@ -44,17 +44,17 @@ namespace BitCoin
     };
 
     // Return Base58 address from hash and type.
-    ArcMist::String encodeAddress(const ArcMist::Hash &pHash, AddressType pType,
+    NextCash::String encodeAddress(const NextCash::Hash &pHash, AddressType pType,
       AddressFormat pFormat = CASH);
 
     // Decode address to hash, type, and format from any known format.
-    bool decodeAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType, AddressFormat &pFormat);
+    bool decodeAddress(const char *pText, NextCash::Hash &pHash, AddressType &pType, AddressFormat &pFormat);
 
     // Parse hash and type from Base58 encoded data.
-    bool decodeLegacyAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType);
+    bool decodeLegacyAddress(const char *pText, NextCash::Hash &pHash, AddressType &pType);
 
     // Parse hash and type from cash address format.
-    bool decodeCashAddress(const char *pText, ArcMist::Hash &pHash, AddressType &pType);
+    bool decodeCashAddress(const char *pText, NextCash::Hash &pHash, AddressType &pType);
 
     class Signature
     {
@@ -80,17 +80,17 @@ namespace BitCoin
         void setHashType(HashType pHashType) { mHashType = pHashType; }
 
         void set(void *pData) { std::memcpy(mData, pData, 64); }
-        ArcMist::String hex() const;
+        NextCash::String hex() const;
 
-        void write(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
-        bool read(ArcMist::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly = false);
+        void write(NextCash::OutputStream *pStream, bool pScriptFormat) const;
+        bool read(NextCash::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly = false);
 
         void randomize()
         {
             unsigned int random;
             for(unsigned int i=0;i<64;i+=4)
             {
-                random = ArcMist::Math::randomInt();
+                random = NextCash::Math::randomInt();
                 std::memcpy(mData + i, &random, 4);
             }
         }
@@ -120,7 +120,7 @@ namespace BitCoin
         ~Key() { clear(); }
 
         // Encode key as base58 text
-        ArcMist::String encode() const;
+        NextCash::String encode() const;
 
         // Decode key from base58 text
         bool decode(const char *pText);
@@ -137,10 +137,10 @@ namespace BitCoin
         unsigned int childCount() const { return mChildren.size(); }
         Key *publicKey() { return mPublicKey; } // Null for public keys
         bool used() const { return mUsed; } // Public key has received payment
-        const ArcMist::Hash &hash() const; // SHA256 then RIPEMD160 of compressed key data
+        const NextCash::Hash &hash() const; // SHA256 then RIPEMD160 of compressed key data
 
         // Encoded hash of compressed key data as specified text format.
-        ArcMist::String address(AddressFormat pFormat = CASH) const;
+        NextCash::String address(AddressFormat pFormat = CASH) const;
 
         bool operator == (const Key &pRight)
         {
@@ -159,26 +159,26 @@ namespace BitCoin
 
         void clear();
 
-        bool sign(const ArcMist::Hash &pHash, Signature &pSignature) const;
-        bool verify(const Signature &pSignature, const ArcMist::Hash &pHash) const;
+        bool sign(const NextCash::Hash &pHash, Signature &pSignature) const;
+        bool verify(const Signature &pSignature, const NextCash::Hash &pHash) const;
 
         // Read/Write public key in script format
-        bool readPublic(ArcMist::InputStream *pStream);
-        bool writePublic(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
+        bool readPublic(NextCash::InputStream *pStream);
+        bool writePublic(NextCash::OutputStream *pStream, bool pScriptFormat) const;
 
         // Read/Write private key raw key data only
-        bool readPrivate(ArcMist::InputStream *pStream);
-        bool writePrivate(ArcMist::OutputStream *pStream, bool pScriptFormat) const;
+        bool readPrivate(NextCash::InputStream *pStream);
+        bool writePrivate(NextCash::OutputStream *pStream, bool pScriptFormat) const;
 
         // Serialize key data
-        void write(ArcMist::OutputStream *pStream) const;
-        bool read(ArcMist::InputStream *pStream);
+        void write(NextCash::OutputStream *pStream) const;
+        bool read(NextCash::InputStream *pStream);
 
         // Generate an individual private key (not a hierarchal key).
         void generatePrivate(Network pNetwork);
 
         // Setup a key with only a hash
-        void loadHash(const ArcMist::Hash &pHash);
+        void loadHash(const NextCash::Hash &pHash);
 
         /******************************************************************************************
          *                       BIP-0032 Hierarchal Deterministic Keys
@@ -237,7 +237,7 @@ namespace BitCoin
         Key *findChild(uint32_t pIndex);
 
         // Find an address level key with a matching hash
-        Key *findAddress(const ArcMist::Hash &pHash);
+        Key *findAddress(const NextCash::Hash &pHash);
 
         // Return the next child key that is not used
         Key *getNextUnused();
@@ -249,7 +249,7 @@ namespace BitCoin
         // Keep a specified number of unused addresses ahead of any used address.
         // Sets pNewAddresses to true if new addresses are generated.
         // Returns the key matching the hash or NULL if none found.
-        Key *markUsed(const ArcMist::Hash &pHash, unsigned int pGap, bool &pNewAddresses);
+        Key *markUsed(const NextCash::Hash &pHash, unsigned int pGap, bool &pNewAddresses);
 
         // Synchronize which keys are created and which addresses are "used".
         // pOther should be a public only version of one of the keys in the structure.
@@ -262,23 +262,23 @@ namespace BitCoin
         Key *deriveChild(uint32_t pIndex);
 
         // Seed initialization
-        bool loadBinarySeed(Network pNetwork, ArcMist::InputStream *pStream);
+        bool loadBinarySeed(Network pNetwork, NextCash::InputStream *pStream);
 
         // Generate a master key from a mnemonic sentence and passphrase BIP-0039
         bool loadMnemonicSeed(Network pNetwork, const char *pText, const char *pPassPhrase = "", const char *pSalt = "mnemonic");
 
         // Generate a random mnemonic sentence
-        static ArcMist::String generateMnemonicSeed(Mnemonic::Language, unsigned int pBytesEntropy = 32);
+        static NextCash::String generateMnemonicSeed(Mnemonic::Language, unsigned int pBytesEntropy = 32);
 
         // Serializes key data and all children
-        void writeTree(ArcMist::OutputStream *pStream) const;
-        bool readTree(ArcMist::InputStream *pStream);
+        void writeTree(NextCash::OutputStream *pStream) const;
+        bool readTree(NextCash::InputStream *pStream);
 
         static secp256k1_context *context(unsigned int pFlags);
         static void destroyContext();
         static secp256k1_context *sContext;
         static unsigned int sContextFlags;
-        static ArcMist::Mutex sMutex;
+        static NextCash::Mutex sMutex;
         static const uint32_t sVersionValues[4];
 
         static bool test();
@@ -302,7 +302,7 @@ namespace BitCoin
         Key *mPublicKey;
         std::vector<Key *> mChildren;
 
-        ArcMist::Hash mHash;
+        NextCash::Hash mHash;
         bool mUsed;
 
     };
@@ -319,19 +319,19 @@ namespace BitCoin
         // Valid lines of text are:
         //   Base58 encoded address key hashes.
         //   Base58 encoded BIP-0032 key data.
-        bool loadKeys(ArcMist::InputStream *pStream);
+        bool loadKeys(NextCash::InputStream *pStream);
 
         // Find an address level key with a matching hash
-        Key *findAddress(const ArcMist::Hash &pHash);
+        Key *findAddress(const NextCash::Hash &pHash);
 
         // Mark a key as "used" and generate new keys if necessary.
         // Keep a specified number of unused addresses ahead of any used address.
         // Sets pNewAddresses to true if new addresses are generated.
         // Returns the key matching the hash or NULL if none found.
-        Key *markUsed(const ArcMist::Hash &pHash, unsigned int pGap, bool &pNewAddresses);
+        Key *markUsed(const NextCash::Hash &pHash, unsigned int pGap, bool &pNewAddresses);
 
-        void write(ArcMist::OutputStream *pStream) const;
-        bool read(ArcMist::InputStream *pStream);
+        void write(NextCash::OutputStream *pStream) const;
+        bool read(NextCash::InputStream *pStream);
     };
 }
 

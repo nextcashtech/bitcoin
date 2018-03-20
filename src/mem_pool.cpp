@@ -1,13 +1,13 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #include "mem_pool.hpp"
 
-#include "arcmist/base/log.hpp"
+#include "nextcash/base/log.hpp"
 
 #define BITCOIN_MEM_POOL_LOG_NAME "MemPool"
 
@@ -27,14 +27,14 @@ namespace BitCoin
         mLock.writeUnlock();
     }
 
-    void MemPool::addBlacklisted(const ArcMist::Hash &pHash)
+    void MemPool::addBlacklisted(const NextCash::Hash &pHash)
     {
         mBlackListed.push_back(pHash);
         while(mBlackListed.size() > 1024)
             mBlackListed.erase(mBlackListed.begin());
     }
 
-    bool MemPool::isBlackListed(const ArcMist::Hash &pHash)
+    bool MemPool::isBlackListed(const NextCash::Hash &pHash)
     {
         bool result = false;
         mLock.readLock();
@@ -43,12 +43,12 @@ namespace BitCoin
         return result;
     }
 
-    bool MemPool::isBlackListedInternal(const ArcMist::Hash &pHash)
+    bool MemPool::isBlackListedInternal(const NextCash::Hash &pHash)
     {
         return mBlackListed.contains(pHash);
     }
 
-    MemPool::HashStatus MemPool::addPending(const ArcMist::Hash &pHash, TransactionOutputPool &pOutputs, unsigned int pNodeID)
+    MemPool::HashStatus MemPool::addPending(const NextCash::Hash &pHash, TransactionOutputPool &pOutputs, unsigned int pNodeID)
     {
         mLock.writeLock("Add Pending");
 
@@ -63,7 +63,7 @@ namespace BitCoin
         return result;
     }
 
-    MemPool::HashStatus MemPool::addPendingInternal(const ArcMist::Hash &pHash, unsigned int pNodeID)
+    MemPool::HashStatus MemPool::addPendingInternal(const NextCash::Hash &pHash, unsigned int pNodeID)
     {
         if(isBlackListedInternal(pHash))
             return BLACK_LISTED;
@@ -88,9 +88,9 @@ namespace BitCoin
         return NEED;
     }
 
-    void MemPool::markForNode(ArcMist::HashList &pList, unsigned int pNodeID)
+    void MemPool::markForNode(NextCash::HashList &pList, unsigned int pNodeID)
     {
-        ArcMist::HashList remaining = pList;
+        NextCash::HashList remaining = pList;
         mLock.writeLock("Mark");
 
         // Mark all existing
@@ -99,7 +99,7 @@ namespace BitCoin
             {
                 (*pending)->requestingNode = pNodeID;
                 (*pending)->requestedTime = getTime();
-                for(ArcMist::HashList::iterator hash=remaining.begin();hash!=remaining.end();++hash)
+                for(NextCash::HashList::iterator hash=remaining.begin();hash!=remaining.end();++hash)
                     if(*hash == (*pending)->hash)
                     {
                         remaining.erase(hash);
@@ -108,7 +108,7 @@ namespace BitCoin
             }
 
         // Add any remaining as new pending
-        for(ArcMist::HashList::iterator hash=remaining.begin();hash!=remaining.end();++hash)
+        for(NextCash::HashList::iterator hash=remaining.begin();hash!=remaining.end();++hash)
             mPending.push_back(new PendingTransactionData(*hash, pNodeID, getTime()));
 
         mLock.writeUnlock();
@@ -123,7 +123,7 @@ namespace BitCoin
         mLock.readUnlock();
     }
 
-    void MemPool::getNeeded(ArcMist::HashList &pList)
+    void MemPool::getNeeded(NextCash::HashList &pList)
     {
         mLock.readLock();
         uint32_t time = getTime();
@@ -133,17 +133,17 @@ namespace BitCoin
         mLock.readUnlock();
     }
 
-    void MemPool::getToAnnounce(ArcMist::HashList &pList)
+    void MemPool::getToAnnounce(NextCash::HashList &pList)
     {
         pList.clear();
         mLock.readLock();
-        for(ArcMist::HashList::iterator hash=mToAnnounce.begin();hash!=mToAnnounce.end();++hash)
+        for(NextCash::HashList::iterator hash=mToAnnounce.begin();hash!=mToAnnounce.end();++hash)
             pList.push_back(*hash);
         mToAnnounce.clear();
         mLock.readUnlock();
     }
 
-    void MemPool::getFullList(ArcMist::HashList &pList, const BloomFilter &pFilter)
+    void MemPool::getFullList(NextCash::HashList &pList, const BloomFilter &pFilter)
     {
         pList.clear();
         mLock.readLock();
@@ -166,12 +166,12 @@ namespace BitCoin
     bool MemPool::check(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
       const Forks &pForks, uint64_t pMinFeeRate)
     {
-        ArcMist::HashList outpointsNeeded;
+        NextCash::HashList outpointsNeeded;
         if(!pTransaction->check(pOutputs, mTransactions, outpointsNeeded,
           pForks.requiredVersion(), pBlockStats, pForks))
         {
             addBlacklisted(pTransaction->hash);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Failed to check transaction. (%d bytes) : %s", pTransaction->size(),
               pTransaction->hash.hex().text());
             return false;
@@ -183,19 +183,19 @@ namespace BitCoin
         {
             // Transaction not standard or has invalid signatures
             addBlacklisted(pTransaction->hash);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Transaction is not standard %02x. (%d bytes) : %s", pTransaction->status(), pTransaction->size(),
               pTransaction->hash.hex().text());
-            pTransaction->print(ArcMist::Log::VERBOSE);
+            pTransaction->print(NextCash::Log::VERBOSE);
             return false;
         }
         else if(!(pTransaction->status() & Transaction::OUTPOINTS_FOUND))
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Transaction requires unseen output. Adding to pending. (%d bytes) : %s", pTransaction->size(),
               pTransaction->hash.hex().text());
 
-            for(ArcMist::HashList::iterator outpoint=outpointsNeeded.begin();outpoint!=outpointsNeeded.end();++outpoint)
+            for(NextCash::HashList::iterator outpoint=outpointsNeeded.begin();outpoint!=outpointsNeeded.end();++outpoint)
                 addPendingInternal(*outpoint, 0);
 
             return pTransaction->status();
@@ -204,7 +204,7 @@ namespace BitCoin
         if(pTransaction->feeRate() < pMinFeeRate)
         {
             addBlacklisted(pTransaction->hash);
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Fee rate below minimum %llu < %llu (%lld fee) (%d bytes) : %s", pTransaction->feeRate(), pMinFeeRate,
               pTransaction->fee(), pTransaction->size(), pTransaction->hash.hex().text());
             return false;
@@ -221,7 +221,7 @@ namespace BitCoin
         {
             if(!check(*transaction, pOutputs, pBlockStats, pForks, pMinFeeRate))
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
                   "Failed to check pending transaction. Removing. (%d bytes) (%llu fee rate) : %s", (*transaction)->size(),
                   (*transaction)->feeRate(), (*transaction)->hash.hex().text());
                 mSize -= (*transaction)->size();
@@ -229,7 +229,7 @@ namespace BitCoin
             }
             else if(((*transaction)->status() & Transaction::STANDARD_VERIFIED) == Transaction::STANDARD_VERIFIED)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
                   "Verified pending transaction. (%d bytes) (%llu fee rate) : %s", (*transaction)->size(),
                   (*transaction)->feeRate(), (*transaction)->hash.hex().text());
                 if(insert(*transaction, true))
@@ -260,7 +260,7 @@ namespace BitCoin
 
         if(pOutputs.find(pTransaction->hash, 0) != NULL)
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Transaction already confirmed : %s", pTransaction->hash.hex().text());
             mLock.writeUnlock();
             return NOT_NEEDED;
@@ -273,7 +273,7 @@ namespace BitCoin
                 return NOT_NEEDED;
             }
 
-        // ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+        // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
           // "Attempting to add transaction. (%d bytes) : %s", pTransaction->size(),
           // pTransaction->hash.hex().text());
 
@@ -283,7 +283,7 @@ namespace BitCoin
             mLock.writeUnlock();
             if(pTransaction->feeRate() < pMinFeeRate)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
                   "Transaction has low fee (%d bytes) (%llu fee rate) : %s", pTransaction->size(), pTransaction->feeRate(),
                   pTransaction->hash.hex().text());
                 return LOW_FEE;
@@ -291,7 +291,7 @@ namespace BitCoin
             else if((pTransaction->status() & Transaction::STANDARD_VERIFIED) == Transaction::STANDARD_VERIFIED &&
               pTransaction->status() & Transaction::OUTPOINTS_SPENT)
             {
-                ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
                   "Transaction has double spend : %s", pTransaction->hash.hex().text());
                 return DOUBLE_SPEND;
             }
@@ -309,14 +309,14 @@ namespace BitCoin
 
         if(outpointExists(pTransaction))
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
               "Transaction has double spend from mempool : %s", pTransaction->hash.hex().text());
             addBlacklisted(pTransaction->hash);
             mLock.writeUnlock();
             return DOUBLE_SPEND;
         }
 
-        ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
           "Adding transaction (%d bytes) (%llu fee rate) : %s", pTransaction->size(), pTransaction->feeRate(),
           pTransaction->hash.hex().text());
 
@@ -334,11 +334,11 @@ namespace BitCoin
         for(std::vector<Transaction *>::const_iterator transaction=pTransactions.begin();transaction!=pTransactions.end();++transaction)
             remove((*transaction)->hash);
         if((mTransactions.size() + mPendingTransactions.size()) == previousCount)
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Mem pool not reduced. %d trans, %d KiB", mTransactions.size() + mPendingTransactions.size(),
               mSize / 1024);
         else
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Mem pool reduced by %d trans, %d KiB, %d%% to %d trans, %d KiB",
               previousCount - (mTransactions.size() + mPendingTransactions.size()), (previousSize - mSize) / 1024,
               (int)(((float)(previousSize - mSize) / (float)previousSize) * 100.0f), mTransactions.size() + mPendingTransactions.size(),
@@ -359,11 +359,11 @@ namespace BitCoin
                 delete newTransaction;
         }
         if((mTransactions.size() + mPendingTransactions.size()) == previousCount)
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Mem pool not increased reverting block. %d trans, %d KiB", mTransactions.size() + mPendingTransactions.size(),
               mSize / 1024);
         else
-            ArcMist::Log::addFormatted(ArcMist::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Mem pool increased reverting block by %d trans, %d KiB, %d%% to %d trans, %d KiB",
               (mTransactions.size() + mPendingTransactions.size()) - previousCount, (mSize - previousSize) / 1024,
               (int)(((float)(mSize - previousSize) / (float)mSize) * 100.0f), mTransactions.size() + mPendingTransactions.size(),
@@ -394,7 +394,7 @@ namespace BitCoin
             return false;
     }
 
-    bool MemPool::remove(const ArcMist::Hash &pHash)
+    bool MemPool::remove(const NextCash::Hash &pHash)
     {
         // Remove from pending
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();++pending)
@@ -424,7 +424,7 @@ namespace BitCoin
         return false;
     }
 
-    Transaction *MemPool::get(const ArcMist::Hash &pHash, bool pLocked)
+    Transaction *MemPool::get(const NextCash::Hash &pHash, bool pLocked)
     {
         if(!pLocked)
             mLock.readLock();
@@ -434,7 +434,7 @@ namespace BitCoin
         return result;
     }
 
-    Transaction *MemPool::getInternal(const ArcMist::Hash &pHash)
+    Transaction *MemPool::getInternal(const NextCash::Hash &pHash)
     {
         return mTransactions.getSorted(pHash);
     }
@@ -456,7 +456,7 @@ namespace BitCoin
 
         if(toRemove != mTransactions.end())
         {
-            ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
               "Dropping transaction with fee rate %llu (%d bytes) : %s", feeRate, (*toRemove)->size(),
               (*toRemove)->hash.hex().text());
             mSize -= (*toRemove)->size();
@@ -468,7 +468,7 @@ namespace BitCoin
     void MemPool::expirePending()
     {
         int32_t expireTime = getTime() - 60;
-        ArcMist::String timeString;
+        NextCash::String timeString;
 
         for(std::list<PendingTransactionData *>::iterator pending=mPending.begin();pending!=mPending.end();)
         {
@@ -486,7 +486,7 @@ namespace BitCoin
             if((*transaction)->time() < expireTime)
             {
                 timeString.writeFormattedTime((*transaction)->time());
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
                   "Expiring pending transaction (time %d) %s : %s", (*transaction)->time(), timeString.text(),
                   (*transaction)->hash.hex().text());
                 transaction = mPendingTransactions.erase(transaction);
@@ -499,14 +499,14 @@ namespace BitCoin
     void MemPool::expire()
     {
         int32_t expireTime = getTime() - (60 * 60 * 24);
-        ArcMist::String timeString;
+        NextCash::String timeString;
 
         for(TransactionList::iterator transaction=mTransactions.begin();transaction!=mTransactions.end();)
         {
             if((*transaction)->time() < expireTime)
             {
                 timeString.writeFormattedTime((*transaction)->time());
-                ArcMist::Log::addFormatted(ArcMist::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
                   "Expiring transaction (time %d) %s : %s", (*transaction)->time(), timeString.text(),
                   (*transaction)->hash.hex().text());
                 delete *transaction;

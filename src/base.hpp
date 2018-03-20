@@ -1,20 +1,20 @@
 /**************************************************************************
- * Copyright 2017 ArcMist, LLC                                            *
+ * Copyright 2017 NextCash, LLC                                            *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@arcmist.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                    *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 #ifndef BITCOIN_BASE_HPP
 #define BITCOIN_BASE_HPP
 
-#include "arcmist/io/stream.hpp"
-#include "arcmist/io/network.hpp"
+#include "nextcash/io/stream.hpp"
+#include "nextcash/io/network.hpp"
 
 #include <cstdint>
 #include <ctime>
 
-#define BITCOIN_USER_AGENT "/ArcMist:0.8.0/" // BIP-0014 Specifies User Agent Format
+#define BITCOIN_USER_AGENT "/NextCash:0.8.0/" // BIP-0014 Specifies User Agent Format
 #define PROTOCOL_VERSION 70015
 #define ADDRESS_HASH_SIZE 20
 
@@ -84,8 +84,8 @@ namespace BitCoin
             port = pPort;
         }
 
-        void write(ArcMist::OutputStream *pStream) const;
-        bool read(ArcMist::InputStream *pStream);
+        void write(NextCash::OutputStream *pStream) const;
+        bool read(NextCash::InputStream *pStream);
 
         bool matches(const IPAddress &pOther) const { return std::memcmp(ip, pOther.ip, INET6_ADDRLEN) == 0 && port == pOther.port; }
 
@@ -99,7 +99,7 @@ namespace BitCoin
             return std::memcmp(ip, pRight.ip, INET6_ADDRLEN) != 0 || port != pRight.port;
         }
 
-        void operator = (ArcMist::Network::Connection &pConnection)
+        void operator = (NextCash::Network::Connection &pConnection)
         {
             if(pConnection.ipv6Bytes())
                 std::memcpy(ip, pConnection.ipv6Bytes(), INET6_ADDRLEN);
@@ -173,7 +173,7 @@ namespace BitCoin
             outgoingConnections += pRight.outgoingConnections;
         }
 
-        void write(ArcMist::OutputStream *pStream) const
+        void write(NextCash::OutputStream *pStream) const
         {
             pStream->writeString("AMST");
             pStream->writeByte(1); // Version
@@ -188,9 +188,9 @@ namespace BitCoin
             pStream->writeUnsignedInt(outgoingConnections);
         }
 
-        bool read(ArcMist::InputStream *pStream)
+        bool read(NextCash::InputStream *pStream)
         {
-            ArcMist::String startString = pStream->readString(4);
+            NextCash::String startString = pStream->readString(4);
             if(startString != "AMST")
                 return false;
 
@@ -237,8 +237,8 @@ namespace BitCoin
     uint64_t targetValue(uint32_t pTargetBits);
 
     unsigned int compactIntegerSize(uint64_t pValue);
-    unsigned int writeCompactInteger(ArcMist::OutputStream *pStream, uint64_t pValue);
-    uint64_t readCompactInteger(ArcMist::InputStream *pStream);
+    unsigned int writeCompactInteger(NextCash::OutputStream *pStream, uint64_t pValue);
+    uint64_t readCompactInteger(NextCash::InputStream *pStream);
 
     namespace Base
     {
