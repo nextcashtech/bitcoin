@@ -8,9 +8,9 @@
 #ifndef BITCOIN_INTERPRETER_HPP
 #define BITCOIN_INTERPRETER_HPP
 
-#include "nextcash/base/hash.hpp"
-#include "nextcash/base/log.hpp"
-#include "nextcash/io/buffer.hpp"
+#include "hash.hpp"
+#include "log.hpp"
+#include "buffer.hpp"
 #include "base.hpp"
 #include "key.hpp"
 #include "forks.hpp"

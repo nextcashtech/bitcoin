@@ -8,11 +8,11 @@
 #ifndef BITCOIN_BLOOM_HPP
 #define BITCOIN_BLOOM_HPP
 
-#include "nextcash/base/hash.hpp"
-#include "nextcash/base/math.hpp"
-#include "nextcash/io/buffer.hpp"
-#include "nextcash/io/stream.hpp"
-#include "nextcash/crypto/digest.hpp"
+#include "hash.hpp"
+#include "math.hpp"
+#include "buffer.hpp"
+#include "stream.hpp"
+#include "digest.hpp"
 #include "transaction.hpp"
 
 

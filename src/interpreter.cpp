@@ -8,10 +8,10 @@
 #include "interpreter.hpp"
 
 #ifdef PROFILER_ON
-#include "nextcash/dev/profiler.hpp"
+#include "profiler.hpp"
 #endif
 
-#include "nextcash/crypto/digest.hpp"
+#include "digest.hpp"
 #include "key.hpp"
 
 

@@ -8,10 +8,10 @@
 #ifndef BITCOIN_DAEMON_HPP
 #define BITCOIN_DAEMON_HPP
 
-#include "nextcash/io/stream.hpp"
-#include "nextcash/base/thread.hpp"
-#include "nextcash/base/mutex.hpp"
-#include "nextcash/base/hash.hpp"
+#include "stream.hpp"
+#include "thread.hpp"
+#include "mutex.hpp"
+#include "hash.hpp"
 #include "base.hpp"
 #include "info.hpp"
 #include "node.hpp"

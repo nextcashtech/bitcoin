@@ -8,12 +8,12 @@
 #ifndef BITCOIN_OUTPUTS_HPP
 #define BITCOIN_OUTPUTS_HPP
 
-#include "nextcash/base/mutex.hpp"
-#include "nextcash/base/hash.hpp"
-#include "nextcash/base/hash_data_set.hpp"
-#include "nextcash/base/log.hpp"
-#include "nextcash/io/buffer.hpp"
-#include "nextcash/io/file_stream.hpp"
+#include "mutex.hpp"
+#include "hash.hpp"
+#include "hash_data_set.hpp"
+#include "log.hpp"
+#include "buffer.hpp"
+#include "file_stream.hpp"
 #include "base.hpp"
 
 #include <vector>

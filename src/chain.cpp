@@ -8,13 +8,13 @@
 #include "chain.hpp"
 
 #ifdef PROFILER_ON
-#include "nextcash/dev/profiler.hpp"
+#include "profiler.hpp"
 #endif
 
-#include "nextcash/base/log.hpp"
-#include "nextcash/base/thread.hpp"
-#include "nextcash/io/file_stream.hpp"
-#include "nextcash/crypto/digest.hpp"
+#include "log.hpp"
+#include "thread.hpp"
+#include "file_stream.hpp"
+#include "digest.hpp"
 #include "info.hpp"
 #include "daemon.hpp"
 #include "monitor.hpp"

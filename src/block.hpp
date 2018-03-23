@@ -8,10 +8,10 @@
 #ifndef BITCOIN_BLOCK_HPP
 #define BITCOIN_BLOCK_HPP
 
-#include "nextcash/base/hash.hpp"
-#include "nextcash/base/log.hpp"
-#include "nextcash/io/stream.hpp"
-#include "nextcash/io/file_stream.hpp"
+#include "hash.hpp"
+#include "log.hpp"
+#include "stream.hpp"
+#include "file_stream.hpp"
 #include "base.hpp"
 #include "forks.hpp"
 #include "transaction.hpp"

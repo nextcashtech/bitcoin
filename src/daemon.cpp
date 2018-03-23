@@ -8,11 +8,11 @@
 #include "daemon.hpp"
 
 #ifdef PROFILER_ON
-#include "nextcash/dev/profiler.hpp"
+#include "profiler.hpp"
 #endif
 
-#include "nextcash/base/log.hpp"
-#include "nextcash/io/network.hpp"
+#include "log.hpp"
+#include "network.hpp"
 #include "info.hpp"
 #include "block.hpp"
 #include "chain.hpp"

@@ -7,7 +7,7 @@
  **************************************************************************/
 #include "monitor.hpp"
 
-#include "nextcash/base/log.hpp"
+#include "log.hpp"
 #include "base.hpp"
 #include "key.hpp"
 #include "interpreter.hpp"

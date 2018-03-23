@@ -7,8 +7,8 @@
  **************************************************************************/
 #include "node.hpp"
 
-#include "nextcash/base/log.hpp"
-#include "nextcash/crypto/digest.hpp"
+#include "log.hpp"
+#include "digest.hpp"
 #include "info.hpp"
 #include "message.hpp"
 #include "block.hpp"

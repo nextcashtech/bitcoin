@@ -8,12 +8,12 @@
 #ifndef BITCOIN_MESSAGE_HPP
 #define BITCOIN_MESSAGE_HPP
 
-#include "nextcash/base/math.hpp"
-#include "nextcash/base/string.hpp"
-#include "nextcash/base/hash.hpp"
-#include "nextcash/io/stream.hpp"
-#include "nextcash/io/buffer.hpp"
-#include "nextcash/io/network.hpp"
+#include "math.hpp"
+#include "string.hpp"
+#include "hash.hpp"
+#include "stream.hpp"
+#include "buffer.hpp"
+#include "network.hpp"
 #include "base.hpp"
 #include "info.hpp"
 #include "transaction.hpp"

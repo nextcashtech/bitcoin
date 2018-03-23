@@ -8,8 +8,8 @@
 #ifndef BITCOIN_BASE_HPP
 #define BITCOIN_BASE_HPP
 
-#include "nextcash/io/stream.hpp"
-#include "nextcash/io/network.hpp"
+#include "stream.hpp"
+#include "network.hpp"
 
 #include <cstdint>
 #include <ctime>

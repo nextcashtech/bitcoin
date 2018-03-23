@@ -8,9 +8,9 @@
 #ifndef BITCOIN_INFO_HPP
 #define BITCOIN_INFO_HPP
 
-#include "nextcash/base/string.hpp"
-#include "nextcash/base/mutex.hpp"
-#include "nextcash/io/buffer.hpp"
+#include "string.hpp"
+#include "mutex.hpp"
+#include "buffer.hpp"
 #include "base.hpp"
 #include "block.hpp"
 

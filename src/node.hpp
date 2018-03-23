@@ -8,11 +8,11 @@
 #ifndef BITCOIN_NODE_HPP
 #define BITCOIN_NODE_HPP
 
-#include "nextcash/base/mutex.hpp"
-#include "nextcash/base/thread.hpp"
-#include "nextcash/base/hash.hpp"
-#include "nextcash/io/buffer.hpp"
-#include "nextcash/io/network.hpp"
+#include "mutex.hpp"
+#include "thread.hpp"
+#include "hash.hpp"
+#include "buffer.hpp"
+#include "network.hpp"
 #include "base.hpp"
 #include "message.hpp"
 #include "chain.hpp"

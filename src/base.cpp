@@ -7,10 +7,10 @@
  **************************************************************************/
 #include "base.hpp"
 
-#include "nextcash/base/endian.hpp"
-#include "nextcash/base/log.hpp"
-#include "nextcash/io/buffer.hpp"
-#include "nextcash/crypto/digest.hpp"
+#include "endian.hpp"
+#include "log.hpp"
+#include "buffer.hpp"
+#include "digest.hpp"
 
 #include <cstring>
 

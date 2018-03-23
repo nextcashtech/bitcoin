@@ -8,9 +8,9 @@
 #ifndef BITCOIN_CHAIN_HPP
 #define BITCOIN_CHAIN_HPP
 
-#include "nextcash/base/string.hpp"
-#include "nextcash/base/hash.hpp"
-#include "nextcash/base/mutex.hpp"
+#include "string.hpp"
+#include "hash.hpp"
+#include "mutex.hpp"
 #include "base.hpp"
 #include "message.hpp"
 #include "forks.hpp"

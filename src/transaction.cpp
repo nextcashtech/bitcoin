@@ -8,13 +8,13 @@
 #include "transaction.hpp"
 
 #ifdef PROFILER_ON
-#include "nextcash/dev/profiler.hpp"
+#include "profiler.hpp"
 #endif
 
-#include "nextcash/base/endian.hpp"
-#include "nextcash/base/math.hpp"
-#include "nextcash/base/log.hpp"
-#include "nextcash/crypto/digest.hpp"
+#include "endian.hpp"
+#include "math.hpp"
+#include "log.hpp"
+#include "digest.hpp"
 #include "interpreter.hpp"
 #include "block.hpp"
 

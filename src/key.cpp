@@ -8,12 +8,12 @@
 #include "key.hpp"
 
 #ifdef PROFILER_ON
-#include "nextcash/dev/profiler.hpp"
+#include "profiler.hpp"
 #endif
 
-#include "nextcash/base/log.hpp"
-#include "nextcash/base/math.hpp"
-#include "nextcash/crypto/digest.hpp"
+#include "log.hpp"
+#include "math.hpp"
+#include "digest.hpp"
 #include "interpreter.hpp"
 
 #define BITCOIN_KEY_LOG_NAME "Key"

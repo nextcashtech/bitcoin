@@ -8,8 +8,8 @@
 #ifndef BITCOIN_MEM_POOL_HPP
 #define BITCOIN_MEM_POOL_HPP
 
-#include "nextcash/base/mutex.hpp"
-#include "nextcash/base/hash.hpp"
+#include "mutex.hpp"
+#include "hash.hpp"
 #include "base.hpp"
 #include "transaction.hpp"
 #include "outputs.hpp"

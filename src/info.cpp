@@ -7,12 +7,12 @@
  **************************************************************************/
 #include "info.hpp"
 
-#include "nextcash/io/buffer.hpp"
-#include "nextcash/io/file_stream.hpp"
-#include "nextcash/io/network.hpp"
-#include "nextcash/base/log.hpp"
-#include "nextcash/crypto/digest.hpp"
-#include "nextcash/io/email.hpp"
+#include "buffer.hpp"
+#include "file_stream.hpp"
+#include "network.hpp"
+#include "log.hpp"
+#include "digest.hpp"
+#include "email.hpp"
 
 #include <cstdio>
 #include <cstdlib>

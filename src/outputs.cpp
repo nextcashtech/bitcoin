@@ -8,7 +8,7 @@
 #include "outputs.hpp"
 
 #ifdef PROFILER_ON
-#include "nextcash/dev/profiler.hpp"
+#include "profiler.hpp"
 #endif
 
 #include "info.hpp"

@@ -7,7 +7,7 @@
  **************************************************************************/
 #include "mem_pool.hpp"
 
-#include "nextcash/base/log.hpp"
+#include "log.hpp"
 
 #define BITCOIN_MEM_POOL_LOG_NAME "MemPool"
 

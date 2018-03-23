@@ -8,10 +8,10 @@
 #ifndef BITCOIN_TRANSACTION_HPP
 #define BITCOIN_TRANSACTION_HPP
 
-#include "nextcash/base/log.hpp"
-#include "nextcash/base/hash.hpp"
-#include "nextcash/io/stream.hpp"
-#include "nextcash/io/buffer.hpp"
+#include "log.hpp"
+#include "hash.hpp"
+#include "stream.hpp"
+#include "buffer.hpp"
 #include "base.hpp"
 #include "forks.hpp"
 #include "key.hpp"

@@ -8,10 +8,10 @@
 #ifndef BITCOIN_FORKS_HPP
 #define BITCOIN_FORKS_HPP
 
-#include "nextcash/base/string.hpp"
-#include "nextcash/base/hash.hpp"
-#include "nextcash/base/log.hpp"
-#include "nextcash/io/stream.hpp"
+#include "string.hpp"
+#include "hash.hpp"
+#include "log.hpp"
+#include "stream.hpp"
 #include "base.hpp"
 
 #include <cstdint>

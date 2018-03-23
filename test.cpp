@@ -13,7 +13,7 @@
 #include "chain.hpp"
 #include "info.hpp"
 
-#include "nextcash/base/log.hpp"
+#include "log.hpp"
 
 bool chainTest();
 bool merkleTest1();

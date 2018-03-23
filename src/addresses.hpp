@@ -8,11 +8,11 @@
 #ifndef BITCOIN_ADDRESSES_HPP
 #define BITCOIN_ADDRESSES_HPP
 
-#include "nextcash/base/mutex.hpp"
-#include "nextcash/base/hash.hpp"
-#include "nextcash/base/hash_data_set.hpp"
-#include "nextcash/base/distributed_vector.hpp"
-#include "nextcash/base/log.hpp"
+#include "mutex.hpp"
+#include "hash.hpp"
+#include "hash_data_set.hpp"
+#include "distributed_vector.hpp"
+#include "log.hpp"
 #include "base.hpp"
 #include "transaction.hpp"
 #include "info.hpp"

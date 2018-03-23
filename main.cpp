@@ -7,17 +7,17 @@
  **************************************************************************/
 
 #ifdef PROFILER_ON
-#include "nextcash/dev/profiler.hpp"
+#include "profiler.hpp"
 #endif
 
-#include "nextcash/base/string.hpp"
-#include "nextcash/base/math.hpp"
-#include "nextcash/base/hash.hpp"
-#include "nextcash/base/log.hpp"
-#include "nextcash/io/file_stream.hpp"
-#include "nextcash/io/buffer.hpp"
-#include "nextcash/io/network.hpp"
-#include "nextcash/base/endian.hpp"
+#include "string.hpp"
+#include "math.hpp"
+#include "hash.hpp"
+#include "log.hpp"
+#include "file_stream.hpp"
+#include "buffer.hpp"
+#include "network.hpp"
+#include "endian.hpp"
 #include "info.hpp"
 #include "chain.hpp"
 #include "daemon.hpp"

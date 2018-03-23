@@ -8,8 +8,8 @@
 #ifndef BITCOIN_ADDRESS_BLOCK_HPP
 #define BITCOIN_ADDRESS_BLOCK_HPP
 
-#include "nextcash/base/hash.hpp"
-#include "nextcash/io/stream.hpp"
+#include "hash.hpp"
+#include "stream.hpp"
 #include "block.hpp"
 #include "transaction.hpp"
 #include "chain.hpp"

@@ -8,11 +8,11 @@
 #ifndef BITCOIN_KEY_HPP
 #define BITCOIN_KEY_HPP
 
-#include "nextcash/base/string.hpp"
-#include "nextcash/base/hash.hpp"
-#include "nextcash/base/mutex.hpp"
-#include "nextcash/io/stream.hpp"
-#include "nextcash/io/buffer.hpp"
+#include "string.hpp"
+#include "hash.hpp"
+#include "mutex.hpp"
+#include "stream.hpp"
+#include "buffer.hpp"
 #include "base.hpp"
 #include "mnemonics.hpp"
 

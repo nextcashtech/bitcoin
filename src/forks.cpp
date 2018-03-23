@@ -8,11 +8,11 @@
 #include "forks.hpp"
 
 #ifdef PROFILER_ON
-#include "nextcash/dev/profiler.hpp"
+#include "profiler.hpp"
 #endif
 
-#include "nextcash/base/log.hpp"
-#include "nextcash/io/file_stream.hpp"
+#include "log.hpp"
+#include "file_stream.hpp"
 #include "base.hpp"
 #include "info.hpp"
 

@@ -7,9 +7,9 @@
  **************************************************************************/
 #include "requests.hpp"
 
-#include "nextcash/base/log.hpp"
-#include "nextcash/base/hash.hpp"
-#include "nextcash/crypto/digest.hpp"
+#include "log.hpp"
+#include "hash.hpp"
+#include "digest.hpp"
 
 #include "key.hpp"
 #include "info.hpp"

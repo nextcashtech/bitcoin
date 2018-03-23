@@ -8,10 +8,10 @@
 #ifndef BITCOIN_REQUESTS_HPP
 #define BITCOIN_REQUESTS_HPP
 
-#include "nextcash/base/mutex.hpp"
-#include "nextcash/base/thread.hpp"
-#include "nextcash/io/network.hpp"
-#include "nextcash/io/buffer.hpp"
+#include "mutex.hpp"
+#include "thread.hpp"
+#include "network.hpp"
+#include "buffer.hpp"
 
 #include "chain.hpp"
 
