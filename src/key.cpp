@@ -287,7 +287,7 @@ namespace BitCoin
         NextCash::Buffer prefixBuffer, checkSumData;
         while(*character && *character != ':')
         {
-            prefixBuffer.writeByte(*character);
+            prefixBuffer.writeByte(NextCash::lower(*character));
             ++character;
         }
 
@@ -327,7 +327,7 @@ namespace BitCoin
         while(payload.remaining() > 1) // Don't include null byte
         {
             // Decode base32 character
-            match = std::strchr(NextCash::Math::base32Codes, payload.readByte());
+            match = std::strchr(NextCash::Math::base32Codes, NextCash::lower(payload.readByte()));
             if(match == NULL)
             {
                 NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
@@ -342,7 +342,7 @@ namespace BitCoin
         while(*character)
         {
             // Decode base32 character
-            match = std::strchr(NextCash::Math::base32Codes, *character);
+            match = std::strchr(NextCash::Math::base32Codes, NextCash::lower(*character));
             if(match == NULL)
             {
                 NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
@@ -3460,6 +3460,15 @@ namespace BitCoin
             "bitcoincash:pr95sy3j9xwd2ap32xkykttr4cvcu7as4yc93ky28e",
             "bitcoincash:pqq3728yw0y47sqn6l2na30mcw6zm78dzq5ucqzc37",
         };
+        NextCash::String upperCashAddresses[] =
+        {
+            "BITCOINCASH:QPM2QSZNHKS23Z7629MMS6S4CWEF74VCWVY22GDX6A",
+            "BITCOINCASH:QR95SY3J9XWD2AP32XKYKTTR4CVCU7AS4Y0QVERFUY",
+            "BITCOINCASH:QQQ3728YW0Y47SQN6L2NA30MCW6ZM78DZQRE909M2R",
+            "BITCOINCASH:PPM2QSZNHKS23Z7629MMS6S4CWEF74VCWVN0H829PQ",
+            "BITCOINCASH:PR95SY3J9XWD2AP32XKYKTTR4CVCU7AS4YC93KY28E",
+            "BITCOINCASH:PQQ3728YW0Y47SQN6L2NA30MCW6ZM78DZQ5UCQZC37",
+        };
 
 
         for(unsigned int i=0;i<cashAddressCount;++i)
@@ -3513,6 +3522,36 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Failed Cash Address Decode %d : Incorrect hash", i);
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Result  : %s", addressHash.hex().text());
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Correct : %s", correctAddressHash.hex().text());
+                cashAddressSuccess = false;
+            }
+
+            // Check uppercase
+            if(!decodeAddress(upperCashAddresses[i], addressHash, addressType, addressFormat))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Decode %d : Decode upper failed", i);
+                cashAddressSuccess = false;
+            }
+            else if(addressType != correctAddressType)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Decode %d : Decode upper type is not correct", i);
+                cashAddressSuccess = false;
+            }
+            else if(addressFormat != CASH)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Decode %d : Decode upper format is not CASH", i);
+                cashAddressSuccess = false;
+            }
+            else if(addressHash != correctAddressHash)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Cash Address Decode %d : Incorrect upper hash", i);
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Result  : %s", addressHash.hex().text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
