@@ -602,7 +602,7 @@ namespace BitCoin
                         }
                 }
             }
-            else if((*key)->depth() == -1)
+            else if((*key)->depth() == 0xff)
             {
                 if(!mAddressHashes.contains((*key)->hash()))
                 {

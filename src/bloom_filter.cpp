@@ -433,7 +433,7 @@ namespace BitCoin
          ***********************************************************************************************/
         const unsigned int SET_CHECK_SIZE = 1000;
         NextCash::Hash hashes[SET_CHECK_SIZE];
-        BloomFilter setFilter(SET_CHECK_SIZE, 0.01);
+        BloomFilter setFilter(SET_CHECK_SIZE, UPDATE_ALL, 0.01);
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOOM_LOG_NAME,
           "Created bloom filter with %d bytes and %d functions", filter.size(), filter.functionCount());

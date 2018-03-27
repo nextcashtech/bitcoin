@@ -1438,7 +1438,7 @@ namespace BitCoin
                     if(info.spvMode)
                     {
                         NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                          "Dropping. Sent block in SPV mode : %s", ((Message::BlockData *)message)->block->hash);
+                          "Dropping. Sent block in SPV mode : %s", ((Message::BlockData *)message)->block->hash.hex().text());
                         info.addPeerFail(mAddress, 5);
                         close();
                     }
@@ -1485,7 +1485,7 @@ namespace BitCoin
                 else
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                      "Dropping. Incoming node sent block : %s", ((Message::BlockData *)message)->block->hash);
+                      "Dropping. Incoming node sent block : %s", ((Message::BlockData *)message)->block->hash.hex().text());
                     info.addPeerFail(mAddress, 5);
                     close();
                 }

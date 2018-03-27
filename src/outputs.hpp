@@ -152,7 +152,7 @@ namespace BitCoin
         bool valuesMatch(const HashData *pRight) const
         {
             // Since more than one transaction with the same hash will never be in the same block
-            return blockHeight == blockHeight;
+            return blockHeight == ((TransactionReference *)pRight)->blockHeight;
         }
 
         // Reads object data from a stream

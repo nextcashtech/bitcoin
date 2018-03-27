@@ -16,7 +16,7 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
+#include <string>
 #include <fstream>
 #include <algorithm>
 
@@ -81,7 +81,7 @@ namespace BitCoin
         }
 
         if(!matchFound)
-            return NULL;
+            return false;
 
         // User Agent Bytes
         uint64_t userAgentLength = readCompactInteger(pStream);
@@ -201,15 +201,15 @@ namespace BitCoin
             spvMode = true;
         else if(std::strcmp(name, "max_connections") == 0)
         {
-            maxConnections = std::stol(value, NULL, 0);
-            if(maxConnections < 0)
+            maxConnections = std::strtol(value, NULL, 0);
+            if(maxConnections > 5000)
                 maxConnections = 1;
             else if(maxConnections > 128)
                 maxConnections = 128;
         }
         else if(std::strcmp(name, "fee_min") == 0)
         {
-            minFee = std::stol(value, NULL, 0);
+            minFee = std::strtol(value, NULL, 0);
             if(minFee < 1)
                 minFee = 1;
             else if(minFee > 100000)
@@ -218,17 +218,17 @@ namespace BitCoin
         else if(std::strcmp(name, "ip") == 0)
             ip = NextCash::Network::parseIPv6(value);
         else if(std::strcmp(name, "port") == 0)
-            port = std::stol(value, NULL, 0);
+            port = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "pending_size") == 0)
-            pendingSizeThreshold = std::stol(value, NULL, 0);
+            pendingSizeThreshold = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "pending_blocks") == 0)
-            pendingBlocksThreshold = std::stol(value, NULL, 0);
+            pendingBlocksThreshold = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "output_threshold") == 0)
-            outputsThreshold = std::stol(value, NULL, 0);
+            outputsThreshold = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "mem_pool_size") == 0)
-            memPoolThreshold = std::stol(value, NULL, 0);
+            memPoolThreshold = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "address_threshold") == 0)
-            addressesThreshold = std::stol(value, NULL, 0);
+            addressesThreshold = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "notify_email") == 0)
             notifyEmail = value;
 
