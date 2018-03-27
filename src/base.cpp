@@ -376,3 +376,16 @@ namespace BitCoin
         }
     }
 }
+
+#ifdef JAVA
+
+extern "C"
+{
+    JNIEXPORT jstring JNICALL Java_tech_nextcash_nextcashwallet_Bitcoin_userAgent(JNIEnv *pEnvironment,
+                                                                                  jobject)
+    {
+        return pEnvironment->NewStringUTF(BITCOIN_USER_AGENT);
+    }
+}
+
+#endif
