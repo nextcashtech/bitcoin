@@ -20,6 +20,7 @@ namespace BitCoin
     Monitor::Monitor() : mMutex("Monitor")
     {
         mFilterID = 0;
+        mFilter.setup(0);
         mPasses.push_back(PassData());
     }
 
@@ -664,6 +665,17 @@ namespace BitCoin
             mMutex.unlock();
     }
 
+    unsigned int Monitor::height()
+    {
+        unsigned int result = 0;
+        mMutex.lock();
+        for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass)
+            if(pass->blockHeight > result)
+                result = pass->blockHeight;
+        mMutex.unlock();
+        return result;
+    }
+
     int64_t Monitor::balance(bool pLocked)
     {
         if(!pLocked)
@@ -776,7 +788,7 @@ namespace BitCoin
                 request = mMerkleRequests.get(nextBlockHash);
                 if(request == mMerkleRequests.end())
                 {
-                    if(mMerkleRequests.size() < 2000)
+                    if(mMerkleRequests.size() < 2000 && !mFilter.isEmpty())
                     {
                         // Add new merkle block request
                         newMerkleRequest = new MerkleRequestData(pNodeID, time);

@@ -132,9 +132,13 @@ namespace BitCoin
 
     Info::Info() : mPeerLock("Peer")
     {
-        ip = 0;
+        ip = NULL;
         port = 8333;
+#ifdef ANDROID
+        spvMode = true;
+#else
         spvMode = false;
+#endif
         maxConnections = 64;
         minFee = 1000; // satoshis per KiB
         mPeersModified = false;

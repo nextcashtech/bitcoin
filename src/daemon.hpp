@@ -40,12 +40,18 @@ namespace BitCoin
         static void manage();
         static void process();
 
-        void run(NextCash::String &pSeed, bool pInDaemonMode = true);
+        void run(bool pInDaemonMode = true);
 
+        bool load();
         bool start(bool pInDaemonMode);
         bool isRunning() { return mRunning; }
         bool stopping() { return mStopping; }
 
+        static const int FINISH_ON_REQUEST = 0;
+        static const int FINISH_ON_SYNC = 1;
+
+        // Set criteria for daemon stopping on its own
+        void setFinishMode(int pMode) { mFinishMode = pMode; }
         void requestStop() { mStopRequested = true; mChain.requestStop(); }
 
         // Signals
@@ -54,7 +60,14 @@ namespace BitCoin
         static void handleSigInt(int pValue);
         static void handleSigPipe(int pValue);
 
+        unsigned int peerCount();
+        Chain *chain() { return &mChain; }
+        Monitor *monitor() { return &mMonitor; }
         KeyStore *keyStore() { return &mKeyStore; }
+
+        enum Status { INACTIVE, LOADING, FINDING_PEERS, CONNECTING_TO_PEERS, SYNCHRONIZING, SYNCHRONIZED };
+        bool isLoaded() { return mLoaded; }
+        Status status();
 
     protected:
 
@@ -67,7 +80,8 @@ namespace BitCoin
         Info &mInfo;
 
         void stop();
-        bool mRunning, mStopping, mStopRequested, mLoaded;
+        bool mRunning, mStopping, mStopRequested, mLoading, mLoaded, mQueryingSeed;
+        int mFinishMode;
 
         // Threads
         NextCash::Thread *mConnectionThread;
@@ -84,8 +98,6 @@ namespace BitCoin
         void (*previousSigIntHandler)(int);
         void (*previousSigPipeHandler)(int);
 
-
-        NextCash::String mSeed;
         // Query peers from a seed
         // Returns number of peers actually connected
         unsigned int querySeed(const char *pName);

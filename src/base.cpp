@@ -19,7 +19,7 @@
 
 namespace BitCoin
 {
-    static Network sNetwork = TESTNET;
+    static Network sNetwork = MAINNET;
     static const uint8_t sMainNetworkStartBytes[4] = { 0xf9, 0xbe, 0xb4, 0xd9 };
     static const uint8_t sTestNetworkStartBytes[4] = { 0x0b, 0x11, 0x09, 0x07 };
 
@@ -376,16 +376,3 @@ namespace BitCoin
         }
     }
 }
-
-#ifdef JAVA
-
-extern "C"
-{
-    JNIEXPORT jstring JNICALL Java_tech_nextcash_nextcashwallet_Bitcoin_userAgent(JNIEnv *pEnvironment,
-                                                                                  jobject)
-    {
-        return pEnvironment->NewStringUTF(BITCOIN_USER_AGENT);
-    }
-}
-
-#endif

@@ -49,7 +49,9 @@ namespace BitCoin
         mRunning = false;
         mStopping = false;
         mStopRequested = false;
+        mLoading = false;
         mLoaded = false;
+        mQueryingSeed = false;
         mConnectionThread = NULL;
         mRequestsThread = NULL;
         mManagerThread = NULL;
@@ -69,6 +71,38 @@ namespace BitCoin
     {
         if(isRunning())
             stop();
+
+        saveMonitor();
+        saveKeyStore();
+    }
+
+    unsigned int Daemon::peerCount()
+    {
+        unsigned int result = 0;
+        mNodeLock.readLock();
+        result = mNodes.size();
+        mNodeLock.readUnlock();
+        return result;
+    }
+
+    Daemon::Status Daemon::status()
+    {
+        if(mLoading)
+            return LOADING;
+
+        if(!mRunning)
+            return INACTIVE;
+
+        if(mQueryingSeed)
+            return FINDING_PEERS;
+
+        if(peerCount() < 6)
+            return CONNECTING_TO_PEERS;
+
+        if(mChain.isInSync())
+            return SYNCHRONIZED;
+        else
+            return SYNCHRONIZING;
     }
 
     void Daemon::handleSigTermChild(int pValue)
@@ -94,20 +128,42 @@ namespace BitCoin
         //NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Pipe signal received.");
     }
 
-    void Daemon::run(NextCash::String &pSeed, bool pInDaemonMode)
+    bool Daemon::load()
     {
-        if(!start(pInDaemonMode))
-            return;
+        if(mLoaded || mLoading)
+            return true;
 
-        mSeed = pSeed;
+        mLoading = true;
 
-        while(isRunning())
+        if(!loadKeyStore())
         {
-            if(mStopRequested)
-                stop();
-            else
-                NextCash::Thread::sleep(1000);
+            mLoading = false;
+            return false;
         }
+
+        if(!loadMonitor())
+        {
+            mLoading = false;
+            return false;
+        }
+
+        if(!mChain.load())
+        {
+            if(mStopRequested || mStopping)
+            {
+                mLoading = false;
+                return false;
+            }
+            mLoading = false;
+            requestStop();
+            return false;
+        }
+
+        mChain.setMonitor(mMonitor);
+
+        mLoading = false;
+        mLoaded = true;
+        return true;
     }
 
     bool Daemon::start(bool pInDaemonMode)
@@ -140,12 +196,6 @@ namespace BitCoin
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in SPV mode");
         else
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in Full/Bloom mode");
-
-        if(!loadKeyStore())
-            return false;
-
-        if(!loadMonitor())
-            return false;
 
         mManagerThread = new NextCash::Thread("Manager", manage);
         if(mManagerThread == NULL)
@@ -287,6 +337,24 @@ namespace BitCoin
         mRunning = false;
         mStopping = false;
         NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Stopped");
+    }
+
+    void Daemon::run(bool pInDaemonMode)
+    {
+        if(!start(pInDaemonMode))
+            return;
+
+        while(isRunning())
+        {
+            if(mStopRequested || (mFinishMode == FINISH_ON_SYNC && mChain.isInSync()))
+            {
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                                   "Stopping because of finish on sync");
+                stop();
+            }
+            else
+                NextCash::Thread::sleep(1000);
+        }
     }
 
     void Daemon::collectStatistics()
@@ -1100,19 +1168,13 @@ namespace BitCoin
     {
         Daemon &daemon = Daemon::instance();
 
-        if(!daemon.mChain.load())
-        {
-            if(daemon.mStopRequested || daemon.mStopping)
-                return;
-            daemon.requestStop();
-            return;
-        }
+        daemon.load();
 
-        daemon.mChain.setMonitor(daemon.mMonitor);
+        // If another thread started loading first, then wait for it to finish.
+        while(daemon.mLoading)
+            NextCash::Thread::sleep(100);
 
-        daemon.mLoaded = true;
-
-        if(daemon.mStopping)
+        if(daemon.mStopping || !daemon.mLoaded)
             return;
 
         daemon.mConnectionThread = new NextCash::Thread("Connection", handleConnections);
@@ -1148,14 +1210,14 @@ namespace BitCoin
             return;
         }
 
-        uint32_t startTime = getTime();
-        uint32_t lastStatReportTime = startTime;
-        uint32_t lastRequestCheckTime = startTime;
-        uint32_t lastInfoSaveTime = startTime;
-        uint32_t lastPeerRequestTime = 0;
-        uint32_t lastImprovement = startTime;
-        uint32_t lastTransactionRequest = startTime;
-        uint32_t time;
+        int32_t startTime = getTime();
+        int32_t lastStatReportTime = startTime;
+        int32_t lastRequestCheckTime = startTime;
+        int32_t lastInfoSaveTime = startTime;
+        int32_t lastPeerRequestTime = 0;
+        int32_t lastImprovement = startTime;
+        int32_t lastTransactionRequest = startTime;
+        int32_t time;
 #ifdef PROFILER_ON
         uint32_t lastProfilerWrite = startTime;
         NextCash::String profilerTime;
@@ -1226,7 +1288,8 @@ namespace BitCoin
                 break;
 
             time = getTime();
-            if(daemon.mLastPeerCount > 0 && daemon.mLastPeerCount < 2000 && time - lastPeerRequestTime > 60)
+            if(daemon.mLastPeerCount > 0 && daemon.mLastPeerCount < 10000 &&
+              time - lastPeerRequestTime > 60)
             {
                 lastPeerRequestTime = time;
                 daemon.sendPeerRequest();
@@ -1266,10 +1329,10 @@ namespace BitCoin
     void Daemon::process()
     {
         Daemon &daemon = Daemon::instance();
-        uint32_t lastOutputsPurgeTime = getTime();
-        uint32_t lastAddressPurgeTime = getTime();
-        uint32_t lastMemPoolCheckPending = getTime();
-        uint32_t lastMonitorProcess = getTime();
+        int32_t lastOutputsPurgeTime = getTime();
+        int32_t lastAddressPurgeTime = getTime();
+        int32_t lastMemPoolCheckPending = getTime();
+        int32_t lastMonitorProcess = getTime();
         NextCash::Hash lastBlockHash = daemon.mChain.lastBlockHash();
 
         while(!daemon.mStopping)
@@ -1400,8 +1463,20 @@ namespace BitCoin
         return true;
     }
 
+    static const char *SEEDS[] =
+            { "seed.bitcoinabc.org",
+              "seed-abc.bitcoinforks.org",
+              "btccash-seeder.bitcoinunlimited.info",
+              "seed.bitprim.org",
+              "seed.deadalnix.me",
+              "seeder.criptolayer.net"
+            };
+    static const int SEED_COUNT = 6;
+
     unsigned int Daemon::querySeed(const char *pName)
     {
+        mQueryingSeed = true;
+
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Querying seed %s", pName);
         NextCash::Network::IPList ipList;
         NextCash::Network::list(pName, ipList);
@@ -1410,6 +1485,7 @@ namespace BitCoin
         if(ipList.size() == 0)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "No nodes found from seed");
+            mQueryingSeed = false;
             return 0;
         }
 
@@ -1424,6 +1500,7 @@ namespace BitCoin
                 result++;
         }
 
+        mQueryingSeed = false;
         return result;
     }
 
@@ -1499,6 +1576,13 @@ namespace BitCoin
 
             if(mStopping || count >= pCount)
                 break;
+        }
+
+        if(count == 0)
+        {
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Choosing random seed");
+            querySeed(SEEDS[NextCash::Math::randomInt(SEED_COUNT)]);
         }
 
         return count;
@@ -1601,15 +1685,6 @@ namespace BitCoin
 
         while(!daemon.mStopping)
         {
-            if(daemon.mSeed)
-            {
-                daemon.querySeed(daemon.mSeed);
-                daemon.mSeed.clear();
-            }
-
-            if(daemon.mStopping)
-                break;
-
             if(daemon.mOutgoingNodes < daemon.outgoingConnectionCountTarget() && getTime() - lastFillNodesTime > 30)
             {
                 daemon.recruitPeers(daemon.outgoingConnectionCountTarget() - daemon.mOutgoingNodes);
@@ -1642,7 +1717,8 @@ namespace BitCoin
                         }
                         else
                         {
-                            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create incoming listener");
+                            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                              "Failed to create incoming listener");
                             daemon.requestStop();
                             break;
                         }

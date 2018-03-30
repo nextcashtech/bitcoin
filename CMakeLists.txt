@@ -4,7 +4,6 @@ cmake_minimum_required(VERSION 3.4.1)
 
 add_definitions( -DANDROID -DJAVA )
 
-
 include_directories( ../nextcash/src/base
                      ../nextcash/src/io
                      ../nextcash/src/crypto
@@ -31,4 +30,5 @@ add_library( bitcoin STATIC SHARED
              src/requests.cpp
              src/transaction.cpp )
 
+# Link NextCash and SECP256K1 libraries
 target_link_libraries( bitcoin nextcash secp256k1 )

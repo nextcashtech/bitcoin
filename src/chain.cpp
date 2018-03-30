@@ -1189,7 +1189,7 @@ namespace BitCoin
             // Create first block file
             mLastFileID = 0;
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Creating first block file %08x", mLastFileID, mLastFileID + 1);
+              "Creating first block file %08x", mLastFileID);
             BlockFile::lock(mLastFileID);
             mLastBlockFile = BlockFile::create(mLastFileID);
             if(mLastBlockFile == NULL) // Failed to create file

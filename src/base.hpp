@@ -14,7 +14,13 @@
 #include <cstdint>
 #include <ctime>
 
-#define BITCOIN_USER_AGENT "/NextCash:0.8.0/" // BIP-0014 Specifies User Agent Format
+// BIP-0014 Specifies User Agent Format
+#ifdef ANDROID
+#define BITCOIN_USER_AGENT "/NextCash:0.8.0/NextCashWallet:0.1.0(Android)/"
+#else
+#define BITCOIN_USER_AGENT "/NextCash:0.8.0/"
+#endif
+
 #define PROTOCOL_VERSION 70015
 #define ADDRESS_HASH_SIZE 20
 
@@ -245,17 +251,5 @@ namespace BitCoin
         bool test();
     }
 }
-
-#ifdef JAVA
-
-#include <jni.h>
-
-extern "C"
-{
-    JNIEXPORT jstring JNICALL Java_tech_nextcash_nextcashwallet_Bitcoin_userAgent(JNIEnv *pEnvironment,
-                                                                                  jobject);
-}
-
-#endif
 
 #endif

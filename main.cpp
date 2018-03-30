@@ -38,8 +38,8 @@ void printHelp(const char *pPath);
 
 int main(int pArgumentCount, char **pArguments)
 {
-    bool nextIsPath = false, nextIsSeed = false;
-    NextCash::String path, seed;
+    bool nextIsPath = false;
+    NextCash::String path;
     bool start = false;
     bool noDaemon = false;
     bool stop = false;
@@ -91,11 +91,6 @@ int main(int pArgumentCount, char **pArguments)
                 path += "/";
             nextIsPath = false;
         }
-        else if(nextIsSeed)
-        {
-            seed = pArguments[i];
-            nextIsSeed = false;
-        }
         else if(nextIsPrintBlock)
         {
             printBlock = pArguments[i];
@@ -116,8 +111,6 @@ int main(int pArgumentCount, char **pArguments)
             nextIsPath = true;
         else if(std::strcmp(pArguments[i], "--testnet") == 0)
             testnet = true;
-        else if(std::strcmp(pArguments[i], "--seed") == 0)
-            nextIsSeed = true;
         else if(std::strcmp(pArguments[i], "--help") == 0 ||
           std::strcmp(pArguments[i], "-h") == 0)
         {
@@ -380,12 +373,7 @@ int main(int pArgumentCount, char **pArguments)
 #endif
     BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
 
-    // "testnet-seed.bitcoin.jonasschnelli.ch"
-    // seed.tbtc.petertodd.org
-    // testnet-seed.bluematt.me
-    // testnet-seed.bitcoin.schildbach.de
-
-    daemon.run(seed, !noDaemon);
+    daemon.run(!noDaemon);
 
     if(!noDaemon)
         NextCash::removeFile(pidFilePath.text());
@@ -428,7 +416,6 @@ void printHelp(const char *pPath)
     std::cerr << "Options :" << std::endl;
     std::cerr << "    --help or -h                    -> Display this message" << std::endl;
     std::cerr << "    --path PATH                     -> Specify directory for daemon files. Default : " << pPath << std::endl;
-    std::cerr << "    --seed SEED_NAME                -> Start daemon and load peers from seed" << std::endl;
     std::cerr << "    --testnet                       -> Run on testnet instead of mainnet" << std::endl;
     std::cerr << "    --nodaemon                      -> Don't do daemon fork. (i.e. run in this process)" << std::endl;
     std::cerr << "    -v                              -> Verbose logging" << std::endl;
