@@ -90,7 +90,8 @@ namespace BitCoin
         NextCash::Thread *mProcessThread;
 
         // Timers
-        uint32_t mLastHeaderRequestTime;
+        int32_t mLastHeaderRequestTime;
+        int32_t mLastConnectionActive;
 
         // Signals
         void (*previousSigTermChildHandler)(int);

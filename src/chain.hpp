@@ -212,6 +212,7 @@ namespace BitCoin
         // Chain is up to date with most chains
         bool isInSync() { return mIsInSync; }
         void setInSync() { mIsInSync = true; }
+        void clearInSync() { mIsInSync = false; }
         Block *blockToAnnounce();
 
         // Check if a block is already in the chain

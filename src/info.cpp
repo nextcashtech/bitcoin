@@ -159,9 +159,9 @@ namespace BitCoin
             NextCash::String dataFilePath = sPath;
             dataFilePath.pathAppend("data");
             readSettingsFile(dataFilePath);
-        }
 
-        readPeersFile();
+            readPeersFile();
+        }
     }
 
     Info::~Info()
@@ -336,6 +336,10 @@ namespace BitCoin
     {
         pPeers.clear();
 
+        // For scenario when path was not set before loading instance
+        if(mPeers.size() == 0)
+            readPeersFile();
+
         mPeerLock.readLock();
         for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
             if((*peer)->rating >= pMinimumRating && ((*peer)->services & mServicesRequiredMask) == mServicesRequiredMask)
@@ -350,6 +354,10 @@ namespace BitCoin
     {
         if(!pAddress.isValid())
             return;
+
+        // For scenario when path was not set before loading instance
+        if(mPeers.size() == 0)
+            readPeersFile();
 
         //bool remove = false;
         mPeerLock.readLock();
@@ -384,6 +392,10 @@ namespace BitCoin
     {
         if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) || pServices == 0)
             return;
+
+        // For scenario when path was not set before loading instance
+        if(mPeers.size() == 0)
+            readPeersFile();
 
         mPeerLock.readLock();
         for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)

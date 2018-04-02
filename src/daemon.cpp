@@ -61,6 +61,7 @@ namespace BitCoin
         previousSigIntHandler = NULL;
         previousSigPipeHandler = NULL;
         mLastHeaderRequestTime = 0;
+        mLastConnectionActive = 0;
         mNodeCount = 0;
         mIncomingNodes = 0;
         mOutgoingNodes = 0;
@@ -96,7 +97,7 @@ namespace BitCoin
         if(mQueryingSeed)
             return FINDING_PEERS;
 
-        if(peerCount() < 6)
+        if(peerCount() < outgoingConnectionCountTarget() / 2)
             return CONNECTING_TO_PEERS;
 
         if(mChain.isInSync())
@@ -181,6 +182,7 @@ namespace BitCoin
         }
 
         mRunning = true;
+        mLastConnectionActive = getTime();
 
         // Set signal handlers
         if(pInDaemonMode)
@@ -265,6 +267,9 @@ namespace BitCoin
             for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
                 delete *node;
             mNodes.clear();
+            mOutgoingNodes = 0;
+            mIncomingNodes = 0;
+            mNodeCount = 0;
         }
         mNodeLock.writeUnlock();
 
@@ -322,7 +327,7 @@ namespace BitCoin
         saveMonitor();
         saveKeyStore();
         mChain.save();
-        Info::destroy();
+        mChain.clearInSync();
 
 #ifdef PROFILER_ON
         NextCash::String profilerTime;
@@ -336,6 +341,7 @@ namespace BitCoin
 
         mRunning = false;
         mStopping = false;
+        mStopRequested = false;
         NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Stopped");
     }
 
@@ -346,7 +352,9 @@ namespace BitCoin
 
         while(isRunning())
         {
-            if(mStopRequested || (mFinishMode == FINISH_ON_SYNC && mChain.isInSync()))
+            if(mStopRequested)
+                stop();
+            else if(mFinishMode == FINISH_ON_SYNC && mChain.isInSync())
             {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                                    "Stopping because of finish on sync");
@@ -1228,7 +1236,7 @@ namespace BitCoin
         while(!daemon.mStopping)
         {
             time = getTime();
-            if(getTime() - lastStatReportTime > 180)
+            if(time - lastStatReportTime > 180)
             {
                 lastStatReportTime = getTime();
                 daemon.printStatistics();
@@ -1236,6 +1244,15 @@ namespace BitCoin
 
             if(daemon.mStopping)
                 break;
+
+            if(daemon.mFinishMode != FINISH_ON_REQUEST &&
+              daemon.peerCount() == 0 && time - daemon.mLastConnectionActive > 60)
+            {
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Stopping because of lack of network connectivity");
+                daemon.requestStop();
+                break;
+            }
 
             if(!daemon.mChain.isInSync())
             {
@@ -1416,6 +1433,8 @@ namespace BitCoin
 
     bool Daemon::addNode(NextCash::Network::Connection *pConnection, bool pIncoming, bool pIsSeed, uint64_t pServices)
     {
+        mLastConnectionActive = getTime();
+
         // Check if IP is on reject list
         for(std::vector<IPBytes>::iterator ip=mRejectedIPs.begin();ip!=mRejectedIPs.end();++ip)
             if(*ip == pConnection->ipv6Bytes())
@@ -1448,7 +1467,7 @@ namespace BitCoin
 
         mNodeLock.writeLock("Add");
         mNodes.push_back(node);
-        mNodeCount++;
+        ++mNodeCount;
         if(pIncoming)
         {
             ++mStatistics.incomingConnections;
@@ -1600,6 +1619,7 @@ namespace BitCoin
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
             if(!(*node)->isOpen())
             {
+                mLastConnectionActive = getTime();
                 if((*node)->wasRejected())
                     addRejectedIP((*node)->ipv6Bytes());
                 --mNodeCount;
@@ -1675,8 +1695,8 @@ namespace BitCoin
         Daemon &daemon = Daemon::instance();
         NextCash::Network::Listener *nodeListener = NULL;
         NextCash::Network::Connection *newConnection;
-        uint32_t lastFillNodesTime = 0;
-        uint32_t lastCleanTime = getTime();
+        int32_t lastFillNodesTime = 0;
+        int32_t lastCleanTime = getTime();
 
         if(daemon.outgoingConnectionCountTarget() >= daemon.mInfo.maxConnections)
             daemon.mMaxIncoming = 0;
@@ -1753,7 +1773,7 @@ namespace BitCoin
         Daemon &daemon = Daemon::instance();
         NextCash::Network::Listener *requestsListener = NULL;
         NextCash::Network::Connection *newConnection;
-        uint32_t lastCleanTime = getTime();
+        int32_t lastCleanTime = getTime();
 
         while(!daemon.mStopping)
         {
