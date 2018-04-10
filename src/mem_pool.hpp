@@ -55,8 +55,8 @@ namespace BitCoin
 
         // Add transaction to mem pool. Returns false if it was already in the mem pool or is invalid
         enum AddStatus { ADDED, NOT_NEEDED, NON_STANDARD, DOUBLE_SPEND, LOW_FEE, UNSEEN_OUTPOINTS };
-        AddStatus add(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
-          const Forks &pForks, uint64_t pMinFeeRate);
+        AddStatus add(Transaction *pTransaction, TransactionOutputPool &pOutputs, BlockStats &pBlockStats,
+          Forks &pForks, uint64_t pMinFeeRate);
 
         // Remove transactions that have been added to a block
         void remove(const std::vector<Transaction *> &pTransactions);
@@ -78,7 +78,7 @@ namespace BitCoin
         void getFullList(NextCash::HashList &pList, const BloomFilter &pFilter);
 
         void checkPendingTransactions(TransactionOutputPool &pOutputs,
-          const BlockStats &pBlockStats, const Forks &pForks, uint64_t pMinFeeRate);
+          BlockStats &pBlockStats, Forks &pForks, uint64_t pMinFeeRate);
 
         bool isBlackListed(const NextCash::Hash &pHash);
 
@@ -109,7 +109,7 @@ namespace BitCoin
 
         // Verifies that a transaction is valid
         bool check(Transaction *pTransaction, TransactionOutputPool &pOutputs,
-          const BlockStats &pBlockStats, const Forks &pForks, uint64_t pMinFeeRate);
+          BlockStats &pBlockStats, Forks &pForks, uint64_t pMinFeeRate);
 
         bool outpointExists(Transaction *pTransaction);
 

@@ -45,6 +45,19 @@ namespace BitCoin
             signatureStatus = pCopy.signatureStatus;
         }
         ~Outpoint() { if(output != NULL) delete output; }
+        Outpoint &operator = (const Outpoint &pRight)
+        {
+            transactionID = pRight.transactionID;
+            index = pRight.index;
+            if(output != NULL)
+                delete output;
+            if(pRight.output == NULL)
+                output = NULL;
+            else
+                output = new Output(*pRight.output);
+            signatureStatus = pRight.signatureStatus;
+            return *this;
+        }
 
         void write(NextCash::OutputStream *pStream);
         bool read(NextCash::InputStream *pStream);
@@ -66,8 +79,6 @@ namespace BitCoin
         static const uint8_t VERIFIED = 0x02;
         uint8_t signatureStatus;
 
-    private:
-        Outpoint &operator = (const Outpoint &pRight);
     };
 
     class Input
@@ -82,6 +93,13 @@ namespace BitCoin
         Input(const Input &pCopy) : outpoint(pCopy.outpoint), script(pCopy.script)
         {
             sequence = pCopy.sequence;
+        }
+        Input &operator = (const Input &pRight)
+        {
+            outpoint = pRight.outpoint;
+            script = pRight.script;
+            sequence = pRight.sequence;
+            return *this;
         }
 
         // Outpoint (32 trans id + 4 index), + 4 sequence, + script length size + script length
@@ -106,8 +124,6 @@ namespace BitCoin
         // BIP-0068 Minimum time/blocks since outpoint creation before this transaction is valid
         uint32_t sequence;
 
-    private:
-        Input &operator = (const Input &pRight);
     };
 
     class Transaction;
@@ -169,8 +185,8 @@ namespace BitCoin
 
         // Data
         uint32_t version;
-        std::vector<Input *> inputs;
-        std::vector<Output *> outputs;
+        std::vector<Input> inputs;
+        std::vector<Output> outputs;
         uint32_t lockTime;
 
         unsigned int size() const { return mSize; }
@@ -206,12 +222,12 @@ namespace BitCoin
         void calculateHash();
 
         bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
-          uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, const BlockStats &pBlockStats,
-          const Forks &pForks, std::vector<unsigned int> &pSpentAges);
+          uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, BlockStats &pBlockStats,
+          Forks &pForks, std::vector<unsigned int> &pSpentAges);
 
         // Check validity and return status
         bool check(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
-          NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, const BlockStats &pBlockStats, const Forks &pForks);
+          NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, BlockStats &pBlockStats, Forks &pForks);
 
         // Check that none of the outpoints are spent and return status
         uint8_t checkOutpoints(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions);
@@ -254,7 +270,8 @@ namespace BitCoin
         bool addMultiSigOutput(unsigned int pRequiredSignatureCount, std::vector<Key *> pPublicKeys,
           uint64_t pAmount);
 
-        static Transaction *createCoinbaseTransaction(int pBlockHeight, int64_t pFees, const NextCash::Hash &pPublicKeyHash);
+        static Transaction *createCoinbaseTransaction(int pBlockHeight, int64_t pFees,
+          const NextCash::Hash &pPublicKeyHash);
 
         // Run unit tests
         static bool test();

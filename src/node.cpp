@@ -510,13 +510,13 @@ namespace BitCoin
                 outpoint.transactionID = pTransaction->hash;
                 outpoint.index = 0;
 
-                for(std::vector<Output *>::iterator output=pTransaction->outputs.begin();output!=pTransaction->outputs.end();++output,++outpoint.index)
-                    if(mFilter.containsScript((*output)->script))
+                for(std::vector<Output>::iterator output=pTransaction->outputs.begin();output!=pTransaction->outputs.end();++output,++outpoint.index)
+                    if(mFilter.containsScript(output->script))
                     {
                         if(mFilter.flags() & BloomFilter::UPDATE_P2PUBKEY_ONLY)
                         {
                             // Don't add unless P2PKH or MultiSig
-                            type = ScriptInterpreter::parseOutputScript((*output)->script, hashes);
+                            type = ScriptInterpreter::parseOutputScript(output->script, hashes);
                             if(type != ScriptInterpreter::P2PKH && type != ScriptInterpreter::MULTI_SIG)
                                 continue;
                         }
@@ -739,7 +739,27 @@ namespace BitCoin
             mConnectionMutex.unlock();
             return;
         }
-        mConnection->receive(&mReceiveBuffer);
+
+        try
+        {
+            mConnection->receive(&mReceiveBuffer);
+        }
+        catch(std::bad_alloc pException)
+        {
+            mConnectionMutex.unlock();
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+              "Bad allocation while receiving data : %s", pException.what());
+            close();
+            return;
+        }
+        catch(std::exception pException)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+              "Exception while receiving data : %s", pException.what());
+            close();
+            return;
+        }
+
         mConnectionMutex.unlock();
 
         if(mVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
@@ -768,8 +788,27 @@ namespace BitCoin
         }
 
         // Check for a complete message
-        Message::Data *message = mMessageInterpreter.read(&mReceiveBuffer, mName);
+        Message::Data *message;
         bool dontDeleteMessage = false;
+
+        try
+        {
+            message = mMessageInterpreter.read(&mReceiveBuffer, mName);
+        }
+        catch(std::bad_alloc pException)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+              "Bad allocation while reading message : %s", pException.what());
+            close();
+            return;
+        }
+        catch(std::exception pException)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+              "Exception while reading message : %s", pException.what());
+            close();
+            return;
+        }
 
         if(message == NULL)
         {

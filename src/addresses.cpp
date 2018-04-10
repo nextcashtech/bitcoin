@@ -71,7 +71,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Addresses::add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
+    bool Addresses::add(std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Addresses Add");
@@ -89,12 +89,12 @@ namespace BitCoin
         unsigned int transactionOffset = 0, outputOffset;
         NextCash::HashData *newAddress;
         bool success = true;
-        for(std::vector<Transaction *>::const_iterator trans=pBlockTransactions.begin();trans!=pBlockTransactions.end();++trans,++transactionOffset)
+        for(std::vector<Transaction *>::iterator trans=pBlockTransactions.begin();trans!=pBlockTransactions.end();++trans,++transactionOffset)
         {
             outputOffset = 0;
-            for(std::vector<Output *>::const_iterator output=(*trans)->outputs.begin();output!=(*trans)->outputs.end();++output,++outputOffset)
+            for(std::vector<Output>::iterator output=(*trans)->outputs.begin();output!=(*trans)->outputs.end();++output,++outputOffset)
             {
-                switch(ScriptInterpreter::parseOutputScript((*output)->script, hashes))
+                switch(ScriptInterpreter::parseOutputScript(output->script, hashes))
                 {
                     case ScriptInterpreter::P2PKH:
                     case ScriptInterpreter::P2PK:
@@ -120,7 +120,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Addresses::remove(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
+    bool Addresses::remove(std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
     {
         if(pBlockHeight != mNextBlockHeight - 1)
         {
@@ -137,13 +137,13 @@ namespace BitCoin
         Iterator item;
         bool found;
 
-        for(std::vector<Transaction *>::const_iterator trans=pBlockTransactions.begin();trans!=pBlockTransactions.end();++trans,++transactionOffset)
+        for(std::vector<Transaction *>::iterator trans=pBlockTransactions.begin();trans!=pBlockTransactions.end();++trans,++transactionOffset)
         {
             // Remove addresses added by outputs from this block's transactions
             outputOffset = 0;
-            for(std::vector<Output *>::const_iterator output=(*trans)->outputs.begin();output!=(*trans)->outputs.end();++output,++outputOffset)
+            for(std::vector<Output>::iterator output=(*trans)->outputs.begin();output!=(*trans)->outputs.end();++output,++outputOffset)
             {
-                switch(ScriptInterpreter::parseOutputScript((*output)->script, hashes))
+                switch(ScriptInterpreter::parseOutputScript(output->script, hashes))
                 {
                     case ScriptInterpreter::P2PKH:
                     case ScriptInterpreter::P2PK:

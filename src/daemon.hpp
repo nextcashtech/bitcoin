@@ -44,11 +44,13 @@ namespace BitCoin
 
         bool load();
         bool start(bool pInDaemonMode);
+
+        bool isLoaded() { return mLoaded; }
         bool isRunning() { return mRunning; }
         bool stopping() { return mStopping; }
 
-        static const int FINISH_ON_REQUEST = 0;
-        static const int FINISH_ON_SYNC = 1;
+        static const int FINISH_ON_REQUEST = 0x00;
+        static const int FINISH_ON_SYNC    = 0x01;
 
         // Set criteria for daemon stopping on its own
         void setFinishMode(int pMode) { mFinishMode = pMode; }
@@ -65,8 +67,14 @@ namespace BitCoin
         Monitor *monitor() { return &mMonitor; }
         KeyStore *keyStore() { return &mKeyStore; }
 
-        enum Status { INACTIVE, LOADING, FINDING_PEERS, CONNECTING_TO_PEERS, SYNCHRONIZING, SYNCHRONIZED };
-        bool isLoaded() { return mLoaded; }
+        bool loadMonitor();
+        bool saveMonitor();
+
+        bool loadKeyStore();
+        bool saveKeyStore();
+
+        enum Status { INACTIVE, LOADING, FINDING_PEERS, CONNECTING_TO_PEERS, SYNCHRONIZING,
+          SYNCHRONIZED, FINDING_TRANSACTIONS };
         Status status();
 
     protected:
@@ -149,12 +157,7 @@ namespace BitCoin
         void announce();
 
         KeyStore mKeyStore;
-        bool loadKeyStore();
-        bool saveKeyStore();
-
         Monitor mMonitor;
-        bool loadMonitor();
-        bool saveMonitor();
 
         // Request Channels
         NextCash::ReadersLock mRequestsLock;

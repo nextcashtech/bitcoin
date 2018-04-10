@@ -33,8 +33,9 @@ namespace BitCoin
         void write(NextCash::OutputStream *pStream);
         bool read(NextCash::InputStream *pStream);
 
-        unsigned int height(); // The block height of the latest "pass"
-        int64_t balance(bool pLocked = false);
+        unsigned int height(); // The block height of the lowest "pass"
+        int64_t balance(bool pLocked = false); // Return total balance of all keys
+        int64_t balance(Key *pKey, bool pIncludePending = false); // Return balance associated with a specific key
         unsigned int size() const { return mAddressHashes.size(); }
         unsigned int transactionCount() const { return mTransactions.size(); }
 

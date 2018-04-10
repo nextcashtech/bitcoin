@@ -127,8 +127,8 @@ namespace BitCoin
 
         int height() { return mNextBlockHeight - 1; }
 
-        bool add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
-        bool remove(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
+        bool add(std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
+        bool remove(std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
 
         // Get transaction outputs associated with the specified public key address hash
         bool getOutputs(const NextCash::Hash &pAddress, std::vector<FullOutputData> &pOutputs);

@@ -2,7 +2,7 @@
 
 cmake_minimum_required(VERSION 3.4.1)
 
-add_definitions( -DANDROID -DJAVA )
+add_definitions( -DANDROID -DLOW_MEM )
 
 include_directories( ../nextcash/src/base
                      ../nextcash/src/io

@@ -218,7 +218,7 @@ namespace BitCoin
         }
 
         // Process script
-        bool process(NextCash::Buffer &pScript, int32_t pBlockVersion, const Forks &pForks);
+        bool process(NextCash::Buffer &pScript, int32_t pBlockVersion, Forks &pForks);
 
         // No issues processing script
         bool isValid()

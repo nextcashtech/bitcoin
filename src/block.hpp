@@ -67,8 +67,8 @@ namespace BitCoin
         void calculateHash();
         void calculateMerkleHash(NextCash::Hash &pMerkleHash);
 
-        bool process(TransactionOutputPool &pOutputs, int pBlockHeight, const BlockStats &pBlockStats,
-          const Forks &pForks);
+        bool process(TransactionOutputPool &pOutputs, int pBlockHeight, BlockStats &pBlockStats,
+          Forks &pForks);
 
         bool updateOutputs(TransactionOutputPool &pOutputs, int pBlockHeight);
 

@@ -156,15 +156,15 @@ namespace BitCoin
     bool MemPool::outpointExists(Transaction *pTransaction)
     {
         for(TransactionList::iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
-            for(std::vector<Input *>::iterator input=(*trans)->inputs.begin();input!=(*trans)->inputs.end();++input)
-                for(std::vector<Input *>::iterator otherInput=pTransaction->inputs.begin();otherInput!=pTransaction->inputs.end();++otherInput)
-                    if((*input)->outpoint == (*otherInput)->outpoint)
+            for(std::vector<Input>::iterator input=(*trans)->inputs.begin();input!=(*trans)->inputs.end();++input)
+                for(std::vector<Input>::iterator otherInput=pTransaction->inputs.begin();otherInput!=pTransaction->inputs.end();++otherInput)
+                    if(input->outpoint == otherInput->outpoint)
                         return true;
         return false;
     }
 
-    bool MemPool::check(Transaction *pTransaction, TransactionOutputPool &pOutputs, const BlockStats &pBlockStats,
-      const Forks &pForks, uint64_t pMinFeeRate)
+    bool MemPool::check(Transaction *pTransaction, TransactionOutputPool &pOutputs, BlockStats &pBlockStats,
+      Forks &pForks, uint64_t pMinFeeRate)
     {
         NextCash::HashList outpointsNeeded;
         if(!pTransaction->check(pOutputs, mTransactions, outpointsNeeded,
@@ -214,7 +214,7 @@ namespace BitCoin
     }
 
     void MemPool::checkPendingTransactions(TransactionOutputPool &pOutputs,
-      const BlockStats &pBlockStats, const Forks &pForks, uint64_t pMinFeeRate)
+      BlockStats &pBlockStats, Forks &pForks, uint64_t pMinFeeRate)
     {
         mLock.writeLock("Check Pending");
         for(TransactionList::iterator transaction=mPendingTransactions.begin();transaction!=mPendingTransactions.end();)
@@ -247,7 +247,7 @@ namespace BitCoin
     }
 
     MemPool::AddStatus MemPool::add(Transaction *pTransaction, TransactionOutputPool &pOutputs,
-      const BlockStats &pBlockStats, const Forks &pForks, uint64_t pMinFeeRate)
+      BlockStats &pBlockStats, Forks &pForks, uint64_t pMinFeeRate)
     {
         mLock.writeLock("Add");
 

@@ -36,8 +36,8 @@ namespace BitCoin
             return 0;
 
         uint64_t result = 0;
-        for(std::vector<Output *>::iterator output=transactions.front()->outputs.begin();output!=transactions.front()->outputs.end();++output)
-            result += (*output)->amount;
+        for(std::vector<Output>::iterator output=transactions.front()->outputs.begin();output!=transactions.front()->outputs.end();++output)
+            result += output->amount;
 
         return result;
     }
@@ -543,8 +543,8 @@ namespace BitCoin
         return true;
     }
 
-    bool Block::process(TransactionOutputPool &pOutputs, int pBlockHeight, const BlockStats &pBlockStats,
-      const Forks &pForks)
+    bool Block::process(TransactionOutputPool &pOutputs, int pBlockHeight, BlockStats &pBlockStats,
+      Forks &pForks)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Block Process");
@@ -670,16 +670,16 @@ namespace BitCoin
         Transaction *transaction = new Transaction();
         transaction->version = 1;
 
-        Input *input = new Input();
-        input->script.writeHex("04FFFF001D0104455468652054696D65732030332F4A616E2F32303039204368616E63656C6C6F72206F6E206272696E6B206F66207365636F6E64206261696C6F757420666F722062616E6B73");
-        input->script.compact();
-        transaction->inputs.push_back(input);
+        transaction->inputs.emplace_back();
+        Input &input = transaction->inputs.back();
+        input.script.writeHex("04FFFF001D0104455468652054696D65732030332F4A616E2F32303039204368616E63656C6C6F72206F6E206272696E6B206F66207365636F6E64206261696C6F757420666F722062616E6B73");
+        input.script.compact();
 
-        Output *output = new Output();
-        output->amount = 5000000000;
-        output->script.writeHex("4104678AFDB0FE5548271967F1A67130B7105CD6A828E03909A67962E0EA1F61DEB649F6BC3F4CEF38C4F35504E51EC112DE5C384DF7BA0B8D578A4C702B6BF11D5FAC");
-        output->script.compact();
-        transaction->outputs.push_back(output);
+        transaction->outputs.emplace_back();
+        Output &output = transaction->outputs.back();
+        output.amount = 5000000000;
+        output.script.writeHex("4104678AFDB0FE5548271967F1A67130B7105CD6A828E03909A67962E0EA1F61DEB649F6BC3F4CEF38C4F35504E51EC112DE5C384DF7BA0B8D578A4C702B6BF11D5FAC");
+        output.script.compact();
 
         transaction->lockTime = 0;
         transaction->calculateHash();

@@ -41,7 +41,6 @@ namespace BitCoin
         mAnnouncedAdded = false;
         mAnnounceBlock = NULL;
         mAccumulatedProofOfWork = 0;
-        mBlockHashes.reserve(2048);
         mPendingAccumulatedWork.setSize(32);
         mMonitor = NULL;
     }
@@ -88,13 +87,13 @@ namespace BitCoin
                       // "Using cash DAA for block height %d", mBlockStats.height());
 
                     // Get first and last block times and accumulated work
-                    uint32_t lastTime, firstTime;
+                    int32_t lastTime, firstTime;
                     NextCash::Hash lastWork, firstWork;
 
                     mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 1, lastTime, lastWork, 3);
                     mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 145, firstTime, firstWork, 3);
 
-                    uint32_t timeSpan = lastTime - firstTime;
+                    int32_t timeSpan = lastTime - firstTime;
                     // NextCash::String timeText;
 
                     // timeText.writeFormattedTime(firstTime);
@@ -940,8 +939,13 @@ namespace BitCoin
         {
             // Check if it fits on one of the last 5000 blocks in the chain
             int chainHeight = height();
+#ifdef LOW_MEM
+            NextCash::HashList::reverse_iterator hash = mLastBlockHashes.rbegin();
+            for(int i=0;hash!=mLastBlockHashes.rend()&&i<5000;++i,++hash,--chainHeight)
+#else
             NextCash::HashList::reverse_iterator hash = mBlockHashes.rbegin();
-            for(int i=0;i<5000;++i,++hash,--chainHeight)
+            for(int i=0;hash!=mBlockHashes.rend()&&i<5000;++i,++hash,--chainHeight)
+#endif
                 if(*hash == pBlock->previousHash)
                 {
                     added = true;
@@ -1241,10 +1245,15 @@ namespace BitCoin
     {
         BlockSet &blockSet = mBlockLookup[pHash.lookup16()];
         blockSet.lock();
+#ifdef LOW_MEM
+        mLastBlockHashes.push_back(pHash);
+        while(mLastBlockHashes.size() > RECENT_BLOCK_COUNT)
+            mLastBlockHashes.erase(mLastBlockHashes.begin());
+#else
         mBlockHashes.push_back(pHash);
-        blockSet.push_back(new BlockInfo(mBlockHashes.back(), mLastFileID, mNextBlockHeight));
+#endif
+        blockSet.push_back(new BlockInfo(pHash, mLastFileID, mNextBlockHeight));
         blockSet.unlock();
-
         ++mNextBlockHeight;
         mLastBlockHash = pHash;
     }
@@ -1408,7 +1417,11 @@ namespace BitCoin
             BlockSet &blockSet = mBlockLookup[block.hash.lookup16()];
             blockSet.lock();
             blockSet.remove(block.hash);
+#ifdef LOW_MEM
+            mLastBlockHashes.erase(mLastBlockHashes.end() - 1);
+#else
             mBlockHashes.erase(mBlockHashes.end() - 1);
+#endif
             blockSet.unlock();
             --mNextBlockHeight;
         }
@@ -1554,6 +1567,9 @@ namespace BitCoin
     bool Chain::getBlockHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash, unsigned int pCount)
     {
         int hashHeight;
+#ifdef LOW_MEM
+        NextCash::Hash hash;
+#endif
 
         pHashes.clear();
 
@@ -1567,7 +1583,15 @@ namespace BitCoin
 
         while(pHashes.size() < pCount)
         {
+#ifdef LOW_MEM
+            if(!getBlockHash(hashHeight, hash))
+                break;
+            pHashes.push_back(hash);
+#else
+            if(hashHeight >= mBlockHashes.size())
+                break;
             pHashes.push_back(mBlockHashes[hashHeight]);
+#endif
             ++hashHeight;
         }
 
@@ -1578,10 +1602,22 @@ namespace BitCoin
     {
         pHashes.clear();
         mProcessMutex.lock();
+#ifdef LOW_MEM
+        unsigned int hashHeight = (unsigned int)height();
+        NextCash::Hash hash;
+        while(pHashes.size() < pCount)
+        {
+            if(!getBlockHash(hashHeight, hash))
+                break;
+            pHashes.push_back(hash);
+            hashHeight -= 500;
+        }
+#else
         int height = mBlockHashes.size();
         for(NextCash::HashList::reverse_iterator hash=mBlockHashes.rbegin();
           hash!=mBlockHashes.rend() && pHashes.size() < pCount && height > 0;hash+=500,height-=500)
             pHashes.push_back(*hash);
+#endif
         mProcessMutex.unlock();
         return true;
     }
@@ -1637,6 +1673,37 @@ namespace BitCoin
 
     bool Chain::getBlockHash(unsigned int pHeight, NextCash::Hash &pHash)
     {
+        if(pHeight > height())
+            return false;
+#ifdef LOW_MEM
+        unsigned int blocksFromTop = height() - pHeight;
+        if(blocksFromTop < mLastBlockHashes.size())
+            pHash = mLastBlockHashes[mLastBlockHashes.size() - blocksFromTop - 1];
+        else
+        {
+            // Get hash from block file
+            unsigned int fileID = pHeight / 100;
+            unsigned int offset = pHeight - (fileID * 100);
+
+            if(fileID > mLastFileID)
+                return false;
+
+            BlockFile *blockFile;
+
+            BlockFile::lock(fileID);
+            if(fileID == mLastFileID && mLastBlockFile != NULL)
+                blockFile = mLastBlockFile;
+            else
+                blockFile = new BlockFile(fileID);
+
+            bool success = blockFile->isValid() && blockFile->readHash(offset, pHash);
+
+            if(blockFile != mLastBlockFile)
+                delete blockFile;
+            BlockFile::unlock(fileID);
+            return success;
+        }
+#else
         if(pHeight >= mBlockHashes.size())
         {
             pHash.clear();
@@ -1644,6 +1711,7 @@ namespace BitCoin
         }
 
         pHash = mBlockHashes[pHeight];
+#endif
         return true;
     }
 
@@ -1746,7 +1814,7 @@ namespace BitCoin
         BlockFile *blockFile = NULL;
         Block block;
         Forks emptyForks;
-        uint32_t lastPurgeTime = getTime();
+        int32_t lastPurgeTime = getTime();
 
         while(currentHeight <= height() && !mStop)
         {
@@ -1853,7 +1921,7 @@ namespace BitCoin
         BlockFile *blockFile = NULL;
         Block block;
         Forks emptyForks;
-        uint32_t lastPurgeTime = getTime();
+        int32_t lastPurgeTime = getTime();
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Chain Update Addresses", false);
 #endif
@@ -1973,10 +2041,21 @@ namespace BitCoin
 
         mProcessMutex.lock();
 
+        for(fileID=0;;fileID++)
+        {
+            filePathName = BlockFile::fileName(fileID);
+            if (!NextCash::fileExists(filePathName))
+                break;
+        }
+
         mLastFileID = INVALID_FILE_ID;
         mNextBlockHeight = 0;
-        mLastBlockHash.setSize(32);
-        mLastBlockHash.zeroize();
+        mLastBlockHash.clear();
+
+#ifndef LOW_MEM
+        mBlockHashes.clear();
+        mBlockHashes.reserve(fileID * BlockFile::MAX_BLOCKS);
+#endif
 
         for(fileID=0;;fileID++)
         {
@@ -2010,8 +2089,10 @@ namespace BitCoin
                 {
                     BlockSet &blockSet = mBlockLookup[hash->lookup16()];
                     blockSet.lock();
+#ifndef LOW_MEM
                     mBlockHashes.push_back(*hash);
-                    blockSet.push_back(new BlockInfo(mBlockHashes.back(), fileID, mNextBlockHeight));
+#endif
+                    blockSet.push_back(new BlockInfo(*hash, fileID, mNextBlockHeight));
                     blockSet.unlock();
                     mNextBlockHeight++;
                 }
@@ -2022,6 +2103,61 @@ namespace BitCoin
                 break;
             }
         }
+
+#ifdef LOW_MEM
+        mLastBlockHashes.clear();
+        mLastBlockHashes.reserve(RECENT_BLOCK_COUNT);
+
+        // Get top block hashes
+        if(height() > 0)
+        {
+            unsigned int startHeight;
+            if(height() > RECENT_BLOCK_COUNT)
+                startHeight = (unsigned int) height() - RECENT_BLOCK_COUNT;
+            else
+                startHeight = 0;
+
+            fileID = startHeight / 100;
+            while(true)
+            {
+                BlockFile::lock(fileID);
+                filePathName = BlockFile::fileName(fileID);
+                if(NextCash::fileExists(filePathName))
+                {
+                    blockFile = new BlockFile(fileID, false);
+                    if (!blockFile->isValid())
+                    {
+                        delete blockFile;
+                        BlockFile::unlock(fileID);
+                        break;
+                    }
+
+                    if(!blockFile->readBlockHashes(hashes))
+                    {
+                        NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                                                    "Failed to read hashes from block file %08x",
+                                                    fileID);
+                        delete blockFile;
+                        BlockFile::unlock(fileID);
+                        break;
+                    }
+
+                    for(NextCash::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                        mLastBlockHashes.push_back(*hash);
+
+                    while(mLastBlockHashes.size() > RECENT_BLOCK_COUNT)
+                        mLastBlockHashes.erase(mLastBlockHashes.begin());
+                }
+                else
+                {
+                    BlockFile::unlock(fileID);
+                    break;
+                }
+                BlockFile::unlock(fileID);
+                ++fileID;
+            }
+        }
+#endif
 
         if(success)
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
@@ -2044,10 +2180,9 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   "Updating block statistics to height %d", mNextBlockHeight - 1);
 
-                mBlockStats.reserve(mNextBlockHeight);
                 fileID = (mBlockStats.height() + 1) / BlockFile::MAX_BLOCKS;
                 unsigned int offset = (mBlockStats.height() + 1) - (fileID * BlockFile::MAX_BLOCKS);
-                uint32_t lastReport = getTime();
+                int32_t lastReport = getTime();
                 for(;fileID<=mLastFileID;++fileID)
                 {
                     if(getTime() - lastReport > 10)
@@ -2119,7 +2254,7 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   "Updating forks to height %d", mNextBlockHeight - 1);
 
-                uint32_t lastReport = getTime();
+                int32_t lastReport = getTime();
                 for(int i=mForks.height()+1;i<mNextBlockHeight;++i)
                 {
                     if(getTime() - lastReport > 10)
@@ -2194,8 +2329,6 @@ namespace BitCoin
                 if(!success)
                     return false;
             }
-
-            mLastBlockHash = mBlockHashes.back();
         }
 
         return success && loadPending();

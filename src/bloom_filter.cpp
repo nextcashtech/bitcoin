@@ -24,7 +24,7 @@ namespace BitCoin
     const unsigned int BloomFilter::MAX_SIZE = 36000; // bytes
     const unsigned int BloomFilter::MAX_FUNCTIONS = 50;
 
-    BloomFilter::BloomFilter(unsigned int pElementCount, unsigned int pFlags, double pFalsePositiveRate, unsigned int pTweak)
+    BloomFilter::BloomFilter(unsigned int pElementCount, unsigned char pFlags, double pFalsePositiveRate, unsigned int pTweak)
     {
         mData = NULL;
         setup(pElementCount, pFlags, pFalsePositiveRate, pTweak);
@@ -36,23 +36,17 @@ namespace BitCoin
             delete[] mData;
     }
 
-    void BloomFilter::setup(unsigned int pElementCount, unsigned int pFlags, double pFalsePositiveRate, unsigned int pTweak)
+    void BloomFilter::setup(unsigned int pElementCount, unsigned char pFlags, double pFalsePositiveRate, unsigned int pTweak)
     {
         if(mData != NULL)
             delete[] mData;
 
-        if(pElementCount > 0)
-        {
-            mDataSize = std::min((unsigned int)(-1 / LN2SQUARED * pElementCount * log(pFalsePositiveRate)), MAX_SIZE * 8) / 8;
-            mData = new unsigned char[mDataSize];
-            mHashFunctionCount = std::min((unsigned int)(mDataSize * 8 / pElementCount * LN2), MAX_FUNCTIONS);
-        }
-        else
-        {
-            mDataSize = 0;
-            mData = NULL;
-            mHashFunctionCount = 0;
-        }
+        if(pElementCount < 20)
+            pElementCount = 20;
+
+        mDataSize = std::min((unsigned int)(-1 / LN2SQUARED * pElementCount * log(pFalsePositiveRate)), MAX_SIZE * 8) / 8;
+        mData = new unsigned char[mDataSize];
+        mHashFunctionCount = std::min((unsigned int)(mDataSize * 8 / pElementCount * LN2), MAX_FUNCTIONS);
         mTweak = pTweak;
         mFlags = pFlags;
         mIsFull = false;
@@ -167,6 +161,8 @@ namespace BitCoin
                 byteCount = pScript.readUnsignedShort();
             else if(opCode == OP_PUSHDATA4)
                 byteCount = pScript.readUnsignedInt();
+            else
+                byteCount = 0;
 
             if(byteCount > 0)
             {
@@ -234,12 +230,12 @@ namespace BitCoin
         if(contains(pTransaction.hash))
             return true;
 
-        for(std::vector<Input *>::iterator input=pTransaction.inputs.begin();input!=pTransaction.inputs.end();++input)
-            if(contains((*input)->outpoint))
+        for(std::vector<Input>::iterator input=pTransaction.inputs.begin();input!=pTransaction.inputs.end();++input)
+            if(contains(input->outpoint))
                 return true;
 
-        for(std::vector<Output *>::iterator output=pTransaction.outputs.begin();output!=pTransaction.outputs.end();++output)
-            if(containsScript((*output)->script))
+        for(std::vector<Output>::iterator output=pTransaction.outputs.begin();output!=pTransaction.outputs.end();++output)
+            if(containsScript(output->script))
                 return true;
 
         return false;
@@ -270,6 +266,8 @@ namespace BitCoin
                 byteCount = pScript.readUnsignedShort();
             else if(opCode == OP_PUSHDATA4)
                 byteCount = pScript.readUnsignedInt();
+            else
+                byteCount = 0;
 
             if(byteCount > 0)
             {

@@ -227,7 +227,7 @@ namespace BitCoin
         return result;
     }
 
-    void TransactionReference::commit(std::vector<Output *> &pOutputs)
+    void TransactionReference::commit(std::vector<Output> &pOutputs)
     {
         if(mOutputCount != pOutputs.size())
         {
@@ -237,8 +237,8 @@ namespace BitCoin
         }
 
         OutputReference *output = mOutputs;
-        for(std::vector<Output *>::iterator fullOutput=pOutputs.begin();fullOutput!=pOutputs.end();++fullOutput,++output)
-            if(output->commit(**fullOutput))
+        for(std::vector<Output>::iterator fullOutput=pOutputs.begin();fullOutput!=pOutputs.end();++fullOutput,++output)
+            if(output->commit(*fullOutput))
                 setModified();
     }
 
@@ -441,7 +441,7 @@ namespace BitCoin
             return false;
         }
 
-        std::vector<Input *>::const_iterator input;
+        std::vector<Input>::const_iterator input;
         Iterator reference;
         OutputReference *outputReference;
         bool success = true;
@@ -452,20 +452,20 @@ namespace BitCoin
         {
             // Unspend inputs
             for(input=(*transaction)->inputs.begin();input!=(*transaction)->inputs.end();++input)
-                if((*input)->outpoint.index != 0xffffffff) // Coinbase input has no outpoint transaction
+                if(input->outpoint.index != 0xffffffff) // Coinbase input has no outpoint transaction
                 {
-                    reference = get((*input)->outpoint.transactionID);
+                    reference = get(input->outpoint.transactionID);
                     found = false;
-                    while(reference && reference.hash() == (*input)->outpoint.transactionID)
+                    while(reference && reference.hash() == input->outpoint.transactionID)
                     {
                         if(!((TransactionReference *)(*reference))->markedRemove())
                         {
-                            outputReference = ((TransactionReference *)(*reference))->outputAt((*input)->outpoint.index);
+                            outputReference = ((TransactionReference *)(*reference))->outputAt(input->outpoint.index);
                             if(outputReference != NULL && outputReference->spentBlockHeight != 0)
                             {
                                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
-                                  "Reverting spend on input transaction : index %d %s", (*input)->outpoint.index,
-                                  (*input)->outpoint.transactionID.hex().text());
+                                  "Reverting spend on input transaction : index %d %s", input->outpoint.index,
+                                  input->outpoint.transactionID.hex().text());
                                 outputReference->spentBlockHeight = 0;
                                 reference->setModified();
                                 found = true;
@@ -479,8 +479,8 @@ namespace BitCoin
                     if(!found)
                     {
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                          "Input transaction not found to revert spend : index %d %s", (*input)->outpoint.index,
-                          (*input)->outpoint.transactionID.hex().text());
+                          "Input transaction not found to revert spend : index %d %s", input->outpoint.index,
+                          input->outpoint.transactionID.hex().text());
                         success = false;
                         break;
                     }

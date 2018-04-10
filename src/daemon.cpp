@@ -25,23 +25,28 @@
 
 namespace BitCoin
 {
-    Daemon *Daemon::sInstance = 0;
+    Daemon *Daemon::sInstance = NULL;
 
     Daemon &Daemon::instance()
     {
-        if(!sInstance)
+        if(sInstance == NULL)
         {
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Creating instance");
             sInstance = new Daemon;
             std::atexit(destroy);
         }
 
-        return *Daemon::sInstance;
+        return *sInstance;
     }
 
     void Daemon::destroy()
     {
-        delete Daemon::sInstance;
-        Daemon::sInstance = 0;
+        if(sInstance != NULL)
+        {
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Destroying instance");
+            delete sInstance;
+        }
+        sInstance = NULL;
     }
 
     Daemon::Daemon() : mInfo(Info::instance()), mNodeLock("Nodes"), mRequestsLock("Requests")
@@ -70,11 +75,11 @@ namespace BitCoin
 
     Daemon::~Daemon()
     {
-        if(isRunning())
-            stop();
+        if(isRunning() && !mStopping)
+            requestStop();
 
-        saveMonitor();
-        saveKeyStore();
+        while(isRunning())
+            NextCash::Thread::sleep(100);
     }
 
     unsigned int Daemon::peerCount()
@@ -101,7 +106,13 @@ namespace BitCoin
             return CONNECTING_TO_PEERS;
 
         if(mChain.isInSync())
-            return SYNCHRONIZED;
+        {
+            unsigned int monitorHeight = mMonitor.height();
+            if(monitorHeight > 0 && monitorHeight < mChain.height())
+                return FINDING_TRANSACTIONS;
+            else
+                return SYNCHRONIZED;
+        }
         else
             return SYNCHRONIZING;
     }
@@ -150,13 +161,7 @@ namespace BitCoin
 
         if(!mChain.load())
         {
-            if(mStopRequested || mStopping)
-            {
-                mLoading = false;
-                return false;
-            }
             mLoading = false;
-            requestStop();
             return false;
         }
 
@@ -354,12 +359,6 @@ namespace BitCoin
         {
             if(mStopRequested)
                 stop();
-            else if(mFinishMode == FINISH_ON_SYNC && mChain.isInSync())
-            {
-                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                                   "Stopping because of finish on sync");
-                stop();
-            }
             else
                 NextCash::Thread::sleep(1000);
         }
@@ -1235,6 +1234,18 @@ namespace BitCoin
 
         while(!daemon.mStopping)
         {
+            if(daemon.mFinishMode == FINISH_ON_SYNC && daemon.mChain.isInSync() &&
+              daemon.mMonitor.height() == daemon.mChain.height())
+            {
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Stopping because of finish on sync");
+                daemon.requestStop();
+                break;
+            }
+
+            if(daemon.mStopping)
+                break;
+
             time = getTime();
             if(time - lastStatReportTime > 180)
             {
@@ -1292,6 +1303,17 @@ namespace BitCoin
                 lastInfoSaveTime = time;
                 daemon.mInfo.save();
                 daemon.saveMonitor();
+                daemon.mChain.blockStats().save();
+                daemon.mChain.forks().save();
+            }
+
+            if(daemon.mStopping)
+                break;
+
+            if(daemon.mChain.blockStats().cacheSize() > 10000)
+            {
+                daemon.mChain.blockStats().save();
+                daemon.mChain.forks().save();
             }
 
             if(daemon.mStopping)

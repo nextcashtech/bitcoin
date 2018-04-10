@@ -31,7 +31,7 @@ namespace BitCoin
     class BlockInfo
     {
     public:
-        BlockInfo(const NextCash::Hash &pHash, unsigned int pFileID, unsigned int pHeight)
+        BlockInfo(const NextCash::Hash &pHash, unsigned int pFileID, int32_t pHeight)
         {
             hash   = pHash;
             fileID = pFileID;
@@ -39,8 +39,8 @@ namespace BitCoin
         }
 
         NextCash::Hash hash;
-        unsigned int  fileID;
-        unsigned int  height;
+        unsigned int   fileID;
+        int32_t        height;
 
     private:
         BlockInfo(BlockInfo &pCopy);
@@ -191,12 +191,12 @@ namespace BitCoin
         unsigned int pendingChainHeight() const { return mNextBlockHeight - 1 + mPendingBlocks.size(); }
         const NextCash::Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
-        const NextCash::Hash &accumulatedWork() { return mBlockStats.accumulatedWork(mBlockStats.height()); }
+        const NextCash::Hash accumulatedWork() { return mBlockStats.accumulatedWork(mBlockStats.height()); }
         const NextCash::Hash &pendingAccumulatedWork() { return mPendingAccumulatedWork; }
 
         TransactionOutputPool &outputs() { return mOutputs; }
-        const BlockStats &blockStats() const { return mBlockStats; }
-        const Forks &forks() const { return mForks; }
+        BlockStats &blockStats() { return mBlockStats; }
+        Forks &forks() { return mForks; }
         MemPool &memPool() { return mMemPool; }
         Addresses &addresses() { return mAddresses; }
 
@@ -304,7 +304,13 @@ namespace BitCoin
         TransactionOutputPool mOutputs;
         Addresses mAddresses;
         Info &mInfo;
+#ifndef LOW_MEM
         NextCash::HashList mBlockHashes;
+#else
+        NextCash::HashList mLastBlockHashes;
+        static const int RECENT_BLOCK_COUNT = 5000;
+#endif
+
         BlockSet mBlockLookup[0x10000];
 
         // Block headers for blocks not yet on chain
@@ -312,7 +318,7 @@ namespace BitCoin
         std::list<PendingBlockData *> mPendingBlocks;
         NextCash::Hash mLastPendingHash, mPendingAccumulatedWork;
         unsigned int mPendingSize, mPendingBlockCount, mLastFullPendingOffset;
-        uint32_t mBlockProcessStartTime;
+        int32_t mBlockProcessStartTime;
 
         // Save pending data to the file system
         bool savePending();

@@ -185,7 +185,7 @@ namespace BitCoin
         void clearOutputs();
 
         // Update block file offsets in outputs
-        void commit(std::vector<Output *> &pOutputs);
+        void commit(std::vector<Output> &pOutputs);
 
         // Unmark any outputs spent above a specified block height
         bool revert(const NextCash::Hash &pHash, unsigned int pBlockHeight);

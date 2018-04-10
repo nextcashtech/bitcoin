@@ -1055,7 +1055,7 @@ namespace BitCoin
         //  pBuffer->readHexString(pBuffer->length()).text());
     }
 
-    bool ScriptInterpreter::process(NextCash::Buffer &pScript, int32_t pBlockVersion, const Forks &pForks)
+    bool ScriptInterpreter::process(NextCash::Buffer &pScript, int32_t pBlockVersion, Forks &pForks)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Interpreter Process");

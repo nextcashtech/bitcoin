@@ -105,7 +105,7 @@ namespace BitCoin
         return address.read(pStream);
     }
 
-    Info *Info::sInstance = 0;
+    Info *Info::sInstance = NULL;
     NextCash::String Info::sPath;
 
     void Info::setPath(const char *pPath)
@@ -115,24 +115,34 @@ namespace BitCoin
 
     Info &Info::instance()
     {
-        if(!sInstance)
+        if(sInstance == NULL)
         {
             sInstance = new Info;
             std::atexit(destroy);
         }
 
-        return *Info::sInstance;
+        return *sInstance;
     }
 
     void Info::destroy()
     {
-        delete Info::sInstance;
-        Info::sInstance = 0;
+        if(sInstance != NULL)
+            delete sInstance;
+        sInstance = NULL;
     }
 
     Info::Info() : mPeerLock("Peer")
     {
-        ip = NULL;
+        std::memset(ip, 0, INET6_ADDRLEN);
+
+        // Unknown IP Address
+        ip[10] = 255;
+        ip[11] = 255;
+        ip[12] = 127;
+        ip[13] = 0;
+        ip[14] = 0;
+        ip[15] = 1;
+
         port = 8333;
 #ifdef ANDROID
         spvMode = true;
@@ -168,9 +178,6 @@ namespace BitCoin
     {
         writeDataFile();
         writePeersFile();
-
-        if(ip != 0)
-            delete[] ip;
 
         mPeerLock.writeLock("Destroy");
         for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
@@ -220,7 +227,11 @@ namespace BitCoin
                 minFee = 100000;
         }
         else if(std::strcmp(name, "ip") == 0)
-            ip = NextCash::Network::parseIPv6(value);
+        {
+            uint8_t *newIP = NextCash::Network::parseIPv6(value);
+            std::memcpy(ip, newIP, INET6_ADDRLEN);
+            delete newIP;
+        }
         else if(std::strcmp(name, "port") == 0)
             port = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "pending_size") == 0)

@@ -59,14 +59,14 @@ namespace BitCoin
                 std::memcpy(mData, pCopy.mData, mDataSize);
             }
         }
-        BloomFilter(unsigned int pElementCount, unsigned int pFlags = UPDATE_ALL,
-          double pFalsePositiveRate = 0.0001, unsigned int pTweak = NextCash::Math::randomInt());
+        BloomFilter(unsigned int pElementCount, unsigned char pFlags = UPDATE_NONE,
+          double pFalsePositiveRate = 0.00001, unsigned int pTweak = NextCash::Math::randomInt());
         ~BloomFilter();
 
         const BloomFilter &operator = (const BloomFilter &pRight);
 
-        void setup(unsigned int pElementCount, unsigned int pFlags = UPDATE_ALL,
-          double pFalsePositiveRate = 0.0001, unsigned int pTweak = NextCash::Math::randomInt());
+        void setup(unsigned int pElementCount, unsigned char pFlags = UPDATE_NONE,
+          double pFalsePositiveRate = 0.00001, unsigned int pTweak = NextCash::Math::randomInt());
 
         bool isEmpty() const { return mIsEmpty; }
         bool isFull() const { return mIsFull; }

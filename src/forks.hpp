@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                            *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@nextcash.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                   *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -9,6 +9,7 @@
 #define BITCOIN_FORKS_HPP
 
 #include "string.hpp"
+#include "file_stream.hpp"
 #include "hash.hpp"
 #include "log.hpp"
 #include "stream.hpp"
@@ -26,9 +27,10 @@ namespace BitCoin
     class BlockStat
     {
     public:
+
         BlockStat() : accumulatedWork(32) {}
-        BlockStat(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits, const NextCash::Hash &pAccumulatedWork) :
-          accumulatedWork(pAccumulatedWork)
+        BlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits,
+          const NextCash::Hash &pAccumulatedWork) : accumulatedWork(pAccumulatedWork)
           { version = pVersion; time = pTime; targetBits = pTargetBits; }
 
         void write(NextCash::OutputStream *pStream) const
@@ -44,74 +46,126 @@ namespace BitCoin
 
             pStream->read(this, 12);
 
-            if(!accumulatedWork.read(pStream))
-                return false;
-            return true;
+            return !accumulatedWork.read(pStream);
         }
 
-        bool operator <(const BlockStat &pRight) const { return time < pRight.time; }
+        bool operator < (const BlockStat &pRight) const { return time < pRight.time; }
 
         static const unsigned int SIZE = 44;
 
-        int32_t       version;
-        uint32_t      time;
-        uint32_t      targetBits;
+        int32_t        version;
+        int32_t        time;
+        uint32_t       targetBits;
         NextCash::Hash accumulatedWork;
     };
 
-    class BlockStats : public std::vector<BlockStat *>
+#ifdef LOW_MEM
+    class BlockStats
+#else
+    class BlockStats : private std::vector<BlockStat *>
+#endif
     {
     public:
 
-        BlockStats() { mIsValid = false; }
+#ifdef LOW_MEM
+        BlockStats() : mMutex("BlockStats")
+        {
+            mFileStream = NULL;
+            mCachedOffset = 0;
+            mIsValid = false;
+            mIsModified = false;
+        }
+#else
+        BlockStats() { mIsValid = false; mIsModified = false; }
+#endif
         ~BlockStats();
 
-        int height() const { return size() - 1; }
+#ifdef LOW_MEM
+        int height() const { return (int)(mCachedOffset + mCached.size() - 1); }
+        int cacheSize() const { return mCached.size(); }
+#else
+        int height() const { return (int)size() - 1; }
+#endif
 
-        uint32_t time(unsigned int pBlockHeight) const;
-        uint32_t targetBits(unsigned int pBlockHeight) const;
-        const NextCash::Hash &accumulatedWork(unsigned int pBlockHeight) const;
+        int32_t version(unsigned int pBlockHeight);
+        int32_t time(unsigned int pBlockHeight, bool pLocked = false);
+        uint32_t targetBits(unsigned int pBlockHeight);
+        const NextCash::Hash accumulatedWork(unsigned int pBlockHeight);
 
         // Note : Call after block has been added to stats
-        uint32_t getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount = 11) const;
+        int32_t getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount = 11);
 
-        void getMedianPastTimeAndWork(unsigned int pBlockHeight, uint32_t &pTime, NextCash::Hash &pAccumulatedWork,
-          unsigned int pMedianCount = 3) const;
+        void getMedianPastTimeAndWork(unsigned int pBlockHeight, int32_t &pTime,
+          NextCash::Hash &pAccumulatedWork, unsigned int pMedianCount = 3);
 
-        void add(int32_t pVersion, uint32_t pTime, uint32_t pTargetBits)
+        void add(int32_t pVersion, int32_t pTime, uint32_t pTargetBits)
         {
             NextCash::Hash work(32);
             NextCash::Hash target(32);
             target.setDifficulty(pTargetBits);
             target.getWork(work);
-            work += accumulatedWork(height());
+            work += accumulatedWork((unsigned int)height());
             // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
               // "Block work at height %d : %s", size(), work.hex().text());
+
+            mMutex.lock();
+            mIsModified = true;
+#ifdef LOW_MEM
+            mCached.push_back(new BlockStat(pVersion, pTime, pTargetBits, work));
+#else
             push_back(new BlockStat(pVersion, pTime, pTargetBits, work));
+#endif
+            mMutex.unlock();
         }
 
         void revert(unsigned int pBlockHeight)
         {
-            if(size() <= pBlockHeight + 1)
-                return;
+            mMutex.lock();
 
-            while(size() > pBlockHeight + 1)
+            if(height() <= pBlockHeight)
             {
+                mMutex.unlock();
+                return;
+            }
+
+            while(height() > pBlockHeight)
+            {
+                mIsModified = true;
+#ifdef LOW_MEM
+                if(mCached.size() > 0)
+                {
+                    delete mCached.back();
+                    mCached.pop_back();
+                }
+                else
+                    --mCachedOffset;
+#else
                 delete back();
                 pop_back();
+#endif
             }
+
+            mMutex.unlock();
         }
 
-        bool load();
+        bool load(bool pLocked = false);
         bool save();
 
     private:
         bool mIsValid;
+        NextCash::Mutex mMutex;
+        bool mIsModified;
+#ifdef LOW_MEM
+        NextCash::FileInputStream *mFileStream;
+        NextCash::stream_size mCachedOffset;
+        std::vector<BlockStat *> mCached;
+#endif
     };
 
     class SoftFork
     {
     public:
+
         enum ID
         {
             // These all share the same start time, timeout, and bit, so they will share one ID
@@ -156,7 +210,7 @@ namespace BitCoin
             lockedHeight = NOT_LOCKED;
         }
 
-        void revert(const BlockStats &pBlockStats, int pBlockHeight);
+        void revert(BlockStats &pBlockStats, int pBlockHeight);
 
         // Reset to initial state
         void reset()
@@ -201,7 +255,7 @@ namespace BitCoin
         int32_t enabledVersion() const { return mEnabledVersion; }
         int32_t requiredVersion() const { return mRequiredVersion; }
 
-        SoftFork::State softForkState(unsigned int pID) const;
+        SoftFork::State softForkState(unsigned int pID);
 
         // BitCoin Cash
 #ifdef DISABLE_CASH
@@ -216,9 +270,9 @@ namespace BitCoin
         int cashForkBlockHeight() const { return mCashForkBlockHeight; }
         unsigned int blockMaxSize() const { return mBlockMaxSize; }
 
-        void process(const BlockStats &pBlockStats, int pBlockHeight);
+        void process(BlockStats &pBlockStats, int pBlockHeight);
 
-        void revert(const BlockStats &pBlockStats, int pBlockHeight);
+        void revert(BlockStats &pBlockStats, int pBlockHeight);
 
         // Reset all soft forks to initial state
         void reset();
@@ -229,7 +283,7 @@ namespace BitCoin
 
     private:
 
-        void add(SoftFork *pSoftFork);
+        void add(SoftFork *pSoftFork, bool pLocked = false);
 
         int mHeight;
 
@@ -247,6 +301,8 @@ namespace BitCoin
 
         unsigned int mThreshHold;
         bool mModified;
+
+        NextCash::Mutex mMutex;
 
     };
 }

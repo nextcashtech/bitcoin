@@ -2082,6 +2082,7 @@ namespace BitCoin
                             chain->updateGap(20);
 
                         push_back(newKey);
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "Added ");
                         newKey = new Key();
                     }
                 }

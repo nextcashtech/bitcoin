@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                            *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@nextcash.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                   *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -23,32 +23,90 @@ namespace BitCoin
 {
     BlockStats::~BlockStats()
     {
+        mMutex.lock();
+#ifdef LOW_MEM
+        for(std::vector<BlockStat *>::iterator stat=mCached.begin();stat!=mCached.end();++stat)
+            delete *stat;
+        if(mFileStream != NULL)
+            delete mFileStream;
+#else
         for(iterator stat=begin();stat!=end();++stat)
             delete *stat;
+#endif
+        mMutex.unlock();
     }
 
-    bool BlockStats::load()
+    bool BlockStats::load(bool pLocked)
     {
+        if(!pLocked)
+            mMutex.lock();
+
+#ifdef LOW_MEM
+        if(mFileStream != NULL)
+            delete mFileStream;
+        mFileStream = NULL;
+        mCachedOffset = 0;
+        for(std::vector<BlockStat *>::iterator stat=mCached.begin();stat!=mCached.end();++stat)
+            delete *stat;
+        mCached.clear();
+#else
+        for(std::vector<BlockStat *>::iterator stat=begin();stat!=end();++stat)
+            delete *stat;
+        clear();
+#endif
+
         NextCash::String filePathName = Info::instance().path();
+        BlockStat *newStat;
         filePathName.pathAppend("block_stats");
         if(!NextCash::fileExists(filePathName))
         {
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
               "No block stats file to load");
             mIsValid = true;
+            if(!pLocked)
+                mMutex.unlock();
             return true;
         }
 
+#ifdef LOW_MEM
+        mFileStream = new NextCash::FileInputStream(filePathName);
+        if(!mFileStream->isValid())
+        {
+            delete mFileStream;
+            mFileStream = NULL;
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
+                               "Failed to open block stats file to load");
+            mIsValid = false;
+            if(!pLocked)
+                mMutex.unlock();
+            return false;
+        }
+
+        // Cache 2500 block stats
+        if((mFileStream->length() / BlockStat::SIZE) > 2500)
+            mCachedOffset = (mFileStream->length() / BlockStat::SIZE) - 2500;
+        else
+            mCachedOffset = 0;
+        mFileStream->setReadOffset(mCachedOffset * BlockStat::SIZE);
+        mCached.reserve(2500);
+        while(mFileStream->remaining() > 0)
+        {
+            newStat = new BlockStat();
+            newStat->read(mFileStream);
+            mCached.push_back(newStat);
+        }
+#else
         NextCash::FileInputStream file(filePathName);
         if(!file.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
-              "Failed to open block stats file to load");
+                               "Failed to open block stats file to load");
             mIsValid = false;
+            if(!pLocked)
+                mMutex.unlock();
             return false;
         }
 
-        BlockStat *newStat;
         reserve(file.length() / BlockStat::SIZE);
         while(file.remaining() > 0)
         {
@@ -56,29 +114,87 @@ namespace BitCoin
             newStat->read(&file);
             push_back(newStat);
         }
+#endif
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
           "Loaded block statistics at height %d", height());
         mIsValid = true;
+        mIsModified = false;
+        if(!pLocked)
+            mMutex.unlock();
         return true;
     }
 
     bool BlockStats::save()
     {
+        mMutex.lock();
+
+        if(!mIsModified)
+        {
+            mMutex.unlock();
+            return true;
+        }
+
         if(!mIsValid)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
               "Not saving block stats. Not valid.");
+            mMutex.unlock();
             return false;
         }
 
         NextCash::String filePathName = Info::instance().path();
         filePathName.pathAppend("block_stats");
+
+#ifdef LOW_MEM
+        int previousHeight = height();
+        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(filePathName + ".temp", true);
+        if(!outputFile->isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
+                               "Failed to open temp block stats file to save");
+            mMutex.unlock();
+            return false;
+        }
+
+        // Write uncached data to new file
+        if(mFileStream != NULL && mCachedOffset > 0)
+        {
+            mFileStream->setReadOffset(0);
+            outputFile->writeStream(mFileStream, mCachedOffset * BlockStat::SIZE);
+            delete mFileStream;
+            mFileStream = NULL;
+        }
+
+        // Write cache to file
+        for(std::vector<BlockStat *>::iterator stat=mCached.begin();stat!=mCached.end();++stat)
+        {
+            (*stat)->write(outputFile);
+            delete *stat;
+        }
+        mCachedOffset = 0;
+        mCached.clear();
+        delete outputFile;
+
+        // Rename new file to original name
+        NextCash::removeFile(filePathName);
+        NextCash::renameFile(filePathName + ".temp", filePathName);
+
+        // Reload
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+          "Saved block statistics at height %d", previousHeight);
+        bool success = load(true);
+        if(success)
+            mIsModified = false;
+        mMutex.unlock();
+        return success;
+#else
         NextCash::FileOutputStream file(filePathName, true);
         if(!file.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
-              "Failed to open block stats file to save");
+                               "Failed to open block stats file to save");
+            mMutex.unlock();
             return false;
         }
 
@@ -87,37 +203,191 @@ namespace BitCoin
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
           "Saved block statistics at height %d", height());
+        mIsModified = false;
+        mMutex.unlock();
         return true;
+#endif
     }
 
-    uint32_t BlockStats::time(unsigned int pBlockHeight) const
+    int32_t BlockStats::version(unsigned int pBlockHeight)
     {
-        if(pBlockHeight  >= size())
+        mMutex.lock();
+
+#ifdef LOW_MEM
+        if(pBlockHeight >= mCachedOffset + mCached.size())
+        {
+            mMutex.unlock();
             return 0;
-        return at(pBlockHeight)->time;
-    }
+        }
 
-    uint32_t BlockStats::targetBits(unsigned int pBlockHeight) const
-    {
+        // Read from cache if possible
+        if(pBlockHeight >= mCachedOffset)
+        {
+            int32_t result = mCached.at(pBlockHeight - mCachedOffset)->version;
+            mMutex.unlock();
+            return result;
+        }
+
+        // Read from file
+        mFileStream->setReadOffset(pBlockHeight * BlockStat::SIZE);
+        BlockStat stat;
+        stat.read(mFileStream);
+        mMutex.unlock();
+        return stat.version;
+#else
         if(pBlockHeight >= size())
+        {
+            mMutex.unlock();
             return 0;
-        return at(pBlockHeight)->targetBits;
+        }
+        int32_t result = at(pBlockHeight)->version;
+        mMutex.unlock();
+        return result;
+#endif
     }
 
-    const NextCash::Hash &BlockStats::accumulatedWork(unsigned int pBlockHeight) const
+    int32_t BlockStats::time(unsigned int pBlockHeight, bool pLocked)
+    {
+        if(!pLocked)
+            mMutex.lock();
+
+#ifdef LOW_MEM
+        if(pBlockHeight >= mCachedOffset + mCached.size())
+        {
+            if(!pLocked)
+                mMutex.unlock();
+            return 0;
+        }
+
+        // Read from cache if possible
+        if(pBlockHeight >= mCachedOffset)
+        {
+            int32_t result = mCached.at(pBlockHeight - mCachedOffset)->time;
+            if(!pLocked)
+                mMutex.unlock();
+            return result;
+        }
+
+        // Read from file
+        mFileStream->setReadOffset(pBlockHeight * BlockStat::SIZE);
+        BlockStat stat;
+        stat.read(mFileStream);
+        if(!pLocked)
+            mMutex.unlock();
+        return stat.time;
+#else
+        if(pBlockHeight >= size())
+        {
+            if(!pLocked)
+                mMutex.unlock();
+            return 0;
+        }
+        int32_t result = at(pBlockHeight)->time;
+        if(!pLocked)
+            mMutex.unlock();
+        return result;
+#endif
+    }
+
+    uint32_t BlockStats::targetBits(unsigned int pBlockHeight)
+    {
+        mMutex.lock();
+
+#ifdef LOW_MEM
+        if(pBlockHeight >= mCachedOffset + mCached.size())
+        {
+            mMutex.unlock();
+            return 0;
+        }
+
+        // Read from cache if possible
+        if(pBlockHeight >= mCachedOffset)
+        {
+            uint32_t result = mCached.at(pBlockHeight - mCachedOffset)->targetBits;
+            mMutex.unlock();
+            return result;
+        }
+
+        // Read from file
+        mFileStream->setReadOffset(pBlockHeight * BlockStat::SIZE);
+        BlockStat stat;
+        stat.read(mFileStream);
+        mMutex.unlock();
+        return stat.targetBits;
+#else
+        if(pBlockHeight >= size())
+        {
+            mMutex.unlock();
+            return 0;
+        }
+        uint32_t result = at(pBlockHeight)->targetBits;
+        mMutex.unlock();
+        return result;
+#endif
+    }
+
+    const NextCash::Hash BlockStats::accumulatedWork(unsigned int pBlockHeight)
     {
         static NextCash::Hash zeroHash(32);
-        if(pBlockHeight >= size())
+
+        mMutex.lock();
+
+#ifdef LOW_MEM
+        if(pBlockHeight >= mCachedOffset + mCached.size())
+        {
+            mMutex.unlock();
             return zeroHash;
-        return at(pBlockHeight)->accumulatedWork;
+        }
+
+        // Read from cache if possible
+        if(pBlockHeight >= mCachedOffset)
+        {
+            NextCash::Hash result = mCached.at(pBlockHeight - mCachedOffset)->accumulatedWork;
+            mMutex.unlock();
+            return result;
+        }
+
+        // Read from file
+        mFileStream->setReadOffset(pBlockHeight * BlockStat::SIZE);
+        BlockStat stat;
+        stat.read(mFileStream);
+        mMutex.unlock();
+        return stat.accumulatedWork;
+#else
+        if(pBlockHeight >= size())
+        {
+            mMutex.unlock();
+            return zeroHash;
+        }
+        NextCash::Hash result = at(pBlockHeight)->accumulatedWork;
+        mMutex.unlock();
+        return result;
+#endif
     }
 
-    uint32_t BlockStats::getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount) const
+    int32_t BlockStats::getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount)
     {
-        if(pBlockHeight > size())
-            return 0;
+        std::vector<int32_t> times;
 
-        std::vector<uint32_t> times;
+        mMutex.lock();
+
+#ifdef LOW_MEM
+        if(pBlockHeight >= mCachedOffset + mCached.size())
+        {
+            mMutex.unlock();
+            return 0;
+        }
+
+        for(unsigned int i=pBlockHeight-pMedianCount;i<pBlockHeight;++i)
+            times.push_back(time(i, true));
+#else
+        if(pBlockHeight > size())
+        {
+            if(!pLocked)
+                mMutex.unlock();
+            return 0;
+        }
+
         const_iterator stat = begin() + (pBlockHeight - pMedianCount);
         const_iterator endStat = begin() + pBlockHeight;
         while(stat < endStat)
@@ -125,6 +395,9 @@ namespace BitCoin
             times.push_back((*stat)->time);
             ++stat;
         }
+#endif
+
+        mMutex.unlock();
 
         // Sort times
         std::sort(times.begin(), times.end());
@@ -138,13 +411,33 @@ namespace BitCoin
         return *pLeft < *pRight;
     }
 
-    void BlockStats::getMedianPastTimeAndWork(unsigned int pBlockHeight, uint32_t &pTime, NextCash::Hash &pAccumulatedWork,
-      unsigned int pMedianCount) const
+    void BlockStats::getMedianPastTimeAndWork(unsigned int pBlockHeight, int32_t &pTime,
+      NextCash::Hash &pAccumulatedWork, unsigned int pMedianCount)
     {
-        std::vector<BlockStat *> values;
+        std::vector<BlockStat *> values, toDelete;
+        unsigned int statHeight = pBlockHeight - pMedianCount + 1;
+
+        mMutex.lock();
+
+#ifdef LOW_MEM
+        BlockStat *newStat;
+        for(unsigned int i=pBlockHeight-pMedianCount+1;i<pBlockHeight+1;++i)
+        {
+            if(i >= mCachedOffset)
+                values.push_back(mCached[i-mCachedOffset]);
+            else
+            {
+                newStat = new BlockStat();
+                mFileStream->setReadOffset(i * BlockStat::SIZE);
+                newStat->read(mFileStream);
+                toDelete.push_back(newStat);
+                values.push_back(newStat);
+            }
+            ++statHeight;
+        }
+#else
         const_iterator stat = begin() + (pBlockHeight - pMedianCount + 1);
         const_iterator endStat = begin() + (pBlockHeight + 1);
-        unsigned int statHeight = pBlockHeight - pMedianCount + 1;
         while(stat < endStat)
         {
             // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
@@ -154,6 +447,9 @@ namespace BitCoin
             ++stat;
             ++statHeight;
         }
+#endif
+
+        mMutex.unlock();
 
         // Sort
         std::sort(values.begin(), values.end(), blockStatLessThan);
@@ -166,6 +462,11 @@ namespace BitCoin
         pAccumulatedWork = values[pMedianCount / 2]->accumulatedWork;
         // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
           // "Using median calculate time %d, work %s", pTime, pAccumulatedWork.hex().text());
+
+#ifdef LOW_MEM
+        for(std::vector<BlockStat *>::iterator stat=toDelete.begin();stat!=toDelete.end();++stat)
+            delete *stat;
+#endif
     }
 
     void SoftFork::write(NextCash::OutputStream *pStream)
@@ -260,7 +561,7 @@ namespace BitCoin
         return result;
     }
 
-    void SoftFork::revert(const BlockStats &pBlockStats, int pBlockHeight)
+    void SoftFork::revert(BlockStats &pBlockStats, int pBlockHeight)
     {
         switch(state)
         {
@@ -335,7 +636,7 @@ namespace BitCoin
         }
     }
 
-    Forks::Forks()
+    Forks::Forks() : mMutex("Forks")
     {
         mHeight = 0;
         mEnabledVersion = 1;
@@ -373,31 +674,43 @@ namespace BitCoin
 
     Forks::~Forks()
     {
+        mMutex.lock();
         for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             delete *softFork;
+        mMutex.unlock();
     }
 
-    SoftFork::State Forks::softForkState(unsigned int pID) const
+    SoftFork::State Forks::softForkState(unsigned int pID)
     {
+        SoftFork::State result = SoftFork::UNDEFINED;
+        mMutex.lock();
+
         for(std::vector<SoftFork *>::const_iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             if((*softFork)->id == pID)
-                return (*softFork)->state;
+            {
+                result = (*softFork)->state;
+                break;
+            }
 
-        return SoftFork::UNDEFINED;
+        mMutex.unlock();
+        return result;
     }
 
-    void Forks::process(const BlockStats &pBlockStats, int pBlockHeight)
+    void Forks::process(BlockStats &pBlockStats, int pBlockHeight)
     {
+        mMutex.lock();
+
 #ifdef PROFILER_ON
         NextCash::Profiler outputsProfiler("Forks Process");
 #endif
         if(pBlockHeight < 0)
+        {
+            mMutex.unlock();
             return;
+        }
 
         unsigned int offset;
-        BlockStats::const_reverse_iterator topStat = pBlockStats.rbegin();
-
-        topStat += (pBlockStats.height() - pBlockHeight);
+        int topStatHeight = pBlockHeight;
 
         if(mRequiredVersion < 4)
         {
@@ -416,9 +729,9 @@ namespace BitCoin
             int version3OrHigherCount = 0;
             int version2OrHigherCount = 0;
             offset = 0;
-            for(BlockStats::const_reverse_iterator stat=topStat;stat!=pBlockStats.rend()&&offset<totalCount;++stat,++offset)
+            for(int height=topStatHeight;height>=0&&offset<totalCount;--height,++offset)
             {
-                switch((*stat)->version)
+                switch(pBlockStats.version(height))
                 {
                 default:
                 case 4:
@@ -524,7 +837,8 @@ namespace BitCoin
               "Updating for block height %d", pBlockHeight);
 
             uint32_t compositeValue = 0;
-            uint32_t medianTimePast = pBlockStats.getMedianPastTime(pBlockHeight);
+            int32_t version;
+            int32_t medianTimePast = pBlockStats.getMedianPastTime(pBlockHeight);
             for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             {
                 compositeValue |= (0x01 << (*softFork)->bit);
@@ -560,9 +874,10 @@ namespace BitCoin
 
                         unsigned int support = 0;
                         offset = 0;
-                        for(BlockStats::const_reverse_iterator stat=topStat;stat!=pBlockStats.rend()&&offset<RETARGET_PERIOD;++stat,++offset)
+                        for(int height=topStatHeight;height>=0&&offset<RETARGET_PERIOD;--height,++offset)
                         {
-                            if(((*stat)->version & 0xE0000000) == 0x20000000 && ((*stat)->version >> (*softFork)->bit) & 0x01)
+                            version = pBlockStats.version(height);
+                            if((version & 0xE0000000) == 0x20000000 && (version >> (*softFork)->bit) & 0x01)
                                 ++support;
                         }
 
@@ -604,14 +919,15 @@ namespace BitCoin
                 unknownSupport[i] = 0;
 
             offset = 0;
-            for(BlockStats::const_reverse_iterator stat=topStat;stat!=pBlockStats.rend()&&offset<RETARGET_PERIOD;++stat,++offset)
+            for(int height=topStatHeight;height>=0&&offset<RETARGET_PERIOD;--height,++offset)
             {
-                if(((*stat)->version & 0xE0000000) != 0x20000000)
+                version = pBlockStats.version(height);
+                if((version & 0xE0000000) != 0x20000000)
                     continue;
-                if(((*stat)->version | compositeValue) != compositeValue)
+                if((version | compositeValue) != compositeValue)
                 {
                     for(i=0;i<29;i++)
-                        if(((*stat)->version & (0x01 << i)) && !(compositeValue & (0x01 << i)))
+                        if((version & (0x01 << i)) && !(compositeValue & (0x01 << i)))
                             ++unknownSupport[i]; // Bit set in version and not in composite
                 }
             }
@@ -633,10 +949,14 @@ namespace BitCoin
             mCashForkBlockHeight = mHeight - 1;
             mBlockMaxSize = CASH_START_MAX_BLOCK_SIZE;
         }
+
+        mMutex.unlock();
     }
 
-    void Forks::revert(const BlockStats &pBlockStats, int pBlockHeight)
+    void Forks::revert(BlockStats &pBlockStats, int pBlockHeight)
     {
+        mMutex.lock();
+
         // Back out any version enabled/required heights below new block height
         for(unsigned int i=0;i<3;++i)
         {
@@ -676,10 +996,13 @@ namespace BitCoin
 
         mHeight = pBlockHeight - 1;
         mModified = true;
+        mMutex.unlock();
     }
 
     void Forks::reset()
     {
+        mMutex.lock();
+
         mEnabledVersion = 0;
         mRequiredVersion = 0;
         for(unsigned int i=0;i<3;i++)
@@ -691,10 +1014,15 @@ namespace BitCoin
         mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             (*softFork)->reset();
+
+        mMutex.unlock();
     }
 
-    void Forks::add(SoftFork *pSoftFork)
+    void Forks::add(SoftFork *pSoftFork, bool pLocked)
     {
+        if(!pLocked)
+            mMutex.lock();
+
         // Overwrite if it is already in here
         bool found = false;
         for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
@@ -708,10 +1036,15 @@ namespace BitCoin
 
         if(!found)
             mForks.push_back(pSoftFork);
+
+        if(!pLocked)
+            mMutex.unlock();
     }
 
     bool Forks::load(const char *pFileName)
     {
+        mMutex.lock();
+
         NextCash::String filePathName = Info::instance().path();
         filePathName.pathAppend(pFileName);
 
@@ -719,6 +1052,7 @@ namespace BitCoin
         {
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
               "No soft forks file to load");
+            mMutex.unlock();
             return true;
         }
 
@@ -728,6 +1062,7 @@ namespace BitCoin
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
               "Failed to open soft forks file");
+            mMutex.unlock();
             return false;
         }
 
@@ -762,7 +1097,7 @@ namespace BitCoin
           "Block versions %d/%d enabled/required", mEnabledVersion, mRequiredVersion);
 
         // Read cash fork block height and max size
-        mCashForkBlockHeight = file.readUnsignedInt();
+        mCashForkBlockHeight = file.readInt();
         mBlockMaxSize = file.readUnsignedInt();
 
         if(mCashForkBlockHeight != -1)
@@ -778,9 +1113,10 @@ namespace BitCoin
                 delete newSoftFork;
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
                   "Failed to read soft fork");
+                mMutex.unlock();
                 return false;
             }
-            add(newSoftFork);
+            add(newSoftFork, true);
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
               "Loaded soft fork %s : %s", newSoftFork->name.text(), newSoftFork->description().text());
         }
@@ -788,13 +1124,18 @@ namespace BitCoin
         mModified = false;
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
           "Loaded %d soft forks at height %d", mForks.size(), mHeight);
+        mMutex.unlock();
         return true;
     }
 
     bool Forks::save(const char *pFileName)
     {
+        mMutex.lock();
         if(!mModified)
+        {
+            mMutex.unlock();
             return true;
+        }
 
         NextCash::String filePathName = Info::instance().path();
         filePathName.pathAppend(pFileName);
@@ -802,7 +1143,9 @@ namespace BitCoin
 
         if(!file.isValid())
         {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME, "Failed to open soft forks file to save");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
+              "Failed to open soft forks file to save");
+            mMutex.unlock();
             return false;
         }
 
@@ -816,13 +1159,14 @@ namespace BitCoin
             file.writeInt(mVersionRequiredHeights[i]);
 
         // Write cash fork block height and max size
-        file.writeUnsignedInt(mCashForkBlockHeight);
+        file.writeInt(mCashForkBlockHeight);
         file.writeUnsignedInt(mBlockMaxSize);
 
         for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             (*softFork)->write(&file);
 
         mModified = false;
+        mMutex.unlock();
         return true;
     }
 }

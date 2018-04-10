@@ -67,7 +67,7 @@ namespace BitCoin
         static void setPath(const char *pPath);
         static NextCash::String path() { return sPath; }
 
-        uint8_t *ip;
+        uint8_t ip[INET6_ADDRLEN];
         uint16_t port;
         bool spvMode;
 
