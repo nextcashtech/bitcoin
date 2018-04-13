@@ -371,7 +371,7 @@ int main(int pArgumentCount, char **pArguments)
 #ifdef PROFILER_ON
     NextCash::Profiler profiler("Main"); // Attempt to trigger destroy of profiler instance after daemon instance
 #endif
-    BitCoin::Daemon &daemon = BitCoin::Daemon::instance();
+    BitCoin::Daemon daemon;
 
     daemon.run(!noDaemon);
 

@@ -82,7 +82,7 @@ namespace BitCoin
 
         bool isBlackListed(const NextCash::Hash &pHash);
 
-        unsigned int size() const { return mSize; }
+        NextCash::stream_size size() const { return mSize; }
         unsigned int count() const { return mTransactions.size(); }
         unsigned int pendingCount() const { return mPendingTransactions.size(); }
 
@@ -114,7 +114,7 @@ namespace BitCoin
         bool outpointExists(Transaction *pTransaction);
 
         NextCash::ReadersLock mLock;
-        unsigned int mSize; // Size in bytes of all transactions in mempool
+        NextCash::stream_size mSize; // Size in bytes of all transactions in mempool
         TransactionList mTransactions; // Verified transactions
         TransactionList mPendingTransactions; // Transactions waiting for unseen outpoints
         NextCash::HashList mBlackListed; // Transactions that failed to verify

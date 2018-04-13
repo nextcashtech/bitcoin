@@ -198,8 +198,8 @@ namespace BitCoin
             while(data.remaining())
             {
                 byteValue = data.readByte();
-                for(int bitOffset=0;bitOffset<8;++bitOffset)
-                    bits.push_back(NextCash::Math::bit(byteValue, bitOffset));
+                for(int bitOffsetIter=0;bitOffsetIter<8;++bitOffsetIter)
+                    bits.push_back(NextCash::Math::bit(byteValue, bitOffsetIter));
             }
 
             // Pad payload to 5 bit boundary
@@ -229,12 +229,12 @@ namespace BitCoin
                 checkSumData.writeByte(0);
 
             // Calculate check sum
-            uint64_t check = cashAddressCheckSum(&checkSumData);
+            uint64_t checkSum = cashAddressCheckSum(&checkSumData);
 
             // Append check sum to result
             NextCash::Buffer encodedCheckSum;
             for(int i=0;i<8;++i)
-                encodedCheckSum.writeByte(NextCash::Math::base32Codes[(check >> (5 * (7 - i))) & 0x1f]);
+                encodedCheckSum.writeByte((uint8_t)NextCash::Math::base32Codes[(checkSum >> (5 * (7 - i))) & 0x1f]);
 
             return NextCash::String(prefix) + ":" + encodedPayload + encodedCheckSum.readString(encodedCheckSum.length());
         }
@@ -287,7 +287,7 @@ namespace BitCoin
         NextCash::Buffer prefixBuffer, checkSumData;
         while(*character && *character != ':')
         {
-            prefixBuffer.writeByte(NextCash::lower(*character));
+            prefixBuffer.writeByte((uint8_t)NextCash::lower(*character));
             ++character;
         }
 
@@ -1497,6 +1497,11 @@ namespace BitCoin
             case TESTNET_PUBLIC:
                 result->mVersion = TESTNET_PUBLIC;
                 break;
+            default:
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  "Invalid parent version for derive");
+                delete result;
+                return NULL;
             }
 
             result->mDepth = mDepth + 1;
@@ -2021,6 +2026,112 @@ namespace BitCoin
         }
 
         return true;
+    }
+
+    int KeyStore::loadKey(const char *pText, Key::DerivationPathMethod pMethod)
+    {
+        Key *newKey = new Key(), *chain;
+        NextCash::Hash addressHash;
+        AddressType addressType;
+        AddressFormat addressFormat;
+
+        if(newKey->decode(pText))
+        {
+            for(const_iterator key=begin();key!=end();++key)
+                if(**key == *newKey)
+                {
+                    delete newKey;
+                    return 3; // Already exists
+                }
+
+            // Prime the key for several derivation methods
+            switch(pMethod)
+            {
+                case Key::SIMPLE:
+                    chain = newKey->chainKey(0, Key::SIMPLE);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+                    else
+                    {
+                        delete newKey;
+                        return 4; // Invalid Derivation Method
+                    }
+                    chain = newKey->chainKey(1, Key::SIMPLE);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+                    else
+                    {
+                        delete newKey;
+                        return 4; // Invalid Derivation Method
+                    }
+                    break;
+                case Key::BIP0032:
+                    chain = newKey->chainKey(0, Key::BIP0032);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+                    else
+                    {
+                        delete newKey;
+                        return 4; // Invalid Derivation Method
+                    }
+                    chain = newKey->chainKey(1, Key::BIP0032);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+                    else
+                    {
+                        delete newKey;
+                        return 4; // Invalid Derivation Method
+                    }
+                    break;
+                case Key::BIP0044:
+                    chain = newKey->chainKey(0, Key::BIP0044);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+                    else
+                    {
+                        delete newKey;
+                        return 4; // Invalid Derivation Method
+                    }
+                    chain = newKey->chainKey(1, Key::BIP0044);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+                    else
+                    {
+                        delete newKey;
+                        return 4; // Invalid Derivation Method
+                    }
+                    break;
+            }
+
+            push_back(newKey);
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+              "Added BIP-0032 Key");
+            return 0; // Success
+        }
+        else if(decodeAddress(pText, addressHash, addressType, addressFormat) &&
+                addressType == PUB_KEY_HASH && addressHash.size() == ADDRESS_HASH_SIZE)
+        {
+            // Check if it is already in this block
+            for(const_iterator key=begin();key!=end();++key)
+                if((*key)->hash() == addressHash)
+                {
+                    delete newKey;
+                    return 3; // Already exists
+                }
+
+            newKey->loadHash(addressHash);
+            push_back(newKey);
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "Added Address");
+            return 0; // Success
+        }
+        else
+        {
+            delete newKey;
+            return 2; // Invalid Format
+        }
+
+        delete newKey;
+        return 1; // Unknown Failure
     }
 
     bool KeyStore::loadKeys(NextCash::InputStream *pStream)

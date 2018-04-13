@@ -94,7 +94,7 @@ namespace BitCoin
     {
     public:
 
-        PendingHeaderData(const NextCash::Hash &pHash, unsigned int pNodeID, uint32_t pTime)
+        PendingHeaderData(const NextCash::Hash &pHash, unsigned int pNodeID, int32_t pTime)
         {
             hash = pHash;
             requestedTime = pTime;
@@ -103,8 +103,8 @@ namespace BitCoin
         }
 
         NextCash::Hash hash;
-        uint32_t requestedTime;
-        uint32_t updateTime;
+        int32_t requestedTime;
+        int32_t updateTime;
         unsigned int requestingNode;
 
     private:
@@ -140,8 +140,8 @@ namespace BitCoin
         bool isFull() { return block->transactionCount > 0; }
 
         Block *block;
-        uint32_t requestedTime;
-        uint32_t updateTime;
+        int32_t requestedTime;
+        int32_t updateTime;
         unsigned int requestingNode;
 
     private:
@@ -245,7 +245,7 @@ namespace BitCoin
         // Builds a list of blocks that need to be requested and marks them as requested by the node specified
         bool getBlocksNeeded(NextCash::HashList &pHashes, unsigned int pCount, bool pReduceOnly);
         // Mark that download progress has increased for this block
-        void updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, uint32_t pTime);
+        void updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, int32_t pTime);
         // Mark blocks as requested by the specified node
         void markBlocksForNode(NextCash::HashList &pHashes, unsigned int pNodeID);
         // Release all blocks requested by a specified node so they will be requested again

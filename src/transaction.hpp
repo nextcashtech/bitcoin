@@ -217,12 +217,12 @@ namespace BitCoin
         static const uint8_t STANDARD_VERIFIED = IS_VALID | IS_STANDARD | SIGS_VERIFIED;
         bool isStandardVerified() const { return (mStatus & STANDARD_VERIFIED) == STANDARD_VERIFIED; }
 
-        unsigned int calculatedSize();
+        NextCash::stream_size calculatedSize();
 
         void calculateHash();
 
         bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
-          uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, BlockStats &pBlockStats,
+          unsigned int pBlockHeight, bool pCoinBase, int32_t pBlockVersion, BlockStats &pBlockStats,
           Forks &pForks, std::vector<unsigned int> &pSpentAges);
 
         // Check validity and return status
@@ -280,7 +280,7 @@ namespace BitCoin
 
         int32_t mTime;
         int64_t mFee;
-        unsigned int mSize;
+        NextCash::stream_size mSize;
         uint8_t mStatus;
 
         NextCash::Hash mOutpointHash, mSequenceHash, mOutputHash;

@@ -18,6 +18,9 @@
 #define BITCOIN_NODE_LOG_NAME "Node"
 
 
+#define PEER_MESSAGE_LIMIT 5000
+
+
 namespace BitCoin
 {
     unsigned int Node::mNextID = 256;
@@ -57,7 +60,9 @@ namespace BitCoin
         mIsSeed = pIsSeed;
         mSendBlocksCompact = false;
         mRejected = false;
+#ifndef SINGLE_THREAD
         mThread = NULL;
+#endif
         mSocketID = -1;
         mServices = pServices;
         if(!pIncoming && !pIsSeed)
@@ -98,9 +103,11 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Outgoing Connection %s : %d (socket %d)",
               mConnection->ipv6Address(), mConnection->port(), mSocketID);
 
+#ifndef SINGLE_THREAD
         // Start thread
         mThread = new NextCash::Thread(mName, run, this);
         NextCash::Thread::sleep(500); // Give the thread a chance to initialize
+#endif
     }
 
     Node::~Node()
@@ -114,8 +121,10 @@ namespace BitCoin
               mMessageInterpreter.pendingBlockHash.hex().text());
 
         requestStop();
+#ifndef SINGLE_THREAD
         if(mThread != NULL)
             delete mThread;
+#endif
         mConnectionMutex.lock();
         if(mConnection != NULL)
             delete mConnection;
@@ -163,8 +172,10 @@ namespace BitCoin
     void Node::requestStop()
     {
         releaseBlockRequests();
+#ifndef SINGLE_THREAD
         if(mThread == NULL)
             return;
+#endif
         mStop = true;
     }
 
@@ -200,7 +211,7 @@ namespace BitCoin
 
         if(!mIsIncoming && !mChain->isInSync())
         {
-            uint32_t time = getTime();
+            int32_t time = getTime();
 
             if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 30 && time - mBlockReceiveTime > 30)
             {
@@ -570,7 +581,7 @@ namespace BitCoin
 
     bool Node::sendPing()
     {
-        uint32_t time = getTime();
+        int32_t time = getTime();
         if(time - mLastPingTime < 60)
             return true;
         Message::PingData pingData;
@@ -630,8 +641,6 @@ namespace BitCoin
             return;
         }
 
-        node->sendVersion();
-
         while(!node->mStop)
         {
             node->process();
@@ -675,66 +684,84 @@ namespace BitCoin
 
     void Node::process()
     {
+        if(!isOpen() || mStop || mStopped)
+            return;
+
+        if(!mVersionSent)
+            sendVersion();
+
+        if(mMessagesReceived > PEER_MESSAGE_LIMIT)
+        {
+            NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Reached message limit");
+            close();
+            return;
+        }
+
         int32_t time = getTime();
         if(time - mLastCheckTime > 10)
             check();
 
+        mConnectionMutex.lock();
+        mReceiveBuffer.compact();
+        mConnectionMutex.unlock();
+
         Info &info = Info::instance();
 
-        if(info.spvMode && mVersionAcknowledged && mVersionData != NULL && isReady() && !mIsIncoming &&
-          !mIsSeed && mMonitor != NULL && time - mLastMerkleCheck > 2)
+        if (info.spvMode && mVersionAcknowledged && mVersionData != NULL && isReady() &&
+            !mIsIncoming &&
+            !mIsSeed && mMonitor != NULL && time - mLastMerkleCheck > 2)
         {
-            if(mMonitor->needsClose(mID))
+            if (mMonitor->needsClose(mID))
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                  "Dropping. Inappropriate false positive rate.");
+                                            "Dropping. Monitor requested.");
                 close();
                 return;
             }
 
-            if(mMonitor->filterNeedsResend(mID, mBloomFilterID))
+            if (mMonitor->filterNeedsResend(mID, mBloomFilterID))
                 sendBloomFilter();
 
-            if(mActiveMerkleRequests < 25)
+            if (mActiveMerkleRequests < 25)
             {
                 bool fail = false;
                 NextCash::HashList blockHashes;
 
                 mMonitor->getNeededMerkleBlocks(mID, *mChain, blockHashes);
-                for(NextCash::HashList::iterator hash=blockHashes.begin();hash!=blockHashes.end();++hash)
-                    if(!requestMerkleBlock(*hash))
+                for (NextCash::HashList::iterator hash = blockHashes.begin();
+                     hash != blockHashes.end(); ++hash)
+                    if (!requestMerkleBlock(*hash))
                     {
                         fail = true;
                         break;
                     }
 
-                if(!fail && blockHashes.size() > 0)
+                if (!fail && blockHashes.size() > 0)
                 {
                     mActiveMerkleRequests += blockHashes.size();
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                      "Requested %d merkle blocks", blockHashes.size());
+                                                "Requested %d merkle blocks", blockHashes.size());
                     mLastMerkleRequest = getTime();
                 }
 
                 mLastMerkleCheck = time;
-            }
-            else if(time - mLastMerkleCheck > 120)
+            } else if (time - mLastMerkleCheck > 120)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                  "Dropping. Took too long to return merkle blocks");
+                                            "Dropping. Took too long to return merkle blocks");
                 close();
                 return;
             }
         }
 
         mConnectionMutex.lock();
-        if(mConnection == NULL)
+        if (mConnection == NULL)
         {
             mConnectionMutex.unlock();
             return;
         }
 
-        if(!mConnection->isOpen())
+        if (!mConnection->isOpen())
         {
             mConnectionMutex.unlock();
             return;
@@ -744,52 +771,64 @@ namespace BitCoin
         {
             mConnection->receive(&mReceiveBuffer);
         }
-        catch(std::bad_alloc pException)
+        catch (std::bad_alloc pException)
         {
             mConnectionMutex.unlock();
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-              "Bad allocation while receiving data : %s", pException.what());
+                                        "Bad allocation while receiving data : %s",
+                                        pException.what());
             close();
             return;
         }
-        catch(std::exception pException)
+        catch (std::exception pException)
         {
+            mConnectionMutex.unlock();
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-              "Exception while receiving data : %s", pException.what());
+                                        "Exception while receiving data : %s", pException.what());
             close();
             return;
         }
 
         mConnectionMutex.unlock();
 
-        if(mVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
-          mPingRoundTripTime == -1 && mPingCutoff != -1 &&
-          time - mLastPingTime > mPingCutoff)
+        if (mVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
+            mPingRoundTripTime == -1 && mPingCutoff != -1 &&
+            time - mLastPingTime > mPingCutoff)
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-              "Dropping. Ping not received within cutoff of %ds", mPingCutoff);
+                                        "Dropping. Ping not received within cutoff of %ds",
+                                        mPingCutoff);
             info.addPeerFail(mAddress);
             close();
             return;
         }
 
-        if(time - mLastBlackListCheck > 10)
+        if (time - mLastBlackListCheck > 10)
         {
             mLastBlackListCheck = time;
-            for(NextCash::HashList::iterator hash=mAnnounceTransactions.begin();hash!=mAnnounceTransactions.end();++hash)
-                if(mChain->memPool().isBlackListed(*hash))
+            for (NextCash::HashList::iterator hash = mAnnounceTransactions.begin();
+                 hash != mAnnounceTransactions.end(); ++hash)
+                if (mChain->memPool().isBlackListed(*hash))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-                      "Dropping. Detected black listed transaction : %s", hash->hex().text());
+                                                "Dropping. Detected black listed transaction : %s",
+                                                hash->hex().text());
                     info.addPeerFail(mAddress);
                     close();
                     return;
                 }
         }
 
+        while(processMessage());
+    }
+
+    bool Node::processMessage()
+    {
         // Check for a complete message
         Message::Data *message;
         bool dontDeleteMessage = false;
+        int32_t time = getTime();
+        Info &info = Info::instance();
 
         try
         {
@@ -800,25 +839,31 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
               "Bad allocation while reading message : %s", pException.what());
             close();
-            return;
+            return false;
         }
         catch(std::exception pException)
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
               "Exception while reading message : %s", pException.what());
             close();
-            return;
+            return false;
         }
 
         if(message == NULL)
         {
+#ifdef SINGLE_THREAD
+            if(mMessagesReceived == 0 && time - mConnectedTime > 180)
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, mName, "No valid messages within 180 seconds of connecting");
+#else
             if(mMessagesReceived == 0 && time - mConnectedTime > 60)
             {
                 NextCash::Log::add(NextCash::Log::WARNING, mName, "No valid messages within 60 seconds of connecting");
+#endif
                 close();
                 if(!mIsSeed)
                     info.addPeerFail(mAddress);
-                return;
+                return false;
             }
 
             if(time - mLastReceiveTime > 600) // 10 minutes
@@ -827,7 +872,7 @@ namespace BitCoin
             if(!mMessageInterpreter.pendingBlockHash.isEmpty() && mMessageInterpreter.pendingBlockUpdateTime != 0)
                 mChain->updateBlockProgress(mMessageInterpreter.pendingBlockHash, mID, mMessageInterpreter.pendingBlockUpdateTime);
 
-            return;
+            return false;
         }
 
         NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName, "Received <%s>", Message::nameFor(message->type));
@@ -842,16 +887,10 @@ namespace BitCoin
             if(!mIsSeed)
                 info.addPeerFail(mAddress);
             delete message;
-            return;
+            return false;
         }
 
         ++mMessagesReceived;
-
-        if(mMessagesReceived > 2000)
-        {
-            NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Reached message limit");
-            close();
-        }
 
         switch(message->type)
         {
@@ -1441,7 +1480,7 @@ namespace BitCoin
 
                     if(blockList.size() > 0)
                         requestBlocks(blockList);
-                    else if(!lastAnnouncedHeaderFound)
+                    else if(!lastAnnouncedHeaderFound && mChain->isInSync())
                     {
                         mRejected = true;
                         NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
@@ -1586,7 +1625,7 @@ namespace BitCoin
                 if(!info.spvMode)
                 {
                     // Send Inventory message with all transactions in the mem pool
-                    Message::InventoryData message;
+                    Message::InventoryData inventoryMessage;
                     NextCash::HashList list;
 
                     mChain->memPool().getFullList(list, mFilter);
@@ -1596,20 +1635,19 @@ namespace BitCoin
 
                     for(NextCash::HashList::iterator hash=list.begin();hash!=list.end();++hash)
                     {
-                        if(message.inventory.size() == 50000)
+                        if(inventoryMessage.inventory.size() == 10000)
                         {
                             // For large mem pools break in to multiple messages
-                            if(!sendMessage(&message))
+                            if(!sendMessage(&inventoryMessage))
                                 break;
-                            message.inventory.clear();
+                            inventoryMessage.inventory.clear();
                         }
 
-                        message.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION, *hash));
+                        inventoryMessage.inventory.push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION, *hash));
                     }
 
-                    if(message.inventory.size() > 0)
-                        sendMessage(&message);
-
+                    if(inventoryMessage.inventory.size() > 0)
+                        sendMessage(&inventoryMessage);
                 }
                 break;
             case Message::MERKLE_BLOCK:
@@ -1722,5 +1760,7 @@ namespace BitCoin
 
         if(!dontDeleteMessage)
             delete message;
+
+        return true;
     }
 }

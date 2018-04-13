@@ -53,14 +53,15 @@ namespace BitCoin
         uint32_t time;
         uint32_t targetBits;
         uint32_t nonce;
-        uint64_t transactionCount;
+
+        unsigned int transactionCount;
 
         // Transactions (empty when "header only")
         std::vector<Transaction *> transactions;
 
         // Total of fees collected from transactions (set during process), not including coin base
         uint64_t fees() const { return mFees; }
-        unsigned int size() const { return mSize; }
+        NextCash::stream_size size() const { return mSize; }
 
         uint64_t actualCoinbaseAmount(); // Amount from coinbase transaction
 
@@ -81,7 +82,7 @@ namespace BitCoin
     private:
 
         uint64_t mFees;
-        unsigned int mSize;
+        NextCash::stream_size mSize;
 
         Block(Block &pCopy);
         Block &operator = (Block &pRight);

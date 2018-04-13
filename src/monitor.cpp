@@ -12,7 +12,14 @@
 #include "key.hpp"
 #include "interpreter.hpp"
 
-#define BITCOIN_ADDRESS_BLOCK_LOG_NAME "Monitor"
+#define BITCOIN_MONITOR_LOG_NAME "Monitor"
+
+// Maximum number of concurrent merkle requests
+#ifdef LOW_MEM
+#define MAX_MERKLE_REQUESTS 500
+#else
+#define MAX_MERKLE_REQUESTS 2000
+#endif
 
 
 namespace BitCoin
@@ -22,10 +29,14 @@ namespace BitCoin
         mFilterID = 0;
         mFilter.setup(0);
         mPasses.push_back(PassData());
+
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME, "Creating monitor object");
     }
 
     Monitor::~Monitor()
     {
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME, "Destroying monitor object");
+
         mMutex.lock();
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
             delete *trans;
@@ -416,7 +427,7 @@ namespace BitCoin
         for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass,++passIndex)
             if(!pass->complete && pass->blockHeight > 0)
             {
-                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   "Pass %d marked complete at block height %d to start new pass for new addresses",
                   passIndex, pass->blockHeight);
                 pass->complete = true;
@@ -424,13 +435,13 @@ namespace BitCoin
 
         if(mPasses.size() == 0)
         {
-            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
               "Starting first pass %d for %d addresses", mPasses.size() + 1, mAddressHashes.size());
             mPasses.push_back(PassData());
         }
         else if(mPasses.back().blockHeight > 0)
         {
-            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
               "Starting new pass %d for new addresses", mPasses.size() + 1);
             mPasses.push_back(PassData());
         }
@@ -480,7 +491,7 @@ namespace BitCoin
                 {
                     mAddressHashes.push_back(addressHash);
                     ++addedCount;
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Adding address hash : %s", line.text());
                 }
             }
@@ -520,7 +531,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                               "Added new BIP0044 external address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -535,7 +546,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                               "Added new BIP0044 internal address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -550,7 +561,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                               "Added new BIP0032 external address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -565,7 +576,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                               "Added new BIP0032 internal address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -580,7 +591,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                               "Added new SIMPLE external address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -595,7 +606,7 @@ namespace BitCoin
                     for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                         if(!mAddressHashes.contains((*child)->hash()))
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                               "Added new SIMPLE internal address from key store : %s", (*child)->address().text());
                             mAddressHashes.push_back((*child)->hash());
                             ++addedCount;
@@ -606,7 +617,7 @@ namespace BitCoin
             {
                 if(!mAddressHashes.contains((*key)->hash()))
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Added new individual address from key store : %s", (*key)->address().text());
                     mAddressHashes.push_back((*key)->hash());
                     ++addedCount;
@@ -620,7 +631,7 @@ namespace BitCoin
                 for(std::vector<Key *>::iterator child=children.begin();child!=children.end();++child)
                     if(!mAddressHashes.contains((*child)->hash()))
                     {
-                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                           "Added new immediate child address from key store : %s", (*child)->address().text());
                         mAddressHashes.push_back((*child)->hash());
                         ++addedCount;
@@ -628,7 +639,7 @@ namespace BitCoin
             }
         }
 
-        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
           "Added %d new addresses from key store", addedCount);
         return addedCount;
     }
@@ -835,7 +846,7 @@ namespace BitCoin
                 request = mMerkleRequests.get(nextBlockHash);
                 if(request == mMerkleRequests.end())
                 {
-                    if(mMerkleRequests.size() < 2000 && !mFilter.isEmpty())
+                    if(mMerkleRequests.size() < MAX_MERKLE_REQUESTS && !mFilter.isEmpty())
                     {
                         // Add new merkle block request
                         newMerkleRequest = new MerkleRequestData(pNodeID, time);
@@ -862,7 +873,7 @@ namespace BitCoin
 
                         if(!found)
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                               "Node [%d] needs closed. Merkle blocks too slow", (*request)->node);
                             mNodesToClose.push_back((*request)->node);
                         }
@@ -912,7 +923,7 @@ namespace BitCoin
             return false;
         }
 
-        // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+        // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
           // "Received merkle block from node [%d] with %d transaction hashes : %s", pNodeID,
           // transactionHashes.size(), pData->block->hash.hex().text());
 
@@ -934,7 +945,7 @@ namespace BitCoin
                 pendingTransaction = mPendingTransactions.get(*hash);
                 if(pendingTransaction != mPendingTransactions.end())
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
                       "Transaction pulled from pending into merkle request : %s", hash->hex().text());
                     request->transactions.insert(*hash, *pendingTransaction);
                     (*pendingTransaction)->blockHash = pData->block->hash;
@@ -945,7 +956,7 @@ namespace BitCoin
                     confirmedTransaction = mTransactions.get(*hash);
                     if(confirmedTransaction != mTransactions.end())
                     {
-                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
                           "Transaction found in confirmed for merkle request : %s", hash->hex().text());
                         newSPVTransaction = new SPVTransactionData(**confirmedTransaction);
                         request->transactions.insert(*hash, newSPVTransaction);
@@ -982,7 +993,7 @@ namespace BitCoin
 
         // Mark receive time
         if(request->receiveTime != 0)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
               "Repeated merkle block from node [%d] with %d transaction (%d sec ago) : %s", pNodeID,
               request->transactions.size(), getTime() - request->receiveTime, pData->block->hash.hex().text());
 
@@ -1031,7 +1042,7 @@ namespace BitCoin
                         pTransactionData->transaction = NULL; // Prevent it from being deleted
                         refreshTransaction(*transactionIter, true);
                         processNeeded = request->isComplete();
-                        // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
                           // "Added confirmed transaction to merkle block request : %s", transaction->hash.hex().text());
 
                         // Note: Bloom filter updated when merkle block is processed
@@ -1062,20 +1073,20 @@ namespace BitCoin
                         NextCash::String subject, message;
                         if((*pendingTransaction)->amount > 0)
                         {
-                            subject = "Bitcoin Cash Payment Pending";
-                            message.writeFormatted("Payment pending for %0.8f bitcoins.\nTransaction : %s",
-                              -bitcoins((*pendingTransaction)->amount), (*pendingTransaction)->transaction->hash.hex().text());
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                              "Pending transaction paying %0.8f bitcoins : %s", bitcoins((*pendingTransaction)->amount),
+                            subject = "Bitcoin Cash Receive Pending";
+                            message.writeFormatted("Receive pending for %0.8f bitcoins.\nTransaction : %s",
+                              bitcoins((*pendingTransaction)->amount), (*pendingTransaction)->transaction->hash.hex().text());
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                              "Pending transaction receiving %0.8f bitcoins : %s", bitcoins((*pendingTransaction)->amount),
                               (*pendingTransaction)->transaction->hash.hex().text());
                         }
                         else
                         {
-                            subject = "Bitcoin Cash Spend Pending";
-                            message.writeFormatted("Spend pending for %0.8f bitcoins.\nTransaction : %s",
+                            subject = "Bitcoin Cash Send Pending";
+                            message.writeFormatted("Send pending for %0.8f bitcoins.\nTransaction : %s",
                               -bitcoins((*pendingTransaction)->amount), (*pendingTransaction)->transaction->hash.hex().text());
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                              "Pending transaction spending %0.8f bitcoins : %s", -bitcoins((*pendingTransaction)->amount),
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                              "Pending transaction sending %0.8f bitcoins : %s", -bitcoins((*pendingTransaction)->amount),
                               (*pendingTransaction)->transaction->hash.hex().text());
                         }
 
@@ -1083,7 +1094,7 @@ namespace BitCoin
                     }
                     else
                     {
-                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                           "Pending transaction (unrelated) : %s", (*pendingTransaction)->transaction->hash.hex().text());
                         //delete *pendingTransaction;
                         //mPendingTransactions.erase(pendingTransaction);
@@ -1092,7 +1103,7 @@ namespace BitCoin
             }
 
             if(!result)
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
                   "Transaction not found in merkle block or pending : %s", pTransactionData->transaction->hash.hex().text());
 
             mMutex.unlock();
@@ -1108,14 +1119,14 @@ namespace BitCoin
                 // // Needed this transaction
                 // result = true;
                 // (*pendingTransaction)->transaction = pTransaction;
-                // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   // "Received pending transaction : %s", pTransaction->hash.hex().text());
             // }
             // else
             // {
                 // delete *pendingTransaction;
                 // mPendingTransactions.erase(pendingTransaction);
-                // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   // "Removed unrelated pending transaction : %s", pTransaction->hash.hex().text());
             // }
 
@@ -1136,7 +1147,7 @@ namespace BitCoin
             {
                 // Add new pending transaction
                 SPVTransactionData *newPendingTransaction = new SPVTransactionData();
-                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   "Pending transaction accepted on first node [%d] : %s", pNodeID, pTransactionHash.hex().text());
                 newPendingTransaction->nodes.push_back(pNodeID);
                 refreshTransaction(newPendingTransaction, true);
@@ -1159,7 +1170,7 @@ namespace BitCoin
                 if(!found)
                 {
                     (*pendingTransaction)->nodes.push_back(pNodeID);
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Pending transaction accepted on %d nodes. [%d] : %s", (*pendingTransaction)->nodes.size(),
                       pNodeID, pTransactionHash.hex().text());
                 }
@@ -1204,7 +1215,7 @@ namespace BitCoin
                 ++trans;
         }
 
-        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
           "Reverted block with %d transactions at height %d : %s", transactionCount,
           pBlockHeight, pBlockHash.hex().text());
 
@@ -1236,7 +1247,7 @@ namespace BitCoin
 
             if(pChain.isInSync() && pChain.height() > 5000 && mPasses.back().blockHeight < (unsigned int)pChain.height() - 5000)
             {
-                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   "Starting new pass at block height %d to monitor new blocks", pChain.height());
                 PassData newPass;
                 newPass.beginBlockHeight = pChain.height();
@@ -1253,7 +1264,7 @@ namespace BitCoin
 
                 if(pass->blockHeight == (unsigned int)pChain.height() && passIndex < mPasses.size())
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Pass %d completed at block height %d", passIndex, pass->blockHeight);
                     pass->complete = true;
                     continue;
@@ -1304,22 +1315,22 @@ namespace BitCoin
 
                                     if((*trans)->amount > 0)
                                     {
-                                        subject = "Bitcoin Cash Payment Confirmed";
-                                        message.writeFormatted("Payment confirmed for %0.8f bitcoins in block %d\nNew Balance : %0.8f\nTransaction : %s",
+                                        subject = "Bitcoin Cash Receive Confirmed";
+                                        message.writeFormatted("Receive confirmed for %0.8f bitcoins in block %d\nNew Balance : %0.8f\nTransaction : %s",
                                           bitcoins((*trans)->amount), pass->blockHeight + 1, bitcoins(balance(true)),
                                           (*trans)->transaction->hash.hex().text());
-                                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                                          "Confirmed transaction paying %0.8f bitcoins : %s", bitcoins((*trans)->amount),
+                                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                                          "Confirmed transaction receiving %0.8f bitcoins : %s", bitcoins((*trans)->amount),
                                           (*trans)->transaction->hash.hex().text());
                                     }
                                     else
                                     {
-                                        subject = "Bitcoin Cash Spend Confirmed";
-                                        message.writeFormatted("Spend confirmed for %0.8f bitcoins in block %d.\nNew Balance : %0.8f\nTransaction : %s",
+                                        subject = "Bitcoin Cash Send Confirmed";
+                                        message.writeFormatted("Send confirmed for %0.8f bitcoins in block %d.\nNew Balance : %0.8f\nTransaction : %s",
                                           -bitcoins((*trans)->amount), pass->blockHeight + 1, bitcoins(balance(true)),
                                           (*trans)->transaction->hash.hex().text());
-                                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
-                                          "Confirmed transaction spending %0.8f bitcoins : %s", -bitcoins((*trans)->amount),
+                                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                                          "Confirmed transaction sending %0.8f bitcoins : %s", -bitcoins((*trans)->amount),
                                           (*trans)->transaction->hash.hex().text());
                                     }
 
@@ -1335,7 +1346,7 @@ namespace BitCoin
                                 delete *trans; // Transaction already confirmed
                         }
 
-                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                           "Adding merkle block from node [%d] with %d/%d trans at height %d : %s", merkleRequest->node,
                           merkleRequest->transactions.size() - falsePositiveCount, merkleRequest->transactions.size(),
                           pass->blockHeight + 1, request.hash().hex().text());
@@ -1359,7 +1370,7 @@ namespace BitCoin
 
                                 if(!found)
                                 {
-                                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                                       "Node [%d] needs closed. False positive rate %d/%d", merkleRequest->node,
                                       falsePositiveCount, merkleRequest->totalTransactions);
                                     mNodesToClose.push_back(merkleRequest->node);
@@ -1378,7 +1389,7 @@ namespace BitCoin
                                 //TODO Add delay so bloom filter doesn't get sent after every merkle block received before it actually updates
                                 if(!found)
                                 {
-                                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                                       "Node [%d] needs bloom filter resend. False positive rate %d/%d", merkleRequest->node,
                                       falsePositiveCount, merkleRequest->totalTransactions);
                                     mNodesToResendFilter.push_back(merkleRequest->node);
@@ -1398,14 +1409,14 @@ namespace BitCoin
 
                     if(balanceUpdated)
                     {
-                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                           "Total balance updated to %0.8f bitcoins", bitcoins(balance(true)));
                         balanceUpdated = false;
                     }
 
                     if(resetNeeded)
                     {
-                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESS_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                           "New UTXO found. Resetting bloom filters and merkle requests");
 
                         // Update bloom filter and reset all node bloom filters

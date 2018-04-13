@@ -179,7 +179,7 @@ namespace BitCoin
 
         if(!(pTransaction->status() & Transaction::IS_VALID))
             return false;
-        else if(!(pTransaction->status() & Transaction::STANDARD_VERIFIED))
+        else if(!pTransaction->isStandardVerified())
         {
             // Transaction not standard or has invalid signatures
             addBlacklisted(pTransaction->hash);
@@ -227,7 +227,7 @@ namespace BitCoin
                 mSize -= (*transaction)->size();
                 transaction = mPendingTransactions.erase(transaction);
             }
-            else if(((*transaction)->status() & Transaction::STANDARD_VERIFIED) == Transaction::STANDARD_VERIFIED)
+            else if((*transaction)->isStandardVerified())
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
                   "Verified pending transaction. (%d bytes) (%llu fee rate) : %s", (*transaction)->size(),
@@ -288,7 +288,7 @@ namespace BitCoin
                   pTransaction->hash.hex().text());
                 return LOW_FEE;
             }
-            else if((pTransaction->status() & Transaction::STANDARD_VERIFIED) == Transaction::STANDARD_VERIFIED &&
+            else if(pTransaction->isStandardVerified() &&
               pTransaction->status() & Transaction::OUTPOINTS_SPENT)
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,

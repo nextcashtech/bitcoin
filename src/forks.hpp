@@ -76,7 +76,7 @@ namespace BitCoin
             mIsModified = false;
         }
 #else
-        BlockStats() { mIsValid = false; mIsModified = false; }
+        BlockStats() : mMutex("BlockStats") { mIsValid = false; mIsModified = false; }
 #endif
         ~BlockStats();
 

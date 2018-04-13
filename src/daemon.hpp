@@ -31,23 +31,27 @@ namespace BitCoin
     {
     public:
 
-        static Daemon &instance();
-        static void destroy();
+        Daemon();
+        ~Daemon();
 
         // Threads
-        static void handleConnections();
-        static void handleRequests();
-        static void manage();
-        static void process();
+        static void runConnections();
+        static void runRequests();
+        static void runManage();
+        static void runProcesses();
 
         void run(bool pInDaemonMode = true);
+        void manage();
+        void process();
+        void handleConnections();
+        void handleRequests();
 
         bool load();
         bool start(bool pInDaemonMode);
 
         bool isLoaded() { return mLoaded; }
         bool isRunning() { return mRunning; }
-        bool stopping() { return mStopping; }
+        bool isStopping() { return mStopping; }
 
         static const int FINISH_ON_REQUEST = 0x00;
         static const int FINISH_ON_SYNC    = 0x01;
@@ -81,9 +85,6 @@ namespace BitCoin
 
         static const int MAX_BLOCK_REQUEST = 8;
 
-        Daemon();
-        ~Daemon();
-
         Chain mChain;
         Info &mInfo;
 
@@ -91,15 +92,27 @@ namespace BitCoin
         bool mRunning, mStopping, mStopRequested, mLoading, mLoaded, mQueryingSeed;
         int mFinishMode;
 
+#ifndef SINGLE_THREAD
         // Threads
         NextCash::Thread *mConnectionThread;
         NextCash::Thread *mRequestsThread;
         NextCash::Thread *mManagerThread;
         NextCash::Thread *mProcessThread;
+#endif
 
         // Timers
         int32_t mLastHeaderRequestTime;
         int32_t mLastConnectionActive;
+        int32_t mLastOutputsPurgeTime;
+        int32_t mLastAddressPurgeTime;
+        int32_t mLastMemPoolCheckPending;
+        int32_t mLastMonitorProcess;
+        int32_t mLastFillNodesTime;
+        int32_t mLastCleanTime;
+
+        NextCash::Hash mLastBlockHash;
+        NextCash::Network::Listener *mNodeListener;
+        NextCash::Network::Listener *mRequestsListener = NULL;
 
         // Signals
         void (*previousSigTermChildHandler)(int);
@@ -142,8 +155,6 @@ namespace BitCoin
         unsigned int recruitPeers(unsigned int pCount);
         void cleanNodes();
 
-        Node *nodeWithInventory();
-        Node *nodeWithBlock(const NextCash::Hash &pHash);
         void checkSync();
         void sendRequests();
         void sendHeaderRequest();
@@ -169,8 +180,6 @@ namespace BitCoin
         void collectStatistics();
         void saveStatistics();
         void printStatistics();
-
-        static Daemon *sInstance;
     };
 }
 

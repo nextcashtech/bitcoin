@@ -175,8 +175,8 @@ namespace BitCoin
           (mForks.cashActive() && mBlockStats.getMedianPastTime(mBlockStats.height()) > 1510600000)) // Disable original DAA when new Cash DAA becomes active
             return true;
 
-        uint32_t lastBlockTime      = mBlockStats.time(mBlockStats.height() - 1);
-        uint32_t lastAdjustmentTime = mBlockStats.time(mBlockStats.height() - RETARGET_PERIOD);
+        int32_t lastBlockTime      = mBlockStats.time(mBlockStats.height() - 1);
+        int32_t lastAdjustmentTime = mBlockStats.time(mBlockStats.height() - RETARGET_PERIOD);
 
         lastTargetBits = mBlockStats.targetBits(mBlockStats.height() - 1);
 
@@ -1110,7 +1110,7 @@ namespace BitCoin
         return success;
     }
 
-    void Chain::updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, uint32_t pTime)
+    void Chain::updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, int32_t pTime)
     {
         mPendingLock.readLock();
         for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
@@ -1126,7 +1126,7 @@ namespace BitCoin
     void Chain::markBlocksForNode(NextCash::HashList &pHashes, unsigned int pNodeID)
     {
         mPendingLock.readLock();
-        uint32_t time = getTime();
+        int32_t time = getTime();
         for(NextCash::HashList::iterator hash=pHashes.begin();hash!=pHashes.end();++hash)
             for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
                 if((*pending)->block->hash == *hash)
@@ -2040,6 +2040,7 @@ namespace BitCoin
         unsigned int fileID;
 
         mProcessMutex.lock();
+        mStop = false;
 
         for(fileID=0;;fileID++)
         {
@@ -2135,8 +2136,7 @@ namespace BitCoin
                     if(!blockFile->readBlockHashes(hashes))
                     {
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-                                                    "Failed to read hashes from block file %08x",
-                                                    fileID);
+                          "Failed to read hashes from block file %08x", fileID);
                         delete blockFile;
                         BlockFile::unlock(fileID);
                         break;

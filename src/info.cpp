@@ -106,29 +106,36 @@ namespace BitCoin
     }
 
     Info *Info::sInstance = NULL;
+    NextCash::Mutex Info::sMutex("Info");
     NextCash::String Info::sPath;
 
     void Info::setPath(const char *pPath)
     {
+        sMutex.lock();
         sPath = pPath;
+        sMutex.unlock();
     }
 
     Info &Info::instance()
     {
+        sMutex.lock();
         if(sInstance == NULL)
         {
             sInstance = new Info;
             std::atexit(destroy);
         }
+        sMutex.unlock();
 
         return *sInstance;
     }
 
     void Info::destroy()
     {
+        sMutex.lock();
         if(sInstance != NULL)
             delete sInstance;
         sInstance = NULL;
+        sMutex.unlock();
     }
 
     Info::Info() : mPeerLock("Peer")
@@ -169,8 +176,6 @@ namespace BitCoin
             NextCash::String dataFilePath = sPath;
             dataFilePath.pathAppend("data");
             readSettingsFile(dataFilePath);
-
-            readPeersFile();
         }
     }
 

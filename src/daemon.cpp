@@ -25,30 +25,6 @@
 
 namespace BitCoin
 {
-    Daemon *Daemon::sInstance = NULL;
-
-    Daemon &Daemon::instance()
-    {
-        if(sInstance == NULL)
-        {
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Creating instance");
-            sInstance = new Daemon;
-            std::atexit(destroy);
-        }
-
-        return *sInstance;
-    }
-
-    void Daemon::destroy()
-    {
-        if(sInstance != NULL)
-        {
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Destroying instance");
-            delete sInstance;
-        }
-        sInstance = NULL;
-    }
-
     Daemon::Daemon() : mInfo(Info::instance()), mNodeLock("Nodes"), mRequestsLock("Requests")
     {
         mRunning = false;
@@ -57,10 +33,12 @@ namespace BitCoin
         mLoading = false;
         mLoaded = false;
         mQueryingSeed = false;
+#ifndef SINGLE_THREAD
         mConnectionThread = NULL;
         mRequestsThread = NULL;
         mManagerThread = NULL;
         mProcessThread = NULL;
+#endif
         previousSigTermChildHandler = NULL;
         previousSigTermHandler= NULL;
         previousSigIntHandler = NULL;
@@ -71,10 +49,23 @@ namespace BitCoin
         mIncomingNodes = 0;
         mOutgoingNodes = 0;
         mLastPeerCount = 0;
+        mLastOutputsPurgeTime = getTime();
+        mLastAddressPurgeTime = getTime();
+        mLastMemPoolCheckPending = getTime();
+        mLastMonitorProcess = getTime();
+        mLastFillNodesTime = 0;
+        mLastCleanTime = getTime();
+        mNodeListener = NULL;
+        mLastCleanTime = getTime();
+        mRequestsListener = NULL;
+
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Creating daemon object");
     }
 
     Daemon::~Daemon()
     {
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Destroying daemon object");
+
         if(isRunning() && !mStopping)
             requestStop();
 
@@ -84,9 +75,8 @@ namespace BitCoin
 
     unsigned int Daemon::peerCount()
     {
-        unsigned int result = 0;
         mNodeLock.readLock();
-        result = mNodes.size();
+        unsigned int result = mNodes.size();
         mNodeLock.readUnlock();
         return result;
     }
@@ -117,6 +107,8 @@ namespace BitCoin
             return SYNCHRONIZING;
     }
 
+    static Daemon *sSignalInstance = NULL;
+
     void Daemon::handleSigTermChild(int pValue)
     {
         //NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Child process terminated");
@@ -125,13 +117,15 @@ namespace BitCoin
     void Daemon::handleSigTerm(int pValue)
     {
         NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Terminate signal received. Stopping.");
-        instance().requestStop();
+        if(sSignalInstance != NULL)
+            sSignalInstance->requestStop();
     }
 
     void Daemon::handleSigInt(int pValue)
     {
         NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Interrupt signal received. Stopping.");
-        instance().requestStop();
+        if(sSignalInstance != NULL)
+            sSignalInstance->requestStop();
     }
 
     void Daemon::handleSigPipe(int pValue)
@@ -190,6 +184,7 @@ namespace BitCoin
         mLastConnectionActive = getTime();
 
         // Set signal handlers
+        sSignalInstance = this;
         if(pInDaemonMode)
             previousSigTermHandler = signal(SIGTERM, handleSigTerm);
         previousSigTermChildHandler = signal(SIGCHLD, handleSigTermChild);
@@ -199,18 +194,27 @@ namespace BitCoin
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Starting %s on %s in %s", BITCOIN_USER_AGENT, networkName(), Info::instance().path().text());
 
+#ifdef SINGLE_THREAD
         if(mInfo.spvMode)
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in SPV mode");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in SPV mode (Single Thread)");
         else
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in Full/Bloom mode");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in Full/Bloom mode (Single Thread)");
+#else
+        if(mInfo.spvMode)
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in SPV mode (Multi Threaded)");
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in Full/Bloom mode (Multi Threaded)");
+#endif
 
-        mManagerThread = new NextCash::Thread("Manager", manage);
+#ifndef SINGLE_THREAD
+        mManagerThread = new NextCash::Thread("Manager", runManage, this);
         if(mManagerThread == NULL)
         {
             requestStop();
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create manage thread");
             return false;
         }
+#endif
 
         return true;
     }
@@ -246,6 +250,7 @@ namespace BitCoin
         previousSigTermHandler= NULL;
         previousSigIntHandler = NULL;
 
+#ifndef SINGLE_THREAD
         // Wait for connections to finish
         if(mConnectionThread != NULL)
         {
@@ -253,6 +258,7 @@ namespace BitCoin
             delete mConnectionThread;
             mConnectionThread = NULL;
         }
+#endif
 
         // Stop nodes
         mNodeLock.readLock();
@@ -299,6 +305,7 @@ namespace BitCoin
         }
         mRequestsLock.writeUnlock();
 
+#ifndef SINGLE_THREAD
         // Wait for requests to finish
         if(mRequestsThread != NULL)
         {
@@ -306,11 +313,13 @@ namespace BitCoin
             delete mRequestsThread;
             mRequestsThread = NULL;
         }
+#endif
 
         // Tell the chain to stop processing
         NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping chain");
         mChain.requestStop();
 
+#ifndef SINGLE_THREAD
         // Wait for process thread to finish
         if(mProcessThread != NULL)
         {
@@ -326,6 +335,7 @@ namespace BitCoin
             delete mManagerThread;
             mManagerThread = NULL;
         }
+#endif
 
         NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Saving data");
         saveStatistics();
@@ -355,6 +365,9 @@ namespace BitCoin
         if(!start(pInDaemonMode))
             return;
 
+#ifdef SINGLE_THREAD
+        manage();
+#else
         while(isRunning())
         {
             if(mStopRequested)
@@ -362,6 +375,7 @@ namespace BitCoin
             else
                 NextCash::Thread::sleep(1000);
         }
+#endif
     }
 
     void Daemon::collectStatistics()
@@ -535,10 +549,7 @@ namespace BitCoin
         filePathName = Info::instance().path();
         filePathName.pathAppend("key_text");
         NextCash::FileInputStream textFile(filePathName);
-        if(textFile.isValid() && !mKeyStore.loadKeys(&textFile))
-            return false;
-
-        return true;
+        return !textFile.isValid() || mKeyStore.loadKeys(&textFile);
     }
 
     bool Daemon::saveKeyStore()
@@ -786,7 +797,7 @@ namespace BitCoin
         }
 
         NodeRequests *nodeRequests = new NodeRequests[nodes.size()];
-        NodeRequests *nodeRequest = nodeRequests;
+        NodeRequests *nodeRequest;
         unsigned int i;
 
         // Assign nodes
@@ -1171,51 +1182,74 @@ namespace BitCoin
         }
     }
 
+    void Daemon::runManage()
+    {
+        ((Daemon *)NextCash::Thread::getParameter())->manage();
+    }
+
     void Daemon::manage()
     {
-        Daemon &daemon = Daemon::instance();
-
-        daemon.load();
-
-        // If another thread started loading first, then wait for it to finish.
-        while(daemon.mLoading)
-            NextCash::Thread::sleep(100);
-
-        if(daemon.mStopping || !daemon.mLoaded)
-            return;
-
-        daemon.mConnectionThread = new NextCash::Thread("Connection", handleConnections);
-        if(daemon.mConnectionThread == NULL)
+        try
         {
-            daemon.requestStop();
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create connection thread");
+            load();
+        }
+        catch(std::bad_alloc pException)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Bad allocation while loading : %s", pException.what());
+            return;
+        }
+        catch(std::exception pException)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Exception while loading : %s", pException.what());
             return;
         }
 
-        if(daemon.mStopping)
+        // If another thread started loading first, then wait for it to finish.
+        while(mLoading)
+            NextCash::Thread::sleep(100);
+
+        if(mStopping || !mLoaded)
             return;
 
-        if(!daemon.mInfo.spvMode)
+#ifndef SINGLE_THREAD
+        mConnectionThread = new NextCash::Thread("Connection", runConnections, this);
+        if(mConnectionThread == NULL)
         {
-            daemon.mRequestsThread = new NextCash::Thread("Requests", handleRequests);
-            if(daemon.mRequestsThread == NULL)
+            requestStop();
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Failed to create connection thread");
+            return;
+        }
+
+        if(mStopping)
+            return;
+
+        if(!mInfo.spvMode)
+        {
+            mRequestsThread = new NextCash::Thread("Requests", runRequests, this);
+            if(mRequestsThread == NULL)
             {
-                daemon.requestStop();
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create requests thread");
+                requestStop();
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                  "Failed to create requests thread");
                 return;
             }
 
-            if(daemon.mStopping)
+            if(mStopping)
                 return;
         }
 
-        daemon.mProcessThread = new NextCash::Thread("Process", process);
-        if(daemon.mProcessThread == NULL)
+        mProcessThread = new NextCash::Thread("Process", runProcesses, this);
+        if(mProcessThread == NULL)
         {
-            daemon.requestStop();
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create process thread");
+            requestStop();
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Failed to create process thread");
             return;
         }
+#endif
 
         int32_t startTime = getTime();
         int32_t lastStatReportTime = startTime;
@@ -1232,120 +1266,160 @@ namespace BitCoin
         NextCash::FileOutputStream *profilerFile;
 #endif
 
-        while(!daemon.mStopping)
+        while(!mStopping)
         {
-            if(daemon.mFinishMode == FINISH_ON_SYNC && daemon.mChain.isInSync() &&
-              daemon.mMonitor.height() == daemon.mChain.height())
+            if(mFinishMode == FINISH_ON_SYNC && mChain.isInSync() &&
+              mMonitor.height() == mChain.height())
             {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Stopping because of finish on sync");
-                daemon.requestStop();
+                requestStop();
                 break;
             }
 
-            if(daemon.mStopping)
+            if(mStopping)
                 break;
 
             time = getTime();
             if(time - lastStatReportTime > 180)
             {
                 lastStatReportTime = getTime();
-                daemon.printStatistics();
+                printStatistics();
             }
 
-            if(daemon.mStopping)
+            if(mStopping)
                 break;
 
-            if(daemon.mFinishMode != FINISH_ON_REQUEST &&
-              daemon.peerCount() == 0 && time - daemon.mLastConnectionActive > 60)
+            if(mFinishMode != FINISH_ON_REQUEST &&
+              peerCount() == 0 && time - mLastConnectionActive > 60)
             {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Stopping because of lack of network connectivity");
-                daemon.requestStop();
+                requestStop();
                 break;
             }
 
-            if(!daemon.mChain.isInSync())
+            if(!mChain.isInSync())
             {
-                // Wait 30 seconds so hopefully a bunch of nodes are ready to request at the same time to improve staggering
+                // Wait 30 seconds so hopefully a bunch of nodes are ready to request at the same
+                //   time to improve staggering
                 time = getTime();
                 if(time - lastRequestCheckTime > 30 ||
-                  (daemon.mChain.pendingBlockCount() == 0 && time - lastRequestCheckTime > 10))
+                  (mChain.pendingBlockCount() == 0 && time - lastRequestCheckTime > 10))
                 {
                     lastRequestCheckTime = time;
-                    daemon.checkSync();
-                    daemon.sendRequests();
+                    checkSync();
+                    sendRequests();
                 }
 
-                if(daemon.mStopping)
+                if(mStopping)
                     break;
             }
             else
             {
-                if(daemon.mChain.headersNeeded())
-                    daemon.sendHeaderRequest();
-                if(daemon.mChain.blocksNeeded())
-                    daemon.sendRequests();
-                if(!daemon.mInfo.spvMode)
+                if(mChain.headersNeeded())
+                    sendHeaderRequest();
+                if(mChain.blocksNeeded())
+                    sendRequests();
+                if(!mInfo.spvMode)
                 {
                     time = getTime();
                     if(time - lastTransactionRequest > 20)
                     {
                         lastTransactionRequest = time;
-                        daemon.sendTransactionRequests();
+                        sendTransactionRequests();
                     }
                 }
             }
 
             time = getTime();
+#ifdef ANDROID
+            if(time - lastInfoSaveTime > 180)
+#else
             if(time - lastInfoSaveTime > 600)
+#endif
             {
                 lastInfoSaveTime = time;
-                daemon.mInfo.save();
-                daemon.saveMonitor();
-                daemon.mChain.blockStats().save();
-                daemon.mChain.forks().save();
+                mInfo.save();
+                saveMonitor();
+                mChain.blockStats().save();
+                mChain.forks().save();
             }
 
-            if(daemon.mStopping)
+            if(mStopping)
                 break;
 
-            if(daemon.mChain.blockStats().cacheSize() > 10000)
+            if(mChain.blockStats().cacheSize() > 10000)
             {
-                daemon.mChain.blockStats().save();
-                daemon.mChain.forks().save();
+                mChain.blockStats().save();
+                mChain.forks().save();
             }
 
-            if(daemon.mStopping)
+            if(mStopping)
                 break;
 
             time = getTime();
-            if(time - daemon.mStatistics.startTime > 3600)
-                daemon.saveStatistics();
+            if(time - mStatistics.startTime > 3600)
+                saveStatistics();
 
-            if(daemon.mStopping)
+            if(mStopping)
                 break;
 
             time = getTime();
-            if(daemon.mLastPeerCount > 0 && daemon.mLastPeerCount < 10000 &&
+            if(mLastPeerCount > 0 && mLastPeerCount < 10000 &&
               time - lastPeerRequestTime > 60)
             {
                 lastPeerRequestTime = time;
-                daemon.sendPeerRequest();
+                sendPeerRequest();
             }
 
-            if(daemon.mStopping)
+            if(mStopping)
                 break;
 
             time = getTime();
             if(time - lastImprovement > 300) // Every 5 minutes
             {
                 lastImprovement = time;
-                daemon.improveSpeed();
+                improveSpeed();
             }
 
-            if(daemon.mStopping)
+            if(mStopping)
                 break;
+
+#ifdef SINGLE_THREAD
+            // Process nodes
+            mNodeLock.readLock();
+            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+                (*node)->process();
+            mNodeLock.readUnlock();
+            if(mStopping)
+                break;
+
+            process();
+            if(mStopping)
+                break;
+
+            handleConnections();
+            if(mStopping)
+                break;
+
+            if(!mInfo.spvMode)
+            {
+                handleRequests();
+                if(mStopping)
+                    break;
+            }
+
+            if(mStopRequested)
+            {
+                stop();
+                break;
+            }
+            else
+                NextCash::Thread::sleep(200);
+#else
+            NextCash::Thread::sleep(2000);
+#endif
 
 #ifdef PROFILER_ON
             time = getTime();
@@ -1360,87 +1434,85 @@ namespace BitCoin
                 lastProfilerWrite = time;
             }
 #endif
+        }
+    }
 
-            NextCash::Thread::sleep(2000);
+    void Daemon::runProcesses()
+    {
+        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        daemon->mLastBlockHash = daemon->mChain.lastBlockHash();
+
+        while(!daemon->mStopping)
+        {
+            daemon->process();
+            NextCash::Thread::sleep(100);
         }
     }
 
     void Daemon::process()
     {
-        Daemon &daemon = Daemon::instance();
-        int32_t lastOutputsPurgeTime = getTime();
-        int32_t lastAddressPurgeTime = getTime();
-        int32_t lastMemPoolCheckPending = getTime();
-        int32_t lastMonitorProcess = getTime();
-        NextCash::Hash lastBlockHash = daemon.mChain.lastBlockHash();
+        mChain.process();
 
-        while(!daemon.mStopping)
+        if(mStopping)
+            return;
+
+        if(mInfo.spvMode)
         {
-            daemon.mChain.process();
-
-            if(daemon.mStopping)
-                break;
-
-            if(daemon.mInfo.spvMode)
+            if(mLastBlockHash != mChain.lastBlockHash() ||
+              getTime() - mLastMonitorProcess > 2)
             {
-                if(lastBlockHash != daemon.mChain.lastBlockHash() ||
-                  getTime() - lastMonitorProcess > 2)
-                {
-                    daemon.mMonitor.process(daemon.mChain);
-                    lastMonitorProcess = getTime();
-                    lastBlockHash = daemon.mChain.lastBlockHash();
-                }
-
-                if(daemon.mStopping)
-                    break;
-            }
-            else
-            {
-                if(daemon.mChain.isInSync())
-                    daemon.announce();
-
-                if(daemon.mStopping)
-                    break;
-
-                if(getTime() - lastMemPoolCheckPending > 20)
-                {
-                    daemon.mChain.memPool().checkPendingTransactions(daemon.mChain.outputs(),
-                      daemon.mChain.blockStats(), daemon.mChain.forks(), daemon.mInfo.minFee);
-                    lastMemPoolCheckPending = getTime();
-                }
-
-                if(daemon.mStopping)
-                    break;
-
-                daemon.mChain.memPool().process(daemon.mInfo.memPoolThreshold);
-
-                if(daemon.mStopping)
-                    break;
-
-                if((getTime() - lastOutputsPurgeTime > 30 && daemon.mChain.outputs().needsPurge()) ||
-                  getTime() - lastOutputsPurgeTime > 3600)
-                {
-                    if(!daemon.mChain.outputs().save())
-                        daemon.requestStop();
-                    lastOutputsPurgeTime = getTime();
-                }
-
-                if(daemon.mStopping)
-                    break;
-
-                if((getTime() - lastAddressPurgeTime > 30 && daemon.mChain.addresses().needsPurge()) ||
-                  getTime() - lastAddressPurgeTime > 3600)
-                {
-                    if(!daemon.mChain.addresses().save())
-                        daemon.requestStop();
-                    lastAddressPurgeTime = getTime();
-                }
-
-                if(daemon.mStopping)
-                    break;
+                mMonitor.process(mChain);
+                mLastMonitorProcess = getTime();
+                mLastBlockHash = mChain.lastBlockHash();
             }
 
-            NextCash::Thread::sleep(100);
+            if(mStopping)
+                return;
+        }
+        else
+        {
+            if(mChain.isInSync())
+                announce();
+
+            if(mStopping)
+                return;
+
+            if(getTime() - mLastMemPoolCheckPending > 20)
+            {
+                mChain.memPool().checkPendingTransactions(mChain.outputs(),
+                  mChain.blockStats(), mChain.forks(), mInfo.minFee);
+                mLastMemPoolCheckPending = getTime();
+            }
+
+            if(mStopping)
+                return;
+
+            mChain.memPool().process(mInfo.memPoolThreshold);
+
+            if(mStopping)
+                return;
+
+            if((getTime() - mLastOutputsPurgeTime > 30 && mChain.outputs().needsPurge()) ||
+              getTime() - mLastOutputsPurgeTime > 3600)
+            {
+                if(!mChain.outputs().save())
+                    requestStop();
+                mLastOutputsPurgeTime = getTime();
+            }
+
+            if(mStopping)
+                return;
+
+            if((getTime() - mLastAddressPurgeTime > 30 && mChain.addresses().needsPurge()) ||
+              getTime() - mLastAddressPurgeTime > 3600)
+            {
+                if(!mChain.addresses().save())
+                    requestStop();
+                mLastAddressPurgeTime = getTime();
+            }
+
+            if(mStopping)
+                return;
         }
     }
 
@@ -1552,6 +1624,9 @@ namespace BitCoin
         unsigned int count = 0;
         bool found;
         uint64_t servicesMask = Message::VersionData::FULL_NODE_BIT;
+#ifdef SINGLE_THREAD
+        int32_t lastNodeProcess = getTime();
+#endif
 
         if(mChain.forks().cashActive())
             servicesMask |= Message::VersionData::CASH_NODE_BIT;
@@ -1564,7 +1639,7 @@ namespace BitCoin
         NextCash::Network::Connection *connection;
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d good peers", peers.size());
-        for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
+        for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end()&&!mStopRequested;++peer)
         {
             // Skip nodes already connected
             found = false;
@@ -1583,23 +1658,41 @@ namespace BitCoin
             if(!connection->isOpen())
                 delete connection;
             else if(addNode(connection, false, false, (*peer)->services))
-                count++;
+            {
+                ++count;
+#ifdef SINGLE_THREAD
+                break;
+#endif
+            }
 
             if(mStopping || count >= pCount / 2) // Limit good to half
                 break;
+
+#ifdef SINGLE_THREAD
+            if(getTime() - lastNodeProcess > 5)
+            {
+                // Process nodes so they don't wait a long time
+                mNodeLock.readLock();
+                for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end()&&!mStopRequested;++node)
+                    (*node)->process();
+                mNodeLock.readUnlock();
+                lastNodeProcess = getTime();
+            }
+#endif
         }
 
         peers.clear();
         mInfo.getRandomizedPeers(peers, -5, servicesMask);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d usable peers", peers.size());
+        unsigned int usableCount = 0;
         mLastPeerCount = peers.size();
         for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
         {
             // Skip nodes already connected
             found = false;
             mNodeLock.readLock();
-            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end()&&!mStopRequested;++node)
                 if((*node)->address() == (*peer)->address)
                 {
                     found = true;
@@ -1613,10 +1706,28 @@ namespace BitCoin
             if(!connection->isOpen())
                 delete connection;
             else if(addNode(connection, false, false, 0))
-                count++;
+            {
+                ++count;
+#ifdef SINGLE_THREAD
+                break;
+#endif
+                ++usableCount;
+            }
 
             if(mStopping || count >= pCount)
                 break;
+
+#ifdef SINGLE_THREAD
+            if(getTime() - lastNodeProcess > 5)
+            {
+                // Process nodes so they don't wait a long time
+                mNodeLock.readLock();
+                for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end()&&!mStopRequested;++node)
+                    (*node)->process();
+                mNodeLock.readUnlock();
+                lastNodeProcess = getTime();
+            }
+#endif
         }
 
         if(count == 0)
@@ -1712,140 +1823,142 @@ namespace BitCoin
             delete *requestChannel;
     }
 
-    void Daemon::handleConnections()
+    void Daemon::runConnections()
     {
-        Daemon &daemon = Daemon::instance();
-        NextCash::Network::Listener *nodeListener = NULL;
-        NextCash::Network::Connection *newConnection;
-        int32_t lastFillNodesTime = 0;
-        int32_t lastCleanTime = getTime();
+        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
 
-        if(daemon.outgoingConnectionCountTarget() >= daemon.mInfo.maxConnections)
-            daemon.mMaxIncoming = 0;
+        if (daemon->outgoingConnectionCountTarget() >= daemon->mInfo.maxConnections)
+            daemon->mMaxIncoming = 0;
         else
-            daemon.mMaxIncoming = daemon.mInfo.maxConnections - daemon.outgoingConnectionCountTarget();
+            daemon->mMaxIncoming =
+              daemon->mInfo.maxConnections - daemon->outgoingConnectionCountTarget();
 
-        while(!daemon.mStopping)
+        while(!daemon->mStopping)
         {
-            if(daemon.mOutgoingNodes < daemon.outgoingConnectionCountTarget() && getTime() - lastFillNodesTime > 30)
-            {
-                daemon.recruitPeers(daemon.outgoingConnectionCountTarget() - daemon.mOutgoingNodes);
-                lastFillNodesTime = getTime();
-            }
-
-            if(daemon.mStopping)
-                break;
-
-            if(getTime() - lastCleanTime > 10)
-            {
-                lastCleanTime = getTime();
-                daemon.cleanNodes();
-            }
-
-            if(daemon.mStopping)
-                break;
-
-            if(!daemon.mInfo.spvMode)
-            {
-                if(nodeListener == NULL)
-                {
-                    if(daemon.mIncomingNodes < daemon.mMaxIncoming)
-                    {
-                        nodeListener = new NextCash::Network::Listener(AF_INET6, networkPort(), 5, 1);
-                        if(nodeListener->isValid())
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                              "Started listening for incoming connections on port %d", nodeListener->port());
-                        }
-                        else
-                        {
-                            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
-                              "Failed to create incoming listener");
-                            daemon.requestStop();
-                            break;
-                        }
-                    }
-                }
-                else
-                {
-                    while(!daemon.mStopping && (newConnection = nodeListener->accept()) != NULL)
-                        if(daemon.addNode(newConnection, true, false, 0) && daemon.mIncomingNodes >= daemon.mMaxIncoming)
-                        {
-                            delete nodeListener;
-                            nodeListener = NULL;
-                            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                              "Stopped listening for incoming connections because of connection limit");
-                            break;
-                        }
-                }
-
-                if(daemon.mStopping)
-                    break;
-            }
-
+            daemon->handleConnections();
             NextCash::Thread::sleep(500);
         }
 
-        if(nodeListener != NULL)
-            delete nodeListener;
+        if(daemon->mNodeListener != NULL)
+            delete daemon->mNodeListener;
     }
 
-    void Daemon::handleRequests()
+    void Daemon::handleConnections()
     {
-        Daemon &daemon = Daemon::instance();
-        NextCash::Network::Listener *requestsListener = NULL;
         NextCash::Network::Connection *newConnection;
-        int32_t lastCleanTime = getTime();
 
-        while(!daemon.mStopping)
+        if(mOutgoingNodes < outgoingConnectionCountTarget() && getTime() - mLastFillNodesTime > 30)
         {
-            if(getTime() - lastCleanTime > 10)
-            {
-                lastCleanTime = getTime();
-                daemon.cleanRequestChannels();
-            }
+            recruitPeers(outgoingConnectionCountTarget() - mOutgoingNodes);
+            mLastFillNodesTime = getTime();
+        }
 
-            if(daemon.mStopping)
-                break;
+        if(mStopping)
+            return;
 
-            if(requestsListener == NULL)
+        if(getTime() - mLastCleanTime > 10)
+        {
+            mLastCleanTime = getTime();
+            cleanNodes();
+        }
+
+        if(mStopping)
+            return;
+
+        if(!mInfo.spvMode)
+        {
+            if(mNodeListener == NULL)
             {
-                if(daemon.mRequestChannels.size() < 8)
+                if(mIncomingNodes < mMaxIncoming)
                 {
-                    requestsListener = new NextCash::Network::Listener(AF_INET6, 8666, 5, 1);
-                    if(requestsListener->isValid())
+                    mNodeListener = new NextCash::Network::Listener(AF_INET6, networkPort(), 5, 1);
+                    if(mNodeListener->isValid())
                     {
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                          "Started listening for request connections on port %d", requestsListener->port());
+                          "Started listening for incoming connections on port %d", mNodeListener->port());
                     }
                     else
                     {
-                        NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create requests listener");
-                        daemon.requestStop();
-                        break;
+                        NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                          "Failed to create incoming listener");
+                        requestStop();
+                        return;
                     }
                 }
             }
             else
             {
-                while(!daemon.mStopping && (newConnection = requestsListener->accept()) != NULL)
-                    if(daemon.addRequestChannel(newConnection) && daemon.mRequestChannels.size() >= 8)
+                while(!mStopping && (newConnection = mNodeListener->accept()) != NULL)
+                    if(addNode(newConnection, true, false, 0) && mIncomingNodes >= mMaxIncoming)
                     {
-                        delete requestsListener;
-                        requestsListener = NULL;
+                        delete mNodeListener;
+                        mNodeListener = NULL;
                         NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                          "Stopped listening for request connections because of connection limit");
+                          "Stopped listening for incoming connections because of connection limit");
                         break;
                     }
             }
+        }
+    }
 
-            if(daemon.mStopping)
-                break;
+    void Daemon::runRequests()
+    {
+        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
 
+        while(!daemon->mStopping)
+        {
+            daemon->handleRequests();
             NextCash::Thread::sleep(200);
         }
 
-        if(requestsListener != NULL)
-            delete requestsListener;
+        if(daemon->mRequestsListener != NULL)
+            delete daemon->mRequestsListener;
+    }
+
+    void Daemon::handleRequests()
+    {
+        NextCash::Network::Connection *newConnection;
+
+        if(getTime() - mLastCleanTime > 10)
+        {
+            mLastCleanTime = getTime();
+            cleanRequestChannels();
+        }
+
+        if(mStopping)
+            return;
+
+        if(mRequestsListener == NULL)
+        {
+            if(mRequestChannels.size() < 8)
+            {
+                mRequestsListener = new NextCash::Network::Listener(AF_INET6, 8666, 5, 1);
+                if(mRequestsListener->isValid())
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                      "Started listening for request connections on port %d",
+                      mRequestsListener->port());
+                }
+                else
+                {
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                      "Failed to create requests listener");
+                    requestStop();
+                    return;
+                }
+            }
+        }
+        else
+        {
+            while(!mStopping && (newConnection = mRequestsListener->accept()) != NULL)
+                if(addRequestChannel(newConnection) && mRequestChannels.size() >= 8)
+                {
+                    delete mRequestsListener;
+                    mRequestsListener = NULL;
+                    NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                      "Stopped listening for request connections because of connection limit");
+                    break;
+                }
+        }
     }
 }

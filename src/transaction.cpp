@@ -1043,7 +1043,7 @@ namespace BitCoin
     }
 
     bool Transaction::process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
-      uint64_t pBlockHeight, bool pCoinBase, int32_t pBlockVersion, BlockStats &pBlockStats,
+      unsigned int pBlockHeight, bool pCoinBase, int32_t pBlockVersion, BlockStats &pBlockStats,
       Forks &pForks, std::vector<unsigned int> &pSpentAges)
     {
 #ifdef PROFILER_ON
@@ -1386,7 +1386,7 @@ namespace BitCoin
         return true;
     }
 
-    unsigned int Transaction::calculatedSize()
+    NextCash::stream_size Transaction::calculatedSize()
     {
         unsigned int result = 4; // Version
 
@@ -1412,12 +1412,12 @@ namespace BitCoin
 
     uint64_t Transaction::feeRate()
     {
-        unsigned int currentSize = mSize;
+        uint64_t currentSize = mSize;
         if(currentSize == 0)
             currentSize = calculatedSize();
         if(mFee == 0)
             return 0;
-        return (mFee * 1000) / (uint64_t)currentSize; // Satoshis per KB
+        return (mFee * 1000) / currentSize; // Satoshis per KB
     }
 
     void Outpoint::write(NextCash::OutputStream *pStream)
@@ -1509,7 +1509,7 @@ namespace BitCoin
 
     void Transaction::write(NextCash::OutputStream *pStream, bool pBlockFile)
     {
-        unsigned int startOffset = pStream->writeOffset();
+        NextCash::stream_size startOffset = pStream->writeOffset();
         mSize = 0;
 
         // Version
@@ -1564,11 +1564,11 @@ namespace BitCoin
         // Extract FORKID (0x40) flag from hash type
         bool forkID = hashType & Signature::FORKID;
         if(forkID)
-            hashType = static_cast<Signature::HashType>(hashType ^ Signature::FORKID);
+            hashType = static_cast<Signature::HashType >(hashType ^ Signature::FORKID);
         // Extract ANYONECANPAY (0x80) flag from hash type
         bool anyoneCanPay = hashType & Signature::ANYONECANPAY;
         if(anyoneCanPay)
-            hashType = static_cast<Signature::HashType>(hashType ^ Signature::ANYONECANPAY);
+            hashType = static_cast<Signature::HashType >(hashType ^ Signature::ANYONECANPAY);
 
         if(forkID)
         {
@@ -1801,7 +1801,7 @@ namespace BitCoin
     {
         // Write appropriate data to a digest
         NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
-        unsigned int previousReadOffset = pOutputScript.readOffset();
+        NextCash::stream_size previousReadOffset = pOutputScript.readOffset();
         digest.setOutputEndian(NextCash::Endian::LITTLE);
         if(writeSignatureData(&digest, pInputOffset, pOutputScript, pOutputAmount, pHashType))
         {
@@ -1910,7 +1910,7 @@ namespace BitCoin
 #endif
         clear();
 
-        unsigned int startOffset = pStream->readOffset();
+        NextCash::stream_size startOffset = pStream->readOffset();
         mSize = 0;
 
         // Create hash

@@ -100,6 +100,8 @@ namespace BitCoin
         // Check if node should be closed
         void check();
 
+        bool processMessage();
+
         unsigned int mActiveMerkleRequests;
         bool requestMerkleBlock(NextCash::Hash &pHash);
 
@@ -116,7 +118,9 @@ namespace BitCoin
 
         unsigned int mID;
         NextCash::String mName;
+#ifndef SINGLE_THREAD
         NextCash::Thread *mThread;
+#endif
         IPAddress mAddress;
         Chain *mChain;
         Monitor *mMonitor;
@@ -150,7 +154,7 @@ namespace BitCoin
         unsigned int mBlockDownloadTime;
 
         NextCash::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested, mLastHeader;
-        uint32_t mHeaderRequestTime;
+        int32_t mHeaderRequestTime;
 
         NextCash::Mutex mBlockRequestMutex;
         NextCash::HashList mBlocksRequested;

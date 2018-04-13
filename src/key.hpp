@@ -315,6 +315,19 @@ namespace BitCoin
 
         void clear();
 
+        // Load a key from text
+        // Valid values are:
+        //   Base58 encoded address key hashes.
+        //   Base58 encoded BIP-0032 key data.
+        //
+        // Return values:
+        //   0 = success
+        //   1 = unknown failure
+        //   2 = invalid format
+        //   3 = already exists
+        //   4 = invalid derivation method for key
+        int loadKey(const char *pText, Key::DerivationPathMethod pMethod);
+
         // Load keys from a text stream
         // Valid lines of text are:
         //   Base58 encoded address key hashes.

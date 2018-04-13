@@ -150,7 +150,7 @@ namespace BitCoin
 
         Data *Interpreter::read(NextCash::Buffer *pInput, const char *pName)
         {
-            unsigned int startReadOffset = pInput->readOffset();
+            NextCash::stream_size startReadOffset = pInput->readOffset();
             pInput->setInputEndian(NextCash::Endian::LITTLE);
 
             // Start String
@@ -258,7 +258,7 @@ namespace BitCoin
             }
 
             // Read payload
-            unsigned int payloadOffset = pInput->readOffset();
+            NextCash::stream_size payloadOffset = pInput->readOffset();
 
             // Validate check sum
             uint8_t checkSum[4];
@@ -462,7 +462,7 @@ namespace BitCoin
         bool Inventory::read(NextCash::InputStream *pStream, unsigned int pSize)
         {
             // Inventory Hash Count
-            unsigned int startReadOffset = pStream->readOffset();
+            NextCash::stream_size startReadOffset = pStream->readOffset();
             uint64_t count = readCompactInteger(pStream);
             if(pStream->readOffset() + count > startReadOffset + pSize)
                 return false;
@@ -575,7 +575,7 @@ namespace BitCoin
 
         bool VersionData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
-            unsigned int startReadOffset = pStream->readOffset();
+            NextCash::stream_size startReadOffset = pStream->readOffset();
 
             if(pSize < 81)
                 return false;
@@ -704,7 +704,7 @@ namespace BitCoin
             if(pSize < 1)
                 return false;
 
-            unsigned int startReadOffset = pStream->readOffset();
+            NextCash::stream_size startReadOffset = pStream->readOffset();
 
             // Command Bytes
             uint64_t commandLength = readCompactInteger(pStream);
@@ -776,7 +776,7 @@ namespace BitCoin
             if(pSize < 1)
                 return false;
 
-            unsigned int startReadOffset = pStream->readOffset();
+            NextCash::stream_size startReadOffset = pStream->readOffset();
 
             // Address Count
             uint64_t count = readCompactInteger(pStream);
@@ -821,7 +821,7 @@ namespace BitCoin
             if(pSize < 1)
                 return false;
 
-            unsigned int startReadOffset = pStream->readOffset();
+            NextCash::stream_size startReadOffset = pStream->readOffset();
 
             // Address Count
             uint64_t count = readCompactInteger(pStream);
@@ -866,7 +866,7 @@ namespace BitCoin
             if(pSize < 5)
                 return false;
 
-            unsigned int startReadOffset = pStream->readOffset();
+            NextCash::stream_size startReadOffset = pStream->readOffset();
 
             // Version
             version = pStream->readUnsignedInt();
@@ -883,10 +883,7 @@ namespace BitCoin
                     return false;
 
             // Stop header hash
-            if(!stopHeaderHash.read(pStream, 32))
-                return false;
-
-            return true;
+            return stopHeaderHash.read(pStream, 32);
         }
 
         void GetHeadersData::write(NextCash::OutputStream *pStream)
@@ -912,7 +909,7 @@ namespace BitCoin
             if(pSize < 5)
                 return false;
 
-            unsigned int startReadOffset = pStream->readOffset();
+            NextCash::stream_size startReadOffset = pStream->readOffset();
 
             // Version
             version = pStream->readUnsignedInt();
@@ -929,10 +926,7 @@ namespace BitCoin
                     return false;
 
             // Stop header hash
-            if(!stopHeaderHash.read(pStream, 32))
-                return false;
-
-            return true;
+            return stopHeaderHash.read(pStream, 32);
         }
 
         void HeadersData::write(NextCash::OutputStream *pStream)
@@ -950,7 +944,7 @@ namespace BitCoin
             if(pSize < 1)
                 return false;
 
-            unsigned int startReadOffset = pStream->readOffset();
+            NextCash::stream_size startReadOffset = pStream->readOffset();
 
             // Header count
             uint64_t count = readCompactInteger(pStream);
@@ -1072,7 +1066,7 @@ namespace BitCoin
 
         bool MerkleBlockData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
-            unsigned int startReadOffset = pStream->readOffset();
+            NextCash::stream_size startReadOffset = pStream->readOffset();
 
             if(blockNeedsDelete && block != NULL)
                 delete block;
@@ -1100,10 +1094,15 @@ namespace BitCoin
                 return false;
 
             // Hashes
-            hashes.resize(count);
-            for(unsigned int i=0;i<hashes.size();i++)
-                if(!hashes[i].read(pStream, 32))
+            hashes.clear();
+            hashes.reserve(count);
+            for(unsigned int i=0;i<count;i++)
+            {
+                if(pStream->remaining() < 32)
                     return false;
+                else
+                    hashes.emplace_back(pStream, 32);
+            }
 
             // Flag Byte Count
             flags.clear();
@@ -1243,6 +1242,19 @@ namespace BitCoin
 
             delete merkleRoot;
             return true;
+        }
+
+        void TransactionData::write(NextCash::OutputStream *pStream)
+        {
+            if(transaction != NULL)
+                transaction->write(pStream);
+        }
+
+        bool TransactionData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        {
+            if(transaction == NULL)
+                transaction = new Transaction();
+            return transaction->read(pStream);
         }
 
         void PrefilledTransaction::write(NextCash::OutputStream *pStream)
@@ -1391,7 +1403,7 @@ namespace BitCoin
 
         bool CompactBlockData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
         {
-            unsigned int startOffset = pStream->readOffset();
+            NextCash::stream_size startOffset = pStream->readOffset();
 
             if(block != NULL)
                 delete block;
@@ -1455,10 +1467,7 @@ namespace BitCoin
                     ++readCount;
             }
 
-            if(readCount != count)
-                return false;
-
-            return true;
+            return readCount == count;
         }
 
         void GetBlockTransactionsData::write(NextCash::OutputStream *pStream)

@@ -53,7 +53,11 @@ namespace BitCoin
 
         // Get hashes for blocks that need merkle blocks
         void getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain, NextCash::HashList &pBlockHashes,
+#ifdef LOW_MEM
+          unsigned int pMaxCount = 100);
+#else
           unsigned int pMaxCount = 250);
+#endif
 
         bool filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID);
         bool needsClose(unsigned int pNodeID);

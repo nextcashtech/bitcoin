@@ -52,7 +52,7 @@ namespace BitCoin
     void Block::write(NextCash::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
       bool pBlockFile)
     {
-        unsigned int startOffset = pStream->writeOffset();
+        NextCash::stream_size startOffset = pStream->writeOffset();
         mSize = 0;
 
         // Version
@@ -99,7 +99,7 @@ namespace BitCoin
     bool Block::read(NextCash::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
       bool pCalculateHash, bool pBlockFile)
     {
-        unsigned int startOffset = pStream->readOffset();
+        NextCash::stream_size startOffset = pStream->readOffset();
         mSize = 0;
 
         // Create hash
@@ -122,9 +122,9 @@ namespace BitCoin
         }
 
         // Version
-        version = pStream->readUnsignedInt();
+        version = (int32_t)pStream->readUnsignedInt();
         if(pCalculateHash)
-            digest->writeUnsignedInt(version);
+            digest->writeUnsignedInt((unsigned int)version);
 
         // Hash of previous block
         if(!previousHash.read(pStream))
@@ -181,7 +181,7 @@ namespace BitCoin
         }
 
         // Transaction Count (Zero when header only)
-        transactionCount = readCompactInteger(pStream);
+        transactionCount = (unsigned int)readCompactInteger(pStream);
 
         if(!pIncludeTransactions)
         {
@@ -1056,7 +1056,8 @@ namespace BitCoin
 
         // Set offset to offset of first data offset location in file
         mInputFile->setReadOffset(HASHES_OFFSET + 32 + (pOffset * HEADER_ITEM_SIZE));
-        unsigned int blockOffset, previousOffset;
+        unsigned int blockOffset;
+        NextCash::stream_size previousOffset;
         uint32_t version, time, targetBits;
         for(unsigned int i=0;i<MAX_BLOCKS;i++)
         {
@@ -1297,11 +1298,7 @@ namespace BitCoin
             if(!Transaction::skip(mInputFile))
                 return false;
 
-        if(!Transaction::readOutput(mInputFile, pOutputIndex, pTransactionID, pOutput, true))
-            return false;
-
-        return true;
-
+        return Transaction::readOutput(mInputFile, pOutputIndex, pTransactionID, pOutput, true);
     }
 
     bool BlockFile::readTransaction(unsigned int pBlockOffset, unsigned int pTransactionOffset, Transaction &pTransaction)
@@ -1344,10 +1341,7 @@ namespace BitCoin
             if(!Transaction::skip(mInputFile))
                 return false;
 
-        if(!pTransaction.read(mInputFile, true, true))
-            return false;
-
-        return true;
+        return pTransaction.read(mInputFile, true, true);
     }
 
     bool BlockFile::readTransactionOutput(unsigned int pFileOffset, Output &pTransactionOutput)

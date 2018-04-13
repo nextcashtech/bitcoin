@@ -135,7 +135,7 @@ namespace BitCoin
 
             int32_t version;
             NextCash::Hash pendingBlockHash;
-            uint32_t pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
+            int32_t pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
             unsigned int lastPendingBlockSize;
 
         };
@@ -476,17 +476,8 @@ namespace BitCoin
             TransactionData() : Data(TRANSACTION) { transaction = NULL; }
             ~TransactionData() { if(transaction != NULL) delete transaction; }
 
-            void write(NextCash::OutputStream *pStream)
-            {
-                if(transaction != NULL)
-                    transaction->write(pStream);
-            }
-            bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
-            {
-                if(transaction == NULL)
-                    transaction = new Transaction();
-                return transaction->read(pStream);
-            }
+            void write(NextCash::OutputStream *pStream);
+            bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             Transaction *transaction;
 
