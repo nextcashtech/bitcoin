@@ -26,6 +26,7 @@ namespace BitCoin
 {
     Monitor::Monitor() : mMutex("Monitor")
     {
+        mKeyStore = NULL;
         mFilterID = 0;
         mFilter.setup(0);
         mPasses.push_back(PassData());

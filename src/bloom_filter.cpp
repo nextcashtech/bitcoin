@@ -321,6 +321,7 @@ namespace BitCoin
         if(mDataSize == 0 || mDataSize > MAX_SIZE || mDataSize > pStream->remaining() - 9)
         {
             mDataSize = 0;
+            mData = NULL;
             return false;
         }
 
@@ -342,6 +343,7 @@ namespace BitCoin
     {
         if(mData != NULL)
             delete[] mData; // Delete any data
+        mData = NULL;
 
         mDataSize = 0;
         mHashFunctionCount = 0;

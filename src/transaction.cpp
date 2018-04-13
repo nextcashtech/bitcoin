@@ -1179,7 +1179,7 @@ namespace BitCoin
                   pForks.softForkState(SoftFork::BIP0068) == SoftFork::ACTIVE)
                 {
                     // Sequence is an encoded relative time lock
-                    uint32_t lock = input->sequence & Input::SEQUENCE_LOCKTIME_MASK;
+                    int32_t lock = input->sequence & Input::SEQUENCE_LOCKTIME_MASK;
                     if(input->sequence & Input::SEQUENCE_TYPE)
                     {
                         // Seconds since outpoint median past time in units of 512 seconds granularity
@@ -1312,7 +1312,7 @@ namespace BitCoin
                 // Lock time is a timestamp
                 if(pForks.softForkState(SoftFork::BIP0113) == SoftFork::ACTIVE)
                 {
-                    if(lockTime > pBlockStats.getMedianPastTime(pBlockHeight, 11))
+                    if((int32_t)lockTime > pBlockStats.getMedianPastTime(pBlockHeight, 11))
                     {
                         NextCash::String lockTimeText, blockTimeText;
                         lockTimeText.writeFormattedTime(lockTime);
@@ -1328,7 +1328,7 @@ namespace BitCoin
                 {
                     // Add 600 to fake having a "peer time offset" for older blocks
                     //   Block 357903 transaction 98 has a lock time about 3 minutes after the block time
-                    if(lockTime > pBlockStats.time(pBlockHeight) + 600)
+                    if((int32_t)lockTime > pBlockStats.time(pBlockHeight) + 600)
                     {
                         NextCash::String lockTimeText, blockTimeText;
                         lockTimeText.writeFormattedTime(lockTime);

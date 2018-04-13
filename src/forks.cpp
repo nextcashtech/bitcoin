@@ -383,8 +383,7 @@ namespace BitCoin
 #else
         if(pBlockHeight > size())
         {
-            if(!pLocked)
-                mMutex.unlock();
+            mMutex.unlock();
             return 0;
         }
 

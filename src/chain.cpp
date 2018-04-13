@@ -1673,7 +1673,7 @@ namespace BitCoin
 
     bool Chain::getBlockHash(unsigned int pHeight, NextCash::Hash &pHash)
     {
-        if(pHeight > height())
+        if(pHeight > (unsigned int)height())
             return false;
 #ifdef LOW_MEM
         unsigned int blocksFromTop = height() - pHeight;

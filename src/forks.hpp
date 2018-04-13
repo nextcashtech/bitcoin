@@ -122,13 +122,13 @@ namespace BitCoin
         {
             mMutex.lock();
 
-            if(height() <= pBlockHeight)
+            if(pBlockHeight > 0 && height() <= (int)pBlockHeight)
             {
                 mMutex.unlock();
                 return;
             }
 
-            while(height() > pBlockHeight)
+            while(height() > (int)pBlockHeight)
             {
                 mIsModified = true;
 #ifdef LOW_MEM
@@ -229,8 +229,8 @@ namespace BitCoin
         NextCash::String name;
         unsigned int id;
         uint8_t bit;
-        unsigned int startTime;
-        unsigned int timeout;
+        int32_t startTime;
+        int32_t timeout;
 
         // Values that change based on chain state
         State state;
@@ -259,9 +259,9 @@ namespace BitCoin
 
         // BitCoin Cash
 #ifdef DISABLE_CASH
-        static const uint32_t CASH_ACTIVATION_TIME = 0;
+        static const int32_t CASH_ACTIVATION_TIME = 0;
 #else
-        static const uint32_t CASH_ACTIVATION_TIME = 1501590000; // Block height on mainnet 478558
+        static const int32_t CASH_ACTIVATION_TIME = 1501590000; // Block height on mainnet 478558
 #endif
         static const unsigned int HARD_MAX_BLOCK_SIZE = 1000000;
         static const unsigned int CASH_START_MAX_BLOCK_SIZE = 8000000;

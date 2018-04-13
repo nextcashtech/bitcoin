@@ -97,7 +97,7 @@ namespace BitCoin
 
         if(mChain.isInSync())
         {
-            unsigned int monitorHeight = mMonitor.height();
+            int monitorHeight = mMonitor.height();
             if(monitorHeight > 0 && monitorHeight < mChain.height())
                 return FINDING_TRANSACTIONS;
             else
@@ -1269,7 +1269,7 @@ namespace BitCoin
         while(!mStopping)
         {
             if(mFinishMode == FINISH_ON_SYNC && mChain.isInSync() &&
-              mMonitor.height() == mChain.height())
+              (int)mMonitor.height() == mChain.height())
             {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Stopping because of finish on sync");
@@ -1349,11 +1349,13 @@ namespace BitCoin
             if(mStopping)
                 break;
 
+#ifdef LOW_MEM
             if(mChain.blockStats().cacheSize() > 10000)
             {
                 mChain.blockStats().save();
                 mChain.forks().save();
             }
+#endif
 
             if(mStopping)
                 break;
