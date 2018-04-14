@@ -1596,6 +1596,9 @@ namespace BitCoin
         NextCash::Network::IPList ipList;
         NextCash::Network::list(pName, ipList);
         unsigned int result = 0;
+#ifdef SINGLE_THREAD
+        int32_t lastNodeProcess = getTime();
+#endif
 
         if(ipList.size() == 0)
         {
@@ -1606,13 +1609,41 @@ namespace BitCoin
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Found %d nodes from %s", ipList.size(), pName);
         NextCash::Network::Connection *connection;
+        unsigned int seedConnections;
         for(NextCash::Network::IPList::iterator ip=ipList.begin();ip!=ipList.end() && !mStopping;++ip)
         {
-            connection = new NextCash::Network::Connection(*ip, networkPortString(), 5);
-            if(!connection->isOpen())
-                delete connection;
-            else if(addNode(connection, false, true, 0))
-                result++;
+            seedConnections = 0;
+            mNodeLock.readLock();
+            for (std::vector<Node *>::iterator node = mNodes.begin();
+                 node != mNodes.end() && !mStopRequested; ++node)
+                if ((*node)->isSeed())
+                    ++seedConnections;
+            mNodeLock.readUnlock();
+
+            if(seedConnections < 16)
+            {
+                connection = new NextCash::Network::Connection(*ip, networkPortString(), 5);
+                if (!connection->isOpen())
+                    delete connection;
+                else if (addNode(connection, false, true, 0))
+                    result++;
+            }
+            else
+            {
+                NextCash::Thread::sleep(500);
+#ifdef SINGLE_THREAD
+                if(getTime() - lastNodeProcess > 5)
+                {
+                    // Process nodes so they don't wait a long time
+                    mNodeLock.readLock();
+                    for (std::vector<Node *>::iterator node = mNodes.begin();
+                         node != mNodes.end() && !mStopRequested; ++node)
+                        (*node)->process();
+                    mNodeLock.readUnlock();
+                    lastNodeProcess = getTime();
+                }
+#endif
+            }
         }
 
         mQueryingSeed = false;
