@@ -738,8 +738,8 @@ namespace BitCoin
     {
         clear();
 
-        mDepth = -1;
-        mIndex = -1;
+        mDepth = 0xff;
+        mIndex = 0xff;
 
         if(pStream->remaining() < 33)
             return false;
@@ -827,8 +827,8 @@ namespace BitCoin
     {
         clear();
 
-        mDepth = -1;
-        mIndex = -1;
+        mDepth = 0xff;
+        mIndex = 0xff;
 
         if(pStream->remaining() < 32)
             return false;
@@ -853,8 +853,8 @@ namespace BitCoin
 
         secp256k1_context *thisContext = context(SECP256K1_CONTEXT_NONE);
 
-        mDepth = -1;
-        mIndex = -1;
+        mDepth = 0xff;
+        mIndex = 0xff;
 
         while(true)
         {
@@ -880,8 +880,8 @@ namespace BitCoin
     {
         clear();
 
-        mDepth = -1;
-        mIndex = -1;
+        mDepth = 0xff;
+        mIndex = 0xff;
         mHash = pHash;
     }
 
@@ -969,6 +969,11 @@ namespace BitCoin
 
         unsigned int childCount = pStream->readUnsignedInt();
         Key *newChild;
+
+        mChildLock.lock();
+        mChildren.reserve(childCount);
+        mChildLock.unlock();
+
         for(unsigned int i=0;i<childCount;++i)
         {
             newChild = new Key();

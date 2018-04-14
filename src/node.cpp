@@ -898,7 +898,8 @@ namespace BitCoin
             {
                 if(mVersionData != NULL)
                 {
-                    sendReject(Message::nameFor(message->type), Message::RejectData::DUPLICATE, "More than one version message");
+                    sendReject(Message::nameFor(message->type), Message::RejectData::DUPLICATE,
+                      "More than one version message");
                     break;
                 }
 
@@ -908,8 +909,9 @@ namespace BitCoin
                 NextCash::String timeText;
                 timeText.writeFormattedTime(mVersionData->time);
                 NextCash::String versionText;
-                versionText.writeFormatted("Version : %s (%d), %d blocks", mVersionData->userAgent.text(),
-                  mVersionData->version, mVersionData->startBlockHeight);
+                versionText.writeFormatted("Version : %s (%d), %d blocks",
+                  mVersionData->userAgent.text(), mVersionData->version,
+                  mVersionData->startBlockHeight);
                 if(mVersionData->relay)
                     versionText += ", relay";
                 if(mVersionData->transmittingServices & Message::VersionData::FULL_NODE_BIT)
@@ -1045,7 +1047,8 @@ namespace BitCoin
                             if(mPingRoundTripTime > mPingCutoff)
                             {
                                 NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                                  "Dropping. Ping time %ds not within cutoff of %ds", mPingRoundTripTime, mPingCutoff);
+                                  "Dropping. Ping time %ds not within cutoff of %ds",
+                                  mPingRoundTripTime, mPingCutoff);
                                 close();
                             }
                             else if(mVersionData != NULL && !mIsIncoming && !mIsSeed)

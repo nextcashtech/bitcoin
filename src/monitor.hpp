@@ -208,7 +208,8 @@ namespace BitCoin
         unsigned int refreshKeyStore();
 
         void refreshBloomFilter(bool pLocked);
-        void refreshTransaction(SPVTransactionData *pTransaction, bool pAllowPending);
+        // Returns true if the bloom filter is reset
+        bool refreshTransaction(SPVTransactionData *pTransaction, bool pAllowPending);
         Output *getOutput(NextCash::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending);
         bool getPayAddresses(Output *pOutput, NextCash::HashList &pAddresses, bool pBlockOnly);
 
@@ -217,6 +218,7 @@ namespace BitCoin
 
         // Cancel all pending merkle requests and update the bloom filter.
         void restartBloomFilter();
+        void clearMerkleRequest(MerkleRequestData *pData);
 
         NextCash::Mutex mMutex;
         KeyStore *mKeyStore;

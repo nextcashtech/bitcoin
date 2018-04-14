@@ -343,20 +343,20 @@ namespace BitCoin
         return pAddresses.size() > 0;
     }
 
-    void Monitor::refreshTransaction(Monitor::SPVTransactionData *pTransaction, bool pAllowPending)
+    bool Monitor::refreshTransaction(Monitor::SPVTransactionData *pTransaction, bool pAllowPending)
     {
         pTransaction->amount = 0;
         pTransaction->payOutputs.clear();
         pTransaction->spendInputs.clear();
 
         if(pTransaction->transaction == NULL)
-            return;
+            return false;
 
         // Check for spends
         Output *spentOutput;
         NextCash::HashList payAddresses;
         unsigned int index = 0;
-        for(std::vector<Input>::iterator input=pTransaction->transaction->inputs.begin();input!=pTransaction->transaction->inputs.end();++input)
+        for(std::vector<Input>::iterator input=pTransaction->transaction->inputs.begin();input!=pTransaction->transaction->inputs.end();++input,++index)
         {
             // Find output being spent
             spentOutput = getOutput(input->outpoint.transactionID, input->outpoint.index, pAllowPending);
@@ -365,14 +365,12 @@ namespace BitCoin
                 pTransaction->spendInputs.push_back(index);
                 pTransaction->amount -= spentOutput->amount;
             }
-            ++index;
         }
 
         // Check for payments
         index = 0;
         bool updateNeeded = false, newAddressesCreated = false;
-        for(std::vector<Output>::iterator output=pTransaction->transaction->outputs.begin();output!=pTransaction->transaction->outputs.end();++output)
-        {
+        for(std::vector<Output>::iterator output=pTransaction->transaction->outputs.begin();output!=pTransaction->transaction->outputs.end();++output,++index)
             if(getPayAddresses(&(*output), payAddresses, true))
             {
                 if(mKeyStore != NULL)
@@ -388,12 +386,14 @@ namespace BitCoin
                 pTransaction->amount += output->amount;
             }
 
-            ++index;
-        }
-
         // Refresh addresses from key store and update bloom filter if necessary
         if(updateNeeded && refreshKeyStore())
+        {
             restartBloomFilter();
+            return true;
+        }
+        else
+            return false;
     }
 
     void Monitor::clear()
@@ -454,8 +454,7 @@ namespace BitCoin
     void Monitor::restartBloomFilter()
     {
         for(NextCash::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
-            delete *request;
-        mMerkleRequests.clear();
+            clearMerkleRequest(*request);
 
         refreshBloomFilter(true);
     }
@@ -897,7 +896,8 @@ namespace BitCoin
     {
         mMutex.lock();
 
-        NextCash::HashContainerList<MerkleRequestData *>::Iterator requestIter = mMerkleRequests.get(pData->block->hash);
+        NextCash::HashContainerList<MerkleRequestData *>::Iterator requestIter =
+          mMerkleRequests.get(pData->block->hash);
         if(requestIter == mMerkleRequests.end())
         {
             mMutex.unlock();
@@ -1042,7 +1042,11 @@ namespace BitCoin
                     {
                         (*transactionIter)->transaction = pTransactionData->transaction;
                         pTransactionData->transaction = NULL; // Prevent it from being deleted
-                        refreshTransaction(*transactionIter, true);
+                        if(refreshTransaction(*transactionIter, true))
+                        {
+                            mMutex.unlock();
+                            return result;
+                        }
                         processNeeded = request->isComplete();
                         // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
                           // "Added confirmed transaction to merkle block request : %s", transaction->hash.hex().text());
@@ -1427,22 +1431,7 @@ namespace BitCoin
 
                         // Reset all merkle requests so they are only received with updated bloom filters
                         for(NextCash::HashContainerList<MerkleRequestData *>::Iterator requestToClear=mMerkleRequests.begin();requestToClear!=mMerkleRequests.end();++requestToClear)
-                        {
-                            // Move transactions back to pending
-                            for(NextCash::HashContainerList<SPVTransactionData *>::Iterator transaction=(*requestToClear)->transactions.begin();transaction!=(*requestToClear)->transactions.end();)
-                            {
-                                if(mPendingTransactions.get(transaction.hash()) == mPendingTransactions.end())
-                                {
-                                    (*transaction)->blockHash.clear();
-                                    mPendingTransactions.insert(transaction.hash(), *transaction);
-                                    transaction = (*requestToClear)->transactions.erase(transaction);
-                                }
-                                else
-                                    ++transaction;
-                            }
-
-                            (*requestToClear)->clear();
-                        }
+                            clearMerkleRequest(*requestToClear);
 
                         break;
                     }
@@ -1459,5 +1448,23 @@ namespace BitCoin
             // Not SPV mode
 
         }
+    }
+
+    void Monitor::clearMerkleRequest(MerkleRequestData *pData)
+    {
+        // Move transactions back to pending
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator transaction=pData->transactions.begin();transaction!=pData->transactions.end();)
+        {
+            if(mPendingTransactions.get(transaction.hash()) == mPendingTransactions.end())
+            {
+                (*transaction)->blockHash.clear();
+                mPendingTransactions.insert(transaction.hash(), *transaction);
+                transaction = pData->transactions.erase(transaction);
+            }
+            else
+                ++transaction;
+        }
+
+        pData->clear();
     }
 }
