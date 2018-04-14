@@ -977,7 +977,7 @@ namespace BitCoin
         {
             if(transactionHashes.contains(transaction.hash()))
                 ++transaction;
-            else
+            else if((*transaction)->transaction != NULL)
             {
                 // Move transaction to pending
                 if(mPendingTransactions.get((*transaction)->transaction->hash) == mPendingTransactions.end())
