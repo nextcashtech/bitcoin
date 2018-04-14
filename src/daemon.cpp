@@ -33,6 +33,7 @@ namespace BitCoin
         mLoading = false;
         mLoaded = false;
         mQueryingSeed = false;
+        mConnecting = false;
 #ifndef SINGLE_THREAD
         mConnectionThread = NULL;
         mRequestsThread = NULL;
@@ -92,7 +93,7 @@ namespace BitCoin
         if(mQueryingSeed)
             return FINDING_PEERS;
 
-        if(peerCount() < outgoingConnectionCountTarget() / 2)
+        if(mConnecting)
             return CONNECTING_TO_PEERS;
 
         if(mChain.isInSync())
@@ -1661,6 +1662,8 @@ namespace BitCoin
         int32_t lastNodeProcess = getTime();
 #endif
 
+        mConnecting = true;
+
         if(mChain.forks().cashActive())
             servicesMask |= Message::VersionData::CASH_NODE_BIT;
 
@@ -1770,6 +1773,7 @@ namespace BitCoin
             querySeed(SEEDS[NextCash::Math::randomInt(SEED_COUNT)]);
         }
 
+        mConnecting = false;
         return count;
     }
 

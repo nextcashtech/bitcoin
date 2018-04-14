@@ -89,7 +89,7 @@ namespace BitCoin
         Info &mInfo;
 
         void stop();
-        bool mRunning, mStopping, mStopRequested, mLoading, mLoaded, mQueryingSeed;
+        bool mRunning, mStopping, mStopRequested, mLoading, mLoaded, mQueryingSeed, mConnecting;
         int mFinishMode;
 
 #ifndef SINGLE_THREAD
