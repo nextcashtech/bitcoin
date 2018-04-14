@@ -316,6 +316,9 @@ namespace BitCoin
 
         void clear();
 
+        std::vector<NextCash::String> names;
+        std::vector<NextCash::String> seeds;
+
         // Load a key from text
         // Valid values are:
         //   Base58 encoded address key hashes.

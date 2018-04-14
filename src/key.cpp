@@ -2009,6 +2009,8 @@ namespace BitCoin
         for(iterator key=begin();key!=end();++key)
             delete *key;
         std::vector<Key *>::clear();
+        names.clear();
+        seeds.clear();
     }
 
     // If this is the address level then search for public address with matching hash
@@ -2042,13 +2044,23 @@ namespace BitCoin
     void KeyStore::write(NextCash::OutputStream *pStream) const
     {
         // Version
-        pStream->writeUnsignedInt(1);
+        pStream->writeUnsignedInt(2);
 
         // Count
         pStream->writeUnsignedInt(size());
 
-        for(const_iterator key=begin();key!=end();++key)
+        std::vector<NextCash::String>::const_iterator name = names.begin();
+        std::vector<NextCash::String>::const_iterator seed = seeds.begin();
+        for(const_iterator key=begin();key!=end();++key,++name,++seed)
+        {
+            pStream->writeUnsignedInt(name->length());
+            pStream->writeString(*name);
+
+            pStream->writeUnsignedInt(seed->length());
+            pStream->writeString(*seed);
+
             (*key)->writeTree(pStream);
+        }
     }
 
     bool KeyStore::read(NextCash::InputStream *pStream)
@@ -2059,17 +2071,35 @@ namespace BitCoin
             return false;
 
         // Version
-        if(pStream->readUnsignedInt() != 1)
+        unsigned int version = pStream->readUnsignedInt();
+        if(version != 1 && version != 2)
             return false;
 
         // Count
         unsigned int count = pStream->readUnsignedInt();
+        unsigned int length;
         Key *newKey;
 
+        names.reserve(count);
+        seeds.reserve(count);
         reserve(count);
 
         for(unsigned int i=0;i<count;++i)
         {
+            if(version > 1)
+            {
+                length = pStream->readUnsignedInt();
+                names.push_back(pStream->readString(length));
+
+                length = pStream->readUnsignedInt();
+                seeds.push_back(pStream->readString(length));
+            }
+            else
+            {
+                names.emplace_back();
+                seeds.emplace_back();
+            }
+
             newKey = new Key();
             if(newKey->readTree(pStream))
                 push_back(newKey);
@@ -2158,6 +2188,8 @@ namespace BitCoin
                     break;
             }
 
+            names.emplace_back();
+            seeds.emplace_back();
             push_back(newKey);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
               "Added BIP-0032 Key");
@@ -2175,6 +2207,8 @@ namespace BitCoin
                 }
 
             newKey->loadHash(addressHash);
+            names.emplace_back();
+            seeds.emplace_back();
             push_back(newKey);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "Added Address");
             return 0; // Success
@@ -2247,6 +2281,8 @@ namespace BitCoin
                         if(chain != NULL)
                             chain->updateGap(20);
 
+                        names.emplace_back();
+                        seeds.emplace_back();
                         push_back(newKey);
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "Added ");
                         newKey = new Key();
@@ -2267,6 +2303,8 @@ namespace BitCoin
                     if(!found)
                     {
                         newKey->loadHash(addressHash);
+                        names.emplace_back();
+                        seeds.emplace_back();
                         push_back(newKey);
                         newKey = new Key();
                     }
