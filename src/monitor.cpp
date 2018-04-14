@@ -745,6 +745,49 @@ namespace BitCoin
         return result;
     }
 
+    bool Monitor::getTransactions(Key *pKey, std::vector<SPVTransactionData *> &pTransactions)
+    {
+        pTransactions.clear();
+
+        NextCash::HashList payAddresses;
+        Output *output;
+
+        mMutex.lock();
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=mTransactions.begin();trans!=mTransactions.end();++trans)
+        {
+            for(std::vector<unsigned int>::iterator index=(*trans)->spendInputs.begin();index!=(*trans)->spendInputs.end();++index)
+            {
+                output = getOutput((*trans)->transaction->inputs[*index].outpoint.transactionID,
+                  (*trans)->transaction->inputs[*index].outpoint.index, false);
+                if(output != NULL && getPayAddresses(output, payAddresses, true))
+                {
+                    for(NextCash::HashList::iterator hash=payAddresses.begin();hash!=payAddresses.end();++hash)
+                        if(pKey->findAddress(*hash) != NULL)
+                        {
+                            pTransactions.push_back(*trans);
+                            break;
+                        }
+                }
+            }
+
+            for(std::vector<unsigned int>::iterator index=(*trans)->payOutputs.begin();index!=(*trans)->payOutputs.end();++index)
+            {
+                if(getPayAddresses(&(*trans)->transaction->outputs[*index], payAddresses, true))
+                {
+                    for(NextCash::HashList::iterator hash=payAddresses.begin();hash!=payAddresses.end();++hash)
+                        if(pKey->findAddress(*hash) != NULL)
+                        {
+                            pTransactions.push_back(*trans);
+                            break;
+                        }
+                }
+            }
+        }
+        mMutex.unlock();
+
+        return true;
+    }
+
     bool Monitor::filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID)
     {
         mMutex.lock();

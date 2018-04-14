@@ -27,6 +27,8 @@ namespace BitCoin
     {
     public:
 
+        class SPVTransactionData;
+
         Monitor();
         ~Monitor();
 
@@ -38,6 +40,7 @@ namespace BitCoin
         int64_t balance(Key *pKey, bool pIncludePending = false); // Return balance associated with a specific key
         unsigned int size() const { return mAddressHashes.size(); }
         unsigned int transactionCount() const { return mTransactions.size(); }
+        bool getTransactions(Key *pKey, std::vector<SPVTransactionData *> &pTransactions);
 
         void clear();
 
@@ -81,8 +84,6 @@ namespace BitCoin
         //TODO Add handling of non P2PKH transactions
         //TODO Possibly add caching of spend from linking between related transactions
         //TODO Possibly add caching of which output pays which addresses in related transactions
-
-    private:
 
         class SPVTransactionData
         {
@@ -144,6 +145,8 @@ namespace BitCoin
             std::vector<unsigned int> nodes; // IDs of nodes that announced this transaction
 
         };
+
+    private:
 
         class MerkleRequestData
         {
