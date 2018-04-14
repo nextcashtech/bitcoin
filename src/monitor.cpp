@@ -78,7 +78,6 @@ namespace BitCoin
 
     void Monitor::MerkleRequestData::clear()
     {
-        //node = 0;
         requestTime = 0;
         receiveTime = 0;
         totalTransactions = 0;
@@ -718,12 +717,12 @@ namespace BitCoin
             {
                 output = getOutput((*trans)->transaction->inputs[*index].outpoint.transactionID,
                   (*trans)->transaction->inputs[*index].outpoint.index, false);
-                if(output != NULL && getPayAddresses(&(*trans)->transaction->outputs[*index], payAddresses, true))
+                if(output != NULL && getPayAddresses(output, payAddresses, true))
                 {
                     for(NextCash::HashList::iterator hash=payAddresses.begin();hash!=payAddresses.end();++hash)
                         if(pKey->findAddress(*hash) != NULL)
                         {
-                            result -= (*trans)->transaction->outputs[*index].amount;
+                            result -= output->amount;
                             break;
                         }
                 }
@@ -909,7 +908,9 @@ namespace BitCoin
         // Check if node id matches. It must match to ensure this is based on the latest bloom filter.
         //   For Bloom filter updates based on finding new UTXOs.
         MerkleRequestData *request = *requestIter;
-        if(request->isComplete() || request->node != pNodeID)
+        if(request->isComplete() ||
+          request->node != pNodeID || // Received from wrong/old node
+          request->requestTime == 0) // Request reset
         {
             mMutex.unlock();
             return false;
@@ -960,8 +961,8 @@ namespace BitCoin
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
                           "Transaction found in confirmed for merkle request : %s", hash->hex().text());
                         newSPVTransaction = new SPVTransactionData(**confirmedTransaction);
-                        request->transactions.insert(*hash, newSPVTransaction);
                         newSPVTransaction->blockHash = pData->block->hash;
+                        request->transactions.insert(*hash, newSPVTransaction);
                     }
                     else // Create empty transaction
                     {
@@ -977,13 +978,13 @@ namespace BitCoin
         {
             if(transactionHashes.contains(transaction.hash()))
                 ++transaction;
-            else if((*transaction)->transaction != NULL)
+            else
             {
                 // Move transaction to pending
-                if(mPendingTransactions.get((*transaction)->transaction->hash) == mPendingTransactions.end())
+                if(mPendingTransactions.get(transaction.hash()) == mPendingTransactions.end())
                 {
                     (*transaction)->blockHash.clear();
-                    mPendingTransactions.insert((*transaction)->transaction->hash, *transaction);
+                    mPendingTransactions.insert(transaction.hash(), *transaction);
                 }
                 else
                     delete *transaction; // Already in pending
@@ -1151,7 +1152,6 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   "Pending transaction accepted on first node [%d] : %s", pNodeID, pTransactionHash.hex().text());
                 newPendingTransaction->nodes.push_back(pNodeID);
-                refreshTransaction(newPendingTransaction, true);
                 mPendingTransactions.insert(pTransactionHash, newPendingTransaction);
                 result = true; // Need transaction
             }
@@ -1254,7 +1254,7 @@ namespace BitCoin
                 newPass.beginBlockHeight = pChain.height();
                 newPass.blockHeight = newPass.beginBlockHeight;
                 newPass.addressesIncluded = mAddressHashes.size();
-                mPasses.push_back(newPass);
+                mPasses.emplace_back(newPass);
                 ++passIndex;
             }
 
@@ -1289,7 +1289,7 @@ namespace BitCoin
                         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans=merkleRequest->transactions.begin();trans!=merkleRequest->transactions.end();++trans)
                         {
                             // Remove from pending
-                            pendingTransaction = mPendingTransactions.get((*trans)->transaction->hash);
+                            pendingTransaction = mPendingTransactions.get(trans.hash());
                             if(pendingTransaction != mPendingTransactions.end())
                             {
                                 delete *pendingTransaction;
@@ -1297,7 +1297,7 @@ namespace BitCoin
                             }
 
                             // Add to confirmed
-                            confirmedTransaction = mTransactions.get((*trans)->transaction->hash);
+                            confirmedTransaction = mTransactions.get(trans.hash());
                             if(confirmedTransaction == mTransactions.end())
                             {
                                 // Refresh in case it spends pending or previous transaction in this block
@@ -1311,7 +1311,7 @@ namespace BitCoin
                                 if((*trans)->payOutputs.size() > 0 || (*trans)->spendInputs.size() > 0)
                                 {
                                     balanceUpdated = true;
-                                    mTransactions.insert((*trans)->transaction->hash, *trans);
+                                    mTransactions.insert(trans.hash(), *trans);
                                     NextCash::String subject, message;
 
                                     if((*trans)->amount > 0)
@@ -1319,26 +1319,27 @@ namespace BitCoin
                                         subject = "Bitcoin Cash Receive Confirmed";
                                         message.writeFormatted("Receive confirmed for %0.8f bitcoins in block %d\nNew Balance : %0.8f\nTransaction : %s",
                                           bitcoins((*trans)->amount), pass->blockHeight + 1, bitcoins(balance(true)),
-                                          (*trans)->transaction->hash.hex().text());
+                                          trans.hash().hex().text());
                                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                                           "Confirmed transaction receiving %0.8f bitcoins : %s", bitcoins((*trans)->amount),
-                                          (*trans)->transaction->hash.hex().text());
+                                          trans.hash().hex().text());
                                     }
                                     else
                                     {
                                         subject = "Bitcoin Cash Send Confirmed";
                                         message.writeFormatted("Send confirmed for %0.8f bitcoins in block %d.\nNew Balance : %0.8f\nTransaction : %s",
                                           -bitcoins((*trans)->amount), pass->blockHeight + 1, bitcoins(balance(true)),
-                                          (*trans)->transaction->hash.hex().text());
+                                          trans.hash().hex().text());
                                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                                           "Confirmed transaction sending %0.8f bitcoins : %s", -bitcoins((*trans)->amount),
-                                          (*trans)->transaction->hash.hex().text());
+                                          trans.hash().hex().text());
                                     }
 
                                     notify(subject, message);
                                 }
                                 else
                                 {
+                                    // Unrelated
                                     delete *trans;
                                     ++falsePositiveCount;
                                 }
@@ -1425,8 +1426,23 @@ namespace BitCoin
                         refreshBloomFilter(true);
 
                         // Reset all merkle requests so they are only received with updated bloom filters
-                        for(NextCash::HashContainerList<MerkleRequestData *>::Iterator request=mMerkleRequests.begin();request!=mMerkleRequests.end();++request)
-                            (*request)->clear();
+                        for(NextCash::HashContainerList<MerkleRequestData *>::Iterator requestToClear=mMerkleRequests.begin();requestToClear!=mMerkleRequests.end();++requestToClear)
+                        {
+                            // Move transactions back to pending
+                            for(NextCash::HashContainerList<SPVTransactionData *>::Iterator transaction=(*requestToClear)->transactions.begin();transaction!=(*requestToClear)->transactions.end();)
+                            {
+                                if(mPendingTransactions.get(transaction.hash()) == mPendingTransactions.end())
+                                {
+                                    (*transaction)->blockHash.clear();
+                                    mPendingTransactions.insert(transaction.hash(), *transaction);
+                                    transaction = (*requestToClear)->transactions.erase(transaction);
+                                }
+                                else
+                                    ++transaction;
+                            }
+
+                            (*requestToClear)->clear();
+                        }
 
                         break;
                     }
