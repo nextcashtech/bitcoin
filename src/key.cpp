@@ -724,9 +724,11 @@ namespace BitCoin
             delete mPublicKey;
         mPublicKey = NULL;
 
+        mChildLock.lock();
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
             delete *child;
         mChildren.clear();
+        mChildLock.unlock();
 
         mHash.clear();
         mUsed = false;
@@ -939,16 +941,18 @@ namespace BitCoin
         return true;
     }
 
-    void Key::writeTree(NextCash::OutputStream *pStream) const
+    void Key::writeTree(NextCash::OutputStream *pStream)
     {
         write(pStream);
         pStream->writeByte(mUsed);
         if(isPrivate())
             mPublicKey->writeTree(pStream);
 
+        mChildLock.lock();
         pStream->writeUnsignedInt(mChildren.size());
         for(std::vector<Key *>::const_iterator child=mChildren.begin();child!=mChildren.end();++child)
             (*child)->writeTree(pStream);
+        mChildLock.unlock();
     }
 
     bool Key::readTree(NextCash::InputStream *pStream)
@@ -973,7 +977,9 @@ namespace BitCoin
                 delete newChild;
                 return false;
             }
+            mChildLock.lock();
             mChildren.push_back(newChild);
+            mChildLock.unlock();
         }
 
         return true;
@@ -1119,13 +1125,18 @@ namespace BitCoin
         if(pHash == hash())
             return this;
 
+        mChildLock.lock();
         Key *result;
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
         {
             result = (*child)->findAddress(pHash);
             if(result != NULL)
+            {
+                mChildLock.unlock();
                 return result;
+            }
         }
+        mChildLock.unlock();
 
         return NULL;
     }
@@ -1188,6 +1199,8 @@ namespace BitCoin
     {
         unsigned int gap = 0;
         unsigned int nextIndex = 0;
+
+        mChildLock.lock();
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
         {
             if((*child)->mIndex >= nextIndex)
@@ -1197,6 +1210,7 @@ namespace BitCoin
             else
                 ++gap;
         }
+        mChildLock.unlock();
 
         if(gap < pGap)
         {
@@ -1236,6 +1250,8 @@ namespace BitCoin
         Key *result = NULL;
         unsigned int gap = 0;
         unsigned int lastIndex = 0;
+
+        mChildLock.lock();
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
         {
             if(result != NULL)
@@ -1252,7 +1268,10 @@ namespace BitCoin
                 result = *child;
 
                 if(result->mUsed)
+                {
+                    mChildLock.unlock();
                     return result; // Already used so no new addresses will be needed
+                }
 
                 result->mUsed = true;
                 if(result->mPublicKey != NULL)
@@ -1262,9 +1281,13 @@ namespace BitCoin
             {
                 result = (*child)->markUsed(pHash, pGap, pNewAddresses);
                 if(result != NULL)
+                {
+                    mChildLock.unlock();
                     return result;
+                }
             }
         }
+        mChildLock.unlock();
 
         // Check if more addresses need to be generated
         if(result != NULL && gap < pGap)
@@ -1295,23 +1318,33 @@ namespace BitCoin
             }
 
             Key *childKey;
+            mChildLock.lock();
             for(std::vector<Key *>::iterator otherChild=mChildren.begin();otherChild!=mChildren.end();++otherChild)
             {
                 // Derive of find child with matching index to synchronize
-                childKey = deriveChild((*otherChild)->index());
+                childKey = deriveChild((*otherChild)->index(), true);
                 if(childKey == NULL)
+                {
+                    mChildLock.unlock();
                     return false;
+                }
                 childKey->synchronize(*otherChild);
             }
+            mChildLock.unlock();
 
             return true;
         }
         else
         {
             // Check if pOther is below this node in the hierarchy
+            mChildLock.lock();
             for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
                 if((*child)->synchronize(pOther))
+                {
+                    mChildLock.unlock();
                     return true;
+                }
+            mChildLock.unlock();
         }
 
         return false;
@@ -1319,10 +1352,14 @@ namespace BitCoin
 
     Key *Key::getNextUnused()
     {
+        mChildLock.lock();
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
             if(!(*child)->mUsed)
+            {
+                mChildLock.unlock();
                 return *child;
-
+            }
+        mChildLock.unlock();
         return NULL;
     }
 
@@ -1330,16 +1367,22 @@ namespace BitCoin
     {
         pChildren.clear();
         pChildren.reserve(mChildren.size());
+        mChildLock.lock();
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
             pChildren.push_back(*child);
+        mChildLock.unlock();
     }
 
     Key *Key::findChild(uint32_t pIndex)
     {
+        mChildLock.lock();
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
             if((*child)->index() == pIndex)
+            {
+                mChildLock.unlock();
                 return *child;
-
+            }
+        mChildLock.unlock();
         return NULL;
     }
 
@@ -1403,12 +1446,15 @@ namespace BitCoin
         return false;
     }
 
-    Key *Key::deriveChild(uint32_t pIndex)
+    Key *Key::deriveChild(uint32_t pIndex, bool pLocked)
     {
         Key *result = findChild(pIndex);
 
         if(result != NULL)
             return result; // Already created
+
+        if(mDepth >= 100)
+            return NULL;
 
         secp256k1_context *thisContext = context(SECP256K1_CONTEXT_SIGN);
         NextCash::HMACDigest hmac(NextCash::Digest::SHA512);
@@ -1586,7 +1632,11 @@ namespace BitCoin
 
         if(result->finalize())
         {
+            if(!pLocked)
+                mChildLock.lock();
             mChildren.push_back(result);
+            if(!pLocked)
+                mChildLock.unlock();
             return result;
         }
         else

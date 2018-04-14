@@ -116,7 +116,7 @@ namespace BitCoin
 
         enum Version { MAINNET_PRIVATE, MAINNET_PUBLIC, TESTNET_PRIVATE, TESTNET_PUBLIC };
 
-        Key() { mPublicKey = NULL; clear(); }
+        Key() : mChildLock("KeyChild") { mPublicKey = NULL; clear(); }
         ~Key() { clear(); }
 
         // Encode key as base58 text
@@ -259,7 +259,7 @@ namespace BitCoin
 
         // For private key, creates child private/public key pair for specified index.
         // For public only key, creates child public key for specified index.
-        Key *deriveChild(uint32_t pIndex);
+        Key *deriveChild(uint32_t pIndex, bool pLocked = false);
 
         // Seed initialization
         bool loadBinarySeed(Network pNetwork, NextCash::InputStream *pStream);
@@ -271,7 +271,7 @@ namespace BitCoin
         static NextCash::String generateMnemonicSeed(Mnemonic::Language, unsigned int pBytesEntropy = 32);
 
         // Serializes key data and all children
-        void writeTree(NextCash::OutputStream *pStream) const;
+        void writeTree(NextCash::OutputStream *pStream);
         bool readTree(NextCash::InputStream *pStream);
 
         static secp256k1_context *context(unsigned int pFlags);
@@ -300,6 +300,7 @@ namespace BitCoin
         uint8_t mFingerPrint[4];
 
         Key *mPublicKey;
+        NextCash::Mutex mChildLock;
         std::vector<Key *> mChildren;
 
         NextCash::Hash mHash;
