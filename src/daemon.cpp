@@ -77,7 +77,10 @@ namespace BitCoin
     unsigned int Daemon::peerCount()
     {
         mNodeLock.readLock();
-        unsigned int result = mNodes.size();
+        unsigned int result = 0;
+        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            if((*node)->isReady())
+                ++result;
         mNodeLock.readUnlock();
         return result;
     }
@@ -93,7 +96,7 @@ namespace BitCoin
         if(mQueryingSeed)
             return FINDING_PEERS;
 
-        if(mConnecting)
+        if(mConnecting && peerCount() < outgoingConnectionCountTarget() / 2)
             return CONNECTING_TO_PEERS;
 
         if(mChain.isInSync())
