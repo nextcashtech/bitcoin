@@ -40,7 +40,8 @@ namespace BitCoin
         int64_t balance(Key *pKey, bool pIncludePending = false); // Return balance associated with a specific key
         unsigned int size() const { return mAddressHashes.size(); }
         unsigned int transactionCount() const { return mTransactions.size(); }
-        bool getTransactions(Key *pKey, std::vector<SPVTransactionData *> &pTransactions);
+        bool getTransactions(Key *pKey, std::vector<SPVTransactionData *> &pTransactions,
+          bool pIncludePending);
 
         void clear();
 
@@ -61,6 +62,8 @@ namespace BitCoin
 #else
           unsigned int pMaxCount = 250);
 #endif
+
+        int changeID() const { return mChangeID; }
 
         bool filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID);
         bool needsClose(unsigned int pNodeID);
@@ -227,6 +230,7 @@ namespace BitCoin
         KeyStore *mKeyStore;
         NextCash::HashList mAddressHashes;
         unsigned int mFilterID;
+        int mChangeID;
         BloomFilter mFilter;
         std::vector<unsigned int> mNodesToResendFilter, mNodesToClose;
         std::vector<PassData> mPasses;

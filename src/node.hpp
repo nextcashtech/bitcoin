@@ -48,7 +48,7 @@ namespace BitCoin
         bool isSeed() const { return mIsSeed; }
         // Versions exchanged and initial ping completed
         bool isReady() const { return mPingRoundTripTime != -1; }
-        uint32_t pingTime() const { return mPingRoundTripTime; }
+        int32_t pingTime() const { return mPingRoundTripTime; }
         void setPingCutoff(uint32_t pPingCutoff) { mPingCutoff = pPingCutoff; }
         unsigned int blocksDownloadedCount() const { return mBlockDownloadCount; }
         unsigned int blocksDownloadedSize() const { return mBlockDownloadSize; }
@@ -56,9 +56,9 @@ namespace BitCoin
         double blockDownloadBytesPerSecond() const;
 
         // Time that the node connected
-        uint32_t connectedTime() { return mConnectedTime; }
+        int32_t connectedTime() { return mConnectedTime; }
         // Last time a message was received from this peer
-        uint32_t lastReceiveTime() { return mLastReceiveTime; }
+        int32_t lastReceiveTime() { return mLastReceiveTime; }
 
         unsigned int blockHeight() { if(mVersionData == NULL) return 0; else return mVersionData->startBlockHeight; }
 

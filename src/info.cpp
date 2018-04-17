@@ -307,9 +307,10 @@ namespace BitCoin
             return;
         }
 
-        NextCash::String dataFilePath = sPath;
-        dataFilePath.pathAppend("peers");
-        NextCash::FileOutputStream file(dataFilePath, true);
+        // Write to temp file
+        NextCash::String dataFileTempPath = sPath;
+        dataFileTempPath.pathAppend("peers.temp");
+        NextCash::FileOutputStream file(dataFileTempPath, true);
         file.setOutputEndian(NextCash::Endian::LITTLE);
 
         mPeerLock.readLock();
@@ -317,6 +318,13 @@ namespace BitCoin
         for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
             (*i)->write(&file);
         mPeerLock.readUnlock();
+
+        file.close();
+
+        // Rename to actual file
+        NextCash::String dataFilePath = sPath;
+        dataFilePath.pathAppend("peers");
+        NextCash::renameFile(dataFileTempPath, dataFilePath);
 
         mPeersModified = false;
     }
