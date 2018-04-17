@@ -2113,6 +2113,13 @@ namespace BitCoin
         return true;
     }
 
+    void KeyStore::add(Key *pKey)
+    {
+        push_back(pKey);
+        names.emplace_back();
+        seeds.emplace_back();
+    }
+
     int KeyStore::loadKey(const char *pText, Key::DerivationPathMethod pMethod)
     {
         Key *newKey = new Key(), *chain;
@@ -3563,7 +3570,7 @@ namespace BitCoin
         KeyStore keyStore;
         bool readWriteSuccess = true;
 
-        keyStore.push_back(&keyTree);
+        keyStore.add(&keyTree);
 
         keyStore.write(&keyBuffer);
         keyStore.erase(keyStore.begin());
