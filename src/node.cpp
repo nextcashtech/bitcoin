@@ -712,61 +712,61 @@ namespace BitCoin
 
         Info &info = Info::instance();
 
-        if (info.spvMode && mVersionAcknowledged && mVersionData != NULL && isReady() &&
-            !mIsIncoming &&
-            !mIsSeed && mMonitor != NULL && time - mLastMerkleCheck > 2)
+        if(info.spvMode && mVersionAcknowledged && mVersionData != NULL && isReady() &&
+          !mIsIncoming && !mIsSeed && mMonitor != NULL && time - mLastMerkleCheck > 2)
         {
-            if (mMonitor->needsClose(mID))
+            if(mMonitor->needsClose(mID))
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                                            "Dropping. Monitor requested.");
+                  "Dropping. Monitor requested.");
                 close();
                 return;
             }
 
-            if (mMonitor->filterNeedsResend(mID, mBloomFilterID))
+            if(mMonitor->filterNeedsResend(mID, mBloomFilterID))
                 sendBloomFilter();
 
-            if (mActiveMerkleRequests < 25)
+            if(mActiveMerkleRequests < 25)
             {
                 bool fail = false;
                 NextCash::HashList blockHashes;
 
                 mMonitor->getNeededMerkleBlocks(mID, *mChain, blockHashes);
-                for (NextCash::HashList::iterator hash = blockHashes.begin();
+                for(NextCash::HashList::iterator hash = blockHashes.begin();
                      hash != blockHashes.end(); ++hash)
-                    if (!requestMerkleBlock(*hash))
+                    if(!requestMerkleBlock(*hash))
                     {
                         fail = true;
                         break;
                     }
 
-                if (!fail && blockHashes.size() > 0)
+                if(!fail && blockHashes.size() > 0)
                 {
                     mActiveMerkleRequests += blockHashes.size();
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                                                "Requested %d merkle blocks", blockHashes.size());
+                      "Requested %d merkle blocks", blockHashes.size());
                     mLastMerkleRequest = getTime();
                 }
 
                 mLastMerkleCheck = time;
-            } else if (time - mLastMerkleCheck > 120)
+            }
+            else if(time - mLastMerkleCheck > 120)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                                            "Dropping. Took too long to return merkle blocks");
+                  "Dropping. Took too long to return merkle blocks");
                 close();
                 return;
             }
         }
 
         mConnectionMutex.lock();
-        if (mConnection == NULL)
+        if(mConnection == NULL)
         {
             mConnectionMutex.unlock();
             return;
         }
 
-        if (!mConnection->isOpen())
+        if(!mConnection->isOpen())
         {
             mConnectionMutex.unlock();
             return;
@@ -776,53 +776,50 @@ namespace BitCoin
         {
             mConnection->receive(&mReceiveBuffer);
         }
-        catch (std::bad_alloc pException)
+        catch(std::bad_alloc pException)
         {
             mConnectionMutex.unlock();
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-                                        "Bad allocation while receiving data : %s",
-                                        pException.what());
+              "Bad allocation while receiving data : %s", pException.what());
             close();
             return;
         }
-        catch (std::exception pException)
+        catch(std::exception pException)
         {
             mConnectionMutex.unlock();
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-                                        "Exception while receiving data : %s", pException.what());
+              "Exception while receiving data : %s", pException.what());
             close();
             return;
         }
 
         mConnectionMutex.unlock();
 
-        if (mVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
+        if(mVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
             mPingRoundTripTime == -1 && mPingCutoff != -1 &&
             time - mLastPingTime > mPingCutoff)
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-                                        "Dropping. Ping not received within cutoff of %ds",
-                                        mPingCutoff);
+              "Dropping. Ping not received within cutoff of %ds", mPingCutoff);
             info.addPeerFail(mAddress);
             close();
             return;
         }
 
-        if (time - mLastBlackListCheck > 10)
-        {
-            mLastBlackListCheck = time;
-            for (NextCash::HashList::iterator hash = mAnnounceTransactions.begin();
-                 hash != mAnnounceTransactions.end(); ++hash)
-                if (mChain->memPool().isBlackListed(*hash))
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-                                                "Dropping. Detected black listed transaction : %s",
-                                                hash->hex().text());
-                    info.addPeerFail(mAddress);
-                    close();
-                    return;
-                }
-        }
+        // if(time - mLastBlackListCheck > 10)
+        // {
+            // mLastBlackListCheck = time;
+            // for (NextCash::HashList::iterator hash = mAnnounceTransactions.begin();
+                 // hash != mAnnounceTransactions.end(); ++hash)
+                // if (mChain->memPool().isBlackListed(*hash))
+                // {
+                    // NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+                      // "Dropping. Detected black listed transaction : %s", hash->hex().text());
+                    // info.addPeerFail(mAddress);
+                    // close();
+                    // return;
+                // }
+        // }
 
         while(processMessage());
     }
@@ -860,12 +857,12 @@ namespace BitCoin
             if(mMessagesReceived == 0 && time - mConnectedTime > 180)
             {
                 NextCash::Log::add(NextCash::Log::WARNING, mName,
-                  "No valid messages within 180 seconds of connecting");
+                  "Dropping. No valid messages within 180 seconds of connecting");
 #else
-            if(mMessagesReceived == 0 && time - mConnectedTime > 10)
+            if(mMessagesReceived == 0 && time - mConnectedTime > 20)
             {
                 NextCash::Log::add(NextCash::Log::WARNING, mName,
-                  "No valid messages within 10 seconds of connecting");
+                  "Dropping. No valid messages within 20 seconds of connecting");
 #endif
                 close();
                 if(!mIsSeed)
@@ -1410,11 +1407,11 @@ namespace BitCoin
                                     case MemPool::ALREADY_HAVE:
                                         break;
                                     case MemPool::BLACK_LISTED:
-                                        sendReject(Message::nameFor(message->type), Message::RejectData::WRONG_CHAIN,
-                                          "Announced transaction failed verification");
-                                        NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                                          "Dropping. Black listed transaction announced : %s", (*item)->hash.hex().text());
-                                        close();
+                                        // sendReject(Message::nameFor(message->type), Message::RejectData::WRONG_CHAIN,
+                                          // "Announced transaction failed verification");
+                                        // NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                                          // "Dropping. Black listed transaction announced : %s", (*item)->hash.hex().text());
+                                        // close();
                                         break;
                                 }
                             }
