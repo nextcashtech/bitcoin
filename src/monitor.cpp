@@ -32,13 +32,13 @@ namespace BitCoin
         mFilter.setup(0);
         mPasses.push_back(PassData());
 
-        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+        NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_MONITOR_LOG_NAME,
           "Creating monitor object");
     }
 
     Monitor::~Monitor()
     {
-        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+        NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_MONITOR_LOG_NAME,
           "Destroying monitor object");
 
         mMutex.lock();

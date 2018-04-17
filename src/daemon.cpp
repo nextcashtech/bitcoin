@@ -60,12 +60,13 @@ namespace BitCoin
         mLastCleanTime = getTime();
         mRequestsListener = NULL;
 
-        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Creating daemon object");
+        NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME, "Creating daemon object");
     }
 
     Daemon::~Daemon()
     {
-        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Destroying daemon object");
+        NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
+          "Destroying daemon object");
 
         if(isRunning() && !mStopping)
             requestStop();
@@ -686,7 +687,7 @@ namespace BitCoin
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
         {
             blocksRequestedCount += (*node)->blocksRequestedCount();
-            if(!(*node)->waitingForRequests())
+            if((*node)->isReady() && !(*node)->waitingForRequests())
                 requestNodes.push_back(*node);
         }
 
@@ -807,10 +808,11 @@ namespace BitCoin
         // Assign nodes
         nodeRequest = nodeRequests;
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-        {
-            nodeRequest->node = *node;
-            ++nodeRequest;
-        }
+            if((*node)->isReady())
+            {
+                nodeRequest->node = *node;
+                ++nodeRequest;
+            }
 
         // Try to find nodes that have the transactions
         bool found;
@@ -862,7 +864,7 @@ namespace BitCoin
 
         // Check for node with empty last header
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if((*node)->lastHeader().isEmpty() && (*node)->requestHeaders())
+            if((*node)->lastHeader().isEmpty() && (*node)->isReady() && (*node)->requestHeaders())
             {
                 sent = true;
                 mLastHeaderRequestTime = getTime();
@@ -887,7 +889,7 @@ namespace BitCoin
         mNodeLock.readLock();
         unsigned int count = 0;
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
-            if(!(*node)->isIncoming())
+            if(!(*node)->isIncoming() && (*node)->isReady())
             {
                 // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
                   // "Node [%d] last header : %s", (*node)->id(), (*node)->lastHeader().hex().text());
@@ -899,7 +901,8 @@ namespace BitCoin
         if(count >= 4)
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-              "Chain is in sync. %d nodes have matching latest header : %s", count, mChain.lastBlockHash().hex().text());
+              "Chain is in sync. %d nodes have matching latest header : %s", count,
+              mChain.lastBlockHash().hex().text());
             mChain.setInSync();
         }
         // else
@@ -913,7 +916,7 @@ namespace BitCoin
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         randomizeOutgoing(nodes);
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if((*node)->requestPeers())
+            if((*node)->isReady() && (*node)->requestPeers())
                 break;
         mNodeLock.readUnlock();
     }
@@ -1704,7 +1707,7 @@ namespace BitCoin
 #endif
             }
 
-            if(mStopping || count >= pCount / 2) // Limit good to half
+            if(mStopping || count > pCount / 2) // Limit good to half
                 break;
 
 #ifdef SINGLE_THREAD

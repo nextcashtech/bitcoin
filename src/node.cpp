@@ -588,6 +588,7 @@ namespace BitCoin
         bool success = sendMessage(&pingData);
         if(success)
         {
+            NextCash::Log::add(NextCash::Log::INFO, mName, "Sent Ping");
             mLastPingNonce = pingData.nonce;
             mLastPingTime = time;
         }
@@ -601,23 +602,25 @@ namespace BitCoin
         return sendMessage(&feeData);
     }
 
-    bool Node::sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason)
+    bool Node::sendReject(const char *pCommand, Message::RejectData::Code pCode,
+                          const char *pReason)
     {
         if(!isOpen())
             return false;
 
-        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_NODE_LOG_NAME, "Sending reject : %s", pReason);
+        NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Sending reject : %s", pReason);
         Message::RejectData rejectMessage(pCommand, pCode, pReason, NULL);
         return sendMessage(&rejectMessage);
     }
 
-    bool Node::sendRejectWithHash(const char *pCommand, Message::RejectData::Code pCode, const char *pReason,
+    bool Node::sendRejectWithHash(const char *pCommand, Message::RejectData::Code pCode,
+                                  const char *pReason,
       const NextCash::Hash &pHash)
     {
         if(!isOpen())
             return false;
 
-        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_NODE_LOG_NAME, "Sending reject : %s", pReason);
+        NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Sending reject : %s", pReason);
         Message::RejectData rejectMessage(pCommand, pCode, pReason, NULL);
         pHash.write(&rejectMessage.extra);
         return sendMessage(&rejectMessage);
@@ -628,7 +631,8 @@ namespace BitCoin
         Node *node = (Node *)NextCash::Thread::getParameter();
         if(node == NULL)
         {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_NODE_LOG_NAME, "Thread parameter is null. Stopping");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_NODE_LOG_NAME,
+              "Thread parameter is null. Stopping");
             return;
         }
 
@@ -636,7 +640,8 @@ namespace BitCoin
 
         if(node->mStop)
         {
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, name, "Node stopped before thread started");
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, name,
+              "Node stopped before thread started");
             node->mStopped = true;
             return;
         }
@@ -854,11 +859,13 @@ namespace BitCoin
 #ifdef SINGLE_THREAD
             if(mMessagesReceived == 0 && time - mConnectedTime > 180)
             {
-                NextCash::Log::add(NextCash::Log::WARNING, mName, "No valid messages within 180 seconds of connecting");
+                NextCash::Log::add(NextCash::Log::WARNING, mName,
+                  "No valid messages within 180 seconds of connecting");
 #else
-            if(mMessagesReceived == 0 && time - mConnectedTime > 60)
+            if(mMessagesReceived == 0 && time - mConnectedTime > 10)
             {
-                NextCash::Log::add(NextCash::Log::WARNING, mName, "No valid messages within 60 seconds of connecting");
+                NextCash::Log::add(NextCash::Log::WARNING, mName,
+                  "No valid messages within 10 seconds of connecting");
 #endif
                 close();
                 if(!mIsSeed)
@@ -869,19 +876,23 @@ namespace BitCoin
             if(time - mLastReceiveTime > 600) // 10 minutes
                 sendPing();
 
-            if(!mMessageInterpreter.pendingBlockHash.isEmpty() && mMessageInterpreter.pendingBlockUpdateTime != 0)
-                mChain->updateBlockProgress(mMessageInterpreter.pendingBlockHash, mID, mMessageInterpreter.pendingBlockUpdateTime);
+            if(!mMessageInterpreter.pendingBlockHash.isEmpty() &&
+              mMessageInterpreter.pendingBlockUpdateTime != 0)
+                mChain->updateBlockProgress(mMessageInterpreter.pendingBlockHash, mID,
+                  mMessageInterpreter.pendingBlockUpdateTime);
 
             return false;
         }
 
-        NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName, "Received <%s>", Message::nameFor(message->type));
+        NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName, "Received <%s>",
+          Message::nameFor(message->type));
         mLastReceiveTime = time;
 
-        if(mMessagesReceived < 2 && message->type != Message::VERSION && message->type != Message::VERACK &&
-          message->type != Message::REJECT)
+        if(mMessagesReceived < 2 && message->type != Message::VERSION &&
+          message->type != Message::VERACK && message->type != Message::REJECT)
         {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, mName, "First 2 messages not a version and verack : <%s>",
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+              "First 2 messages not a version and verack : <%s>",
               Message::nameFor(message->type));
             close();
             if(!mIsSeed)
@@ -1032,15 +1043,18 @@ namespace BitCoin
                 break;
             }
             case Message::PONG:
-                if(((Message::PongData *)message)->nonce != 0 && mLastPingNonce != ((Message::PongData *)message)->nonce)
+                if(((Message::PongData *)message)->nonce != 0 &&
+                  mLastPingNonce != ((Message::PongData *)message)->nonce)
                 {
-                    NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Pong nonce doesn't match sent Ping");
+                    NextCash::Log::add(NextCash::Log::INFO, mName,
+                      "Dropping. Pong nonce doesn't match sent Ping");
                     close();
                 }
                 else
                 {
                     if(mPingRoundTripTime == -1)
                     {
+                        NextCash::Log::add(NextCash::Log::INFO, mName, "Received round trip ping");
                         mPingRoundTripTime = time - mLastPingTime;
                         if(!mIsIncoming && !mIsSeed && mPingCutoff != -1)
                         {
