@@ -1588,7 +1588,7 @@ namespace BitCoin
                 break;
             pHashes.push_back(hash);
 #else
-            if(hashHeight >= mBlockHashes.size())
+            if((unsigned int)hashHeight >= mBlockHashes.size())
                 break;
             pHashes.push_back(mBlockHashes[hashHeight]);
 #endif
