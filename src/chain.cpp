@@ -2058,6 +2058,7 @@ namespace BitCoin
         mBlockHashes.reserve(fileID * BlockFile::MAX_BLOCKS);
 #endif
 
+        // Load block files
         for(fileID=0;;fileID++)
         {
             BlockFile::lock(fileID);
@@ -2157,6 +2158,10 @@ namespace BitCoin
                 ++fileID;
             }
         }
+
+        mLastBlockHash = mLastBlockHashes.back();
+#else
+        mLastBlockHash = mBlockHashes.back();
 #endif
 
         if(success)
