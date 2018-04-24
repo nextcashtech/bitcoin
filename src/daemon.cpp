@@ -59,6 +59,8 @@ namespace BitCoin
         mNodeListener = NULL;
         mLastCleanTime = getTime();
         mRequestsListener = NULL;
+        mGoodNodeMax = 5;
+        mOutgoingNodeMax = 8;
 
         NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME, "Creating daemon object");
     }
@@ -97,7 +99,7 @@ namespace BitCoin
         if(mQueryingSeed)
             return FINDING_PEERS;
 
-        if(mConnecting && peerCount() < outgoingConnectionCountTarget() / 2)
+        if(mConnecting && peerCount() < mOutgoingNodeMax / 2)
             return CONNECTING_TO_PEERS;
 
         if(mChain.isInSync())
@@ -110,6 +112,20 @@ namespace BitCoin
         }
         else
             return SYNCHRONIZING;
+    }
+
+    void Daemon::setFinishMode(int pMode)
+    {
+        if(pMode != mFinishMode)
+        {
+            if(pMode == FINISH_ON_REQUEST)
+                NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
+                  "Finish mode set to on request");
+            else
+                NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
+                  "Finish mode set to on sync");
+        }
+        mFinishMode = pMode;
     }
 
     static Daemon *sSignalInstance = NULL;
@@ -927,7 +943,7 @@ namespace BitCoin
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         sortOutgoingNodesByPing(nodes);
 
-        if(nodes.size() < outgoingConnectionCountTarget() / 2)
+        if(nodes.size() < mOutgoingNodeMax)
         {
             mNodeLock.readUnlock();
             return;
@@ -960,7 +976,7 @@ namespace BitCoin
 
         // Regularly drop some nodes to increase diversity
         int churnDrop = 0;
-        if(nodes.size() >= outgoingConnectionCountTarget())
+        if(nodes.size() >= mOutgoingNodeMax)
             churnDrop = nodes.size() / 8;
 
         // Drop slowest
@@ -995,7 +1011,7 @@ namespace BitCoin
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
 
-        if(nodes.size() < outgoingConnectionCountTarget() / 2)
+        if(nodes.size() < mOutgoingNodeMax / 2)
         {
             mNodeLock.readUnlock();
             return;
@@ -1008,7 +1024,7 @@ namespace BitCoin
             else
                 ++node;
 
-        if(nodes.size() < outgoingConnectionCountTarget() / 2)
+        if(nodes.size() < mOutgoingNodeMax / 2)
         {
             mNodeLock.readUnlock();
             return;
@@ -1123,7 +1139,7 @@ namespace BitCoin
 
         // Always drop some nodes so nodes with lower pings can still be found
         int churnDrop = 0;
-        if(sortedScores.size() >= outgoingConnectionCountTarget())
+        if(sortedScores.size() >= mOutgoingNodeMax)
             churnDrop = sortedScores.size() / 8;
 
         // Drop slowest
@@ -1534,7 +1550,8 @@ namespace BitCoin
             mRejectedIPs.erase(mRejectedIPs.begin());
     }
 
-    bool Daemon::addNode(NextCash::Network::Connection *pConnection, bool pIncoming, bool pIsSeed, uint64_t pServices)
+    bool Daemon::addNode(NextCash::Network::Connection *pConnection, bool pIncoming, bool pIsSeed,
+                         bool pIsGood, uint64_t pServices)
     {
         mLastConnectionActive = getTime();
 
@@ -1551,7 +1568,7 @@ namespace BitCoin
         Node *node;
         try
         {
-            node = new Node(pConnection, &mChain, pIncoming, pIsSeed, pServices, mMonitor);
+            node = new Node(pConnection, &mChain, pIncoming, pIsSeed, pIsGood, pServices, mMonitor);
         }
         catch(std::bad_alloc &pBadAlloc)
         {
@@ -1576,7 +1593,7 @@ namespace BitCoin
             ++mStatistics.incomingConnections;
             ++mIncomingNodes;
         }
-        else
+        else if(!pIsSeed)
         {
             ++mStatistics.outgoingConnections;
             ++mOutgoingNodes;
@@ -1632,7 +1649,7 @@ namespace BitCoin
                 connection = new NextCash::Network::Connection(*ip, networkPortString(), 5);
                 if (!connection->isOpen())
                     delete connection;
-                else if (addNode(connection, false, true, 0))
+                else if (addNode(connection, false, true, false, 0))
                     result++;
             }
             else
@@ -1657,9 +1674,9 @@ namespace BitCoin
         return result;
     }
 
-    unsigned int Daemon::recruitPeers(unsigned int pCount)
+    unsigned int Daemon::recruitPeers()
     {
-        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Recruiting %d peers", pCount);
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Recruiting peers");
         std::vector<Peer *> peers;
         unsigned int count = 0;
         bool found;
@@ -1669,6 +1686,19 @@ namespace BitCoin
 #endif
 
         mConnecting = true;
+
+        mNodeLock.readLock();
+        unsigned int goodCount = 0;
+        unsigned int usableCount = 0;
+        for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
+            if(!(*node)->isIncoming() && !(*node)->isSeed())
+            {
+                if((*node)->isGood())
+                    ++goodCount;
+                else
+                    ++usableCount;
+            }
+        mNodeLock.readUnlock();
 
         if(mChain.forks().cashActive())
             servicesMask |= Message::VersionData::CASH_NODE_BIT;
@@ -1681,12 +1711,14 @@ namespace BitCoin
         NextCash::Network::Connection *connection;
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d good peers", peers.size());
-        for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end()&&!mStopRequested;++peer)
+        for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
+          !mStopRequested && goodCount < mGoodNodeMax; ++peer)
         {
             // Skip nodes already connected
             found = false;
             mNodeLock.readLock();
-            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+              !mStopRequested; ++node)
                 if((*node)->address() == (*peer)->address)
                 {
                     found = true;
@@ -1696,18 +1728,20 @@ namespace BitCoin
             if(found)
                 continue;
 
-            connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip, (*peer)->address.port, 5);
+            connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
+              (*peer)->address.port, 5);
             if(!connection->isOpen())
                 delete connection;
-            else if(addNode(connection, false, false, (*peer)->services))
+            else if(addNode(connection, false, false, true, (*peer)->services))
             {
+                ++goodCount;
                 ++count;
 #ifdef SINGLE_THREAD
                 break;
 #endif
             }
 
-            if(mStopping || count > pCount / 2) // Limit good to half
+            if(mStopping)
                 break;
 
 #ifdef SINGLE_THREAD
@@ -1715,7 +1749,8 @@ namespace BitCoin
             {
                 // Process nodes so they don't wait a long time
                 mNodeLock.readLock();
-                for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end()&&!mStopRequested;++node)
+                for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+                  !mStopRequested; ++node)
                     (*node)->process();
                 mNodeLock.readUnlock();
                 lastNodeProcess = getTime();
@@ -1727,14 +1762,16 @@ namespace BitCoin
         mInfo.getRandomizedPeers(peers, -5, servicesMask);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d usable peers", peers.size());
-        unsigned int usableCount = 0;
         mLastPeerCount = peers.size();
-        for(std::vector<Peer *>::iterator peer=peers.begin();peer!=peers.end();++peer)
+        for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end(); ++peer)
+        for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
+          !mStopRequested && usableCount < mOutgoingNodeMax - mGoodNodeMax; ++peer)
         {
             // Skip nodes already connected
             found = false;
             mNodeLock.readLock();
-            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end()&&!mStopRequested;++node)
+            for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+              !mStopRequested; ++node)
                 if((*node)->address() == (*peer)->address)
                 {
                     found = true;
@@ -1747,16 +1784,16 @@ namespace BitCoin
             connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip, (*peer)->address.port, 5);
             if(!connection->isOpen())
                 delete connection;
-            else if(addNode(connection, false, false, 0))
+            else if(addNode(connection, false, false, false, 0))
             {
+                ++usableCount;
                 ++count;
 #ifdef SINGLE_THREAD
                 break;
 #endif
-                ++usableCount;
             }
 
-            if(mStopping || count >= pCount)
+            if(mStopping)
                 break;
 
 #ifdef SINGLE_THREAD
@@ -1764,7 +1801,8 @@ namespace BitCoin
             {
                 // Process nodes so they don't wait a long time
                 mNodeLock.readLock();
-                for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end()&&!mStopRequested;++node)
+                for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+                  !mStopRequested; ++node)
                     (*node)->process();
                 mNodeLock.readUnlock();
                 lastNodeProcess = getTime();
@@ -1801,7 +1839,7 @@ namespace BitCoin
                 --mNodeCount;
                 if((*node)->isIncoming())
                     --mIncomingNodes;
-                else
+                else if(!(*node)->isSeed())
                     --mOutgoingNodes;
                 toDelete.push_back(*node);
                 node = mNodes.erase(node);
@@ -1820,7 +1858,7 @@ namespace BitCoin
                         --mNodeCount;
                         if((*node)->isIncoming())
                             --mIncomingNodes;
-                        else
+                        else if(!(*node)->isSeed())
                             --mOutgoingNodes;
                         toDelete.push_back(*node);
                         node = mNodes.erase(node);
@@ -1870,11 +1908,11 @@ namespace BitCoin
     {
         Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
 
-        if (daemon->outgoingConnectionCountTarget() >= daemon->mInfo.maxConnections)
+        if (daemon->mOutgoingNodeMax >= daemon->mInfo.maxConnections)
             daemon->mMaxIncoming = 0;
         else
             daemon->mMaxIncoming =
-              daemon->mInfo.maxConnections - daemon->outgoingConnectionCountTarget();
+              daemon->mInfo.maxConnections - daemon->mOutgoingNodeMax;
 
         while(!daemon->mStopping)
         {
@@ -1890,9 +1928,9 @@ namespace BitCoin
     {
         NextCash::Network::Connection *newConnection;
 
-        if(mOutgoingNodes < outgoingConnectionCountTarget() && getTime() - mLastFillNodesTime > 30)
+        if(mOutgoingNodes < mOutgoingNodeMax && getTime() - mLastFillNodesTime > 30)
         {
-            recruitPeers(outgoingConnectionCountTarget() - mOutgoingNodes);
+            recruitPeers();
             mLastFillNodesTime = getTime();
         }
 
@@ -1932,7 +1970,7 @@ namespace BitCoin
             else
             {
                 while(!mStopping && (newConnection = mNodeListener->accept()) != NULL)
-                    if(addNode(newConnection, true, false, 0) && mIncomingNodes >= mMaxIncoming)
+                    if(addNode(newConnection, true, false, false, 0) && mIncomingNodes >= mMaxIncoming)
                     {
                         delete mNodeListener;
                         mNodeListener = NULL;

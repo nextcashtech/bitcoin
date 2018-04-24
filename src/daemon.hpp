@@ -57,7 +57,8 @@ namespace BitCoin
         static const int FINISH_ON_SYNC    = 0x01;
 
         // Set criteria for daemon stopping on its own
-        void setFinishMode(int pMode) { mFinishMode = pMode; }
+        int finishMode() { return mFinishMode; }
+        void setFinishMode(int pMode);
         void requestStop() { mStopRequested = true; mChain.requestStop(); }
 
         // Signals
@@ -130,7 +131,8 @@ namespace BitCoin
         unsigned int mNodeCount, mIncomingNodes, mOutgoingNodes;
         unsigned int mMaxIncoming;
 
-        unsigned int outgoingConnectionCountTarget() const { return 8; }
+        unsigned int mGoodNodeMax;
+        unsigned int mOutgoingNodeMax;
 
         class IPBytes
         {
@@ -151,8 +153,9 @@ namespace BitCoin
 
         void addRejectedIP(const uint8_t *pIP);
 
-        bool addNode(NextCash::Network::Connection *pConnection, bool pIncoming, bool pIsSeed, uint64_t pServices);
-        unsigned int recruitPeers(unsigned int pCount);
+        bool addNode(NextCash::Network::Connection *pConnection, bool pIncoming, bool pIsSeed,
+                     bool pIsGood, uint64_t pServices);
+        unsigned int recruitPeers();
         void cleanNodes();
 
         void checkSync();
