@@ -150,6 +150,9 @@ namespace BitCoin
 
         Data *Interpreter::read(NextCash::Buffer *pInput, const char *pName)
         {
+            if(pInput->remaining() < 24)
+                return NULL;
+
             NextCash::stream_size startReadOffset = pInput->readOffset();
             pInput->setInputEndian(NextCash::Endian::LITTLE);
 
@@ -176,12 +179,24 @@ namespace BitCoin
             }
 
             if(!startStringFound)
+            {
+                NextCash::stream_size bytesRead = pInput->readOffset() - startReadOffset;
+                if(bytesRead >= 4)
+                    NextCash::Log::addFormatted(NextCash::Log::DEBUG, pName,
+                      "Start string not found in %d bytes", pInput->readOffset() - startReadOffset);
+
+                // Reset in case first 3 bytes of start bytes were read
+                if(bytesRead >= 3)
+                    pInput->setReadOffset(pInput->readOffset() - 3);
+                else
+                    pInput->setReadOffset(startReadOffset);
                 return NULL;
+            }
 
             // Check if header is complete
             if(pInput->remaining() < 20)
             {
-                //NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName, "Header not fully received : %d / %d",
+                //NextCash::Log::addFormatted(NextCash::Log::DEBUG, pName, "Header not fully received : %d / %d",
                 //  pInput->remaining() + 4, 24); // Add 4 for start string that is already read
                 pInput->setReadOffset(startReadOffset);
                 return NULL;

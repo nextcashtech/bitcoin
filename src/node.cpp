@@ -26,13 +26,14 @@ namespace BitCoin
     unsigned int Node::mNextID = 256;
 
     Node::Node(NextCash::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
-      bool pIsSeed, uint64_t pServices, Monitor &pMonitor) : mID(mNextID++), mConnectionMutex("Node Connection"),
+      bool pIsSeed, bool pIsGood, uint64_t pServices, Monitor &pMonitor) : mID(mNextID++), mConnectionMutex("Node Connection"),
       mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce")
     {
         Info &info = Info::instance();
 
         mIsIncoming = pIncoming;
         mConnected = false;
+        mPrepared = false;
         mVersionSent = false;
         mVersionAcknowledged = false;
         mVersionAcknowledgeSent = false;
@@ -58,6 +59,7 @@ namespace BitCoin
         mStop = false;
         mStopped = false;
         mIsSeed = pIsSeed;
+        mIsGood = pIsGood;
         mSendBlocksCompact = false;
         mRejected = false;
 #ifndef SINGLE_THREAD
@@ -190,6 +192,41 @@ namespace BitCoin
         mStatistics.clear();
     }
 
+    void Node::prepare()
+    {
+        if(mLastPingTime == 0)
+            sendPing();
+
+        if(!mPrepared && isReady())
+        {
+            Info &info = Info::instance();
+
+            if(info.spvMode)
+                sendBloomFilter();
+            else if(!mIsIncoming)
+                sendFeeFilter();
+
+            if(!mIsIncoming && !mIsSeed)
+            {
+                Message::Data memPoolMessage(Message::MEM_POOL);
+                sendMessage(&memPoolMessage);
+
+                Message::Data sendHeadersMessage(Message::SEND_HEADERS);
+                sendMessage(&sendHeadersMessage);
+            }
+
+            requestHeaders();
+
+            if(mVersionData != NULL && !mIsIncoming && !mIsSeed)
+            {
+                info.updatePeer(mAddress, mVersionData->userAgent,
+                  mVersionData->transmittingServices);
+            }
+
+            mPrepared = true;
+        }
+    }
+
     void Node::check()
     {
         if(!isOpen())
@@ -197,14 +234,17 @@ namespace BitCoin
 
         if(mIsSeed && getTime() - mConnectedTime > 120)
         {
-            NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Seed connected for too long");
+            NextCash::Log::add(NextCash::Log::INFO, mName,
+              "Dropping. Seed connected for too long.");
             close();
             return;
         }
 
-        if(mPingRoundTripTime == -1 && getTime() - mConnectedTime > 120)
+        if(mPingRoundTripTime == -1 && getTime() - mConnectedTime > mPingCutoff)
         {
-            NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. No pong within 120 seconds of connection");
+            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+              "Dropping. Not ready within %d seconds of connection.", mPingCutoff);
+            Info::instance().addPeerFail(mAddress, 2);
             close();
             return;
         }
@@ -213,19 +253,24 @@ namespace BitCoin
         {
             int32_t time = getTime();
 
-            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 30 && time - mBlockReceiveTime > 30)
+            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 30 &&
+              time - mBlockReceiveTime > 30)
             {
-                if(mMessageInterpreter.pendingBlockUpdateTime == 0) // Haven't started receiving blocks 30 seconds after requesting
+                // Haven't started receiving blocks 30 seconds after requesting
+                if(mMessageInterpreter.pendingBlockUpdateTime == 0)
                 {
-                    NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. No block for 30 seconds");
+                    NextCash::Log::add(NextCash::Log::INFO, mName,
+                      "Dropping. No block for 30 seconds");
                     Info::instance().addPeerFail(mAddress);
                     close();
                     return;
                 }
 
-                if(time - mMessageInterpreter.pendingBlockUpdateTime > 30) // Haven't received more of the block in the last 60 seconds
+                // Haven't received more of the block in the last 60 seconds
+                if(time - mMessageInterpreter.pendingBlockUpdateTime > 30)
                 {
-                    NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. No update on block for 30 seconds");
+                    NextCash::Log::add(NextCash::Log::INFO, mName,
+                      "Dropping. No update on block for 30 seconds");
                     Info::instance().addPeerFail(mAddress);
                     close();
                     return;
@@ -261,10 +306,12 @@ namespace BitCoin
         bool success = mConnection->send(&send);
         mConnectionMutex.unlock();
         if(success)
-            NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName, "Sent <%s>", Message::nameFor(pData->type));
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName, "Sent <%s>",
+              Message::nameFor(pData->type));
         else
         {
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName, "Failed to send <%s>", Message::nameFor(pData->type));
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName, "Failed to send <%s>",
+              Message::nameFor(pData->type));
             close(); // Disconnect
         }
         return success;
@@ -275,7 +322,8 @@ namespace BitCoin
         if(!isOpen() || mIsIncoming || waitingForRequests())
             return false;
 
-        if(!mLastHeaderRequested.isEmpty() && mLastHeaderRequested == mChain->lastPendingBlockHash())
+        if(!mLastHeaderRequested.isEmpty() &&
+          mLastHeaderRequested == mChain->lastPendingBlockHash())
             return false;
 
         NextCash::HashList hashes;
@@ -287,7 +335,8 @@ namespace BitCoin
             getHeadersData.blockHeaderHashes.push_back(*hash);
 
         if(hashes.size() == 0)
-            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Sending header request for blocks from genesis");
+            NextCash::Log::add(NextCash::Log::VERBOSE, mName,
+              "Sending header request for blocks from genesis");
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
               "Sending header request for blocks after : %s", hashes.front().hex().text());
@@ -703,17 +752,71 @@ namespace BitCoin
         }
 
         int32_t time = getTime();
-        if(time - mLastCheckTime > 10)
+        if(time - mLastCheckTime > 5)
             check();
 
         mConnectionMutex.lock();
         mReceiveBuffer.compact();
+
+        if(mConnection == NULL)
+        {
+            mConnectionMutex.unlock();
+            return;
+        }
+
+        if(!mConnection->isOpen())
+        {
+            mConnectionMutex.unlock();
+            return;
+        }
+
+        NextCash::stream_size previousBufferOffset = mReceiveBuffer.remaining();
+
+        try
+        {
+            mConnection->receive(&mReceiveBuffer);
+        }
+        catch(std::bad_alloc pException)
+        {
+            mConnectionMutex.unlock();
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+              "Bad allocation while receiving data : %s", pException.what());
+            close();
+            return;
+        }
+        catch(std::exception pException)
+        {
+            mConnectionMutex.unlock();
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+              "Exception while receiving data : %s", pException.what());
+            close();
+            return;
+        }
+
         mConnectionMutex.unlock();
+
+        // if(time - mLastBlackListCheck > 10)
+        // {
+            // mLastBlackListCheck = time;
+            // for (NextCash::HashList::iterator hash = mAnnounceTransactions.begin();
+                 // hash != mAnnounceTransactions.end(); ++hash)
+                // if (mChain->memPool().isBlackListed(*hash))
+                // {
+                    // NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+                      // "Dropping. Detected black listed transaction : %s", hash->hex().text());
+                    // info.addPeerFail(mAddress);
+                    // close();
+                    // return;
+                // }
+        // }
+
+        if(previousBufferOffset != mReceiveBuffer.remaining())
+            while(processMessage());
 
         Info &info = Info::instance();
 
-        if(info.spvMode && mVersionAcknowledged && mVersionData != NULL && isReady() &&
-          !mIsIncoming && !mIsSeed && mMonitor != NULL && time - mLastMerkleCheck > 2)
+        if(info.spvMode && isReady() && !mIsIncoming && !mIsSeed && mMonitor != NULL &&
+          time - mLastMerkleCheck > 2)
         {
             if(mMonitor->needsClose(mID))
             {
@@ -733,7 +836,7 @@ namespace BitCoin
 
                 mMonitor->getNeededMerkleBlocks(mID, *mChain, blockHashes);
                 for(NextCash::HashList::iterator hash = blockHashes.begin();
-                     hash != blockHashes.end(); ++hash)
+                    hash != blockHashes.end(); ++hash)
                     if(!requestMerkleBlock(*hash))
                     {
                         fail = true;
@@ -759,45 +862,9 @@ namespace BitCoin
             }
         }
 
-        mConnectionMutex.lock();
-        if(mConnection == NULL)
-        {
-            mConnectionMutex.unlock();
-            return;
-        }
-
-        if(!mConnection->isOpen())
-        {
-            mConnectionMutex.unlock();
-            return;
-        }
-
-        try
-        {
-            mConnection->receive(&mReceiveBuffer);
-        }
-        catch(std::bad_alloc pException)
-        {
-            mConnectionMutex.unlock();
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-              "Bad allocation while receiving data : %s", pException.what());
-            close();
-            return;
-        }
-        catch(std::exception pException)
-        {
-            mConnectionMutex.unlock();
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-              "Exception while receiving data : %s", pException.what());
-            close();
-            return;
-        }
-
-        mConnectionMutex.unlock();
-
         if(mVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
-            mPingRoundTripTime == -1 && mPingCutoff != -1 &&
-            time - mLastPingTime > mPingCutoff)
+           mPingRoundTripTime == -1 && mPingCutoff != -1 &&
+           time - mLastPingTime > mPingCutoff)
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
               "Dropping. Ping not received within cutoff of %ds", mPingCutoff);
@@ -805,23 +872,6 @@ namespace BitCoin
             close();
             return;
         }
-
-        // if(time - mLastBlackListCheck > 10)
-        // {
-            // mLastBlackListCheck = time;
-            // for (NextCash::HashList::iterator hash = mAnnounceTransactions.begin();
-                 // hash != mAnnounceTransactions.end(); ++hash)
-                // if (mChain->memPool().isBlackListed(*hash))
-                // {
-                    // NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-                      // "Dropping. Detected black listed transaction : %s", hash->hex().text());
-                    // info.addPeerFail(mAddress);
-                    // close();
-                    // return;
-                // }
-        // }
-
-        while(processMessage());
     }
 
     bool Node::processMessage()
@@ -856,17 +906,20 @@ namespace BitCoin
 #ifdef SINGLE_THREAD
             if(mMessagesReceived == 0 && time - mConnectedTime > 180)
             {
-                NextCash::Log::add(NextCash::Log::WARNING, mName,
-                  "Dropping. No valid messages within 180 seconds of connecting");
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+                  "Dropping. No valid messages within 180 seconds of connecting" %d bytes received.",
+                  mConnection->bytesReceived() + mStatistics.bytesReceived);
 #else
             if(mMessagesReceived == 0 && time - mConnectedTime > 20)
             {
-                NextCash::Log::add(NextCash::Log::WARNING, mName,
-                  "Dropping. No valid messages within 20 seconds of connecting");
+                mConnectionMutex.lock();
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
+                  "Dropping. No valid messages within 20 seconds of connecting. %d bytes received.",
+                  (unsigned int)mConnection->bytesReceived() + mStatistics.bytesReceived);
+                mConnectionMutex.unlock();
 #endif
                 close();
-                if(!mIsSeed)
-                    info.addPeerFail(mAddress);
+                info.addPeerFail(mAddress, 2);
                 return false;
             }
 
@@ -987,44 +1040,14 @@ namespace BitCoin
                     if(mIsSeed)
                         requestPeers(); // Request addresses from the
                     else if(mVersionAcknowledged)
-                    {
-                        sendPing();
-                        if(info.spvMode)
-                            sendBloomFilter();
-                        else if(!mIsIncoming)
-                            sendFeeFilter();
-
-                        if(!mIsIncoming && !mIsSeed)
-                        {
-                            Message::Data memPoolMessage(Message::MEM_POOL);
-                            sendMessage(&memPoolMessage);
-
-                            Message::Data sendHeadersMessage(Message::SEND_HEADERS);
-                            sendMessage(&sendHeadersMessage);
-                        }
-                    }
+                        prepare();
                 }
                 break;
             }
             case Message::VERACK:
                 mVersionAcknowledged = true;
                 if(mVersionData != NULL && !mIsSeed)
-                {
-                    sendPing();
-                    if(info.spvMode)
-                        sendBloomFilter();
-                    else if(!mIsIncoming)
-                        sendFeeFilter();
-
-                    if(!mIsIncoming && !mIsSeed)
-                    {
-                        Message::Data memPoolMessage(Message::MEM_POOL);
-                        sendMessage(&memPoolMessage);
-
-                        Message::Data sendHeadersMessage(Message::SEND_HEADERS);
-                        sendMessage(&sendHeadersMessage);
-                    }
-                }
+                    prepare();
                 break;
             case Message::PING:
             {
@@ -1062,11 +1085,8 @@ namespace BitCoin
                                   mPingRoundTripTime, mPingCutoff);
                                 close();
                             }
-                            else if(mVersionData != NULL && !mIsIncoming && !mIsSeed)
-                            {
-                                info.updatePeer(mAddress, mVersionData->userAgent,
-                                  mVersionData->transmittingServices);
-                            }
+                            else
+                                prepare();
                         }
                     }
                     mLastPingNonce = 0;
@@ -1498,28 +1518,33 @@ namespace BitCoin
                     {
                         mRejected = true;
                         NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                          "Dropping. Announced block for which they didn't provide header : %s", mLastBlockAnnounced.hex().text());
+                          "Dropping. Announced block for which they didn't provide header : %s",
+                          mLastBlockAnnounced.hex().text());
                         info.addPeerFail(mAddress, 5);
                         close();
                     }
 
                     if(addedCount > 0 && !mIsSeed && mVersionData != NULL)
                     {
-                        info.updatePeer(mAddress, mVersionData->userAgent, mVersionData->transmittingServices);
+                        info.updatePeer(mAddress, mVersionData->userAgent,
+                          mVersionData->transmittingServices);
 
-                        // Immediately request more headers if in SPV mode so all the headers come back to back
+                        // Immediately request more headers if in SPV mode so all the headers come
+                        //   back to back
                         if(info.spvMode && addedCount > 1000)
                             requestHeaders();
                     }
 
                     mLastBlockAnnounced.clear();
 
-                    NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName, "Added %d pending headers", addedCount);
+                    NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
+                      "Added %d pending headers", addedCount);
                 }
                 else
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                      "Dropping. Incoming node sent %d headers", ((Message::HeadersData *)message)->headers.size());
+                      "Dropping. Incoming node sent %d headers",
+                      ((Message::HeadersData *)message)->headers.size());
                     info.addPeerFail(mAddress, 5);
                     close();
                 }
@@ -1530,15 +1555,18 @@ namespace BitCoin
                     if(info.spvMode)
                     {
                         NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                          "Dropping. Sent block in SPV mode : %s", ((Message::BlockData *)message)->block->hash.hex().text());
+                          "Dropping. Sent block in SPV mode : %s",
+                          ((Message::BlockData *)message)->block->hash.hex().text());
                         info.addPeerFail(mAddress, 5);
                         close();
                     }
                     else
                     {
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                          "Received block (height %d) (%d KiB) : %s", mChain->blockHeight(((Message::BlockData *)message)->block->hash),
-                          ((Message::BlockData *)message)->block->size() / 1024, ((Message::BlockData *)message)->block->hash.hex().text());
+                          "Received block (height %d) (%d KiB) : %s",
+                          mChain->blockHeight(((Message::BlockData *)message)->block->hash),
+                          ((Message::BlockData *)message)->block->size() / 1024,
+                          ((Message::BlockData *)message)->block->hash.hex().text());
                         ++mStatistics.blocksReceived;
 
                         // Remove from blocks requested

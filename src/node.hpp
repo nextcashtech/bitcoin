@@ -30,7 +30,7 @@ namespace BitCoin
     public:
 
         Node(NextCash::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
-          bool pIsSeed, uint64_t pServices, Monitor &pMonitor);
+          bool pIsSeed, bool pIsGood, uint64_t pServices, Monitor &pMonitor);
         ~Node();
 
         static void run();
@@ -46,6 +46,7 @@ namespace BitCoin
         const char *name() { return mName.text(); }
         bool isIncoming() const { return mIsIncoming; }
         bool isSeed() const { return mIsSeed; }
+        bool isGood() const { return mIsGood; }
         // Versions exchanged and initial ping completed
         bool isReady() const { return mPingRoundTripTime != -1; }
         int32_t pingTime() const { return mPingRoundTripTime; }
@@ -60,18 +61,25 @@ namespace BitCoin
         // Last time a message was received from this peer
         int32_t lastReceiveTime() { return mLastReceiveTime; }
 
-        unsigned int blockHeight() { if(mVersionData == NULL) return 0; else return mVersionData->startBlockHeight; }
+        unsigned int blockHeight()
+        {
+            if(mVersionData == NULL)
+                return 0;
+            else
+                return (unsigned int)mVersionData->startBlockHeight;
+        }
 
-        bool waitingForRequests() { return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty(); }
+        bool waitingForRequests()
+        {
+            return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty();
+        }
         bool requestHeaders();
         bool requestBlocks(NextCash::HashList &pList);
         bool requestTransactions(NextCash::HashList &pList);
-        unsigned int blocksRequestedCount() { return mBlocksRequested.size(); }
+        unsigned int blocksRequestedCount() { return (unsigned int)mBlocksRequested.size(); }
         void releaseBlockRequests();
 
         const NextCash::Hash &lastHeader() const { return mLastHeader; }
-
-        void setMonitor(Monitor &pMonitor);
 
         bool hasTransaction(const NextCash::Hash &pHash);
 
@@ -102,6 +110,9 @@ namespace BitCoin
 
         bool processMessage();
 
+        // Send all initial messages to prepare the node for communication
+        void prepare();
+
         unsigned int mActiveMerkleRequests;
         bool requestMerkleBlock(NextCash::Hash &pHash);
 
@@ -129,12 +140,12 @@ namespace BitCoin
         NextCash::Buffer mReceiveBuffer;
         Statistics mStatistics;
         bool mStop, mStopped;
-        bool mIsIncoming, mIsSeed;
+        bool mIsIncoming, mIsSeed, mIsGood;
         bool mSendBlocksCompact;
         bool mRejected;
 
         Message::VersionData *mVersionData;
-        bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders;
+        bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;
         int32_t mLastReceiveTime;
         int32_t mLastCheckTime;
         int32_t mLastPingTime;
