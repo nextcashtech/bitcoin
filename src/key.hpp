@@ -216,7 +216,7 @@ namespace BitCoin
          * Coin and Account value of 0xffffffff means use default for derivation path
          *   method.
          ******************************************************************************************/
-        enum DerivationPathMethod { SIMPLE, BIP0032, BIP0044 };
+        enum DerivationPathMethod { UNKNOWN = 0, SIMPLE = 1, BIP0032 = 2, BIP0044 = 3 };
         enum CoinIndex
         {
             BITCOIN      = 0x80000000, // 0x00'
@@ -308,6 +308,33 @@ namespace BitCoin
 
     };
 
+    class KeyParentData
+    {
+    public:
+
+        KeyParentData()
+        {
+            derivationPathMethod = Key::UNKNOWN;
+        }
+        KeyParentData(const KeyParentData &pCopy)
+        {
+            name = pCopy.name;
+            seed = pCopy.seed;
+            derivationPathMethod = pCopy.derivationPathMethod;
+        }
+        KeyParentData &operator = (const KeyParentData &pRight)
+        {
+            name = pRight.name;
+            seed = pRight.seed;
+            derivationPathMethod = pRight.derivationPathMethod;
+            return *this;
+        }
+
+        NextCash::String name;
+        NextCash::String seed;
+        Key::DerivationPathMethod derivationPathMethod;
+    };
+
     class KeyStore : public std::vector<Key *>
     {
     public:
@@ -316,8 +343,7 @@ namespace BitCoin
 
         void clear();
 
-        std::vector<NextCash::String> names;
-        std::vector<NextCash::String> seeds;
+        std::vector<KeyParentData> data;
 
         void add(Key *pKey);
 
