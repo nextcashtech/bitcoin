@@ -75,7 +75,7 @@ namespace BitCoin
             delete mFileStream;
             mFileStream = NULL;
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
-                               "Failed to open block stats file to load");
+              "Failed to open block stats file to load");
             mIsValid = false;
             if(!pLocked)
                 mMutex.unlock();
@@ -152,7 +152,7 @@ namespace BitCoin
         if(!outputFile->isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
-                               "Failed to open temp block stats file to save");
+              "Failed to open temp block stats file to save");
             mMutex.unlock();
             return false;
         }
@@ -637,7 +637,7 @@ namespace BitCoin
 
     Forks::Forks() : mMutex("Forks")
     {
-        mHeight = 0;
+        mHeight = -1;
         mEnabledVersion = 1;
         mRequiredVersion = 1;
         mCashForkBlockHeight = -1;

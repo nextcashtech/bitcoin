@@ -800,12 +800,14 @@ namespace BitCoin
                     if(foundInPendingHeader && !mAnnouncedAdded)
                     {
                         if(!mIsInSync)
-                            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Announced block header added");
+                            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                              "Announced block header added");
                         mAnnouncedAdded = true;
 
                         if(!mIsInSync && getTime() - pBlock->time < 600)
                         {
-                            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Chain is in sync");
+                            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                              "Chain is in sync");
                             mIsInSync = true;
                         }
                     }
@@ -847,7 +849,8 @@ namespace BitCoin
         {
             // Check if it is in pending already
             unsigned int offset = 0;
-            for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending,++offset)
+            for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
+              pending != mPendingBlocks.end(); ++pending, ++offset)
                 if((*pending)->block->hash == pBlock->hash)
                 {
                     alreadyHave = true;
@@ -855,8 +858,9 @@ namespace BitCoin
                     {
                         if((*pending)->isFull())
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                              "Block already received from [%d]: %s", (*pending)->requestingNode, pBlock->hash.hex().text());
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE,
+                              BITCOIN_CHAIN_LOG_NAME, "Block already received from [%d]: %s",
+                              (*pending)->requestingNode, pBlock->hash.hex().text());
                         }
                         else
                         {
@@ -2111,7 +2115,7 @@ namespace BitCoin
         mLastBlockHashes.reserve(RECENT_BLOCK_COUNT);
 
         // Get top block hashes
-        if(height() > 0)
+        if(height() >= 0)
         {
             unsigned int startHeight;
             if(height() > RECENT_BLOCK_COUNT)
@@ -2127,7 +2131,7 @@ namespace BitCoin
                 if(NextCash::fileExists(filePathName))
                 {
                     blockFile = new BlockFile(fileID, false);
-                    if (!blockFile->isValid())
+                    if(!blockFile->isValid())
                     {
                         delete blockFile;
                         BlockFile::unlock(fileID);
@@ -2225,7 +2229,7 @@ namespace BitCoin
 
         if(success)
         {
-            if(mBlockStats.height() > 0)
+            if(mBlockStats.height() > -1)
             {
                 mTargetBits = mBlockStats.targetBits(mBlockStats.height());
                 mPendingAccumulatedWork = accumulatedWork();
