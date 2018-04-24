@@ -1603,14 +1603,16 @@ namespace BitCoin
     }
 
     static const char *SEEDS[] =
-            { "seed.bitcoinabc.org",
+            {
+              "nextcash.tech",
+              "seed.bitcoinabc.org",
               "seed-abc.bitcoinforks.org",
               "btccash-seeder.bitcoinunlimited.info",
               "seed.bitprim.org",
               "seed.deadalnix.me",
               "seeder.criptolayer.net"
             };
-    static const int SEED_COUNT = 6;
+    static const int SEED_COUNT = 7;
 
     unsigned int Daemon::querySeed(const char *pName)
     {
