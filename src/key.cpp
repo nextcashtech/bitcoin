@@ -2197,6 +2197,29 @@ namespace BitCoin
                         return 4; // Invalid Derivation Method
                     }
                     break;
+                case Key::UNKNOWN:
+                    // Prime the key for several derivation methods
+                    chain = newKey->chainKey(0, Key::SIMPLE);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+                    chain = newKey->chainKey(1, Key::SIMPLE);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+
+                    chain = newKey->chainKey(0, Key::BIP0032);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+                    chain = newKey->chainKey(1, Key::BIP0032);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+
+                    chain = newKey->chainKey(0, Key::BIP0044);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+                    chain = newKey->chainKey(1, Key::BIP0044);
+                    if(chain != NULL)
+                        chain->updateGap(20);
+
             }
 
             data.emplace_back();

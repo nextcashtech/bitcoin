@@ -907,7 +907,7 @@ namespace BitCoin
             if(mMessagesReceived == 0 && time - mConnectedTime > 180)
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-                  "Dropping. No valid messages within 180 seconds of connecting" %d bytes received.",
+                  "Dropping. No valid messages within 180 seconds of connecting %d bytes received.",
                   mConnection->bytesReceived() + mStatistics.bytesReceived);
 #else
             if(mMessagesReceived == 0 && time - mConnectedTime > 20)
