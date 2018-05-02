@@ -1473,6 +1473,7 @@ namespace BitCoin
                     unsigned int addedCount = 0;
                     NextCash::HashList blockList;
                     bool lastAnnouncedHeaderFound = mLastBlockAnnounced.isEmpty() || mChain->headerAvailable(mLastBlockAnnounced);
+                    bool unsolicited = mHeaderRequested.isEmpty();
 
                     if(headersData->headers.size() == 0)
                         mLastHeader = mHeaderRequested;
@@ -1488,24 +1489,29 @@ namespace BitCoin
                     mHeaderRequestTime = 0;
                     mStatistics.headersReceived += headersData->headers.size();
 
-                    for(std::vector<Block *>::iterator header=headersData->headers.begin();header!=headersData->headers.end();)
+                    for(std::vector<Block *>::iterator header = headersData->headers.begin();
+                      header != headersData->headers.end();)
                     {
                         if(!mLastBlockAnnounced.isEmpty() && mLastBlockAnnounced == (*header)->hash)
                             lastAnnouncedHeaderFound = true;
 
                         if(mChain->addPendingBlock(*header))
                         {
-                            // Memory will be deleted by block chain after it is processed so remove it from this list
+                            // Memory will be deleted by block chain after it is processed so
+                            //   remove it from this list
                             header = headersData->headers.erase(header);
                             addedCount++;
 
                             if(!info.spvMode && mChain->isInSync())
                                 blockList.push_back((*header)->hash);
+
+                            if(unsolicited)
+                                mChain->setAnnouncedAdded();
                         }
                         else if(!mChain->headerAvailable((*header)->hash))
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Rejected Header : %s",
-                              (*header)->hash.hex().text());
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                              "Rejected Header : %s", (*header)->hash.hex().text());
                             ++header;
                         }
                         else

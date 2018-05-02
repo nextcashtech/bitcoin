@@ -253,6 +253,7 @@ namespace BitCoin
 
         // Add block/header to queue to be processed and added to top of chain
         bool addPendingBlock(Block *pBlock);
+        void setAnnouncedAdded() { mAnnouncedAdded = true; }
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
         bool getBlockHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash, unsigned int pCount);

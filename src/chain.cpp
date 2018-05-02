@@ -711,7 +711,8 @@ namespace BitCoin
 
         // Remove pending header
         bool foundInPendingHeader = false;
-        for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();++pendingHeader)
+        for(std::list<PendingHeaderData *>::iterator pendingHeader = mPendingHeaders.begin();
+          pendingHeader != mPendingHeaders.end(); ++pendingHeader)
             if((*pendingHeader)->hash == pBlock->hash)
             {
                 // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
