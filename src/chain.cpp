@@ -2247,7 +2247,7 @@ namespace BitCoin
             return false;
         }
 
-        success = success && mForks.load();
+        success = success && mForks.load(mBlockStats);
 
         if(success)
         {

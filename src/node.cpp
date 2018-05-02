@@ -7,15 +7,12 @@
  **************************************************************************/
 #include "node.hpp"
 
-#include "log.hpp"
 #include "digest.hpp"
 #include "info.hpp"
 #include "message.hpp"
 #include "block.hpp"
 #include "chain.hpp"
 #include "interpreter.hpp"
-
-#define BITCOIN_NODE_LOG_NAME "Node"
 
 
 #define PEER_MESSAGE_LIMIT 5000
@@ -319,11 +316,14 @@ namespace BitCoin
 
     bool Node::requestHeaders()
     {
-        if(!isOpen() || mIsIncoming || waitingForRequests())
+        if(!isOpen() || !isReady() || mIsIncoming || waitingForRequests())
             return false;
 
         if(!mLastHeaderRequested.isEmpty() &&
           mLastHeaderRequested == mChain->lastPendingBlockHash())
+            return false;
+
+        if(!mLastHeader.isEmpty() && mLastHeader == mChain->lastPendingBlockHash())
             return false;
 
         NextCash::HashList hashes;
@@ -637,7 +637,7 @@ namespace BitCoin
         bool success = sendMessage(&pingData);
         if(success)
         {
-            NextCash::Log::add(NextCash::Log::INFO, mName, "Sent Ping");
+            NextCash::Log::add(NextCash::Log::DEBUG, mName, "Sent ping");
             mLastPingNonce = pingData.nonce;
             mLastPingTime = time;
         }
@@ -1074,7 +1074,7 @@ namespace BitCoin
                 {
                     if(mPingRoundTripTime == -1)
                     {
-                        NextCash::Log::add(NextCash::Log::INFO, mName, "Received round trip ping");
+                        NextCash::Log::add(NextCash::Log::DEBUG, mName, "Received round trip ping");
                         mPingRoundTripTime = time - mLastPingTime;
                         if(!mIsIncoming && !mIsSeed && mPingCutoff != -1)
                         {
@@ -1651,6 +1651,11 @@ namespace BitCoin
                             case MemPool::LOW_FEE:
                                 sendRejectWithHash(Message::nameFor(message->type), Message::RejectData::LOW_FEE,
                                   "Fee below minimum", transactionData->transaction->hash);
+                                break;
+
+                            case MemPool::INVALID:
+                                sendRejectWithHash(Message::nameFor(message->type), Message::RejectData::INVALID,
+                                  "Invalid", transactionData->transaction->hash);
                                 break;
 
                             default:

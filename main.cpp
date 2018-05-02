@@ -143,6 +143,15 @@ int main(int pArgumentCount, char **pArguments)
     if(printBlock)
     {
         BitCoin::Block block;
+        BitCoin::BlockStats blockStats;
+        BitCoin::Forks forks;
+
+        if(!blockStats.load() || !forks.load(blockStats))
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, MAIN_LOG_NAME,
+              "Failed to load block stats or forks");
+            return 1;
+        }
 
         if(printBlock.length() == 64)
         {
@@ -170,7 +179,7 @@ int main(int pArgumentCount, char **pArguments)
             }
         }
 
-        block.print(NextCash::Log::INFO, false);
+        block.print(forks, NextCash::Log::INFO, false);
         return 0;
     }
 

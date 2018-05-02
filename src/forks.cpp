@@ -640,8 +640,10 @@ namespace BitCoin
         mHeight = -1;
         mEnabledVersion = 1;
         mRequiredVersion = 1;
-        mCashForkBlockHeight = -1;
         mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
+        mElementMaxSize = 520;
+        mCashForkBlockHeight = -1;
+        mFork201805BlockHeight = -1;
         mModified = false;
 
         for(unsigned int i=0;i<3;i++)
@@ -949,6 +951,15 @@ namespace BitCoin
             mBlockMaxSize = CASH_START_MAX_BLOCK_SIZE;
         }
 
+        if(mFork201805BlockHeight == -1 && mCashForkBlockHeight != -1 &&
+          pBlockStats.getMedianPastTime(pBlockHeight) >= FORK_201805_ACTIVATION_TIME)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+              "2018 May fork activated at block height %d", pBlockHeight);
+            mFork201805BlockHeight = mHeight - 1;
+            mBlockMaxSize = FORK_201805_MAX_BLOCK_SIZE;
+        }
+
         mMutex.unlock();
     }
 
@@ -1010,6 +1021,7 @@ namespace BitCoin
             mVersionRequiredHeights[i] = -1;
         }
         mCashForkBlockHeight = -1;
+        mFork201805BlockHeight = -1;
         mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             (*softFork)->reset();
@@ -1040,12 +1052,12 @@ namespace BitCoin
             mMutex.unlock();
     }
 
-    bool Forks::load(const char *pFileName)
+    bool Forks::load(BlockStats &pBlockStats)
     {
         mMutex.lock();
 
         NextCash::String filePathName = Info::instance().path();
-        filePathName.pathAppend(pFileName);
+        filePathName.pathAppend("forks");
 
         if(!NextCash::fileExists(filePathName))
         {
@@ -1100,8 +1112,25 @@ namespace BitCoin
         mBlockMaxSize = file.readUnsignedInt();
 
         if(mCashForkBlockHeight != -1)
+        {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-              "Cash fork active since block height %d, max block size %d", mCashForkBlockHeight, mBlockMaxSize);
+              "Cash fork active since block height %d, max block size %d", mCashForkBlockHeight,
+              CASH_START_MAX_BLOCK_SIZE);
+
+            // Determine 2018 May fork height
+            for(int i=mCashForkBlockHeight;i<=mHeight;++i)
+            {
+                if(pBlockStats.time(i) > FORK_201805_ACTIVATION_TIME &&
+                  pBlockStats.getMedianPastTime(i) > FORK_201805_ACTIVATION_TIME)
+                {
+                    mFork201805BlockHeight = i;
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                      "2018 May fork active since block height %d, max block size %d",
+                      mFork201805BlockHeight, FORK_201805_MAX_BLOCK_SIZE);
+                    break;
+                }
+            }
+        }
 
         SoftFork *newSoftFork;
         while(file.remaining())
@@ -1127,7 +1156,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Forks::save(const char *pFileName)
+    bool Forks::save()
     {
         mMutex.lock();
         if(!mModified)
@@ -1137,7 +1166,7 @@ namespace BitCoin
         }
 
         NextCash::String filePathName = Info::instance().path();
-        filePathName.pathAppend(pFileName);
+        filePathName.pathAppend("forks");
         NextCash::FileOutputStream file(filePathName, true);
 
         if(!file.isValid())

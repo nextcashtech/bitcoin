@@ -15,6 +15,7 @@
 #include "buffer.hpp"
 #include "file_stream.hpp"
 #include "base.hpp"
+#include "forks.hpp"
 
 #include <vector>
 #include <stdlib.h>
@@ -49,7 +50,7 @@ namespace BitCoin
         static bool skip(NextCash::InputStream *pInputStream, NextCash::OutputStream *pOutputStream = NULL);
 
         // Print human readable version to log
-        void print(NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
+        void print(Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
 
         int64_t amount; // Number of Satoshis spent (documentation says this should be signed)
         NextCash::Buffer script;

@@ -73,13 +73,13 @@ namespace BitCoin
         return true;
     }
 
-    void Output::print(NextCash::Log::Level pLevel)
+    void Output::print(Forks &pForks, NextCash::Log::Level pLevel)
     {
         NextCash::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "Output");
         NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Amount : %.08f", bitcoins(amount));
         script.setReadOffset(0);
         NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Script : (%d bytes)", script.length());
-        ScriptInterpreter::printScript(script, pLevel);
+        ScriptInterpreter::printScript(script, pForks, pLevel);
     }
 
     Output &Output::operator = (const Output &pRight)

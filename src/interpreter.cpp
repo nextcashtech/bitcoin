@@ -64,6 +64,14 @@ namespace BitCoin
         return true;
     }
 
+    void ScriptInterpreter::writeArithmeticInteger(NextCash::Buffer &pScript, int64_t pValue)
+    {
+        NextCash::Buffer value;
+        arithmeticWrite(&value, pValue);
+        ScriptInterpreter::writePushDataSize(value.length(), &pScript);
+        pScript.writeStream(&value, value.length());
+    }
+
     // Parse output script for standard type and hash
     ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(NextCash::Buffer &pScript, NextCash::HashList &pHashes)
     {
@@ -82,7 +90,12 @@ namespace BitCoin
         if(opCode == OP_RETURN)
         {
             if(isPushOnly(pScript))
-                return NULL_DATA;
+            {
+                if(pScript.length() < 224)
+                    return NULL_DATA;
+                else
+                    return NON_STANDARD;
+            }
             else
                 return NON_STANDARD;
         }
@@ -170,13 +183,13 @@ namespace BitCoin
         return NON_STANDARD;
     }
 
-    unsigned int ScriptInterpreter::pullDataSize(uint8_t pOpCode, NextCash::Buffer &pScript)
+    unsigned int ScriptInterpreter::pullDataSize(uint8_t pOpCode, NextCash::Buffer &pScript, bool pSkipData)
     {
         if(pOpCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
         {
             if(pOpCode > pScript.remaining())
                 return 0;
-            else
+            else if(pSkipData)
                 pScript.setReadOffset(pScript.readOffset() + pOpCode);
             return pOpCode;
         }
@@ -210,7 +223,7 @@ namespace BitCoin
                 uint8_t length = pScript.readByte();
                 if(length > pScript.remaining())
                     return 0;
-                else
+                else if(pSkipData)
                     pScript.setReadOffset(pScript.readOffset() + length);
                 return length;
             }
@@ -219,7 +232,7 @@ namespace BitCoin
                 uint16_t length = pScript.readUnsignedShort();
                 if(length > pScript.remaining())
                     return 0;
-                else
+                else if(pSkipData)
                     pScript.setReadOffset(pScript.readOffset() + length);
                 return length;
             }
@@ -228,7 +241,7 @@ namespace BitCoin
                 uint32_t length = pScript.readUnsignedInt();
                 if(length > pScript.remaining())
                     return 0;
-                else
+                else if(pSkipData)
                     pScript.setReadOffset(pScript.readOffset() + length);
                 return length;
             }
@@ -330,7 +343,7 @@ namespace BitCoin
         }
     }
 
-    void ScriptInterpreter::printScript(NextCash::Buffer &pScript, NextCash::Log::Level pLevel)
+    void ScriptInterpreter::printScript(NextCash::Buffer &pScript, Forks &pForks, NextCash::Log::Level pLevel)
     {
         if(pScript.remaining() == 0)
         {
@@ -550,11 +563,17 @@ namespace BitCoin
                 case OP_MUL: //    a b   out    a is multiplied by b. disabled.
                     result += "<OP_MUL disabled>";
                     break;
-                case OP_DIV: //    a b   out    a is divided by b. disabled.
-                    result += "<OP_DIV disabled>";
+                case OP_DIV: //    a b   out    a is divided by b.
+                    if(pForks.fork201805Active())
+                        result += "<OP_DIV>";
+                    else
+                        result += "<OP_DIV disabled>";
                     break;
-                case OP_MOD: //    a b   out    Returns the remainder after dividing a by b. disabled.
-                    result += "<OP_MOD disabled>";
+                case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
+                    if(pForks.fork201805Active())
+                        result += "<OP_MOD>";
+                    else
+                        result += "<OP_MOD disabled>";
                     break;
                 case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign. disabled.
                     result += "<OP_LSHIFT disabled>";
@@ -661,17 +680,29 @@ namespace BitCoin
 
 
                 // Splice
-                case OP_CAT: //  x1 x2  out  Concatenates two strings. disabled.
-                    result += "<OP_CAT disabled>";
+                case OP_CAT: //  x1 x2  out  Concatenates two strings.
+                    if(pForks.fork201805Active())
+                        result += "<OP_CAT>";
+                    else
+                        result += "<OP_CAT disabled>";
                     break;
-                case OP_SUBSTR: //  in begin size  out  Returns a section of a string. disabled.
-                    result += "<OP_SUBSTR disabled>";
+                case OP_SPLIT: // Split byte sequence x at position n
+                    if(pForks.fork201805Active())
+                        result += "<OP_SPLIT>";
+                    else
+                        result += "<OP_SUBSTR disabled>";
                     break;
-                case OP_LEFT: //  in size  out  Keeps only characters left of the specified point in a string. disabled.
-                    result += "<OP_LEFT disabled>";
+                case OP_NUM2BIN: // Convert numeric value a into byte sequence of length b
+                    if(pForks.fork201805Active())
+                        result += "<OP_NUM2BIN>";
+                    else
+                        result += "<OP_LEFT disabled>";
                     break;
-                case OP_RIGHT: //  in size  out  Keeps only characters right of the specified point in a string. disabled.
-                    result += "<OP_RIGHT disabled>";
+                case OP_BIN2NUM: // Convert byte sequence x into a numeric value
+                    if(pForks.fork201805Active())
+                        result += "<OP_BIN2NUM>";
+                    else
+                        result += "<OP_RIGHT disabled>";
                     break;
                 case OP_SIZE: //  in  in size  Pushes the string length of the top element of the stack (without popping it).
                     result += "<OP_SIZE>";
@@ -682,14 +713,23 @@ namespace BitCoin
                 case OP_INVERT: //  in  out  Flips all of the bits in the input. disabled.
                     result += "<OP_INVERT disabled>";
                     break;
-                case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs. disabled.
-                    result += "<OP_AND disabled>";
+                case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs.
+                    if(pForks.fork201805Active())
+                        result += "<OP_AND>";
+                    else
+                        result += "<OP_AND disabled>";
                     break;
-                case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs. disabled.
-                    result += "<OP_OR disabled>";
+                case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs.
+                    if(pForks.fork201805Active())
+                        result += "<OP_OR>";
+                    else
+                        result += "<OP_OR disabled>";
                     break;
-                case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs. disabled.
-                    result += "<OP_XOR disabled>";
+                case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs.
+                    if(pForks.fork201805Active())
+                        result += "<OP_XOR>";
+                    else
+                        result += "<OP_XOR disabled>";
                     break;
 
 
@@ -751,7 +791,22 @@ namespace BitCoin
         NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, result);
     }
 
-    bool ScriptInterpreter::readFirstDataPush(NextCash::Buffer &pScript, NextCash::Buffer &pData)
+
+    bool ScriptInterpreter::readArithmeticInteger(NextCash::Buffer &pScript, int64_t &pValue)
+    {
+        unsigned int length = pullDataSize(pScript.readByte(), pScript, false);
+
+        if(length == 0)
+            return false;
+
+        NextCash::Buffer value;
+
+        value.copyBuffer(pScript, length);
+
+        return arithmeticRead(&value, pValue);
+    }
+
+    bool ScriptInterpreter::readDataPush(NextCash::Buffer &pScript, NextCash::Buffer &pData)
     {
         uint8_t opCode = pScript.readByte();
 
@@ -2082,16 +2137,100 @@ namespace BitCoin
                       "OP_MUL is a disabled op code");
                     mValid = false;
                     return false;
-                case OP_DIV: //    a b   out    a is divided by b. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_DIV is a disabled op code");
-                    mValid = false;
-                    return false;
-                case OP_MOD: //    a b   out    Returns the remainder after dividing a by b. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_MOD is a disabled op code");
-                    mValid = false;
-                    return false;
+                case OP_DIV: //    a b   out    a is divided by b.
+                    if(pForks.fork201805Active())
+                    {
+                        if(!ifStackTrue())
+                            break;
+
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_DIV");
+                            mValid = false;
+                            return false;
+                        }
+
+                        int64_t b;
+                        if(!arithmeticRead(top(), b))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+                        pop();
+
+                        int64_t a;
+                        if(!arithmeticRead(top(), a))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+
+                        if(b == 0)
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Divide by zero for OP_DIV");
+                            mValid = false;
+                            return false;
+                        }
+
+                        arithmeticWrite(top(), a / b);
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_DIV is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+                    break;
+                case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
+                    if(pForks.fork201805Active())
+                    {
+                        if(!ifStackTrue())
+                            break;
+
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_MOD");
+                            mValid = false;
+                            return false;
+                        }
+
+                        int64_t b;
+                        if(!arithmeticRead(top(), b))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+                        pop();
+
+                        int64_t a;
+                        if(!arithmeticRead(top(), a))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+
+                        if(b == 0)
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Divide by zero for OP_MOD");
+                            mValid = false;
+                            return false;
+                        }
+
+                        arithmeticWrite(top(), a % b);
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_MOD is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+                    break;
                 case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign. disabled.
                     NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_LSHIFT is a disabled op code");
@@ -2920,27 +3059,289 @@ namespace BitCoin
 
 
                 // Splice
-                case OP_CAT: //  x1 x2  out  Concatenates two strings. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_CAT is a disabled op code");
-                    mValid = false;
-                    return false;
-                case OP_SUBSTR: //  in begin size  out  Returns a section of a string. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_SUBSTR is a disabled op code");
-                    mValid = false;
-                    return false;
-                case OP_LEFT: //  in size  out  Keeps only characters left of the specified point in a string. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_LEFT is a disabled op code");
-                    mValid = false;
-                    return false;
-                case OP_RIGHT: //  in size  out  Keeps only characters right of the specified point in a string. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_RIGHT is a disabled op code");
-                    mValid = false;
-                    return false;
-                case OP_SIZE: //  in  in size  Pushes the string length of the top element of the stack (without popping it).
+                case OP_CAT: //  x1 x2  out  Concatenates two strings.
+                    if(pForks.fork201805Active())
+                    {
+                        if(!ifStackTrue())
+                            break;
+
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_CAT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        NextCash::Buffer *two = top();
+                        pop(false);
+                        NextCash::Buffer *one = top();
+
+                        if(one->length() + two->length() > pForks.elementMaxSize())
+                        {
+                            // Put two back one stack since it hasn't been deleted yet.
+                            push(two);
+
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack elements too large for OP_CAT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        // Append two to the end of one
+                        one->setWriteOffset(one->length());
+                        two->setReadOffset(0);
+                        one->writeStream(two, two->length());
+
+                        // Delete two
+                        delete two;
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_CAT is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+                    break;
+                case OP_SPLIT: //  in x n  out x1 x2  Split byte sequence x at position n
+                    if(pForks.fork201805Active())
+                    {
+                        if(!ifStackTrue())
+                            break;
+
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_SPLIT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        // Pull n off the stack
+                        int64_t n;
+                        if(!arithmeticRead(top(), n))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+                        pop();
+
+                        if(n < 0)
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack element negative for OP_SPLIT length");
+                            mValid = false;
+                            return false;
+                        }
+
+                        // Get x from stack
+                        NextCash::Buffer *x = top();
+
+                        if(x->length() > pForks.elementMaxSize())
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack element too large for OP_SPLIT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        if((unsigned int)n > x->length())
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "OP_SPLIT byte count is past end of data element to be split");
+                            mValid = false;
+                            return false;
+                        }
+
+                        // Split x after n bytes leaving first part in x and putting second part in two.
+                        NextCash::Buffer *two = new NextCash::Buffer();
+
+                        if(n == 0)
+                        {
+                            // Put an empty value in front of x
+                            pop(false); // pop x
+                            push(two);
+                            push(x);
+                        }
+                        else
+                        {
+                            x->setReadOffset(n);
+                            two->writeStream(x, x->remaining());
+                            x->setReadOffset(0);
+                            x->setEnd(n);
+                            push(two);
+                        }
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_SUBSTR is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+                    break;
+                case OP_NUM2BIN: // in x1 x2 out  Convert numeric value a into byte sequence of length b
+                    if(pForks.fork201805Active())
+                    {
+                        if(!ifStackTrue())
+                            break;
+
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_NUM2BIN");
+                            mValid = false;
+                            return false;
+                        }
+
+                        int64_t length;
+                        if(!arithmeticRead(top(), length))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+                        pop();
+
+                        int64_t n;
+                        unsigned int nLength = top()->length();
+                        if(!arithmeticRead(top(), n))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+
+                        if(length < nLength)
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Length element too short for OP_NUM2BIN");
+                            mValid = false;
+                            return false;
+                        }
+
+                        if(length > pForks.elementMaxSize())
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Length element more than max element size for OP_NUM2BIN");
+                            mValid = false;
+                            return false;
+                        }
+
+                        NextCash::Buffer *out = top();
+                        bool nIsNegative = n < 0;
+
+                        if(nIsNegative)
+                            n = -n;
+                        out->clear();
+
+                        for(int i=0;i<length;++i)
+                        {
+                            if(i < 8)
+                                out->writeByte((n >> (i * 8)) & 0xff);
+                            else
+                                out->writeByte(0);
+                        }
+
+                        if(nIsNegative)
+                        {
+                            // Add negative bit to last byte
+                            out->setWriteOffset(out->writeOffset() - 1);
+                            out->setReadOffset(out->writeOffset());
+                            out->writeByte(out->readByte() | 0x80);
+                        }
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_LEFT is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+                    break;
+                case OP_BIN2NUM: // in x out Convert byte sequence x into a numeric value
+                    if(pForks.fork201805Active())
+                    {
+                        if(!ifStackTrue())
+                            break;
+
+                        if(!checkStackSize(1))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_BIN2NUM");
+                            mValid = false;
+                            return false;
+                        }
+
+                        int64_t n = 0;
+                        int offset = 0;
+                        NextCash::Buffer *x = top();
+
+                        if(x->length() > pForks.elementMaxSize())
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Value element longer than max element size for OP_BIN2NUM");
+                            mValid = false;
+                            return false;
+                        }
+
+                        x->setReadOffset(0);
+                        while(x->remaining() > 1)
+                        {
+                            if(offset >= 8)
+                            {
+                                if(x->readByte() != 0)
+                                {
+                                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                                      "Value element larger than max numeric for OP_BIN2NUM");
+                                    mValid = false;
+                                    return false;
+                                }
+                            }
+                            else
+                            {
+                                n |= x->readByte() << (offset * 8);
+                                ++offset;
+                            }
+                        }
+
+                        if(x->remaining())
+                        {
+                            if(offset >= 8)
+                            {
+                                uint8_t byte = x->readByte();
+
+                                // Bytes past end of numeric can only have negative bit
+                                if(byte == 0x80)
+                                    n = -n;
+                                else if(byte != 0)
+                                {
+                                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                                      "Value element larger than max numeric for OP_BIN2NUM");
+                                    mValid = false;
+                                    return false;
+                                }
+                            }
+                            else
+                            {
+                                // Check for negative bit
+                                uint8_t byte = x->readByte();
+                                n |= (byte & 0x7f) << (offset * 8);
+                                if(byte & 0x80)
+                                    n = -n;
+                            }
+                        }
+
+                        arithmeticWrite(x, n);
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_RIGHT is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+                    break;
+                case OP_SIZE: //  in x out size  Pushes the string length of the top element of the stack (without popping it).
                 {
                     if(!ifStackTrue())
                         break;
@@ -2965,21 +3366,147 @@ namespace BitCoin
                       "OP_RIGHT is a disabled op code");
                     mValid = false;
                     return false;
-                case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_RIGHT is a disabled op code");
-                    mValid = false;
-                    return false;
-                case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_RIGHT is a disabled op code");
-                    mValid = false;
-                    return false;
+                case OP_AND: //  x1 x2  out  Bitwise and between each bit in the inputs.
+                    if(pForks.fork201805Active())
+                    {
+                        if(!ifStackTrue())
+                            break;
+
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_AND");
+                            mValid = false;
+                            return false;
+                        }
+
+                        NextCash::Buffer *two = top();
+                        pop(false);
+                        NextCash::Buffer *one = top();
+
+                        if(two->length() != one->length())
+                        {
+                            push(two);
+
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack item lengths don't match for OP_AND");
+                            mValid = false;
+                            return false;
+                        }
+                        else if(one->length() > 0)
+                        {
+                            one->setReadOffset(0);
+                            two->setReadOffset(0);
+                            one->setWriteOffset(0);
+
+                            while(two->remaining())
+                                one->writeByte(one->readByte() & two->readByte());
+
+                            delete two;
+                        }
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_RIGHT is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+                    break;
+                case OP_OR: //  x1 x2  out  Bitwise or between each bit in the inputs.
+                    if(pForks.fork201805Active())
+                    {
+                        if(!ifStackTrue())
+                            break;
+
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_OR");
+                            mValid = false;
+                            return false;
+                        }
+
+                        NextCash::Buffer *two = top();
+                        pop(false);
+                        NextCash::Buffer *one = top();
+
+                        if(two->length() != one->length())
+                        {
+                            push(two);
+
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack item lengths don't match for OP_OR");
+                            mValid = false;
+                            return false;
+                        }
+                        else if(one->length() > 0)
+                        {
+                            one->setReadOffset(0);
+                            two->setReadOffset(0);
+                            one->setWriteOffset(0);
+
+                            while(two->remaining())
+                                one->writeByte(one->readByte() | two->readByte());
+
+                            delete two;
+                        }
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_RIGHT is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+                    break;
                 case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_RIGHT is a disabled op code");
-                    mValid = false;
-                    return false;
+                    if(pForks.fork201805Active())
+                    {
+                        if(!ifStackTrue())
+                            break;
+
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_XOR");
+                            mValid = false;
+                            return false;
+                        }
+
+                        NextCash::Buffer *two = top();
+                        pop(false);
+                        NextCash::Buffer *one = top();
+
+                        if(two->length() != one->length())
+                        {
+                            push(two);
+
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack item lengths don't match for OP_XOR");
+                            mValid = false;
+                            return false;
+                        }
+                        else if(one->length() > 0)
+                        {
+                            one->setReadOffset(0);
+                            two->setReadOffset(0);
+                            one->setWriteOffset(0);
+
+                            while(two->remaining())
+                                one->writeByte(one->readByte() ^ two->readByte());
+
+                            delete two;
+                        }
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_RIGHT is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+                    break;
 
 
                 // Reserved
@@ -3299,6 +3826,1154 @@ namespace BitCoin
               "Correct   : %s", testData.readHexString(testData.length()).text());
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Written : %s", data.readHexString(data.length()).text());
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * OP_CAT
+         ***********************************************************************************************/
+        Forks forks;
+        NextCash::Buffer testScript;
+        ScriptInterpreter interpreter;
+
+        forks.setFork201805Active();
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element of max size
+        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(), &testScript);
+        for(unsigned int i=0;i<forks.elementMaxSize();++i)
+            testScript.writeByte(0);
+
+        // Add element with size of 1
+        ScriptInterpreter::writePushDataSize(1, &testScript);
+        testScript.writeByte(0);
+
+        // Add OP_CAT
+        testScript.writeByte(OP_CAT);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed OP_CAT max element size");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_CAT max element size");
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element of half max size
+        ScriptInterpreter::writePushDataSize(forks.elementMaxSize() / 2, &testScript);
+        for(unsigned int i=0;i<forks.elementMaxSize() / 2;++i)
+            testScript.writeByte(0);
+
+        // Add element of half max size + 1
+        ScriptInterpreter::writePushDataSize((forks.elementMaxSize() / 2) + 1, &testScript);
+        for(unsigned int i=0;i<(forks.elementMaxSize() / 2) + 1;++i)
+            testScript.writeByte(0);
+
+        // Add OP_CAT
+        testScript.writeByte(OP_CAT);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed OP_CAT combined max element size + 1");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_CAT combined max element size + 1");
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add two empty elements
+        ScriptInterpreter::writePushDataSize(0, &testScript);
+        ScriptInterpreter::writePushDataSize(0, &testScript);
+
+        // Add OP_CAT
+        testScript.writeByte(OP_CAT);
+
+        // Add check that OP_0 is at the top
+        testScript.writeByte(OP_0);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_CAT two empties");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed OP_CAT two empties");
+            interpreter.printStack("Should be one empty");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add one empty element and one not empty
+        testScript.writeByte(OP_5);
+        ScriptInterpreter::writePushDataSize(0, &testScript);
+
+        // Add OP_CAT
+        testScript.writeByte(OP_CAT);
+
+        // Add check that OP_5 is at the top
+        testScript.writeByte(OP_5);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_CAT one empty");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed OP_CAT one empty");
+            interpreter.printStack("Should be a 5");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add one empty element and one not empty
+        ScriptInterpreter::writePushDataSize(0, &testScript);
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(4);
+        testScript.writeByte(6);
+
+        // Add OP_CAT
+        testScript.writeByte(OP_CAT);
+
+        // Add check that OP_5 is at the top
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(4);
+        testScript.writeByte(6);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_CAT 4 and 6");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed OP_CAT 4 and 6");
+            interpreter.printStack("Should be a 4 and 6");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add two elements
+        testScript.writeByte(OP_5);
+        testScript.writeByte(OP_7);
+
+        // Add OP_CAT
+        testScript.writeByte(OP_CAT);
+
+        // Add check that OP_0 is at the top
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(5);
+        testScript.writeByte(7);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_CAT 5 and 7");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed OP_CAT 5 and 7");
+            interpreter.printStack("Should be a 5 and 7");
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * OP_SPLIT
+         ***********************************************************************************************/
+        interpreter.clear();
+        testScript.clear();
+
+        // Add empty element
+        testScript.writeByte(OP_0);
+
+        // Add number zero
+        ScriptInterpreter::writeArithmeticInteger(testScript, 0);
+
+        // Add OP_SPLIT
+        testScript.writeByte(OP_SPLIT);
+
+        if(!interpreter.process(testScript, 4, forks))
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_SPLIT empty at zero");
+            interpreter.printStack("Should be two empties");
+            success = false;
+        }
+        else
+        {
+            NextCash::Buffer *first = interpreter.testElement(0);
+            NextCash::Buffer *second = interpreter.testElement(1);
+
+            if(first != NULL && first->length() == 0 && second != NULL && second->length() == 0)
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Passed OP_SPLIT empty at zero");
+            else
+            {
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Failed to OP_SPLIT empty at zero");
+                interpreter.printStack("Should be two empties");
+                success = false;
+            }
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element with 1 byte
+        testScript.writeByte(OP_5);
+
+        // Add number zero
+        ScriptInterpreter::writeArithmeticInteger(testScript, 0);
+
+        // Add OP_SPLIT
+        testScript.writeByte(OP_SPLIT);
+
+        if(!interpreter.process(testScript, 4, forks))
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_SPLIT non-empty at zero");
+            interpreter.printStack("Should be empty then non-empty");
+            success = false;
+        }
+        else
+        {
+            NextCash::Buffer *first = interpreter.testElement(0);
+            NextCash::Buffer *second = interpreter.testElement(1);
+
+            if(first != NULL && first->length() == 1 && first->readByte() == 5 && second != NULL && second->length() == 0)
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Passed OP_SPLIT non-empty at zero");
+            else
+            {
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Failed to OP_SPLIT non-empty at zero");
+                interpreter.printStack("Should be empty then non-empty");
+                success = false;
+            }
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element with 1 byte
+        testScript.writeByte(OP_5);
+
+        // Add number 1
+        ScriptInterpreter::writeArithmeticInteger(testScript, 1);
+
+        // Add OP_SPLIT
+        testScript.writeByte(OP_SPLIT);
+
+        if(!interpreter.process(testScript, 4, forks))
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_SPLIT non-empty at end");
+            interpreter.printStack("Should be empty then non-empty");
+            success = false;
+        }
+        else
+        {
+            NextCash::Buffer *first = interpreter.testElement(0);
+            NextCash::Buffer *second = interpreter.testElement(1);
+
+            if(first != NULL && first->length() == 0 && second != NULL && second->length() == 1 && second->readByte() == 5)
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Passed OP_SPLIT non-empty at end");
+            else
+            {
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Failed to OP_SPLIT non-empty at end");
+                interpreter.printStack("Should be empty then non-empty");
+                success = false;
+            }
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element with 1 byte
+        testScript.writeByte(OP_5);
+
+        // Add number 1
+        ScriptInterpreter::writeArithmeticInteger(testScript, 2);
+
+        // Add OP_SPLIT
+        testScript.writeByte(OP_SPLIT);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_SPLIT non-empty past end");
+            interpreter.printStack("Should be empty then non-empty");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_SPLIT non-empty past end");
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element with 5 bytes
+        ScriptInterpreter::writePushDataSize(5, &testScript);
+        testScript.writeByte(1);
+        testScript.writeByte(2);
+        testScript.writeByte(3);
+        testScript.writeByte(4);
+        testScript.writeByte(5);
+
+        // Add number 3
+        ScriptInterpreter::writeArithmeticInteger(testScript, 3);
+
+        // Add OP_SPLIT
+        testScript.writeByte(OP_SPLIT);
+
+        if(!interpreter.process(testScript, 4, forks))
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_SPLIT middle");
+            interpreter.printStack("Should be x010203 and x0405");
+            success = false;
+        }
+        else
+        {
+            NextCash::Buffer *first = interpreter.testElement(0);
+            NextCash::Buffer *second = interpreter.testElement(1);
+
+            if(first != NULL && first->length() == 2 && second != NULL && second->length() == 3)
+            {
+                if(first->readByte() != 0x04 || first->readByte() != 0x05 ||
+                  second->readByte() != 0x01 || second->readByte() != 0x02 ||
+                  second->readByte() != 0x03)
+                {
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+                      "Failed to OP_SPLIT middle");
+                    interpreter.printStack("Should be x010203 and x0405");
+                }
+                else
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+                      "Passed OP_SPLIT middle");
+            }
+            else
+            {
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Failed to OP_SPLIT middle");
+                interpreter.printStack("Should be x010203 and x0405");
+                success = false;
+            }
+        }
+
+        /***********************************************************************************************
+         * OP_AND
+         ***********************************************************************************************/
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element with 1 byte
+        testScript.writeByte(OP_5);
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(1);
+        testScript.writeByte(2);
+
+        // Add OP_AND
+        testScript.writeByte(OP_AND);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_AND non-matching lengths");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_AND non-matching lengths");
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(0x01);
+        testScript.writeByte(0x02);
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(0x05);
+        testScript.writeByte(0x04);
+
+        // Add OP_AND
+        testScript.writeByte(OP_AND);
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(0x01);
+        testScript.writeByte(0x00);
+
+        // Add OP_EQUAL
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_AND value check");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_AND value check");
+            interpreter.printStack("Should be x0100");
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * OP_OR
+         ***********************************************************************************************/
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element with 1 byte
+        testScript.writeByte(OP_5);
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(1);
+        testScript.writeByte(2);
+
+        // Add OP_OR
+        testScript.writeByte(OP_OR);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_OR non-matching lengths");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_OR non-matching lengths");
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(0x01);
+        testScript.writeByte(0x02);
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(0x05);
+        testScript.writeByte(0x04);
+
+        // Add OP_OR
+        testScript.writeByte(OP_OR);
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(0x05);
+        testScript.writeByte(0x06);
+
+        // Add OP_EQUAL
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_OR value check");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_OR value check");
+            interpreter.printStack("Should be x0506");
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * OP_XOR
+         ***********************************************************************************************/
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element with 1 byte
+        testScript.writeByte(OP_5);
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(1);
+        testScript.writeByte(2);
+
+        // Add OP_XOR
+        testScript.writeByte(OP_XOR);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_XOR non-matching lengths");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_XOR non-matching lengths");
+
+        interpreter.clear();
+        testScript.clear();
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(0x01);
+        testScript.writeByte(0x02);
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(0x05);
+        testScript.writeByte(0x04);
+
+        // Add OP_XOR
+        testScript.writeByte(OP_XOR);
+
+        // Add element with 2 bytes
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x06);
+
+        // Add OP_EQUAL
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_XOR value check");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_XOR value check");
+            interpreter.printStack("Should be x0406");
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * OP_DIV
+         ***********************************************************************************************/
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(9, &testScript);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+
+        testScript.writeByte(OP_2);
+
+        // Add OP_DIV
+        testScript.writeByte(OP_DIV);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_DIV first non-numeric");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_DIV first non-numeric");
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, 2);
+        ScriptInterpreter::writeArithmeticInteger(testScript, 0);
+
+        // Add OP_DIV
+        testScript.writeByte(OP_DIV);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_DIV divide by zero");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_DIV divide by zero");
+
+        interpreter.clear();
+        testScript.clear();
+
+        testScript.writeByte(OP_5);
+        testScript.writeByte(OP_2);
+
+        // Add OP_DIV
+        testScript.writeByte(OP_DIV);
+
+        testScript.writeByte(OP_2);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_DIV value check");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_DIV value check");
+            interpreter.printStack("Should be x02");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, -5);
+        ScriptInterpreter::writeArithmeticInteger(testScript, 2);
+
+        // Add OP_DIV
+        testScript.writeByte(OP_DIV);
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, -2);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_DIV negative value check");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_DIV negative value check");
+            interpreter.printStack("Should be -2");
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * OP_MOD
+         ***********************************************************************************************/
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(9, &testScript);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+
+        testScript.writeByte(OP_2);
+
+        // Add OP_MOD
+        testScript.writeByte(OP_MOD);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_MOD first non-numeric");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_MOD first non-numeric");
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, 2);
+        ScriptInterpreter::writeArithmeticInteger(testScript, 0);
+
+        // Add OP_MOD
+        testScript.writeByte(OP_MOD);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_MOD divide by zero");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_MOD divide by zero");
+
+        interpreter.clear();
+        testScript.clear();
+
+        testScript.writeByte(OP_5);
+        testScript.writeByte(OP_2);
+
+        // Add OP_MOD
+        testScript.writeByte(OP_MOD);
+
+        testScript.writeByte(OP_1);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_MOD value check");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_MOD value check");
+            interpreter.printStack("Should be x01");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, -5);
+        ScriptInterpreter::writeArithmeticInteger(testScript, 2);
+
+        // Add OP_MOD
+        testScript.writeByte(OP_MOD);
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, -1);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_MOD negative value check");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_MOD negative value check");
+            interpreter.printStack("Should be -1");
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * OP_NUM2BIN
+         ***********************************************************************************************/
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(9, &testScript);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+
+        testScript.writeByte(OP_2);
+
+        // Add OP_NUM2BIN
+        testScript.writeByte(OP_NUM2BIN);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_NUM2BIN first non-numeric");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_NUM2BIN first non-numeric");
+
+        interpreter.clear();
+        testScript.clear();
+
+        testScript.writeByte(OP_2);
+
+        ScriptInterpreter::writePushDataSize(9, &testScript);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+
+        // Add OP_NUM2BIN
+        testScript.writeByte(OP_NUM2BIN);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_NUM2BIN second non-numeric");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_NUM2BIN second non-numeric");
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, 256);
+        ScriptInterpreter::writeArithmeticInteger(testScript, 1);
+
+        // Add OP_NUM2BIN
+        testScript.writeByte(OP_NUM2BIN);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_NUM2BIN sequence too small");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_NUM2BIN sequence too small");
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, 1);
+        ScriptInterpreter::writeArithmeticInteger(testScript, forks.elementMaxSize() + 1);
+
+        // Add OP_NUM2BIN
+        testScript.writeByte(OP_NUM2BIN);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_NUM2BIN sequence too long");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_NUM2BIN sequence too long");
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, 1);
+        ScriptInterpreter::writeArithmeticInteger(testScript, 4);
+
+        // Add OP_NUM2BIN
+        testScript.writeByte(OP_NUM2BIN);
+
+        ScriptInterpreter::writePushDataSize(4, &testScript);
+        testScript.writeByte(1);
+        testScript.writeByte(0);
+        testScript.writeByte(0);
+        testScript.writeByte(0);
+
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_NUM2BIN value check");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_NUM2BIN value check");
+            interpreter.printStack("Should be 0x01000000");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, -2);
+        ScriptInterpreter::writeArithmeticInteger(testScript, 4);
+
+        // Add OP_NUM2BIN
+        testScript.writeByte(OP_NUM2BIN);
+
+        ScriptInterpreter::writePushDataSize(4, &testScript);
+        testScript.writeByte(2);
+        testScript.writeByte(0);
+        testScript.writeByte(0);
+        testScript.writeByte(0x80);
+
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_NUM2BIN negative value check");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_NUM2BIN negative value check");
+            interpreter.printStack("Should be 0x02000080");
+            success = false;
+        }
+
+        /***********************************************************************************************
+         * OP_BIN2NUM
+         ***********************************************************************************************/
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(9, &testScript);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x04);
+
+        // Add OP_BIN2NUM
+        testScript.writeByte(OP_BIN2NUM);
+
+        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_BIN2NUM sequence too large");
+            interpreter.printStack("Should be fail");
+            success = false;
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_BIN2NUM sequence too large");
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(9, &testScript);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+
+        // Add OP_BIN2NUM
+        testScript.writeByte(OP_BIN2NUM);
+
+        testScript.writeByte(OP_0);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_BIN2NUM zeroes");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_BIN2NUM zeroes");
+            interpreter.printStack("Should be empty");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(9, &testScript);
+        testScript.writeByte(0x02);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+
+        // Add OP_BIN2NUM
+        testScript.writeByte(OP_BIN2NUM);
+
+        testScript.writeByte(OP_2);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_BIN2NUM long two");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_BIN2NUM long two");
+            interpreter.printStack("Should be 2");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(), &testScript);
+        testScript.writeByte(0x02);
+        for(unsigned int i=0;i<forks.elementMaxSize()-1;++i)
+            testScript.writeByte(0x00);
+
+        // Add OP_BIN2NUM
+        testScript.writeByte(OP_BIN2NUM);
+
+        testScript.writeByte(OP_2);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_BIN2NUM max length two");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_BIN2NUM max length two");
+            interpreter.printStack("Should be 2");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(9, &testScript);
+        testScript.writeByte(0x02);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x80);
+
+        // Add OP_BIN2NUM
+        testScript.writeByte(OP_BIN2NUM);
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, -2);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_BIN2NUM long negative two");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_BIN2NUM long negative two");
+            interpreter.printStack("Should be -2");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(), &testScript);
+        testScript.writeByte(0x02);
+        for(unsigned int i=0;i<forks.elementMaxSize()-2;++i)
+            testScript.writeByte(0x00);
+        testScript.writeByte(0x80);
+
+        // Add OP_BIN2NUM
+        testScript.writeByte(OP_BIN2NUM);
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, -2);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_BIN2NUM max length negative two");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_BIN2NUM max length negative two");
+            interpreter.printStack("Should be -2");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(2, &testScript);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x80);
+
+        // Add OP_BIN2NUM
+        testScript.writeByte(OP_BIN2NUM);
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, 0);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_BIN2NUM negative zero");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_BIN2NUM negative zero");
+            interpreter.printStack("Should be 0");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(), &testScript);
+        for(unsigned int i=0;i<forks.elementMaxSize()-1;++i)
+            testScript.writeByte(0x00);
+        testScript.writeByte(0x80);
+
+        // Add OP_BIN2NUM
+        testScript.writeByte(OP_BIN2NUM);
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, 0);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_BIN2NUM max length negative zero");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_BIN2NUM max length negative zero");
+            interpreter.printStack("Should be -2");
+            success = false;
+        }
+
+        interpreter.clear();
+        testScript.clear();
+
+        ScriptInterpreter::writePushDataSize(4, &testScript);
+        testScript.writeByte(0xd4);
+        testScript.writeByte(0x04);
+        testScript.writeByte(0x00);
+        testScript.writeByte(0x80);
+
+        // Add OP_BIN2NUM
+        testScript.writeByte(OP_BIN2NUM);
+
+        ScriptInterpreter::writeArithmeticInteger(testScript, -1236);
+        testScript.writeByte(OP_EQUAL);
+
+        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              "Passed OP_BIN2NUM negative 1236");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              "Failed to process OP_BIN2NUM negative 1236");
+            interpreter.printStack("Should be -1236");
             success = false;
         }
 

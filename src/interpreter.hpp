@@ -161,9 +161,13 @@ namespace BitCoin
 
         // Splice
         OP_CAT                 = 0x7e, //  x1 x2  out  Concatenates two strings. disabled.
-        OP_SUBSTR              = 0x7f, //  in begin size  out  Returns a section of a string. disabled.
-        OP_LEFT                = 0x80, //  in size  out  Keeps only characters left of the specified point in a string. disabled.
-        OP_RIGHT               = 0x81, //  in size  out  Keeps only characters right of the specified point in a string. disabled.
+        // OP_SUBSTR, OP_LEFT, and OP_RIGHT are being replaced by OP_SPLIT, OP_NUM2BIN. and OP_BIN2NUM
+        //OP_SUBSTR              = 0x7f, //  in begin size  out  Returns a section of a string. disabled.
+        //OP_LEFT                = 0x80, //  in size  out  Keeps only characters left of the specified point in a string. disabled.
+        //OP_RIGHT               = 0x81, //  in size  out  Keeps only characters right of the specified point in a string. disabled.
+        OP_SPLIT               = 0x7f, // Split byte sequence x at position n
+        OP_NUM2BIN             = 0x80, // Convert numeric value a into byte sequence of length b
+        OP_BIN2NUM             = 0x81, // Convert byte sequence x into a numeric value
         OP_SIZE                = 0x82, //  in  in size  Pushes the string length of the top element of the stack (without popping it).
 
 
@@ -327,29 +331,43 @@ namespace BitCoin
 
         static bool isPushOnly(NextCash::Buffer &pScript);
         static ScriptType parseOutputScript(NextCash::Buffer &pScript, NextCash::HashList &pHashes);
-        static bool readFirstDataPush(NextCash::Buffer &pScript, NextCash::Buffer &pData);
+        static bool readDataPush(NextCash::Buffer &pScript, NextCash::Buffer &pData);
 
         static bool isSmallInteger(uint8_t pOpCode);
         static unsigned int smallIntegerValue(uint8_t pOpCode);
         static bool writeSmallInteger(unsigned int pValue, NextCash::Buffer &pScript);
 
+        static void writeArithmeticInteger(NextCash::Buffer &pScript, int64_t pValue);
+        static bool readArithmeticInteger(NextCash::Buffer &pScript, int64_t &pValue);
+
         static void removeCodeSeparators(NextCash::Buffer &pInputScript, NextCash::Buffer &pOutputScript);
 
-        static void printScript(NextCash::Buffer &pScript, NextCash::Log::Level pLevel = NextCash::Log::DEBUG);
+        static void printScript(NextCash::Buffer &pScript, Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::DEBUG);
 
         // Write to a script to push the following size of data to the stack
         static void writePushDataSize(unsigned int pSize, NextCash::OutputStream *pOutput);
-        static unsigned int pullDataSize(uint8_t pOpCode, NextCash::Buffer &pScript);
+        static unsigned int pullDataSize(uint8_t pOpCode, NextCash::Buffer &pScript, bool pSkipData = true);
         static bool pullData(uint8_t pOpCode, NextCash::Buffer &pScript, NextCash::Buffer &pData);
-
-        static bool arithmeticRead(NextCash::Buffer *pBuffer, int64_t &pValue);
-        static void arithmeticWrite(NextCash::Buffer *pBuffer, int64_t pValue);
 
         static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset, int64_t pOutputAmount,
           const Key &pPublicKey, const Signature &pSignature, NextCash::Buffer &pCurrentOutputScript,
           unsigned int pSignatureStartOffset, const Forks &pForks);
 
         static bool test();
+
+        // For testing
+        NextCash::Buffer *testElement(int pOffsetFromTop)
+        {
+            if(pOffsetFromTop < 0 || (unsigned int)pOffsetFromTop > mStack.size())
+                return NULL;
+
+            std::list<NextCash::Buffer *>::iterator result = mStack.end();
+
+            for(int i=0;i<=(int)pOffsetFromTop;++i)
+                --result;
+
+            return *result;
+        }
 
     private:
 
@@ -418,6 +436,9 @@ namespace BitCoin
         void popAlt(bool pDelete = true) { if(pDelete) delete mAltStack.back(); mAltStack.pop_back(); }
         NextCash::Buffer *topAlt() { return mAltStack.back(); }
         bool stackAltIsEmpty() { return mAltStack.size() == 0; }
+
+        static bool arithmeticRead(NextCash::Buffer *pBuffer, int64_t &pValue);
+        static void arithmeticWrite(NextCash::Buffer *pBuffer, int64_t pValue);
 
     };
 }

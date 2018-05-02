@@ -179,14 +179,14 @@ namespace BitCoin
 
         if(!(pTransaction->status() & Transaction::IS_VALID))
             return false;
-        else if(!pTransaction->isStandardVerified())
+        else if(!pTransaction->isStandard())
         {
             // Transaction not standard or has invalid signatures
             addBlacklisted(pTransaction->hash);
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Transaction is not standard %02x. (%d bytes) : %s", pTransaction->status(), pTransaction->size(),
               pTransaction->hash.hex().text());
-            pTransaction->print(NextCash::Log::VERBOSE);
+            pTransaction->print(pForks, NextCash::Log::VERBOSE);
             return false;
         }
         else if(!(pTransaction->status() & Transaction::OUTPOINTS_FOUND))
@@ -198,7 +198,7 @@ namespace BitCoin
             for(NextCash::HashList::iterator outpoint=outpointsNeeded.begin();outpoint!=outpointsNeeded.end();++outpoint)
                 addPendingInternal(*outpoint, 0);
 
-            return pTransaction->status();
+            return true;
         }
 
         if(pTransaction->feeRate() < pMinFeeRate)
@@ -210,7 +210,7 @@ namespace BitCoin
             return false;
         }
 
-        return pTransaction->status();
+        return true;
     }
 
     void MemPool::checkPendingTransactions(TransactionOutputPool &pOutputs,
@@ -316,14 +316,20 @@ namespace BitCoin
             return DOUBLE_SPEND;
         }
 
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-          "Adding transaction (%d bytes) (%llu fee rate) : %s", pTransaction->size(), pTransaction->feeRate(),
-          pTransaction->hash.hex().text());
+        if(pTransaction->isStandardVerified())
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Adding transaction (%d bytes) (%llu fee rate) : %s", pTransaction->size(), pTransaction->feeRate(),
+              pTransaction->hash.hex().text());
 
-        insert(pTransaction, true);
+            insert(pTransaction, true);
+
+            mLock.writeUnlock();
+            return ADDED;
+        }
 
         mLock.writeUnlock();
-        return ADDED;
+        return INVALID;
     }
 
     void MemPool::remove(const std::vector<Transaction *> &pTransactions)

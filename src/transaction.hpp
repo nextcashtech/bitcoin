@@ -115,7 +115,7 @@ namespace BitCoin
         bool sequenceDisabled() const { return SEQUENCE_DISABLE & sequence; }
 
         // Print human readable version to log
-        void print(NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
+        void print(Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
 
         bool writeSignatureData(NextCash::OutputStream *pStream, NextCash::Buffer *pSubScript, bool pZeroSequence);
 
@@ -178,7 +178,7 @@ namespace BitCoin
         void clearCache();
 
         // Print human readable version to log
-        void print(NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
+        void print(Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
 
         // Hash
         NextCash::Hash hash;
@@ -214,8 +214,8 @@ namespace BitCoin
         bool isVerfied() const { return mStatus & SIGS_VERIFIED; }
 
         // Flag masks
-        static const uint8_t STANDARD_VERIFIED = IS_VALID | IS_STANDARD | SIGS_VERIFIED;
-        bool isStandardVerified() const { return (mStatus & STANDARD_VERIFIED) == STANDARD_VERIFIED; }
+        static const uint8_t STANDARD_VERIFIED_MASK = IS_VALID | IS_STANDARD | SIGS_VERIFIED;
+        bool isStandardVerified() const { return (mStatus & STANDARD_VERIFIED_MASK) == STANDARD_VERIFIED_MASK; }
 
         NextCash::stream_size calculatedSize();
 

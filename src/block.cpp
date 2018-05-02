@@ -238,7 +238,7 @@ namespace BitCoin
         mSize = 0;
     }
 
-    void Block::print(NextCash::Log::Level pLevel, bool pIncludeTransactions)
+    void Block::print(Forks &pForks, NextCash::Log::Level pLevel, bool pIncludeTransactions)
     {
         NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Hash          : %s", hash.hex().text());
         NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Version       : 0x%08x", version);
@@ -263,7 +263,7 @@ namespace BitCoin
                 NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Coinbase Transaction", index++);
             else
                 NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Transaction %d", index++);
-            (*transaction)->print(pLevel);
+            (*transaction)->print(pForks, pLevel);
         }
     }
 

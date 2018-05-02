@@ -257,18 +257,28 @@ namespace BitCoin
 
         SoftFork::State softForkState(unsigned int pID);
 
+        static const unsigned int HARD_MAX_BLOCK_SIZE = 1000000;
+
         // BitCoin Cash
 #ifdef DISABLE_CASH
         static const int32_t CASH_ACTIVATION_TIME = 0;
 #else
         static const int32_t CASH_ACTIVATION_TIME = 1501590000; // Block height on mainnet 478558
 #endif
-        static const unsigned int HARD_MAX_BLOCK_SIZE = 1000000;
         static const unsigned int CASH_START_MAX_BLOCK_SIZE = 8000000;
 
         bool cashActive() const { return mCashForkBlockHeight != -1 && mHeight >= mCashForkBlockHeight; }
         int cashForkBlockHeight() const { return mCashForkBlockHeight; }
+
+        // 2018 May Hard Fork
+        static const int32_t FORK_201805_ACTIVATION_TIME = 1526400000;
+        static const unsigned int FORK_201805_MAX_BLOCK_SIZE = 32000000;
+
+        bool fork201805Active() const { return mFork201805BlockHeight != -1 && mHeight >= mFork201805BlockHeight; }
+
         unsigned int blockMaxSize() const { return mBlockMaxSize; }
+
+        unsigned int elementMaxSize() const { return mElementMaxSize; }
 
         void process(BlockStats &pBlockStats, int pBlockHeight);
 
@@ -278,8 +288,15 @@ namespace BitCoin
         void reset();
 
         // Load from/Save to file system
-        bool load(const char *pFileName = "forks");
-        bool save(const char *pFileName = "forks");
+        bool load(BlockStats &pBlockStats);
+        bool save();
+
+        // For testing
+        void setFork201805Active()
+        {
+            mHeight = 1;
+            mFork201805BlockHeight = 0;
+        }
 
     private:
 
@@ -297,7 +314,10 @@ namespace BitCoin
         int mVersionRequiredHeights[3];
 
         int mCashForkBlockHeight;
+        int mFork201805BlockHeight;
+
         unsigned int mBlockMaxSize;
+        unsigned int mElementMaxSize;
 
         unsigned int mThreshHold;
         bool mModified;

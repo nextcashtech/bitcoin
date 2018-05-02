@@ -71,7 +71,7 @@ namespace BitCoin
         mOutputHash.clear();
     }
 
-    void Transaction::print(NextCash::Log::Level pLevel)
+    void Transaction::print(Forks &pForks, NextCash::Log::Level pLevel)
     {
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Hash      : %s", hash.hex().text());
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Version   : %d", version);
@@ -85,14 +85,14 @@ namespace BitCoin
         else
             NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME,
               "Lock Time : block height %d", lockTime);
-        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Fee       : %f", bitcoins(mFee));
+        NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Fee       : %f", bitcoins(-mFee));
 
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "%d Inputs", inputs.size());
         unsigned int index = 1;
         for(std::vector<Input>::iterator input=inputs.begin();input!=inputs.end();++input)
         {
             NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Input %d", index++);
-            input->print(pLevel);
+            input->print(pForks, pLevel);
         }
 
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "%d Outputs", outputs.size());
@@ -100,18 +100,18 @@ namespace BitCoin
         for(std::vector<Output>::iterator output=outputs.begin();output!=outputs.end();++output)
         {
             NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Output %d", index++);
-            output->print(pLevel);
+            output->print(pForks, pLevel);
         }
     }
 
-    void Input::print(NextCash::Log::Level pLevel)
+    void Input::print(Forks &pForks, NextCash::Log::Level pLevel)
     {
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Outpoint Trans : %s", outpoint.transactionID.hex().text());
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Outpoint Index : %d", outpoint.index);
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Sequence       : 0x%08x", sequence);
         script.setReadOffset(0);
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Script         : (%d bytes)",script.length());
-        ScriptInterpreter::printScript(script, pLevel);
+        ScriptInterpreter::printScript(script, pForks, pLevel);
     }
 
     bool Transaction::addInput(const NextCash::Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence)
@@ -133,10 +133,7 @@ namespace BitCoin
         inputs.emplace_back();
         Input &newInput = inputs.back();
 
-        NextCash::Buffer blockHeight;
-        ScriptInterpreter::arithmeticWrite(&blockHeight, pBlockHeight); // Write block height into coinbase input
-        ScriptInterpreter::writePushDataSize(blockHeight.length(), &newInput.script);
-        blockHeight.readStream(&newInput.script, blockHeight.length());
+        ScriptInterpreter::writeArithmeticInteger(newInput.script, pBlockHeight);
         newInput.script.compact();
         return true;
     }
@@ -242,7 +239,7 @@ namespace BitCoin
         // Check Public Key in output
         NextCash::Buffer publicKeyData;
         pOutput.script.setReadOffset(0);
-        if(ScriptInterpreter::readFirstDataPush(pOutput.script, publicKeyData) == 0)
+        if(ScriptInterpreter::readDataPush(pOutput.script, publicKeyData) == 0)
         {
             NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Failed to read public key");
             return false;
@@ -857,8 +854,8 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d amount is less than zero (%d) : trans %s", index, output->amount, hash.hex().text());
-                output->print(NextCash::Log::VERBOSE);
-                print(NextCash::Log::VERBOSE);
+                output->print(pForks, NextCash::Log::VERBOSE);
+                print(pForks, NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -869,7 +866,7 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d is non standard : trans %s", index, hash.hex().text());
-                print(NextCash::Log::VERBOSE);
+                print(pForks, NextCash::Log::VERBOSE);
                 if(mStatus & IS_STANDARD)
                     mStatus ^= IS_STANDARD;
             }
@@ -878,14 +875,14 @@ namespace BitCoin
             // {
                 // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   // "Output %d is null data", index);
-                // print(NextCash::Log::VERBOSE);
+                // print(pForks, NextCash::Log::VERBOSE);
                 // isStandard = false;
             // }
             else if(scriptType == ScriptInterpreter::INVALID)
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d is invalid : trans %s", index, hash.hex().text());
-                print(NextCash::Log::VERBOSE);
+                print(pForks, NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -979,7 +976,7 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d signature script is invalid : trans %s", index, hash.hex().text());
-                input->print(NextCash::Log::VERBOSE);
+                input->print(pForks, NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -991,13 +988,13 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d outpoint script is not valid : trans %s", index, hash.hex().text());
-                input->print(NextCash::Log::VERBOSE);
+                input->print(pForks, NextCash::Log::VERBOSE);
                 if(reference != NULL)
                 {
                     NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
                     reference->print(NextCash::Log::VERBOSE);
                 }
-                input->outpoint.output->print(NextCash::Log::VERBOSE);
+                input->outpoint.output->print(pForks, NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -1005,14 +1002,14 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d script did not verify : trans %s", index, hash.hex().text());
-                input->print(NextCash::Log::VERBOSE);
+                input->print(pForks, NextCash::Log::VERBOSE);
                 interpreter.printStack("After fail verify");
                 if(reference != NULL)
                 {
                     NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
                     reference->print(NextCash::Log::VERBOSE);
                 }
-                input->outpoint.output->print(NextCash::Log::VERBOSE);
+                input->outpoint.output->print(pForks, NextCash::Log::VERBOSE);
                 sigsVerified = false;
             }
             else
@@ -1028,7 +1025,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Outputs amounts are more than inputs amounts");
-                print(NextCash::Log::VERBOSE);
+                print(pForks, NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 return true;
             }
@@ -1092,17 +1089,15 @@ namespace BitCoin
                 if(pBlockVersion >= 2 && pForks.enabledVersion() >= 2)
                 {
                     // Read block height
+                    int64_t blockHeight = 0;
                     input->script.setReadOffset(0);
-                    NextCash::Buffer blockHeightData;
-                    if(!ScriptInterpreter::readFirstDataPush(input->script, blockHeightData))
+                    if(!ScriptInterpreter::readArithmeticInteger(input->script, blockHeight))
                     {
                         NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Coinbase input doesn't start with data push");
                         return false;
                     }
 
-                    int64_t blockHeight = 0;
-                    ScriptInterpreter::arithmeticRead(&blockHeightData, blockHeight);
                     if(blockHeight < 0 || (uint64_t)blockHeight != pBlockHeight)
                     {
                         NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
@@ -1239,7 +1234,7 @@ namespace BitCoin
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d signature script failed : ", index);
-                    input->print(NextCash::Log::WARNING);
+                    input->print(pForks, NextCash::Log::WARNING);
                     reference->print(NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
@@ -1256,10 +1251,10 @@ namespace BitCoin
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d unspent transaction output script failed : ", index);
-                    input->print(NextCash::Log::WARNING);
+                    input->print(pForks, NextCash::Log::WARNING);
                     NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
                     reference->print(NextCash::Log::WARNING);
-                    output.print(NextCash::Log::WARNING);
+                    output.print(pForks, NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
@@ -1270,11 +1265,11 @@ namespace BitCoin
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d script is not valid : ", index);
-                    input->print(NextCash::Log::WARNING);
+                    input->print(pForks, NextCash::Log::WARNING);
                     interpreter.printStack("After fail validate");
                     NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
                     reference->print(NextCash::Log::WARNING);
-                    output.print(NextCash::Log::WARNING);
+                    output.print(pForks, NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
@@ -1285,11 +1280,11 @@ namespace BitCoin
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d script did not verify : ", index);
-                    input->print(NextCash::Log::WARNING);
+                    input->print(pForks, NextCash::Log::WARNING);
                     interpreter.printStack("After fail verify");
                     NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "UTXO :");
                     reference->print(NextCash::Log::WARNING);
-                    output.print(NextCash::Log::WARNING);
+                    output.print(pForks, NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
@@ -1320,7 +1315,7 @@ namespace BitCoin
                         NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Lock time stamp is not valid. Lock time %s > block median time %s",
                           lockTimeText.text(), blockTimeText.text());
-                        print(NextCash::Log::VERBOSE);
+                        print(pForks, NextCash::Log::VERBOSE);
                         return false;
                     }
                 }
@@ -1336,7 +1331,7 @@ namespace BitCoin
                         NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Lock time stamp is not valid. Lock time %s > block time %s",
                           lockTimeText.text(), blockTimeText.text());
-                        print(NextCash::Log::VERBOSE);
+                        print(pForks, NextCash::Log::VERBOSE);
                         return false;
                     }
                 }
@@ -1349,7 +1344,7 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Lock time block height is not valid. Lock height %d > block height %d",
                       lockTime, pBlockHeight);
-                    print(NextCash::Log::VERBOSE);
+                    print(pForks, NextCash::Log::VERBOSE);
                     return false;
                 }
             }
@@ -1366,15 +1361,15 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d amount is negative %d : ", index + 1, output->amount);
-                output->print(NextCash::Log::WARNING);
-                print(NextCash::Log::VERBOSE);
+                output->print(pForks, NextCash::Log::WARNING);
+                print(pForks, NextCash::Log::VERBOSE);
                 return false;
             }
 
             if(!pCoinBase && output->amount > 0 && output->amount > mFee)
             {
                 NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Outputs are more than inputs");
-                print(NextCash::Log::VERBOSE);
+                print(pForks, NextCash::Log::VERBOSE);
                 return false;
             }
 

@@ -41,7 +41,7 @@ namespace BitCoin
         void clear();
 
         // Print human readable version to log
-        void print(NextCash::Log::Level pLevel = NextCash::Log::DEBUG, bool pIncludeTransactions = true);
+        void print(Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::DEBUG, bool pIncludeTransactions = true);
 
         // Hash
         NextCash::Hash hash;

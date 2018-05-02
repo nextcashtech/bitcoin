@@ -753,7 +753,6 @@ namespace BitCoin
         unsigned int i;
 
         // Assign nodes
-        nodeRequest = nodeRequests;
         for(std::vector<Node *>::iterator node=requestNodes.begin();node!=requestNodes.end();++node)
         {
             nodeRequest->node = *node;

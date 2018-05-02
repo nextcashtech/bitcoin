@@ -54,7 +54,7 @@ namespace BitCoin
         HashStatus addPending(const NextCash::Hash &pHash, TransactionOutputPool &pOutputs, unsigned int pNodeID);
 
         // Add transaction to mem pool. Returns false if it was already in the mem pool or is invalid
-        enum AddStatus { ADDED, NOT_NEEDED, NON_STANDARD, DOUBLE_SPEND, LOW_FEE, UNSEEN_OUTPOINTS };
+        enum AddStatus { ADDED, NOT_NEEDED, NON_STANDARD, DOUBLE_SPEND, LOW_FEE, UNSEEN_OUTPOINTS, INVALID };
         AddStatus add(Transaction *pTransaction, TransactionOutputPool &pOutputs, BlockStats &pBlockStats,
           Forks &pForks, uint64_t pMinFeeRate);
 

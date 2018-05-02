@@ -10,6 +10,7 @@
 
 #include "mutex.hpp"
 #include "thread.hpp"
+#include "log.hpp"
 #include "hash.hpp"
 #include "buffer.hpp"
 #include "network.hpp"
@@ -21,6 +22,8 @@
 
 #include <cstdint>
 #include <list>
+
+#define BITCOIN_NODE_LOG_NAME "Node"
 
 
 namespace BitCoin
@@ -71,7 +74,20 @@ namespace BitCoin
 
         bool waitingForRequests()
         {
-            return mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty();
+            if(mBlocksRequested.size() > 0)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Waiting for %d blocks",
+                  mBlocksRequested.size());
+                return true;
+            }
+            else if(!mHeaderRequested.isEmpty())
+            {
+                NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Waiting for headers after : %s",
+                  mHeaderRequested.hex().text());
+                return true;
+            }
+            else
+                return false;
         }
         bool requestHeaders();
         bool requestBlocks(NextCash::HashList &pList);
