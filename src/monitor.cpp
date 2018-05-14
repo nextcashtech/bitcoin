@@ -546,145 +546,41 @@ namespace BitCoin
     {
         unsigned int addedCount = 0;
         std::vector<Key *> children;
-        Key *chain;
+        std::vector<Key *> *chainKeys;
 
-        for(KeyStore::iterator key=mKeyStore->begin();key!=mKeyStore->end();++key)
+        for(unsigned int i=0;i<mKeyStore->size();++i)
         {
-            if((*key)->depth() == 0)
+            chainKeys = mKeyStore->chainKeys(i);
+
+            if(chainKeys == NULL || chainKeys->size() == 0)
+                continue;
+
+            for(std::vector<Key *>::iterator chainKey = chainKeys->begin();
+              chainKey != chainKeys->end(); ++chainKey)
             {
-                // Check for BIP-0044 External Addresses
-                chain = (*key)->chainKey(0, Key::BIP0044);
-                if(chain != NULL && chain->childCount() > 0)
+                if((*chainKey)->depth() == Key::NO_DEPTH)
                 {
-                    chain->getChildren(children);
-                    for(std::vector<Key *>::iterator child = children.begin();
-                      child != children.end(); ++child)
-                        if(!mAddressHashes.contains((*child)->hash()))
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO,
-                              BITCOIN_MONITOR_LOG_NAME,
-                              "Added new BIP0044 external address from key store : %s",
-                              (*child)->address().text());
-                            mAddressHashes.push_back((*child)->hash());
-                            ++addedCount;
-                        }
-                }
-
-                // Check for BIP-0044 Internal Addresses
-                chain = (*key)->chainKey(1, Key::BIP0044);
-                if(chain != NULL && chain->childCount() > 0)
-                {
-                    chain->getChildren(children);
-                    for(std::vector<Key *>::iterator child = children.begin();
-                      child != children.end(); ++child)
-                        if(!mAddressHashes.contains((*child)->hash()))
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO,
-                              BITCOIN_MONITOR_LOG_NAME,
-                              "Added new BIP0044 internal address from key store : %s",
-                              (*child)->address().text());
-                            mAddressHashes.push_back((*child)->hash());
-                            ++addedCount;
-                        }
-                }
-
-                // Check for BIP-0032 External Addresses
-                chain = (*key)->chainKey(0, Key::BIP0032);
-                if(chain != NULL && chain->childCount() > 0)
-                {
-                    chain->getChildren(children);
-                    for(std::vector<Key *>::iterator child = children.begin();
-                      child != children.end(); ++child)
-                        if(!mAddressHashes.contains((*child)->hash()))
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO,
-                              BITCOIN_MONITOR_LOG_NAME,
-                              "Added new BIP0032 external address from key store : %s",
-                              (*child)->address().text());
-                            mAddressHashes.push_back((*child)->hash());
-                            ++addedCount;
-                        }
-                }
-
-                // Check for BIP-0032 Internal Addresses
-                chain = (*key)->chainKey(1, Key::BIP0032);
-                if(chain != NULL && chain->childCount() > 0)
-                {
-                    chain->getChildren(children);
-                    for(std::vector<Key *>::iterator child = children.begin();
-                      child != children.end(); ++child)
-                        if(!mAddressHashes.contains((*child)->hash()))
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO,
-                              BITCOIN_MONITOR_LOG_NAME,
-                              "Added new BIP0032 internal address from key store : %s",
-                              (*child)->address().text());
-                            mAddressHashes.push_back((*child)->hash());
-                            ++addedCount;
-                        }
-                }
-
-                // Check for SIMPLE External Addresses
-                chain = (*key)->chainKey(0, Key::SIMPLE);
-                if(chain != NULL && chain->childCount() > 0)
-                {
-                    chain->getChildren(children);
-                    for(std::vector<Key *>::iterator child = children.begin();
-                      child != children.end(); ++child)
-                        if(!mAddressHashes.contains((*child)->hash()))
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO,
-                              BITCOIN_MONITOR_LOG_NAME,
-                              "Added new SIMPLE external address from key store : %s",
-                              (*child)->address().text());
-                            mAddressHashes.push_back((*child)->hash());
-                            ++addedCount;
-                        }
-                }
-
-                // Check for SIMPLE Internal Addresses
-                chain = (*key)->chainKey(1, Key::SIMPLE);
-                if(chain != NULL && chain->childCount() > 0)
-                {
-                    chain->getChildren(children);
-                    for(std::vector<Key *>::iterator child = children.begin();
-                      child != children.end(); ++child)
-                        if(!mAddressHashes.contains((*child)->hash()))
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO,
-                              BITCOIN_MONITOR_LOG_NAME,
-                              "Added new SIMPLE internal address from key store : %s",
-                              (*child)->address().text());
-                            mAddressHashes.push_back((*child)->hash());
-                            ++addedCount;
-                        }
-                }
-            }
-            else if((*key)->depth() == 0xff)
-            {
-                if(!mAddressHashes.contains((*key)->hash()))
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                      "Added new individual address from key store : %s", (*key)->address().text());
-                    mAddressHashes.push_back((*key)->hash());
-                    ++addedCount;
-                }
-            }
-            else
-            {
-                // Check for immediate children addresses.
-                // For scenarios like when a public chain key is provided for monitoring.
-                (*key)->getChildren(children);
-                for(std::vector<Key *>::iterator child = children.begin(); child != children.end();
-                  ++child)
-                    if(!mAddressHashes.contains((*child)->hash()))
+                    if(!mAddressHashes.contains((*chainKey)->hash()))
                     {
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                          "Added new immediate child address from key store : %s",
-                          (*child)->address().text());
-                        mAddressHashes.push_back((*child)->hash());
+                          "Added new address from key store hash : %s", (*chainKey)->address().text());
+                        mAddressHashes.push_back((*chainKey)->hash());
                         ++addedCount;
                     }
+                }
+                else
+                {
+                    (*chainKey)->getChildren(children);
+                    for(std::vector<Key *>::iterator child = children.begin();
+                      child != children.end(); ++child)
+                        if(!mAddressHashes.contains((*child)->hash()))
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                              "Added new address from key store chain : %s", (*child)->address().text());
+                            mAddressHashes.push_back((*child)->hash());
+                            ++addedCount;
+                        }
+                }
             }
         }
 

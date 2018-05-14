@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2017-2018 NextCash, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@nextcash.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                   *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -114,9 +114,14 @@ namespace BitCoin
         //   are required to derive children.
         static const uint32_t HARDENED_LIMIT = 0x80000000;
 
+        // Depth when no hierarchy is present
+        static const uint8_t NO_DEPTH = 0xff;
+
         enum Version { MAINNET_PRIVATE, MAINNET_PUBLIC, TESTNET_PRIVATE, TESTNET_PUBLIC };
 
         Key() : mChildLock("KeyChild") { mPublicKey = NULL; clear(); }
+        Key(Key &pCopy);
+        void operator = (Key &pRight);
         ~Key() { clear(); }
 
         // Encode key as base58 text
@@ -223,6 +228,22 @@ namespace BitCoin
             BITCOIN_CASH = 0x80000091  // 0x91'
         };
 
+        const char *derivationPathMethodName(DerivationPathMethod pMethod)
+        {
+            switch(pMethod)
+            {
+            default:
+            case UNKNOWN:
+                return "Unknown";
+            case SIMPLE:
+                return "Simple";
+            case BIP0032:
+                return "BIP-0032";
+            case BIP0044:
+                return "BIP-0044";
+            }
+        }
+
         // Return "chain" key with which to generate/lookup address keys. Requires master key as
         //   top key to ensure correct full path.
         Key *chainKey(uint32_t pChain, DerivationPathMethod pMethod = BIP0044,
@@ -285,9 +306,6 @@ namespace BitCoin
 
     private:
 
-        Key(const Key &pCopy);
-        void operator = (const Key &pRight);
-
         bool finalize();
 
         uint8_t  mVersion;
@@ -308,44 +326,27 @@ namespace BitCoin
 
     };
 
-    class KeyParentData
+    class PublicKeyData;
+    class PrivateKeyData;
+
+    class KeyStore
     {
     public:
 
-        KeyParentData()
-        {
-            derivationPathMethod = Key::UNKNOWN;
-        }
-        KeyParentData(const KeyParentData &pCopy)
-        {
-            name = pCopy.name;
-            seed = pCopy.seed;
-            derivationPathMethod = pCopy.derivationPathMethod;
-        }
-        KeyParentData &operator = (const KeyParentData &pRight)
-        {
-            name = pRight.name;
-            seed = pRight.seed;
-            derivationPathMethod = pRight.derivationPathMethod;
-            return *this;
-        }
-
-        NextCash::String name;
-        NextCash::String seed;
-        Key::DerivationPathMethod derivationPathMethod;
-    };
-
-    class KeyStore : public std::vector<Key *>
-    {
-    public:
-
+        KeyStore();
         ~KeyStore();
 
         void clear();
 
-        std::vector<KeyParentData> data;
+        unsigned int size() { return mKeys.size(); }
 
-        void add(Key *pKey);
+        NextCash::String name(unsigned int pOffset);
+
+        std::vector<Key *> *chainKeys(unsigned int pOffset);
+
+        // These functions require private keys to be loaded/decrypted.
+        bool isPrivateLoaded() { return mPrivateLoaded; }
+        NextCash::String seed(unsigned int pOffset);
 
         // Load a key from text
         // Valid values are:
@@ -358,6 +359,7 @@ namespace BitCoin
         //   2 = invalid format
         //   3 = already exists
         //   4 = invalid derivation method for key
+        //   5 = encryption key needed
         int loadKey(const char *pText, Key::DerivationPathMethod pMethod);
 
         // Load keys from a text stream
@@ -377,6 +379,20 @@ namespace BitCoin
 
         void write(NextCash::OutputStream *pStream) const;
         bool read(NextCash::InputStream *pStream);
+
+        void writePrivate(NextCash::OutputStream *pStream, const uint8_t *pKey, unsigned int pKeyLength) const;
+        bool readPrivate(NextCash::InputStream *pStream, const uint8_t *pKey, unsigned int pKeyLength);
+
+        void unloadPrivate();
+
+    private:
+
+        void add(Key *pKey);
+
+        std::vector<PublicKeyData *> mKeys;
+        bool mPrivateLoaded;
+        std::vector<PrivateKeyData *> mPrivateKeys;
+
     };
 }
 

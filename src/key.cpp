@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2017-2018 NextCash, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@nextcash.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                   *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -14,6 +14,7 @@
 #include "log.hpp"
 #include "math.hpp"
 #include "digest.hpp"
+#include "encrypt.hpp"
 #include "interpreter.hpp"
 
 #define BITCOIN_KEY_LOG_NAME "Key"
@@ -682,6 +683,65 @@ namespace BitCoin
         return false;
     }
 
+    Key::Key(Key &pCopy) : mChildLock("KeyChild")
+    {
+        mVersion = pCopy.mVersion;
+        mDepth = pCopy.mDepth;
+        std::memcpy(mParentFingerPrint, pCopy.mParentFingerPrint, 4);
+        mIndex = pCopy.mIndex;
+        std::memcpy(mChainCode, pCopy.mChainCode, 32);
+        std::memcpy(mKey, pCopy.mKey, 33);
+        std::memcpy(mFingerPrint, pCopy.mFingerPrint, 4);
+
+        if(pCopy.mPublicKey != NULL)
+            mPublicKey = new Key(*pCopy.mPublicKey);
+        else
+            mPublicKey = NULL;
+
+        mChildLock.lock();
+        pCopy.mChildLock.lock();
+        mChildren.reserve(pCopy.mChildren.size());
+        for(std::vector<Key *>::iterator key=pCopy.mChildren.begin();key!=pCopy.mChildren.end();++key)
+            mChildren.push_back(new Key(**key));
+        pCopy.mChildLock.unlock();
+        mChildLock.unlock();
+
+        mHash = pCopy.mHash;
+        mUsed = pCopy.mUsed;
+    }
+
+    void Key::operator = (Key &pRight)
+    {
+        mVersion = pRight.mVersion;
+        mDepth = pRight.mDepth;
+        std::memcpy(mParentFingerPrint, pRight.mParentFingerPrint, 4);
+        mIndex = pRight.mIndex;
+        std::memcpy(mChainCode, pRight.mChainCode, 32);
+        std::memcpy(mKey, pRight.mKey, 33);
+        std::memcpy(mFingerPrint, pRight.mFingerPrint, 4);
+
+        if(mPublicKey != NULL)
+            delete mPublicKey;
+        if(pRight.mPublicKey != NULL)
+            mPublicKey = new Key(*pRight.mPublicKey);
+        else
+            mPublicKey = NULL;
+
+        mChildLock.lock();
+        for(std::vector<Key *>::iterator key=mChildren.begin();key!=mChildren.end();++key)
+            delete *key;
+        mChildren.clear();
+        pRight.mChildLock.lock();
+        mChildren.reserve(pRight.mChildren.size());
+        for(std::vector<Key *>::iterator key=pRight.mChildren.begin();key!=pRight.mChildren.end();++key)
+            mChildren.push_back(new Key(**key));
+        pRight.mChildLock.unlock();
+        mChildLock.unlock();
+
+        mHash = pRight.mHash;
+        mUsed = pRight.mUsed;
+    }
+
     const NextCash::Hash &Key::hash() const
     {
         if(isPrivate() && mPublicKey != NULL)
@@ -713,22 +773,27 @@ namespace BitCoin
 
     void Key::clear()
     {
-        mVersion = 0;
-        mDepth = 0;
-        std::memset(mParentFingerPrint, 0, 4);
-        mIndex = 0;
-        std::memset(mChainCode, 0, 32);
-        std::memset(mKey, 0, 33);
-
-        if(mPublicKey != NULL)
-            delete mPublicKey;
-        mPublicKey = NULL;
-
         mChildLock.lock();
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
             delete *child;
         mChildren.clear();
         mChildLock.unlock();
+
+        if(mPublicKey != NULL)
+            delete mPublicKey;
+        mPublicKey = NULL;
+
+        mVersion = 0;
+        mDepth = 0;
+        std::memset(mParentFingerPrint, 0, 4);
+        mIndex = 0;
+
+        std::memset(mChainCode, 0, 32);
+        std::memset(mKey, 0, 33);
+        std::memset(mChainCode, 0xff, 32);
+        std::memset(mKey, 0xff, 33);
+        std::memset(mChainCode, 0, 32);
+        std::memset(mKey, 0, 33);
 
         mHash.clear();
         mUsed = false;
@@ -738,8 +803,8 @@ namespace BitCoin
     {
         clear();
 
-        mDepth = 0xff;
-        mIndex = 0xff;
+        mDepth = NO_DEPTH;
+        mIndex = NO_DEPTH;
 
         if(pStream->remaining() < 33)
             return false;
@@ -827,8 +892,8 @@ namespace BitCoin
     {
         clear();
 
-        mDepth = 0xff;
-        mIndex = 0xff;
+        mDepth = NO_DEPTH;
+        mIndex = NO_DEPTH;
 
         if(pStream->remaining() < 32)
             return false;
@@ -853,8 +918,8 @@ namespace BitCoin
 
         secp256k1_context *thisContext = context(SECP256K1_CONTEXT_NONE);
 
-        mDepth = 0xff;
-        mIndex = 0xff;
+        mDepth = NO_DEPTH;
+        mIndex = NO_DEPTH;
 
         while(true)
         {
@@ -880,8 +945,8 @@ namespace BitCoin
     {
         clear();
 
-        mDepth = 0xff;
-        mIndex = 0xff;
+        mDepth = NO_DEPTH;
+        mIndex = NO_DEPTH;
         mHash = pHash;
     }
 
@@ -1998,30 +2063,197 @@ namespace BitCoin
         return loadBinarySeed(pNetwork, &seed);
     }
 
+    class PublicKeyData
+    {
+    public:
+
+        PublicKeyData()
+        {
+            derivationPathMethod = Key::UNKNOWN;
+        }
+        PublicKeyData(const PublicKeyData &pCopy) : chainKeys(pCopy.chainKeys)
+        {
+            name = pCopy.name;
+            derivationPathMethod = pCopy.derivationPathMethod;
+        }
+        PublicKeyData &operator = (const PublicKeyData &pRight)
+        {
+            name = pRight.name;
+            derivationPathMethod = pRight.derivationPathMethod;
+            chainKeys = pRight.chainKeys;
+            return *this;
+        }
+        ~PublicKeyData()
+        {
+            for(std::vector<Key *>::iterator key=chainKeys.begin();key!=chainKeys.end();++key)
+                delete *key;
+        }
+
+        void write(NextCash::OutputStream *pStream) const
+        {
+            pStream->writeUnsignedInt(name.length());
+            pStream->writeString(name);
+
+            pStream->writeByte(derivationPathMethod);
+
+            pStream->writeUnsignedInt(chainKeys.size());
+            for(std::vector<Key *>::const_iterator key=chainKeys.begin();key!=chainKeys.end();++key)
+                (*key)->writeTree(pStream);
+        }
+
+        bool read(NextCash::InputStream *pStream)
+        {
+            unsigned int nameLength = pStream->readUnsignedInt();
+            name = pStream->readString(nameLength);
+
+            derivationPathMethod = static_cast<Key::DerivationPathMethod>(pStream->readByte());
+
+            unsigned int chainCount = pStream->readUnsignedInt();
+            Key *newKey;
+
+            chainKeys.clear();
+            chainKeys.reserve(chainCount);
+            for(unsigned int i=0;i<chainCount;++i)
+            {
+                newKey = new Key();
+                if(newKey->readTree(pStream))
+                    chainKeys.push_back(newKey);
+                else
+                {
+                    delete newKey;
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        NextCash::String name;
+        Key::DerivationPathMethod derivationPathMethod;
+
+        // Public keys used to generate addresses without access to private keys
+        std::vector<Key *> chainKeys;
+    };
+
+    class PrivateKeyData
+    {
+    public:
+
+        PrivateKeyData()
+        {
+            key = NULL;
+        }
+        PrivateKeyData(const PrivateKeyData &pCopy)
+        {
+            seed = pCopy.seed;
+            if(key != NULL)
+                delete key;
+            key = new Key(*pCopy.key);
+        }
+        PrivateKeyData &operator = (const PrivateKeyData &pRight)
+        {
+            seed = pRight.seed;
+            if(key != NULL)
+                delete key;
+            key = new Key(*pRight.key);
+            return *this;
+        }
+        ~PrivateKeyData()
+        {
+            if(key != NULL)
+                delete key;
+        }
+
+        void write(NextCash::OutputStream *pStream) const
+        {
+            pStream->writeUnsignedInt(seed.length());
+            pStream->writeString(seed);
+
+            key->writeTree(pStream);
+        }
+
+        bool read(NextCash::InputStream *pStream)
+        {
+            unsigned int seedLength = pStream->readUnsignedInt();
+            seed = pStream->readString(seedLength);
+
+            key = new Key();
+            if(!key->readTree(pStream))
+            {
+                key = NULL;
+                return false;
+            }
+
+            return true;
+        }
+
+        NextCash::String seed;
+        Key *key;
+    };
+
+    static const char sEncryptKeyInitVector[] = "0daf9958eec1c536d8bed3608942b56098ed723b0e26713b1ba8f83e85f1525d";
+
+    KeyStore::KeyStore()
+    {
+        mPrivateLoaded = true;
+    }
+
     KeyStore::~KeyStore()
     {
-        for(iterator key=begin();key!=end();++key)
+        for(std::vector<PublicKeyData *>::iterator key=mKeys.begin();key!=mKeys.end();++key)
             delete *key;
+        for(std::vector<PrivateKeyData *>::iterator key=mPrivateKeys.begin();key!=mPrivateKeys.end();++key)
+            delete *key;
+    }
+
+    NextCash::String KeyStore::name(unsigned int pOffset)
+    {
+        if(pOffset >= mKeys.size())
+            return NextCash::String();
+
+        return mKeys[pOffset]->name;
+    }
+
+    std::vector<Key *> *KeyStore::chainKeys(unsigned int pOffset)
+    {
+        if(pOffset >= mKeys.size())
+            return NULL;
+
+        return &mKeys[pOffset]->chainKeys;
+    }
+
+    NextCash::String KeyStore::seed(unsigned int pOffset)
+    {
+        if(!mPrivateLoaded || pOffset >= mPrivateKeys.size())
+            return NextCash::String();
+
+        return mPrivateKeys[pOffset]->seed;
     }
 
     void KeyStore::clear()
     {
-        for(iterator key=begin();key!=end();++key)
+        for(std::vector<PublicKeyData *>::iterator key=mKeys.begin();key!=mKeys.end();++key)
             delete *key;
-        std::vector<Key *>::clear();
-        data.clear();
+        mKeys.clear();
+
+        for(std::vector<PrivateKeyData *>::iterator key=mPrivateKeys.begin();key!=mPrivateKeys.end();++key)
+            delete *key;
+        mPrivateKeys.clear();
+
+        mPrivateLoaded = false;
     }
 
     // If this is the address level then search for public address with matching hash
     Key *KeyStore::findAddress(const NextCash::Hash &pHash)
     {
         Key *result = NULL;
-        for(iterator key=begin();key!=end();++key)
-        {
-            result = (*key)->findAddress(pHash);
-            if(result != NULL)
-                return result;
-        }
+        for(std::vector<PublicKeyData *>::iterator keyData=mKeys.begin();keyData!=mKeys.end();++keyData)
+            for(std::vector<Key *>::iterator key=(*keyData)->chainKeys.begin();key!=(*keyData)->chainKeys.end();++key)
+            {
+                result = (*key)->findAddress(pHash);
+                if(result != NULL)
+                    return result;
+            }
 
         return NULL;
     }
@@ -2030,12 +2262,13 @@ namespace BitCoin
     {
         pNewAddresses = false;
         Key *result = NULL;
-        for(iterator key=begin();key!=end();++key)
-        {
-            result = (*key)->markUsed(pHash, pGap, pNewAddresses);
-            if(result != NULL)
-                return result;
-        }
+        for(std::vector<PublicKeyData *>::iterator keyData=mKeys.begin();keyData!=mKeys.end();++keyData)
+            for(std::vector<Key *>::iterator key=(*keyData)->chainKeys.begin();key!=(*keyData)->chainKeys.end();++key)
+            {
+                result = (*key)->markUsed(pHash, pGap, pNewAddresses);
+                if(result != NULL)
+                    return result;
+            }
 
         return NULL;
     }
@@ -2043,22 +2276,12 @@ namespace BitCoin
     void KeyStore::write(NextCash::OutputStream *pStream) const
     {
         // Version
-        pStream->writeUnsignedInt(2);
+        pStream->writeUnsignedInt(1);
 
-        // Count
-        pStream->writeUnsignedInt(size());
-
-        std::vector<KeyParentData>::const_iterator datum = data.begin();
-        for(const_iterator key=begin();key!=end();++key,++datum)
-        {
-            pStream->writeUnsignedInt(datum->name.length());
-            pStream->writeString(datum->name);
-
-            pStream->writeUnsignedInt(datum->seed.length());
-            pStream->writeString(datum->seed);
-
-            (*key)->writeTree(pStream);
-        }
+        // Keys
+        pStream->writeUnsignedInt(mKeys.size());
+        for(std::vector<PublicKeyData *>::const_iterator keyData=mKeys.begin();keyData!=mKeys.end();++keyData)
+            (*keyData)->write(pStream);
     }
 
     bool KeyStore::read(NextCash::InputStream *pStream)
@@ -2070,73 +2293,142 @@ namespace BitCoin
 
         // Version
         unsigned int version = pStream->readUnsignedInt();
-        if(version != 1 && version != 2 && version != 3)
+        if(version != 1)
             return false;
 
-        // Count
+        // Keys
         unsigned int count = pStream->readUnsignedInt();
-        unsigned int length;
-        Key *newKey;
+        PublicKeyData *newPublicKey;
 
-        data.reserve(count);
-        reserve(count);
-
+        mKeys.reserve(count);
         for(unsigned int i=0;i<count;++i)
         {
-            if(version > 1)
-            {
-                data.emplace_back();
-
-                length = pStream->readUnsignedInt();
-                data.back().name = pStream->readString(length);
-
-                length = pStream->readUnsignedInt();
-                data.back().seed = pStream->readString(length);
-
-                if(version > 2)
-                    data.back().derivationPathMethod =
-                      static_cast<Key::DerivationPathMethod>(pStream->readByte());
-                else
-                    data.back().derivationPathMethod = Key::SIMPLE;
-            }
+            newPublicKey = new PublicKeyData();
+            if(newPublicKey->read(pStream))
+                mKeys.push_back(newPublicKey);
             else
             {
-                data.emplace_back();
-                data.back().derivationPathMethod = Key::SIMPLE;
-            }
-
-            newKey = new Key();
-            if(newKey->readTree(pStream))
-                push_back(newKey);
-            else
-            {
-                delete newKey;
+                delete newPublicKey;
                 return false;
             }
         }
 
+        mPrivateLoaded = count == 0; // If there are no keys there is not private file to load.
         return true;
     }
 
-    void KeyStore::add(Key *pKey)
+    void KeyStore::writePrivate(NextCash::OutputStream *pStream, const uint8_t *pKey,
+      unsigned int pKeyLength) const
     {
-        push_back(pKey);
-        data.emplace_back();
+        // Version
+        pStream->writeUnsignedInt(1);
+
+        // Setup encryptor
+        NextCash::Encryptor encryptor(pStream, NextCash::Encryption::AES_256,
+          NextCash::Encryption::CBC);
+        NextCash::Buffer initVector;
+
+        initVector.writeHex(sEncryptKeyInitVector);
+
+        encryptor.setup(pKey, pKeyLength, initVector.startPointer(), initVector.length());
+
+        // Private Keys
+        encryptor.writeUnsignedInt(mPrivateKeys.size());
+        for(std::vector<PrivateKeyData *>::const_iterator keyData = mPrivateKeys.begin();
+          keyData != mPrivateKeys.end(); ++keyData)
+            (*keyData)->write(&encryptor);
+
+        encryptor.finalize();
+    }
+
+    bool KeyStore::readPrivate(NextCash::InputStream *pStream, const uint8_t *pKey,
+      unsigned int pKeyLength)
+    {
+        if(mPrivateLoaded)
+            return true;
+
+        if(pStream->remaining() < 4)
+            return false;
+
+        // Version
+        unsigned int version = pStream->readUnsignedInt();
+        if(version != 1)
+            return false;
+
+        // Setup decryptor
+        NextCash::Decryptor decryptor(pStream, NextCash::Encryption::AES_256,
+          NextCash::Encryption::CBC);
+        NextCash::Buffer initVector;
+
+        initVector.writeHex(sEncryptKeyInitVector);
+
+        decryptor.setup(pKey, pKeyLength, initVector.startPointer(), initVector.length());
+
+        // Read private keys
+        unsigned int count = decryptor.readUnsignedInt();
+
+        if(count > 256)
+            return false; // Key invalid or file invalid
+
+        PrivateKeyData *newPrivateKey;
+
+        mPrivateKeys.reserve(count);
+        for(unsigned int i=0;i<count;++i)
+        {
+            newPrivateKey = new PrivateKeyData();
+            if(newPrivateKey->read(&decryptor))
+                mPrivateKeys.push_back(newPrivateKey);
+            else
+            {
+                delete newPrivateKey;
+                return false;
+            }
+        }
+
+        mPrivateLoaded = true;
+        return true;
+    }
+
+    void KeyStore::unloadPrivate()
+    {
+        // Clear private keys
+        for(std::vector<PrivateKeyData *>::iterator key=mPrivateKeys.begin();key!=mPrivateKeys.end();++key)
+            delete *key;
+        mPrivateKeys.clear();
+
+        mPrivateLoaded = mKeys.size() == 0;
     }
 
     int KeyStore::loadKey(const char *pText, Key::DerivationPathMethod pMethod)
     {
+        if(!mPrivateLoaded)
+            return 5; // Private keys need to be loaded to add a private key
+
         Key *newKey = new Key(), *chain;
+        PublicKeyData *newData = new PublicKeyData();
         NextCash::Hash addressHash;
         AddressType addressType;
         AddressFormat addressFormat;
 
         if(newKey->decode(pText))
         {
-            for(const_iterator key=begin();key!=end();++key)
-                if(**key == *newKey)
+            for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
+              keyData != mKeys.end(); ++keyData)
+                for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
+                  key != (*keyData)->chainKeys.end(); ++key)
+                    if(**key == *newKey)
+                    {
+                        delete newKey;
+                        delete newData;
+                        return 3; // Already exists
+                    }
+
+            for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
+              key != mPrivateKeys.end(); ++key)
+                if(*(*key)->key == *newKey)
                 {
                     delete newKey;
+                    delete newData;
                     return 3; // Already exists
                 }
 
@@ -2146,7 +2438,7 @@ namespace BitCoin
                 case Key::SIMPLE:
                     chain = newKey->chainKey(0, Key::SIMPLE);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
                     else
                     {
                         delete newKey;
@@ -2154,7 +2446,7 @@ namespace BitCoin
                     }
                     chain = newKey->chainKey(1, Key::SIMPLE);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
                     else
                     {
                         delete newKey;
@@ -2164,7 +2456,7 @@ namespace BitCoin
                 case Key::BIP0032:
                     chain = newKey->chainKey(0, Key::BIP0032);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
                     else
                     {
                         delete newKey;
@@ -2172,7 +2464,7 @@ namespace BitCoin
                     }
                     chain = newKey->chainKey(1, Key::BIP0032);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
                     else
                     {
                         delete newKey;
@@ -2182,7 +2474,7 @@ namespace BitCoin
                 case Key::BIP0044:
                     chain = newKey->chainKey(0, Key::BIP0044);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
                     else
                     {
                         delete newKey;
@@ -2190,7 +2482,7 @@ namespace BitCoin
                     }
                     chain = newKey->chainKey(1, Key::BIP0044);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
                     else
                     {
                         delete newKey;
@@ -2201,63 +2493,87 @@ namespace BitCoin
                     // Prime the key for several derivation methods
                     chain = newKey->chainKey(0, Key::SIMPLE);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
                     chain = newKey->chainKey(1, Key::SIMPLE);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
 
                     chain = newKey->chainKey(0, Key::BIP0032);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
                     chain = newKey->chainKey(1, Key::BIP0032);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
 
                     chain = newKey->chainKey(0, Key::BIP0044);
                     if(chain != NULL)
-                        chain->updateGap(20);
+                        newData->chainKeys.push_back(new Key(*chain));
                     chain = newKey->chainKey(1, Key::BIP0044);
                     if(chain != NULL)
-                        chain->updateGap(20);
-
+                        newData->chainKeys.push_back(new Key(*chain));
             }
 
-            data.emplace_back();
-            data.back().derivationPathMethod = pMethod;
-            push_back(newKey);
+            if(newKey->isPrivate())
+            {
+                PrivateKeyData *newPrivateData = new PrivateKeyData();
+                newPrivateData->key = newKey;
+                mPrivateKeys.push_back(newPrivateData);
+            }
+            else
+            {
+                mPrivateKeys.push_back(new PrivateKeyData());
+                delete newKey;
+            }
+
+            for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
+              key != newData->chainKeys.end(); ++key)
+                (*key)->updateGap(20);
+
+            newData->derivationPathMethod = pMethod;
+            mKeys.push_back(newData);
+
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
               "Added BIP-0032 Key");
             return 0; // Success
         }
         else if(decodeAddress(pText, addressHash, addressType, addressFormat) &&
-                addressType == PUB_KEY_HASH && addressHash.size() == ADDRESS_HASH_SIZE)
+          addressType == PUB_KEY_HASH && addressHash.size() == ADDRESS_HASH_SIZE)
         {
-            // Check if it is already in this block
-            for(const_iterator key=begin();key!=end();++key)
-                if((*key)->hash() == addressHash)
-                {
-                    delete newKey;
-                    return 3; // Already exists
-                }
+            for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
+              keyData != mKeys.end(); ++keyData)
+                for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
+                  key != (*keyData)->chainKeys.end(); ++key)
+                    if((*key)->hash() == addressHash)
+                    {
+                        delete newKey;
+                        delete newData;
+                        return 3; // Already exists
+                    }
 
             newKey->loadHash(addressHash);
-            data.emplace_back();
-            push_back(newKey);
+            newData->chainKeys.push_back(newKey);
+            mPrivateKeys.push_back(new PrivateKeyData());
+            mKeys.push_back(newData);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "Added Address");
             return 0; // Success
         }
         else
         {
             delete newKey;
+            delete newData;
             return 2; // Invalid Format
         }
 
         delete newKey;
+        delete newData;
         return 1; // Unknown Failure
     }
 
     bool KeyStore::loadKeys(NextCash::InputStream *pStream)
     {
+        if(!mPrivateLoaded)
+            return false; // Private keys need to be loaded to add a key
+
         NextCash::String line;
         unsigned char nextChar;
         NextCash::Hash addressHash;
@@ -2265,6 +2581,8 @@ namespace BitCoin
         AddressFormat addressFormat;
         bool found;
         Key *newKey = new Key(), *chain;
+        PublicKeyData *newData = new PublicKeyData();
+        Key::DerivationPathMethod method = Key::UNKNOWN;
 
         while(pStream->remaining())
         {
@@ -2283,8 +2601,19 @@ namespace BitCoin
                 if(newKey->decode(line))
                 {
                     found = false;
-                    for(const_iterator key=begin();key!=end();++key)
-                        if(**key == *newKey)
+                    for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
+                      keyData != mKeys.end() && !found; ++keyData)
+                        for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
+                          key != (*keyData)->chainKeys.end(); ++key)
+                            if((*key)->hash() == addressHash)
+                            {
+                                found = true;
+                                break;
+                            }
+
+                    for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
+                      key != mPrivateKeys.end() && !found; ++key)
+                        if(*(*key)->key == *newKey)
                         {
                             found = true;
                             break;
@@ -2295,29 +2624,50 @@ namespace BitCoin
                         // Prime the key for several derivation methods
                         chain = newKey->chainKey(0, Key::SIMPLE);
                         if(chain != NULL)
-                            chain->updateGap(20);
+                            newData->chainKeys.push_back(new Key(*chain));
                         chain = newKey->chainKey(1, Key::SIMPLE);
                         if(chain != NULL)
-                            chain->updateGap(20);
+                            newData->chainKeys.push_back(new Key(*chain));
 
                         chain = newKey->chainKey(0, Key::BIP0032);
                         if(chain != NULL)
-                            chain->updateGap(20);
+                            newData->chainKeys.push_back(new Key(*chain));
                         chain = newKey->chainKey(1, Key::BIP0032);
                         if(chain != NULL)
-                            chain->updateGap(20);
+                            newData->chainKeys.push_back(new Key(*chain));
 
                         chain = newKey->chainKey(0, Key::BIP0044);
                         if(chain != NULL)
-                            chain->updateGap(20);
+                            newData->chainKeys.push_back(new Key(*chain));
                         chain = newKey->chainKey(1, Key::BIP0044);
                         if(chain != NULL)
-                            chain->updateGap(20);
+                            newData->chainKeys.push_back(new Key(*chain));
 
-                        data.emplace_back();
-                        push_back(newKey);
-                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "Added ");
+                        for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
+                          key != newData->chainKeys.end(); ++key)
+                            (*key)->updateGap(20);
+
+                        if(newKey->isPrivate())
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                              "Added private key");
+                            PrivateKeyData *newPrivateData = new PrivateKeyData();
+                            newPrivateData->key = newKey;
+                            mPrivateKeys.push_back(newPrivateData);
+                        }
+                        else
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                              "Added public key");
+                            mPrivateKeys.push_back(new PrivateKeyData());
+                            delete newKey;
+                        }
+
+                        newData->derivationPathMethod = method;
+                        mKeys.push_back(newData);
+
                         newKey = new Key();
+                        newData = new PublicKeyData();
                     }
                 }
                 else if(decodeAddress(line, addressHash, addressType, addressFormat) &&
@@ -2325,25 +2675,32 @@ namespace BitCoin
                 {
                     // Check if it is already in this block
                     found = false;
-                    for(const_iterator key=begin();key!=end();++key)
-                        if((*key)->hash() == addressHash)
-                        {
-                            found = true;
-                            break;
-                        }
+                    for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
+                      keyData != mKeys.end() && !found; ++keyData)
+                        for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
+                          key != (*keyData)->chainKeys.end(); ++key)
+                            if((*key)->hash() == addressHash)
+                            {
+                                found = true;
+                                break;
+                            }
 
                     if(!found)
                     {
                         newKey->loadHash(addressHash);
-                        data.emplace_back();
-                        push_back(newKey);
+                        newData->chainKeys.push_back(newKey);
+                        mPrivateKeys.push_back(new PrivateKeyData());
+                        mKeys.push_back(newData);
+
                         newKey = new Key();
+                        newData = new PublicKeyData();
                     }
                 }
             }
         }
 
         delete newKey;
+        delete newData;
         return true;
     }
 
@@ -2357,18 +2714,20 @@ namespace BitCoin
         NextCash::Hash hash;
         NextCash::Hash addressHash;
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * BIP-0032 Test 1
-         ***********************************************************************************************/
+         *****************************************************************************************/
         Key keyTree;
         NextCash::Buffer keyTreeSeed;
         NextCash::String correctEncoding, resultEncoding;
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * Chain m
          * ext pub: xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8
          * ext prv: xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi
-         ***********************************************************************************************/
+         *****************************************************************************************/
         if(success)
         {
             keyTreeSeed.clear();
@@ -2406,11 +2765,12 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * Chain m/0H
          * ext pub: xpub68Gmy5EdvgibQVfPdqkBBCHxA5htiqg55crXYuXoQRKfDBFA1WEjWgP6LHhwBZeNK1VTsfTFUHCdrfp1bgwQ9xv5ski8PX9rL2dZXvgGDnw
          * ext prv: xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7
-         ***********************************************************************************************/
+         *****************************************************************************************/
         Key *m0hKey;
         if(success)
         {
@@ -2458,11 +2818,12 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * Chain m/0H/1
          * ext pub: xpub6ASuArnXKPbfEwhqN6e3mwBcDTgzisQN1wXN9BJcM47sSikHjJf3UFHKkNAWbWMiGj7Wf5uMash7SyYq527Hqck2AxYysAA7xmALppuCkwQ
          * ext prv: xprv9wTYmMFdV23N2TdNG573QoEsfRrWKQgWeibmLntzniatZvR9BmLnvSxqu53Kw1UmYPxLgboyZQaXwTCg8MSY3H2EU4pWcQDnRnrVA1xe8fs
-         ***********************************************************************************************/
+         *****************************************************************************************/
         Key *m0h1Key;
         if(success)
         {
@@ -2510,10 +2871,11 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * Chain m/0H/1 Public Only Derivation
          * ext pub: xpub6ASuArnXKPbfEwhqN6e3mwBcDTgzisQN1wXN9BJcM47sSikHjJf3UFHKkNAWbWMiGj7Wf5uMash7SyYq527Hqck2AxYysAA7xmALppuCkwQ
-         ***********************************************************************************************/
+         *****************************************************************************************/
         Key *m0h1PublicKey;
         if(success)
         {
@@ -2543,11 +2905,12 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * Chain m/0H/1/2H
          * ext pub: xpub6D4BDPcP2GT577Vvch3R8wDkScZWzQzMMUm3PWbmWvVJrZwQY4VUNgqFJPMM3No2dFDFGTsxxpG5uJh7n7epu4trkrX7x7DogT5Uv6fcLW5
          * ext prv: xprv9z4pot5VBttmtdRTWfWQmoH1taj2axGVzFqSb8C9xaxKymcFzXBDptWmT7FwuEzG3ryjH4ktypQSAewRiNMjANTtpgP4mLTj34bhnZX7UiM
-         ***********************************************************************************************/
+         *****************************************************************************************/
         Key *m0h12hKey;
         if(success)
         {
@@ -2595,11 +2958,12 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * Chain m/0H/1/2H/2
          * ext pub: xpub6FHa3pjLCk84BayeJxFW2SP4XRrFd1JYnxeLeU8EqN3vDfZmbqBqaGJAyiLjTAwm6ZLRQUMv1ZACTj37sR62cfN7fe5JnJ7dh8zL4fiyLHV
          * ext prv: xprvA2JDeKCSNNZky6uBCviVfJSKyQ1mDYahRjijr5idH2WwLsEd4Hsb2Tyh8RfQMuPh7f7RtyzTtdrbdqqsunu5Mm3wDvUAKRHSC34sJ7in334
-         ***********************************************************************************************/
+         *****************************************************************************************/
         Key *m0h12h2Key;
         if(success)
         {
@@ -2647,11 +3011,12 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * Chain m/0H/1/2H/2/1000000000
          * ext pub: xpub6H1LXWLaKsWFhvm6RVpEL9P4KfRZSW7abD2ttkWP3SSQvnyA8FSVqNTEcYFgJS2UaFcxupHiYkro49S8yGasTvXEYBVPamhGW6cFJodrTHy
          * ext prv: xprvA41z7zogVVwxVSgdKUHDy1SKmdb533PjDz7J6N6mV6uS3ze1ai8FHa8kmHScGpWmj4WggLyQjgPie1rFSruoUihUZREPSL39UNdE3BBDu76
-         ***********************************************************************************************/
+         *****************************************************************************************/
         Key *m0h12h21000000000Key;
         if(success)
         {
@@ -2699,15 +3064,15 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+        /******************************************************************************************
          * BIP-0032 Test 3
-         ***********************************************************************************************/
+         *****************************************************************************************/
 
-        /***********************************************************************************************
+        /******************************************************************************************
          * Chain m
          * ext pub: xpub661MyMwAqRbcEZVB4dScxMAdx6d4nFc9nvyvH3v4gJL378CSRZiYmhRoP7mBy6gSPSCYk6SzXPTf3ND1cZAceL7SfJ1Z3GC8vBgp2epUt13
          * ext prv: xprv9s21ZrQH143K25QhxbucbDDuQ4naNntJRi4KUfWT7xo4EKsHt2QJDu7KXp1A3u7Bi1j8ph3EGsZ9Xvz9dGuVrtHHs7pXeTzjuxBrCmmhgC6
-         ***********************************************************************************************/
+         *****************************************************************************************/
         if(success)
         {
             keyTreeSeed.clear();
@@ -2745,11 +3110,11 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+        /******************************************************************************************
          * Chain m/0H
          * ext pub: xpub68NZiKmJWnxxS6aaHmn81bvJeTESw724CRDs6HbuccFQN9Ku14VQrADWgqbhhTHBaohPX4CjNLf9fq9MYo6oDaPPLPxSb7gwQN3ih19Zm4Y
          * ext prv: xprv9uPDJpEQgRQfDcW7BkF7eTya6RPxXeJCqCJGHuCJ4GiRVLzkTXBAJMu2qaMWPrS7AANYqdq6vcBcBUdJCVVFceUvJFjaPdGZ2y9WACViL4L
-         ***********************************************************************************************/
+         *****************************************************************************************/
         if(success)
         {
             m0hKey = keyTree.deriveChild(Key::HARDENED_LIMIT + 0);
@@ -2796,9 +3161,9 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+        /******************************************************************************************
          * BIP-0039 Trezor Test Vectors
-         ***********************************************************************************************/
+         *****************************************************************************************/
         NextCash::Buffer resultSeed, correctSeed, mnemonicStream;
         NextCash::Buffer resultProcessedSeed, correctProcessedSeed;
         NextCash::String resultMnemonic, correctMnemonic;
@@ -2916,9 +3281,9 @@ namespace BitCoin
             "xprv9s21ZrQH143K39rnQJknpH1WEPFJrzmAqqasiDcVrNuk926oizzJDDQkdiTvNPr2FYDYzWgiMiC63YmfPAa2oPyNB23r2g7d1yiK6WpqaQS",
         };
 
-        /***********************************************************************************************
+        /******************************************************************************************
          * BIP-0039 Trezor Test Vector
-         ***********************************************************************************************/
+         *****************************************************************************************/
         bool trezorPassed = true;
         NextCash::Buffer salt;
 
@@ -2987,9 +3352,9 @@ namespace BitCoin
         if(trezorPassed)
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed BIP-0039 Trezor Test Vector");
 
-        /***********************************************************************************************
+        /******************************************************************************************
          * Decode Key Text 1
-         ***********************************************************************************************/
+         *****************************************************************************************/
         if(success)
         {
             correctEncoding = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
@@ -3039,9 +3404,9 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
               "Passed Decode Key Text 1");
 
-        /***********************************************************************************************
+        /******************************************************************************************
          * Decode Key Text 2
-         ***********************************************************************************************/
+         *****************************************************************************************/
         if(success)
         {
             correctEncoding = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
@@ -3080,9 +3445,9 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
               "Passed Decode Key Text 2");
 
-        /***********************************************************************************************
+        /******************************************************************************************
          * Decode Key Text 3
-         ***********************************************************************************************/
+         *****************************************************************************************/
         if(success)
         {
             correctEncoding = "xprvA41z7zogVVwxVSgdKUHDy1SKmdb533PjDz7J6N6mV6uS3ze1ai8FHa8kmHScGpWmj4WggLyQjgPie1rFSruoUihUZREPSL39UNdE3BBDu76";
@@ -3136,11 +3501,11 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
               "Passed Decode Key Text 3");
 
-        /***********************************************************************************************
+        /******************************************************************************************
          * Wallet Test vs Electron Cash
          * m/0 For receiving addresses
          * m/1 For change addresses
-         ***********************************************************************************************/
+         *****************************************************************************************/
         Key *chain0, *chain1, *addressKey;
         NextCash::String encodedAddress;
         bool walletSuccess = true;
@@ -3292,14 +3657,16 @@ namespace BitCoin
         else
             success = false;
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * Key Derivation Path Test Vector
-         ***********************************************************************************************/
+         *****************************************************************************************/
         Key *purpose, *coin, *account, *chain, *checkChain;
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * SIMPLE external m/0, internal m/1
-         ***********************************************************************************************/
+         *****************************************************************************************/
         // Receiving
         chain = keyTree.deriveChild(0);
         if(chain == NULL)
@@ -3362,9 +3729,10 @@ namespace BitCoin
                   "Passed SIMPLE Change Chain Key.");
         }
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * BIP-0032 m/0'
-         ***********************************************************************************************/
+         *****************************************************************************************/
         account = keyTree.deriveChild(Key::HARDENED_LIMIT);
         if(account == NULL)
         {
@@ -3437,9 +3805,10 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * BIP-0044 m/44'/0'/0'
-         ***********************************************************************************************/
+         *****************************************************************************************/
         purpose = keyTree.deriveChild(Key::HARDENED_LIMIT + 44);
         if(purpose == NULL)
         {
@@ -3532,9 +3901,10 @@ namespace BitCoin
             }
         }
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * Address Gap
-         ***********************************************************************************************/
+         *****************************************************************************************/
         bool addressGapSuccess = true;
         chain = keyTree.chainKey(0);
         chain->updateGap(20);
@@ -3587,21 +3957,26 @@ namespace BitCoin
         else
             success = false;
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * KeyStore Read/Write
-         ***********************************************************************************************/
+         *****************************************************************************************/
         NextCash::Buffer keyBuffer;
         KeyStore keyStore;
         bool readWriteSuccess = true;
 
-        keyStore.add(&keyTree);
+        keyStore.loadKey("xpub661MyMwAqRbcGujPLVW3q6UQQGetTsUcM7EYwUTDFGif17McpzNmGu5P1kzwxvCNGnjtDPM5MDbRTD8QZQSpktu7f9CcYydG7PNc3tqCKZi",
+          SIMPLE);
+
+        chain = *keyStore.chainKeys(0)->begin();
+        chain->updateGap(5);
 
         keyStore.write(&keyBuffer);
-        keyStore.erase(keyStore.begin());
+
         keyStore.clear();
         keyStore.read(&keyBuffer);
 
-        chain = (*keyStore.begin())->chainKey(0, SIMPLE);
+        chain = *keyStore.chainKeys(0)->begin();
 
         const char *receivingAddresses[5] =
         {
@@ -3670,9 +4045,10 @@ namespace BitCoin
         else
             success = false;
 
-        /***********************************************************************************************
+
+        /******************************************************************************************
          * Encode Cash Address
-         ***********************************************************************************************/
+         *****************************************************************************************/
         unsigned int cashAddressCount = 5;
         NextCash::String cashAddressResult;
         bool cashAddressSuccess = true;

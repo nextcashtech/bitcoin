@@ -550,10 +550,10 @@ namespace BitCoin
     {
         NextCash::String filePathName = Info::instance().path();
         filePathName.pathAppend("keystore");
-        NextCash::FileInputStream file(filePathName);
-        if(file.isValid())
+        NextCash::FileInputStream publicFile(filePathName);
+        if(publicFile.isValid())
         {
-            if(!mKeyStore.read(&file))
+            if(!mKeyStore.read(&publicFile))
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
                   "Key store failed to load");
@@ -565,12 +565,43 @@ namespace BitCoin
         }
         else
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Key store file not found to load");
+              "Key store public file not found to load");
 
         filePathName = Info::instance().path();
         filePathName.pathAppend("key_text");
         NextCash::FileInputStream textFile(filePathName);
-        return !textFile.isValid() || mKeyStore.loadKeys(&textFile);
+
+        if(!textFile.isValid())
+            return true;
+
+        filePathName = Info::instance().path();
+        filePathName.pathAppend(".private_keystore");
+        NextCash::FileInputStream privateFile(filePathName);
+        const uint8_t *key = (const uint8_t *)"";
+        if(privateFile.isValid())
+        {
+            if(!mKeyStore.readPrivate(&privateFile, key, 0))
+            {
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                  "Key store failed to load private");
+                return false;
+            }
+            else
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+                  "Key store loaded private keys");
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Key store private file not found to load");
+
+        if(!mKeyStore.loadKeys(&textFile))
+        {
+            mKeyStore.unloadPrivate();
+            return false;
+        }
+
+        mKeyStore.unloadPrivate();
+        return true;
     }
 
     bool Daemon::saveKeyStore()

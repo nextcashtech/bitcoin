@@ -468,7 +468,7 @@ namespace BitCoin
                 ++falsePositiveCount;
         }
 
-        if(falsePositiveCount <= 15)
+        if(falsePositiveCount <= 25)
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOOM_LOG_NAME,
               "Passed Bloom Filter Random Hash Set False Positives : %d/%d", falsePositiveCount, SET_CHECK_SIZE);
         else
