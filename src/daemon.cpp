@@ -594,11 +594,18 @@ namespace BitCoin
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Key store private file not found to load");
 
+        unsigned int previousSize = mKeyStore.size();
         if(!mKeyStore.loadKeys(&textFile))
         {
             mKeyStore.unloadPrivate();
             return false;
         }
+
+        publicFile.close();
+        privateFile.close();
+
+        if(previousSize != mKeyStore.size())
+            saveKeyStore();
 
         mKeyStore.unloadPrivate();
         return true;
@@ -608,14 +615,24 @@ namespace BitCoin
     {
         NextCash::String filePathName = Info::instance().path();
         filePathName.pathAppend("keystore");
-        NextCash::FileOutputStream file(filePathName, true);
-        if(!file.isValid())
+        NextCash::FileOutputStream publicFile(filePathName, true);
+        if(!publicFile.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
               "Key store file failed to open");
             return false;
         }
-        mKeyStore.write(&file);
+        mKeyStore.write(&publicFile);
+
+        if(mKeyStore.isPrivateLoaded())
+        {
+            filePathName = Info::instance().path();
+            filePathName.pathAppend(".private_keystore");
+            NextCash::FileOutputStream privateFile(filePathName, true);
+            const uint8_t *key = (const uint8_t *)"";
+            mKeyStore.writePrivate(&privateFile, key, 0);
+        }
+
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Key store saved with %d keys", mKeyStore.size());
         return true;

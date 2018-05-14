@@ -2412,17 +2412,6 @@ namespace BitCoin
 
         if(newKey->decode(pText))
         {
-            for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
-              keyData != mKeys.end(); ++keyData)
-                for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
-                  key != (*keyData)->chainKeys.end(); ++key)
-                    if(**key == *newKey)
-                    {
-                        delete newKey;
-                        delete newData;
-                        return 3; // Already exists
-                    }
-
             for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
               key != mPrivateKeys.end(); ++key)
                 if(*(*key)->key == *newKey)
@@ -2513,17 +2502,9 @@ namespace BitCoin
                         newData->chainKeys.push_back(new Key(*chain));
             }
 
-            if(newKey->isPrivate())
-            {
-                PrivateKeyData *newPrivateData = new PrivateKeyData();
-                newPrivateData->key = newKey;
-                mPrivateKeys.push_back(newPrivateData);
-            }
-            else
-            {
-                mPrivateKeys.push_back(new PrivateKeyData());
-                delete newKey;
-            }
+            PrivateKeyData *newPrivateData = new PrivateKeyData();
+            newPrivateData->key = newKey;
+            mPrivateKeys.push_back(newPrivateData);
 
             for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
               key != newData->chainKeys.end(); ++key)
@@ -2601,16 +2582,6 @@ namespace BitCoin
                 if(newKey->decode(line))
                 {
                     found = false;
-                    for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
-                      keyData != mKeys.end() && !found; ++keyData)
-                        for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
-                          key != (*keyData)->chainKeys.end(); ++key)
-                            if((*key)->hash() == addressHash)
-                            {
-                                found = true;
-                                break;
-                            }
-
                     for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
                       key != mPrivateKeys.end() && !found; ++key)
                         if(*(*key)->key == *newKey)
@@ -2648,20 +2619,15 @@ namespace BitCoin
                             (*key)->updateGap(20);
 
                         if(newKey->isPrivate())
-                        {
                             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
                               "Added private key");
-                            PrivateKeyData *newPrivateData = new PrivateKeyData();
-                            newPrivateData->key = newKey;
-                            mPrivateKeys.push_back(newPrivateData);
-                        }
                         else
-                        {
                             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
                               "Added public key");
-                            mPrivateKeys.push_back(new PrivateKeyData());
-                            delete newKey;
-                        }
+
+                        PrivateKeyData *newPrivateData = new PrivateKeyData();
+                        newPrivateData->key = newKey;
+                        mPrivateKeys.push_back(newPrivateData);
 
                         newData->derivationPathMethod = method;
                         mKeys.push_back(newData);
