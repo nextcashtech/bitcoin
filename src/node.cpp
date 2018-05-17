@@ -23,9 +23,9 @@ namespace BitCoin
     unsigned int Node::mNextID = 256;
 
     Node::Node(NextCash::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
-      bool pIsSeed, bool pIsGood, uint64_t pServices, Monitor &pMonitor, bool pCash) :
-      mMessageInterpreter(pCash), mID(mNextID++), mConnectionMutex("Node Connection"),
-      mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce")
+      bool pIsSeed, bool pIsGood, uint64_t pServices, Monitor &pMonitor) : mID(mNextID++),
+      mConnectionMutex("Node Connection"), mBlockRequestMutex("Node Block Request"),
+      mAnnounceMutex("Node Announce")
     {
         Info &info = Info::instance();
 

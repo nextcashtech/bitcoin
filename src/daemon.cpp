@@ -1620,8 +1620,7 @@ namespace BitCoin
         Node *node;
         try
         {
-            node = new Node(pConnection, &mChain, pIncoming, pIsSeed, pIsGood, pServices, mMonitor,
-              mChain.forks().cashActive());
+            node = new Node(pConnection, &mChain, pIncoming, pIsSeed, pIsGood, pServices, mMonitor);
         }
         catch(std::bad_alloc &pBadAlloc)
         {

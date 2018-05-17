@@ -157,7 +157,7 @@ namespace BitCoin
             pInput->setInputEndian(NextCash::Endian::LITTLE);
 
             // Start String
-            const uint8_t *startBytes = networkStartBytes(cash);
+            const uint8_t *startBytes = networkStartBytes();
             unsigned int matchOffset = 0;
             bool startStringFound = false;
 
@@ -410,7 +410,7 @@ namespace BitCoin
 
             // Write header
             // Start String (4 bytes)
-            pOutput->writeHex(networkStartString(cash));
+            pOutput->writeHex(networkStartString());
 
             // Command Name (12 bytes padded with nulls)
             const char *name = nameFor(pData->type);
@@ -1509,7 +1509,7 @@ namespace BitCoin
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "------------- Starting Message Tests -------------");
 
             bool result = true;
-            Interpreter interpreter(false);
+            Interpreter interpreter;
 
             /***********************************************************************************************
              * VERSION

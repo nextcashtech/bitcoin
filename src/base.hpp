@@ -65,8 +65,8 @@ namespace BitCoin
     static const int RETARGET_PERIOD = 2016;
 
     const char *networkName();
-    const char *networkStartString(bool pCash);
-    const uint8_t *networkStartBytes(bool pCash);
+    const char *networkStartString();
+    const uint8_t *networkStartBytes();
     const char *networkPortString();
     uint16_t networkPort();
 

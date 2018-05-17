@@ -41,39 +41,43 @@ namespace BitCoin
         return "Unknown Net";
     }
 
-    const char *networkStartString(bool pCash)
+    const char *networkStartString()
     {
         switch(sNetwork)
         {
             case MAINNET:
-                if(pCash)
-                    return "e3e1f3e8";
-                else
-                    return "f9beb4d9";
+#ifdef DISABLE_CASH
+                return "f9beb4d9";
+#else
+                return "e3e1f3e8";
+#endif
             case TESTNET:
-                if(pCash)
-                    return "f4e5f3f4";
-                else
-                    return "0b110907";
+#ifdef DISABLE_CASH
+                return "0b110907";
+#else
+                return "f4e5f3f4";
+#endif
         }
 
         return "";
     }
 
-    const uint8_t *networkStartBytes(bool pCash)
+    const uint8_t *networkStartBytes()
     {
         switch(sNetwork)
         {
             case MAINNET:
-                if(pCash)
-                    return sCashMainNetworkStartBytes;
-                else
-                    return sMainNetworkStartBytes;
+#ifdef DISABLE_CASH
+                return sMainNetworkStartBytes;
+#else
+                return sCashMainNetworkStartBytes;
+#endif
             case TESTNET:
-                if(pCash)
-                    return sCashTestNetworkStartBytes;
-                else
-                    return sTestNetworkStartBytes;
+#ifdef DISABLE_CASH
+                return sTestNetworkStartBytes;
+#else
+                return sCashTestNetworkStartBytes;
+#endif
         }
 
         return 0x00000000;

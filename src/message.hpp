@@ -128,13 +128,12 @@ namespace BitCoin
         {
         public:
 
-            Interpreter(bool pCash)
+            Interpreter()
             {
                 version = 0;
                 pendingBlockStartTime = 0;
                 pendingBlockLastReportTime = 0;
                 pendingBlockUpdateTime = 0;
-                cash = pCash;
             }
 
             Data *read(NextCash::Buffer *pInput, const char *pName);
@@ -144,7 +143,6 @@ namespace BitCoin
             NextCash::Hash pendingBlockHash;
             int32_t pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
             unsigned int lastPendingBlockSize;
-            bool cash;
 
         };
 
