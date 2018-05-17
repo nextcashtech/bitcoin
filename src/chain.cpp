@@ -20,6 +20,7 @@
 #include "monitor.hpp"
 
 #define BITCOIN_CHAIN_LOG_NAME "Chain"
+#define HISTORY_BRANCH_CHECKING 5000
 
 
 namespace BitCoin
@@ -442,13 +443,14 @@ namespace BitCoin
 
             if(diff < 0)
             {
-                if(height() > 144 &&
-                  (*branch)->height + (*branch)->pendingBlocks.size() < (unsigned int)height() - 144)
+                if(height() > HISTORY_BRANCH_CHECKING &&
+                  (*branch)->height + (*branch)->pendingBlocks.size() <
+                  (unsigned int)height() - HISTORY_BRANCH_CHECKING)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                       "Dropping branch %d", offset);
 
-                    // Drop branches that are 144 blocks behind the main chain
+                    // Drop branches that are HISTORY_BRANCH_CHECKING blocks behind the main chain
                     delete *branch;
                     branch = mBranches.erase(branch);
                     continue;
@@ -887,9 +889,11 @@ namespace BitCoin
         {
             // Check if it is already in a branch
             unsigned int branchID = 1;
-            for(std::vector<Branch *>::iterator branch=mBranches.begin();branch!=mBranches.end();++branch,++branchID)
+            for(std::vector<Branch *>::iterator branch = mBranches.begin();
+              branch != mBranches.end(); ++branch, ++branchID)
             {
-                for(std::list<PendingBlockData *>::iterator pending=(*branch)->pendingBlocks.begin();pending!=(*branch)->pendingBlocks.end();++pending)
+                for(std::list<PendingBlockData *>::iterator pending = (*branch)->pendingBlocks.begin();
+                  pending != (*branch)->pendingBlocks.end(); ++pending)
                     if((*pending)->block->hash == pBlock->hash)
                     {
                         alreadyHave = true;
@@ -914,7 +918,8 @@ namespace BitCoin
         {
             // Check if it is in pending already or fits on a pending block
             unsigned int offset = 0;
-            for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending,++offset)
+            for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
+              pending != mPendingBlocks.end(); ++pending, ++offset)
                 if((*pending)->block->hash == pBlock->previousHash)
                 {
                     added = true;
@@ -932,29 +937,31 @@ namespace BitCoin
         {
             // Check if it fits on a branch
             unsigned int branchID = 1;
-            for(std::vector<Branch *>::iterator branch=mBranches.begin();branch!=mBranches.end();++branch,++branchID)
-                if((*branch)->pendingBlocks.size() > 0 && (*branch)->pendingBlocks.back()->block->hash == pBlock->previousHash)
+            for(std::vector<Branch *>::iterator branch = mBranches.begin();
+              branch != mBranches.end(); ++branch, ++branchID)
+                if((*branch)->pendingBlocks.size() > 0 &&
+                  (*branch)->pendingBlocks.back()->block->hash == pBlock->previousHash)
                 {
                     (*branch)->addBlock(pBlock);
                     added = true;
                     branchesUpdated = true;
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                      "Added header to branch %d (%d blocks) : %s", branchID, (*branch)->pendingBlocks.size(),
-                      pBlock->hash.hex().text());
+                      "Added header to branch %d (%d blocks) : %s", branchID,
+                      (*branch)->pendingBlocks.size(), pBlock->hash.hex().text());
                     break;
                 }
         }
 
         if(!alreadyHave && !added && !filled)
         {
-            // Check if it fits on one of the last 5000 blocks in the chain
+            // Check if it fits on one of the last HISTORY_BRANCH_CHECKING blocks in the chain
             int chainHeight = height();
 #ifdef LOW_MEM
             NextCash::HashList::reverse_iterator hash = mLastBlockHashes.rbegin();
-            for(int i=0;hash!=mLastBlockHashes.rend()&&i<5000;++i,++hash,--chainHeight)
+            for(int i=0;hash!=mLastBlockHashes.rend()&&i<HISTORY_BRANCH_CHECKING;++i,++hash,--chainHeight)
 #else
             NextCash::HashList::reverse_iterator hash = mBlockHashes.rbegin();
-            for(int i=0;hash!=mBlockHashes.rend()&&i<5000;++i,++hash,--chainHeight)
+            for(int i=0;hash!=mBlockHashes.rend()&&i<HISTORY_BRANCH_CHECKING;++i,++hash,--chainHeight)
 #endif
                 if(*hash == pBlock->previousHash)
                 {
@@ -2169,9 +2176,11 @@ namespace BitCoin
             }
         }
 
-        mLastBlockHash = mLastBlockHashes.back();
+        if(mLastBlockHashes.size() > 0)
+            mLastBlockHash = mLastBlockHashes.back();
 #else
-        mLastBlockHash = mBlockHashes.back();
+        if(mBlockHashes.size() > 0)
+            mLastBlockHash = mBlockHashes.back();
 #endif
 
         if(success)
