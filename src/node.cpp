@@ -23,7 +23,8 @@ namespace BitCoin
     unsigned int Node::mNextID = 256;
 
     Node::Node(NextCash::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
-      bool pIsSeed, bool pIsGood, uint64_t pServices, Monitor &pMonitor) : mID(mNextID++), mConnectionMutex("Node Connection"),
+      bool pIsSeed, bool pIsGood, uint64_t pServices, Monitor &pMonitor, bool pCash) :
+      mMessageInterpreter(pCash), mID(mNextID++), mConnectionMutex("Node Connection"),
       mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce")
     {
         Info &info = Info::instance();
@@ -622,7 +623,7 @@ namespace BitCoin
 
         Info &info = Info::instance();
         Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(), mServices, info.ip,
-          info.port, info.spvMode, mChain->forks().cashActive(), mChain->height(), (!mIsIncoming && !mIsSeed));
+          info.port, info.spvMode, mChain->height(), (!mIsIncoming && !mIsSeed));
         bool success = sendMessage(&versionMessage);
         mVersionSent = true;
         return success;
@@ -1004,17 +1005,6 @@ namespace BitCoin
                     info.addPeerFail(mAddress);
                     close();
                 }
-                else if(mChain->forks().cashActive() &&
-                  !(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT) && // Missing Cash node bit
-                  mVersionData->startBlockHeight >= mChain->forks().cashForkBlockHeight()) // Peer above cash fork height
-                {
-                    mRejected = true;
-                    sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
-                      "Cash node bit (0x20) required in protocol version");
-                    NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Missing cash node bit");
-                    info.addPeerFail(mAddress);
-                    close();
-                }
                 else if(!mIsIncoming && !mIsSeed && !mChain->isInSync() && (mVersionData->startBlockHeight < 0 ||
                   mVersionData->startBlockHeight < mChain->height()))
                 {
@@ -1125,9 +1115,6 @@ namespace BitCoin
                 Message::AddressesData addressData;
                 std::vector<Peer *> peers;
                 uint64_t servicesMask = Message::VersionData::FULL_NODE_BIT;
-
-                if(mChain->forks().cashActive())
-                    servicesMask |= Message::VersionData::CASH_NODE_BIT;
 
                 // Get list of peers
                 info.getRandomizedPeers(peers, 1, servicesMask);

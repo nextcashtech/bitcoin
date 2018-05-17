@@ -644,6 +644,8 @@ namespace BitCoin
         mElementMaxSize = 520;
         mCashForkBlockHeight = -1;
         mFork201805BlockHeight = -1;
+        mFork201811BlockHeight = -1;
+        mForkID = 0;
         mModified = false;
 
         for(unsigned int i=0;i<3;i++)
@@ -957,7 +959,17 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
               "2018 May fork activated at block height %d", pBlockHeight);
             mFork201805BlockHeight = mHeight - 1;
+            mForkID = 0x00FF0001;
             mBlockMaxSize = FORK_201805_MAX_BLOCK_SIZE;
+        }
+
+        if(mFork201811BlockHeight == -1 && mCashForkBlockHeight != -1 &&
+          pBlockStats.getMedianPastTime(pBlockHeight) >= FORK_201811_ACTIVATION_TIME)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+              "2018 Nov fork activated at block height %d", pBlockHeight);
+            mFork201811BlockHeight = mHeight - 1;
+            mForkID = 0x00FF0001;
         }
 
         mMutex.unlock();
@@ -1001,6 +1013,21 @@ namespace BitCoin
             mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         }
 
+        if(mFork201805BlockHeight != -1 && pBlockHeight < mFork201805BlockHeight)
+        {
+            // Undo May 2018 fork
+            mFork201805BlockHeight = -1;
+            mBlockMaxSize = CASH_START_MAX_BLOCK_SIZE;
+        }
+
+        if(mFork201811BlockHeight != -1 && pBlockHeight < mFork201811BlockHeight)
+        {
+            // Undo Nov 2018 fork
+            mFork201811BlockHeight = -1;
+            mBlockMaxSize = FORK_201805_MAX_BLOCK_SIZE;
+            mForkID = 0;
+        }
+
         for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             (*softFork)->revert(pBlockStats, pBlockHeight);
 
@@ -1022,6 +1049,8 @@ namespace BitCoin
         }
         mCashForkBlockHeight = -1;
         mFork201805BlockHeight = -1;
+        mFork201805BlockHeight = -1;
+        mForkID = 0;
         mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             (*softFork)->reset();
@@ -1062,7 +1091,7 @@ namespace BitCoin
         if(!NextCash::fileExists(filePathName))
         {
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-              "No soft forks file to load");
+              "No forks file to load");
             mMutex.unlock();
             return true;
         }
@@ -1072,7 +1101,18 @@ namespace BitCoin
         if(!file.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
-              "Failed to open soft forks file");
+              "Failed to open forks file");
+            mMutex.unlock();
+            return false;
+        }
+
+        // Read version
+        unsigned int version = file.readUnsignedInt();
+
+        if(version != 1)
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,
+              "Unknown forks file version");
             mMutex.unlock();
             return false;
         }
@@ -1110,6 +1150,7 @@ namespace BitCoin
         // Read cash fork block height and max size
         mCashForkBlockHeight = file.readInt();
         mBlockMaxSize = file.readUnsignedInt();
+        mForkID = file.readUnsignedInt();
 
         if(mCashForkBlockHeight != -1)
         {
@@ -1177,6 +1218,9 @@ namespace BitCoin
             return false;
         }
 
+        // Write version
+        file.writeUnsignedInt(1);
+
         // Write height
         file.writeInt(mHeight);
 
@@ -1189,6 +1233,7 @@ namespace BitCoin
         // Write cash fork block height and max size
         file.writeInt(mCashForkBlockHeight);
         file.writeUnsignedInt(mBlockMaxSize);
+        file.writeUnsignedInt(mForkID);
 
         for(std::vector<SoftFork *>::iterator softFork=mForks.begin();softFork!=mForks.end();++softFork)
             (*softFork)->write(&file);

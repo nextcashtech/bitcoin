@@ -157,7 +157,7 @@ namespace BitCoin
             pInput->setInputEndian(NextCash::Endian::LITTLE);
 
             // Start String
-            const uint8_t *startBytes = networkStartBytes();
+            const uint8_t *startBytes = networkStartBytes(cash);
             unsigned int matchOffset = 0;
             bool startStringFound = false;
 
@@ -410,7 +410,7 @@ namespace BitCoin
 
             // Write header
             // Start String (4 bytes)
-            pOutput->writeHex(networkStartString());
+            pOutput->writeHex(networkStartString(cash));
 
             // Command Name (12 bytes padded with nulls)
             const char *name = nameFor(pData->type);
@@ -502,7 +502,7 @@ namespace BitCoin
 
         VersionData::VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort, uint64_t pReceivingServices,
                                  const uint8_t *pTransmittingIP, uint16_t pTransmittingPort,
-                                 bool pSPVNode, bool pCashNode, uint32_t pStartBlockHeight, bool pRelay) : Data(VERSION)
+                                 bool pSPVNode, uint32_t pStartBlockHeight, bool pRelay) : Data(VERSION)
         {
             version = PROTOCOL_VERSION;
             services = 0x00;
@@ -512,9 +512,6 @@ namespace BitCoin
                 services |= FULL_NODE_BIT;
                 services |= BLOOM_NODE_BIT;
             }
-
-            if(pCashNode)
-                services |= CASH_NODE_BIT;
 
             time = getTime();
 
@@ -1512,14 +1509,14 @@ namespace BitCoin
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "------------- Starting Message Tests -------------");
 
             bool result = true;
-            Interpreter interpreter;
+            Interpreter interpreter(false);
 
             /***********************************************************************************************
              * VERSION
              ***********************************************************************************************/
             uint8_t rIP[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x04, 0x03, 0x02, 0x01 };
             uint8_t tIP[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x08, 0x07, 0x06, 0x05 };
-            VersionData versionSendData(rIP, 1333, 3, tIP, 1333, false, false, 125, false);
+            VersionData versionSendData(rIP, 1333, 3, tIP, 1333, false, 125, false);
             NextCash::Buffer messageBuffer;
 
             interpreter.write(&versionSendData, &messageBuffer);

@@ -276,9 +276,16 @@ namespace BitCoin
 
         bool fork201805Active() const { return mFork201805BlockHeight != -1 && mHeight >= mFork201805BlockHeight; }
 
+        // 2018 Nov Hard Fork
+        static const int32_t FORK_201811_ACTIVATION_TIME = 1542300000;
+
+        bool fork201811Active() const { return mFork201811BlockHeight != -1 && mHeight >= mFork201811BlockHeight; }
+
         unsigned int blockMaxSize() const { return mBlockMaxSize; }
 
         unsigned int elementMaxSize() const { return mElementMaxSize; }
+
+        uint32_t forkID() const { return mForkID; }
 
         void process(BlockStats &pBlockStats, int pBlockHeight);
 
@@ -315,9 +322,12 @@ namespace BitCoin
 
         int mCashForkBlockHeight;
         int mFork201805BlockHeight;
+        int mFork201811BlockHeight;
 
         unsigned int mBlockMaxSize;
         unsigned int mElementMaxSize;
+
+        uint32_t mForkID;
 
         unsigned int mThreshHold;
         bool mModified;

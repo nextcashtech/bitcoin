@@ -903,7 +903,7 @@ namespace BitCoin
         NextCash::stream_size previousOffset = pCurrentOutputScript.readOffset();
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
         if(!pTransaction.getSignatureHash(signatureHash, pInputOffset, pCurrentOutputScript,
-          pOutputAmount, pSignature.hashType()))
+          pOutputAmount, pSignature.hashType(), pForks.forkID()))
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to get signature hash : 0x%02x - %s", (int)pSignature.hashType(), pSignature.hex().text());

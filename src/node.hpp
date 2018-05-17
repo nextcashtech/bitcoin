@@ -33,7 +33,7 @@ namespace BitCoin
     public:
 
         Node(NextCash::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
-          bool pIsSeed, bool pIsGood, uint64_t pServices, Monitor &pMonitor);
+          bool pIsSeed, bool pIsGood, uint64_t pServices, Monitor &pMonitor, bool pCash);
         ~Node();
 
         static void run();

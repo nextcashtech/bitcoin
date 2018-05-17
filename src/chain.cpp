@@ -445,7 +445,8 @@ namespace BitCoin
                 if(height() > 144 &&
                   (*branch)->height + (*branch)->pendingBlocks.size() < (unsigned int)height() - 144)
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Dropping branch %d", offset);
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                      "Dropping branch %d", offset);
 
                     // Drop branches that are 144 blocks behind the main chain
                     delete *branch;
@@ -453,7 +454,8 @@ namespace BitCoin
                     continue;
                 }
             }
-            else if(diff > 0 && (longestBranch == NULL || (*branch)->accumulatedWork > longestBranch->accumulatedWork))
+            else if(diff > 0 && (longestBranch == NULL ||
+              (*branch)->accumulatedWork > longestBranch->accumulatedWork))
                 longestBranch = *branch;
 
             ++branch;
@@ -471,12 +473,13 @@ namespace BitCoin
           "Activating branch at height %d", longestBranch->height);
 
         // Currently main chain (save in case it switches back)
-        Branch *newBranch = new Branch(longestBranch->height - 1, mBlockStats.accumulatedWork(longestBranch->height - 1));
+        Branch *newBranch = new Branch(longestBranch->height - 1,
+          mBlockStats.accumulatedWork(longestBranch->height - 1));
 
         // Read all main chain blocks above branch height and put them in a branch.
         int currentHeight = height();
         Block *block;
-        for(int i=longestBranch->height;i<currentHeight;++i)
+        for(int i = longestBranch->height; i < currentHeight; ++i)
         {
             block = new Block();
             getBlock(i, *block);
@@ -484,7 +487,8 @@ namespace BitCoin
         }
 
         // Add current main pending blocks to branch
-        for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
+        for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
+          pending != mPendingBlocks.end(); ++pending)
         {
             newBranch->addBlock((*pending)->block);
             (*pending)->block = NULL;
@@ -512,7 +516,8 @@ namespace BitCoin
         offset = 0;
         NextCash::Hash work(32);
         NextCash::Hash target(32);
-        for(std::list<PendingBlockData *>::iterator pending=longestBranch->pendingBlocks.begin();pending!=longestBranch->pendingBlocks.end();++pending)
+        for(std::list<PendingBlockData *>::iterator pending = longestBranch->pendingBlocks.begin();
+          pending != longestBranch->pendingBlocks.end(); ++pending)
         {
             mPendingBlocks.push_back(*pending);
             target.setDifficulty((*pending)->block->targetBits);

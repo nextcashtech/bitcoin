@@ -1261,18 +1261,21 @@ namespace BitCoin
     {
         try
         {
-            load();
+            if(!load())
+                requestStop();
         }
         catch(std::bad_alloc pException)
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
               "Bad allocation while loading : %s", pException.what());
+            requestStop();
             return;
         }
         catch(std::exception pException)
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
               "Exception while loading : %s", pException.what());
+            requestStop();
             return;
         }
 
@@ -1360,6 +1363,7 @@ namespace BitCoin
             if(mStopping)
                 break;
 
+#ifdef ANDROID
             if(mFinishMode != FINISH_ON_REQUEST &&
               peerCount() == 0 && time - mLastConnectionActive > 60)
             {
@@ -1368,6 +1372,7 @@ namespace BitCoin
                 requestStop();
                 break;
             }
+#endif
 
             if(!mChain.isInSync())
             {
@@ -1615,7 +1620,8 @@ namespace BitCoin
         Node *node;
         try
         {
-            node = new Node(pConnection, &mChain, pIncoming, pIsSeed, pIsGood, pServices, mMonitor);
+            node = new Node(pConnection, &mChain, pIncoming, pIsSeed, pIsGood, pServices, mMonitor,
+              mChain.forks().cashActive());
         }
         catch(std::bad_alloc &pBadAlloc)
         {
@@ -1748,9 +1754,6 @@ namespace BitCoin
                     ++usableCount;
             }
         mNodeLock.readUnlock();
-
-        if(mChain.forks().cashActive())
-            servicesMask |= Message::VersionData::CASH_NODE_BIT;
 
         if(mInfo.spvMode)
             servicesMask |= Message::VersionData::BLOOM_NODE_BIT;

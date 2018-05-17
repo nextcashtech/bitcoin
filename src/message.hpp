@@ -128,7 +128,14 @@ namespace BitCoin
         {
         public:
 
-            Interpreter() { version = 0; pendingBlockStartTime = 0; pendingBlockLastReportTime = 0; pendingBlockUpdateTime = 0; }
+            Interpreter(bool pCash)
+            {
+                version = 0;
+                pendingBlockStartTime = 0;
+                pendingBlockLastReportTime = 0;
+                pendingBlockUpdateTime = 0;
+                cash = pCash;
+            }
 
             Data *read(NextCash::Buffer *pInput, const char *pName);
             void write(Data *pData, NextCash::Buffer *pOutput);
@@ -137,6 +144,7 @@ namespace BitCoin
             NextCash::Hash pendingBlockHash;
             int32_t pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
             unsigned int lastPendingBlockSize;
+            bool cash;
 
         };
 
@@ -149,13 +157,13 @@ namespace BitCoin
             static const unsigned int BLOOM_NODE_BIT   = 0x04; // BIP-0111 Supports bloom filters and merkle block requests
             static const unsigned int WITNESS_NODE_BIT = 0x08; // Segregated Witness
             static const unsigned int XTHIN_NODE_BIT   = 0x10; // BUIP-0010
-            static const unsigned int CASH_NODE_BIT    = 0x20; // Bitcoin Cash
+            static const unsigned int CASH_NODE_BIT    = 0x20; // Bitcoin Cash (No longer used)
             static const unsigned int LIMITED_NODE_BIT = 0x0400; // BIP-0159 "Full" node serving only the last 288 (2 day) blocks
 
             VersionData() : Data(VERSION) { }
             VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort, uint64_t pReceivingServices,
                         const uint8_t *pTransmittingIP, uint16_t pTransmittingPort,
-                        bool pFullNode, bool pCashNode, uint32_t pStartBlockHeight, bool pRelay);
+                        bool pFullNode, uint32_t pStartBlockHeight, bool pRelay);
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);

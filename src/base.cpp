@@ -22,6 +22,8 @@ namespace BitCoin
     static Network sNetwork = MAINNET;
     static const uint8_t sMainNetworkStartBytes[4] = { 0xf9, 0xbe, 0xb4, 0xd9 };
     static const uint8_t sTestNetworkStartBytes[4] = { 0x0b, 0x11, 0x09, 0x07 };
+    static const uint8_t sCashMainNetworkStartBytes[4] = { 0xe3, 0xe1, 0xf3, 0xe8 };
+    static const uint8_t sCashTestNetworkStartBytes[4] = { 0xf4, 0xe5, 0xf3, 0xf4 };
 
     Network network() { return sNetwork; }
     void setNetwork(Network pNetwork) { sNetwork = pNetwork; }
@@ -39,27 +41,39 @@ namespace BitCoin
         return "Unknown Net";
     }
 
-    const char *networkStartString()
+    const char *networkStartString(bool pCash)
     {
         switch(sNetwork)
         {
             case MAINNET:
-                return "f9beb4d9";
+                if(pCash)
+                    return "e3e1f3e8";
+                else
+                    return "f9beb4d9";
             case TESTNET:
-                return "0b110907";
+                if(pCash)
+                    return "f4e5f3f4";
+                else
+                    return "0b110907";
         }
 
         return "";
     }
 
-    const uint8_t *networkStartBytes()
+    const uint8_t *networkStartBytes(bool pCash)
     {
         switch(sNetwork)
         {
             case MAINNET:
-                return sMainNetworkStartBytes;
+                if(pCash)
+                    return sCashMainNetworkStartBytes;
+                else
+                    return sMainNetworkStartBytes;
             case TESTNET:
-                return sTestNetworkStartBytes;
+                if(pCash)
+                    return sCashTestNetworkStartBytes;
+                else
+                    return sTestNetworkStartBytes;
         }
 
         return 0x00000000;
