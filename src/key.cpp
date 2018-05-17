@@ -2427,7 +2427,12 @@ namespace BitCoin
                 case Key::SIMPLE:
                     chain = newKey->chainKey(0, Key::SIMPLE);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
                     else
                     {
                         delete newKey;
@@ -2435,7 +2440,12 @@ namespace BitCoin
                     }
                     chain = newKey->chainKey(1, Key::SIMPLE);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
                     else
                     {
                         delete newKey;
@@ -2445,7 +2455,12 @@ namespace BitCoin
                 case Key::BIP0032:
                     chain = newKey->chainKey(0, Key::BIP0032);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
                     else
                     {
                         delete newKey;
@@ -2453,7 +2468,12 @@ namespace BitCoin
                     }
                     chain = newKey->chainKey(1, Key::BIP0032);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
                     else
                     {
                         delete newKey;
@@ -2463,7 +2483,12 @@ namespace BitCoin
                 case Key::BIP0044:
                     chain = newKey->chainKey(0, Key::BIP0044);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
                     else
                     {
                         delete newKey;
@@ -2471,7 +2496,12 @@ namespace BitCoin
                     }
                     chain = newKey->chainKey(1, Key::BIP0044);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
                     else
                     {
                         delete newKey;
@@ -2482,24 +2512,54 @@ namespace BitCoin
                     // Prime the key for several derivation methods
                     chain = newKey->chainKey(0, Key::SIMPLE);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
                     chain = newKey->chainKey(1, Key::SIMPLE);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
 
                     chain = newKey->chainKey(0, Key::BIP0032);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
                     chain = newKey->chainKey(1, Key::BIP0032);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
 
                     chain = newKey->chainKey(0, Key::BIP0044);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
                     chain = newKey->chainKey(1, Key::BIP0044);
                     if(chain != NULL)
-                        newData->chainKeys.push_back(new Key(*chain));
+                    {
+                        if(chain->isPrivate())
+                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                        else
+                            newData->chainKeys.push_back(new Key(*chain));
+                    }
             }
 
             PrivateKeyData *newPrivateData = new PrivateKeyData();
@@ -2595,24 +2655,54 @@ namespace BitCoin
                         // Prime the key for several derivation methods
                         chain = newKey->chainKey(0, Key::SIMPLE);
                         if(chain != NULL)
-                            newData->chainKeys.push_back(new Key(*chain));
+                        {
+                            if(chain->isPrivate())
+                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                            else
+                                newData->chainKeys.push_back(new Key(*chain));
+                        }
                         chain = newKey->chainKey(1, Key::SIMPLE);
                         if(chain != NULL)
-                            newData->chainKeys.push_back(new Key(*chain));
+                        {
+                            if(chain->isPrivate())
+                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                            else
+                                newData->chainKeys.push_back(new Key(*chain));
+                        }
 
                         chain = newKey->chainKey(0, Key::BIP0032);
                         if(chain != NULL)
-                            newData->chainKeys.push_back(new Key(*chain));
+                        {
+                            if(chain->isPrivate())
+                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                            else
+                                newData->chainKeys.push_back(new Key(*chain));
+                        }
                         chain = newKey->chainKey(1, Key::BIP0032);
                         if(chain != NULL)
-                            newData->chainKeys.push_back(new Key(*chain));
+                        {
+                            if(chain->isPrivate())
+                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                            else
+                                newData->chainKeys.push_back(new Key(*chain));
+                        }
 
                         chain = newKey->chainKey(0, Key::BIP0044);
                         if(chain != NULL)
-                            newData->chainKeys.push_back(new Key(*chain));
+                        {
+                            if(chain->isPrivate())
+                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                            else
+                                newData->chainKeys.push_back(new Key(*chain));
+                        }
                         chain = newKey->chainKey(1, Key::BIP0044);
                         if(chain != NULL)
-                            newData->chainKeys.push_back(new Key(*chain));
+                        {
+                            if(chain->isPrivate())
+                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                            else
+                                newData->chainKeys.push_back(new Key(*chain));
+                        }
 
                         for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
                           key != newData->chainKeys.end(); ++key)
