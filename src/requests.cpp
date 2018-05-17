@@ -190,13 +190,13 @@ namespace BitCoin
 
             // Open public keys file
             NextCash::String keysFilePathName = Info::instance().path();
-            keysFilePathName.pathAppend("keys");
+            keysFilePathName.pathAppend("request_keys");
             NextCash::FileInputStream keysFile(keysFilePathName);
 
             if(!keysFile.isValid())
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                  "Failed to open keys file : %s", keysFilePathName.text());
+                  "Failed to open request keys file : %s", keysFilePathName.text());
                 requestStop();
                 return;
             }
@@ -287,7 +287,7 @@ namespace BitCoin
 
             // Send signature back to prove identity
             NextCash::String privateKeyFilePathName = Info::instance().path();
-            privateKeyFilePathName.pathAppend(".private_key");
+            privateKeyFilePathName.pathAppend(".request_private_key");
             NextCash::FileInputStream privateKeyFile(privateKeyFilePathName);
 
             if(!privateKeyFile.isValid())
