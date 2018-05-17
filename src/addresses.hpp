@@ -59,6 +59,13 @@ namespace BitCoin
             outputIndex = pOutputIndex;
         }
 
+        void set(uint32_t pBlockHeight, uint32_t pTransactionOffset, uint32_t pOutputIndex)
+        {
+            blockHeight = pBlockHeight;
+            transactionOffset = pTransactionOffset;
+            outputIndex = pOutputIndex;
+        }
+
         bool getFullOutput(FullOutputData &pOutput) const;
 
         uint64_t size() { return 12; }

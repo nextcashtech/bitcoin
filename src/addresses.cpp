@@ -130,54 +130,48 @@ namespace BitCoin
             return false;
         }
 
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_ADDRESSES_LOG_NAME,
+          "Removing transaction addresses for %d transactions at block height %d.",
+          pBlockTransactions.size(), pBlockHeight);
+
         bool success = true;
-        NextCash::HashData *newAddress;
+        AddressOutputReference newAddress;
         unsigned int transactionOffset = 0, outputOffset;
         NextCash::HashList hashes;
-        Iterator item;
-        bool found;
 
-        for(std::vector<Transaction *>::iterator trans=pBlockTransactions.begin();trans!=pBlockTransactions.end();++trans,++transactionOffset)
+        for(std::vector<Transaction *>::iterator trans = pBlockTransactions.begin();
+          trans != pBlockTransactions.end(); ++trans, ++transactionOffset)
         {
             // Remove addresses added by outputs from this block's transactions
             outputOffset = 0;
-            for(std::vector<Output>::iterator output=(*trans)->outputs.begin();output!=(*trans)->outputs.end();++output,++outputOffset)
+            for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
+              output != (*trans)->outputs.end(); ++output, ++outputOffset)
             {
+                newAddress.set(pBlockHeight, transactionOffset, outputOffset);
+
                 switch(ScriptInterpreter::parseOutputScript(output->script, hashes))
                 {
                     case ScriptInterpreter::P2PKH:
                     case ScriptInterpreter::P2PK:
                     case ScriptInterpreter::P2SH:
                     case ScriptInterpreter::MULTI_SIG:
-                        for(NextCash::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                        for(NextCash::HashList::iterator hash = hashes.begin();
+                          hash != hashes.end(); ++hash)
                         {
-                            newAddress = new AddressOutputReference(pBlockHeight, transactionOffset, outputOffset);
-
-                            // Check for matching address marked for removal
-                            item = get(*hash);
-                            found = false;
-
-                            while(item && item.hash() == *hash)
+                            if(removeIfMatching(*hash, &newAddress))
                             {
-                                if(newAddress->valuesMatch(*item) && !(*item)->markedRemove())
-                                {
-                                    NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_ADDRESSES_LOG_NAME,
-                                      "Removing transaction address for block height %d : %s", pBlockHeight,
-                                      item.hash().hex().text());
-                                    (*item)->setRemove();
-                                    found = true;
-                                    break;
-                                }
-                                ++item;
+                                NextCash::Log::addFormatted(NextCash::Log::DEBUG,
+                                  BITCOIN_ADDRESSES_LOG_NAME,
+                                  "Removing transaction (%d) output (%d) address for block height %d : %s",
+                                  transactionOffset, outputOffset, pBlockHeight, hash->hex().text());
+                                break;
                             }
-
-                            delete newAddress;
-
-                            if(!found)
+                            else
                             {
-                                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
-                                  "Failed to remove transaction address for block height %d : %s", pBlockHeight,
-                                  item.hash().hex().text());
+                                NextCash::Log::addFormatted(NextCash::Log::ERROR,
+                                  BITCOIN_ADDRESSES_LOG_NAME,
+                                  "Failed to remove transaction address for block height %d : %s",
+                                  pBlockHeight, hash->hex().text());
                                 success = false;
                                 break;
                             }
@@ -187,48 +181,6 @@ namespace BitCoin
                         break;
                 }
             }
-
-            // Unspend all addresses spent by inputs from this block's transactions
-            // inputOffset = 0;
-            // for(std::vector<Input *>::const_iterator output=(*trans)->inputs.begin();output!=(*trans)->inputs.end();++output,++inputOffset)
-            // {
-                // // Get outpoint
-                // reference = pOutputs.findUnspent()
-
-                // switch(ScriptInterpreter::parseOutputScript((*output)->script, hashes))
-                // {
-                    // case ScriptInterpreter::P2PKH:
-                    // case ScriptInterpreter::P2PK:
-                    // case ScriptInterpreter::P2SH:
-                    // case ScriptInterpreter::MULTI_SIG:
-                        // for(NextCash::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
-                        // {
-                            // newAddress = new AddressOutputReference(pBlockHeight, transactionOffset, outputOffset);
-
-                            // // Check for matching address marked for removal
-                            // Iterator item = get(*hash);
-
-                            // while(item && item.hash() == *hash)
-                            // {
-                                // if(newAddress->valuesMatch(*item) && (*item)->markedRemove())
-                                // {
-                                    // // Unmark the matching item for removal
-                                    // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_ADDRESSES_LOG_NAME,
-                                      // "Reversing removal of transaction address for block height %d : %s", pBlockHeight,
-                                      // item.hash().hex().text());
-                                    // (*item)->clearRemove();
-                                    // break;
-                                // }
-                                // ++item;
-                            // }
-
-                            // delete newAddress;
-                        // }
-                        // break;
-                    // default:
-                        // break;
-                // }
-            // }
         }
 
         --mNextBlockHeight;
