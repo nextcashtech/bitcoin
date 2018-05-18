@@ -1495,12 +1495,6 @@ namespace BitCoin
                             if(unsolicited)
                                 mChain->setAnnouncedAdded();
                         }
-                        else if(!mChain->headerAvailable((*header)->hash))
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                              "Rejected Header : %s", (*header)->hash.hex().text());
-                            ++header;
-                        }
                         else
                             ++header;
                     }

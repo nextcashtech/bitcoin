@@ -481,10 +481,14 @@ namespace BitCoin
         // Read all main chain blocks above branch height and put them in a branch.
         int currentHeight = height();
         Block *block;
+        Info &info = Info::instance();
         for(int i = longestBranch->height; i < currentHeight; ++i)
         {
             block = new Block();
-            getBlock(i, *block);
+            if(info.spvMode)
+                getHeader(i, *block);
+            else
+                getBlock(i, *block);
             newBranch->addBlock(block);
         }
 
@@ -754,8 +758,8 @@ namespace BitCoin
         if(blockInChain(pBlock->hash))
         {
             mPendingLock.writeUnlock();
-            // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
-              // "Header already in chain : %s", pBlock->hash.hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
+              "Header already in chain : %s", pBlock->hash.hex().text());
             return false;
         }
 
@@ -1397,7 +1401,19 @@ namespace BitCoin
         Block block;
         while(height() >= pHeight)
         {
-            if(!mInfo.spvMode)
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "Reverting block at height %d : %s", height(), block.hash.hex().text());
+
+            if(mInfo.spvMode)
+            {
+                if(!getHeader(height(), block))
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
+                      "Failed to get block header at height %d to revert", height());
+                    return false;
+                }
+            }
+            else
             {
                 if(!getBlock(height(), block))
                 {
@@ -1405,19 +1421,19 @@ namespace BitCoin
                       "Failed to get block at height %d to revert", height());
                     return false;
                 }
+            }
 
-                if(height() == pHeight)
-                {
-                    mLastBlockHash = block.hash;
-                    break;
-                }
+            if(height() == pHeight)
+            {
+                mLastBlockHash = block.hash;
+                break;
+            }
 
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                  "Reverting block at height %d : %s", height(), block.hash.hex().text());
+            if(mMonitor != NULL)
+                mMonitor->revertBlock(block.hash, height());
 
-                if(mMonitor != NULL)
-                    mMonitor->revertBlock(block.hash, height());
-
+            if(!mInfo.spvMode)
+            {
                 if(!mOutputs.revert(block.transactions, height()))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
