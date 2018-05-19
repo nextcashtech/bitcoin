@@ -2069,15 +2069,18 @@ namespace BitCoin
 
         PublicKeyData()
         {
+            hasPrivate = false;
             derivationPathMethod = Key::UNKNOWN;
         }
         PublicKeyData(const PublicKeyData &pCopy) : chainKeys(pCopy.chainKeys)
         {
+            hasPrivate = pCopy.hasPrivate;
             name = pCopy.name;
             derivationPathMethod = pCopy.derivationPathMethod;
         }
         PublicKeyData &operator = (const PublicKeyData &pRight)
         {
+            hasPrivate = pRight.hasPrivate;
             name = pRight.name;
             derivationPathMethod = pRight.derivationPathMethod;
             chainKeys = pRight.chainKeys;
@@ -2091,6 +2094,12 @@ namespace BitCoin
 
         void write(NextCash::OutputStream *pStream) const
         {
+            pStream->writeUnsignedInt(1); // Version
+
+            if(hasPrivate)
+                pStream->writeByte(0xff);
+            else
+                pStream->writeByte(0);
             pStream->writeUnsignedInt(name.length());
             pStream->writeString(name);
 
@@ -2103,6 +2112,13 @@ namespace BitCoin
 
         bool read(NextCash::InputStream *pStream)
         {
+            unsigned int version = pStream->readUnsignedInt();
+
+            if(version != 1)
+                return false;
+
+            hasPrivate = pStream->readByte() != 0;
+
             unsigned int nameLength = pStream->readUnsignedInt();
             name = pStream->readString(nameLength);
 
@@ -2128,6 +2144,7 @@ namespace BitCoin
             return true;
         }
 
+        bool hasPrivate;
         NextCash::String name;
         Key::DerivationPathMethod derivationPathMethod;
 
@@ -2206,6 +2223,14 @@ namespace BitCoin
             delete *key;
     }
 
+    bool KeyStore::hasPrivate(unsigned int pOffset)
+    {
+        if(pOffset >= mKeys.size())
+            return false;
+
+        return mKeys[pOffset]->hasPrivate;
+    }
+
     NextCash::String KeyStore::name(unsigned int pOffset)
     {
         if(pOffset >= mKeys.size())
@@ -2228,6 +2253,12 @@ namespace BitCoin
             return NextCash::String();
 
         return mPrivateKeys[pOffset]->seed;
+    }
+
+    void KeyStore::setName(unsigned int pOffset, const char *pName)
+    {
+        if(pOffset < mKeys.size())
+            mKeys[pOffset]->name = pName;
     }
 
     void KeyStore::clear()
@@ -2347,7 +2378,7 @@ namespace BitCoin
         if(mPrivateLoaded)
             return true;
 
-        if(pStream->remaining() < 4)
+        if(pStream->remaining() < 8)
             return false;
 
         // Version
@@ -2570,6 +2601,7 @@ namespace BitCoin
               key != newData->chainKeys.end(); ++key)
                 (*key)->updateGap(20);
 
+            newData->hasPrivate = newKey->isPrivate();
             newData->derivationPathMethod = pMethod;
             mKeys.push_back(newData);
 
@@ -2592,6 +2624,7 @@ namespace BitCoin
                     }
 
             newKey->loadHash(addressHash);
+            newData->hasPrivate = false;
             newData->chainKeys.push_back(newKey);
             mPrivateKeys.push_back(new PrivateKeyData());
             mKeys.push_back(newData);
@@ -2719,6 +2752,7 @@ namespace BitCoin
                         newPrivateData->key = newKey;
                         mPrivateKeys.push_back(newPrivateData);
 
+                        newData->hasPrivate = newKey->isPrivate();
                         newData->derivationPathMethod = method;
                         mKeys.push_back(newData);
 
@@ -2744,6 +2778,7 @@ namespace BitCoin
                     if(!found)
                     {
                         newKey->loadHash(addressHash);
+                        newData->hasPrivate = false;
                         newData->chainKeys.push_back(newKey);
                         mPrivateKeys.push_back(new PrivateKeyData());
                         mKeys.push_back(newData);

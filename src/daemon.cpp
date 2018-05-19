@@ -546,7 +546,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Daemon::loadKeyStore()
+    bool Daemon::loadKeyStore(const uint8_t *pPassword, unsigned int pPasswordLength)
     {
         NextCash::String filePathName = Info::instance().path();
         filePathName.pathAppend("keystore");
@@ -577,10 +577,9 @@ namespace BitCoin
         filePathName = Info::instance().path();
         filePathName.pathAppend(".private_keystore");
         NextCash::FileInputStream privateFile(filePathName);
-        const uint8_t *key = (const uint8_t *)"";
         if(privateFile.isValid())
         {
-            if(!mKeyStore.readPrivate(&privateFile, key, 0))
+            if(!mKeyStore.readPrivate(&privateFile, pPassword, pPasswordLength))
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
                   "Key store failed to load private");
@@ -611,7 +610,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Daemon::saveKeyStore()
+    bool Daemon::saveKeyStore(const uint8_t *pPassword, unsigned int pPasswordLength)
     {
         NextCash::String filePathName = Info::instance().path();
         filePathName.pathAppend("keystore");
@@ -629,8 +628,7 @@ namespace BitCoin
             filePathName = Info::instance().path();
             filePathName.pathAppend(".private_keystore");
             NextCash::FileOutputStream privateFile(filePathName, true);
-            const uint8_t *key = (const uint8_t *)"";
-            mKeyStore.writePrivate(&privateFile, key, 0);
+            mKeyStore.writePrivate(&privateFile, pPassword, pPasswordLength);
         }
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,

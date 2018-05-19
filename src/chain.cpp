@@ -27,7 +27,8 @@ namespace BitCoin
 {
     NextCash::Hash Chain::sBTCForkBlockHash("00000000000000000019f112ec0a9982926f1258cdcc558dd7c3b7e5dc7fa148");
 
-    Chain::Chain() : mInfo(Info::instance()), mPendingLock("Chain Pending"), mProcessMutex("Chain Process")
+    Chain::Chain() : mInfo(Info::instance()), mPendingLock("Chain Pending"),
+      mProcessMutex("Chain Process")
     {
         mNextBlockHeight = 0;
         mLastFileID = 0;
@@ -51,9 +52,11 @@ namespace BitCoin
         mPendingLock.writeLock("Destroy");
         if(mLastBlockFile != NULL)
             delete mLastBlockFile;
-        for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
+        for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
+          pending != mPendingBlocks.end(); ++pending)
             delete *pending;
-        for(std::vector<Branch *>::iterator branch=mBranches.begin();branch!=mBranches.end();++branch)
+        for(std::vector<Branch *>::iterator branch = mBranches.begin();
+          branch != mBranches.end(); ++branch)
             delete *branch;
         if(mAnnounceBlock != NULL)
             delete mAnnounceBlock;
@@ -62,7 +65,8 @@ namespace BitCoin
 
     Branch::~Branch()
     {
-        for(std::list<PendingBlockData *>::iterator pending=pendingBlocks.begin();pending!=pendingBlocks.end();++pending)
+        for(std::list<PendingBlockData *>::iterator pending = pendingBlocks.begin();
+          pending != pendingBlocks.end(); ++pending)
             delete *pending;
     }
 
@@ -91,8 +95,10 @@ namespace BitCoin
                     int32_t lastTime, firstTime;
                     NextCash::Hash lastWork, firstWork;
 
-                    mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 1, lastTime, lastWork, 3);
-                    mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 145, firstTime, firstWork, 3);
+                    mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 1, lastTime,
+                      lastWork, 3);
+                    mBlockStats.getMedianPastTimeAndWork(mBlockStats.height() - 145, firstTime,
+                      firstWork, 3);
 
                     int32_t timeSpan = lastTime - firstTime;
                     // NextCash::String timeText;
@@ -112,7 +118,8 @@ namespace BitCoin
                     else if(timeSpan > 288 * 600)
                         timeSpan = 288 * 600;
 
-                    // Let the Work Performed (W) be equal to the difference in chainwork[3] between B_last and B_first.
+                    // Let the Work Performed (W) be equal to the difference in chainwork[3] between
+                    //   B_last and B_first.
                     NextCash::Hash work = lastWork - firstWork;
 
                     // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
@@ -160,14 +167,15 @@ namespace BitCoin
                     lastTargetBits = mBlockStats.targetBits(mBlockStats.height() - 1);
                     adjustFactor = 1.25;
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                      "EDA increasing target bits 0x%08x by a factor of %f to reduce difficulty by %.02f%%", lastTargetBits,
-                      adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
+                      "EDA increasing target bits 0x%08x by a factor of %f to reduce difficulty by %.02f%%",
+                      lastTargetBits, adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
 
                     // Treat targetValue as a 256 bit number and multiply it by adjustFactor
                     mTargetBits = multiplyTargetBits(lastTargetBits, adjustFactor, mMaxTargetBits);
 
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                      "EDA new target bits for block height %d : 0x%08x", mBlockStats.height(), mTargetBits);
+                      "EDA new target bits for block height %d : 0x%08x", mBlockStats.height(),
+                      mTargetBits);
                 }
             }
         }
@@ -187,17 +195,18 @@ namespace BitCoin
         // Adjust factor below 1.0 means the target is going down, which also means the difficulty to
         //   find a hash under the target goes up
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Time spent on last 2016 blocks %d - %d = %d", lastBlockTime, lastAdjustmentTime, lastBlockTime - lastAdjustmentTime);
+          "Time spent on last 2016 blocks %d - %d = %d", lastBlockTime, lastAdjustmentTime,
+          lastBlockTime - lastAdjustmentTime);
         adjustFactor = (double)(lastBlockTime - lastAdjustmentTime) / 1209600.0;
 
         if(adjustFactor > 1.0)
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Increasing target bits 0x%08x by a factor of %f to reduce difficulty by %.02f%%", lastTargetBits,
-              adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
+              "Increasing target bits 0x%08x by a factor of %f to reduce difficulty by %.02f%%",
+              lastTargetBits, adjustFactor, (1.0 - (1.0 / adjustFactor)) * 100.0);
         else
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Decreasing target bits 0x%08x by a factor of %f to increase difficulty by %.02f%%", lastTargetBits,
-              adjustFactor, ((1.0 / adjustFactor) - 1.0) * 100.0);
+              "Decreasing target bits 0x%08x by a factor of %f to increase difficulty by %.02f%%",
+              lastTargetBits, adjustFactor, ((1.0 / adjustFactor) - 1.0) * 100.0);
 
         if(adjustFactor < 0.25)
         {
@@ -231,7 +240,8 @@ namespace BitCoin
 
         bool found = false;
         mPendingLock.readLock();
-        for(std::list<PendingBlockData *>::iterator pending=mPendingBlocks.begin();pending!=mPendingBlocks.end();++pending)
+        for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
+          pending != mPendingBlocks.end(); ++pending)
             if((*pending)->block->hash == pHash)
             {
                 found = true;
@@ -377,8 +387,10 @@ namespace BitCoin
         // Check for pending block
         bool result = false;
         mPendingLock.readLock();
-        for(std::list<PendingBlockData *>::iterator pendingBlock=mPendingBlocks.begin();pendingBlock!=mPendingBlocks.end();++pendingBlock)
-            if((*pendingBlock)->requestingNode == 0 || getTime() - (*pendingBlock)->requestedTime > 10)
+        for(std::list<PendingBlockData *>::iterator pendingBlock = mPendingBlocks.begin();
+          pendingBlock != mPendingBlocks.end(); ++pendingBlock)
+            if((*pendingBlock)->requestingNode == 0 ||
+              getTime() - (*pendingBlock)->requestedTime > 10)
             {
                 result = true;
                 break;
@@ -389,11 +401,16 @@ namespace BitCoin
 
     bool Chain::headersNeeded()
     {
+        if(!isInSync())
+            return true;
+
         // Check for pending header
         bool result = false;
         mPendingLock.readLock();
-        for(std::list<PendingHeaderData *>::iterator pendingHeader=mPendingHeaders.begin();pendingHeader!=mPendingHeaders.end();++pendingHeader)
-            if((*pendingHeader)->requestingNode == 0 || getTime() - (*pendingHeader)->requestedTime > 2)
+        for(std::list<PendingHeaderData *>::iterator pendingHeader = mPendingHeaders.begin();
+          pendingHeader != mPendingHeaders.end(); ++pendingHeader)
+            if((*pendingHeader)->requestingNode == 0 ||
+              getTime() - (*pendingHeader)->requestedTime > 2)
             {
                 // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
                   // "Pending header needed : %s", (*pendingHeader)->hash.hex().text());

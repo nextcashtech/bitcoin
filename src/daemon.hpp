@@ -75,8 +75,10 @@ namespace BitCoin
         bool loadMonitor();
         bool saveMonitor();
 
-        bool loadKeyStore();
-        bool saveKeyStore();
+        bool loadKeyStore(const uint8_t *pPassword = (const uint8_t *)"",
+                          unsigned int pPasswordLength = 0);
+        bool saveKeyStore(const uint8_t *pPassword = (const uint8_t *)"",
+                          unsigned int pPasswordLength = 0);
 
         enum Status { INACTIVE, LOADING, FINDING_PEERS, CONNECTING_TO_PEERS, SYNCHRONIZING,
           SYNCHRONIZED, FINDING_TRANSACTIONS };

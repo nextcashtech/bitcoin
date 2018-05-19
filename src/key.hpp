@@ -338,11 +338,13 @@ namespace BitCoin
 
         void clear();
 
-        unsigned int size() { return mKeys.size(); }
+        unsigned int size() { return (unsigned int)mKeys.size(); }
 
+        bool hasPrivate(unsigned int pOffset);
         NextCash::String name(unsigned int pOffset);
-
         std::vector<Key *> *chainKeys(unsigned int pOffset);
+
+        void setName(unsigned int pOffset, const char *pName);
 
         // These functions require private keys to be loaded/decrypted.
         bool isPrivateLoaded() { return mPrivateLoaded; }
