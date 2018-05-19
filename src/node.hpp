@@ -82,8 +82,8 @@ namespace BitCoin
             }
             else if(!mHeaderRequested.isEmpty())
             {
-                NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Waiting for headers after : %s",
-                  mHeaderRequested.hex().text());
+                NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                  "Waiting for headers after : %s", mHeaderRequested.hex().text());
                 return true;
             }
             else

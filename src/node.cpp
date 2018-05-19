@@ -264,7 +264,7 @@ namespace BitCoin
                     return;
                 }
 
-                // Haven't received more of the block in the last 60 seconds
+                // Haven't received more of the block in the last 30 seconds
                 if(time - mMessageInterpreter.pendingBlockUpdateTime > 30)
                 {
                     NextCash::Log::add(NextCash::Log::INFO, mName,
@@ -275,7 +275,7 @@ namespace BitCoin
                 }
             }
 
-            if(!mHeaderRequested.isEmpty() && time - mHeaderRequestTime > 180)
+            if(!mHeaderRequested.isEmpty() && time - mHeaderRequestTime > 30)
             {
                 NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Not providing headers");
                 Info::instance().addPeerFail(mAddress);
@@ -1559,7 +1559,8 @@ namespace BitCoin
                         // Remove from blocks requested
                         time = getTime();
                         mBlockRequestMutex.lock();
-                        for(NextCash::HashList::iterator hash=mBlocksRequested.begin();hash!=mBlocksRequested.end();++hash)
+                        for(NextCash::HashList::iterator hash = mBlocksRequested.begin();
+                          hash != mBlocksRequested.end(); ++hash)
                             if(*hash == ((Message::BlockData *)message)->block->hash)
                             {
                                 mBlocksRequested.erase(hash);
