@@ -209,6 +209,7 @@ namespace BitCoin
 
         // Read block at specified offset in file. Return false if the offset is too high.
         bool readHash(unsigned int pOffset, NextCash::Hash &pHash);
+        bool readHeader(unsigned int pOffset, Block &pBlock);
         bool readBlock(unsigned int pOffset, Block &pBlock, bool pIncludeTransactions);
 
         // Read list of block hashes from this file. If pStartingHash is empty then start with first block
@@ -220,6 +221,9 @@ namespace BitCoin
         // Read list of block headers from this file. If pStartingHash is empty then start with first block
         bool readBlockHeaders(BlockList &pBlockHeaders, const NextCash::Hash &pStartingHash,
           const NextCash::Hash &pStoppingHash, unsigned int pCount);
+
+        // Read header for specified hash
+        bool readHeader(const NextCash::Hash &pHash, Block &pBlock);
 
         // Read block for specified hash
         bool readBlock(const NextCash::Hash &pHash, Block &pBlock, bool pIncludeTransactions);

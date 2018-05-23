@@ -1173,6 +1173,76 @@ namespace BitCoin
         return success;
     }
 
+    bool BlockFile::readHeader(unsigned int pOffset, Block &pBlock)
+    {
+        pBlock.clear();
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        // Go to location in header where the data offset to the block is
+        mInputFile->setReadOffset(HASHES_OFFSET + (pOffset * HEADER_ITEM_SIZE) + 32);
+
+        unsigned int offset = mInputFile->readUnsignedInt();
+        if(offset == 0)
+            return false;
+
+        mInputFile->setReadOffset(offset);
+        bool success = pBlock.read(mInputFile, false, false, true, true);
+        return success;
+    }
+
+    bool BlockFile::readHeader(const NextCash::Hash &pHash, Block &pBlock)
+    {
+        pBlock.clear();
+        if(!openFile())
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x read block from hash failed : invalid file", mID);
+            mValid = false;
+            return false;
+        }
+
+        // Find offset
+        NextCash::Hash hash(32);
+        unsigned int fileOffset;
+        mInputFile->setReadOffset(HASHES_OFFSET);
+        for(unsigned int i=0;i<MAX_BLOCKS;i++)
+        {
+            if(!hash.read(mInputFile))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                  "Block file %08x read block from hash failed : hash read failed", mID);
+                return false;
+            }
+
+            fileOffset = mInputFile->readUnsignedInt();
+            if(fileOffset == 0)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                  "Block file %08x read block from hash failed : zero file offset", mID);
+                return false;
+            }
+
+            if(hash == pHash)
+            {
+                // Read block
+                mInputFile->setReadOffset(fileOffset);
+                bool success = pBlock.read(mInputFile, false, false, true, true);
+                if(!success)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                      "Block file %08x read block from hash failed : block read failed", mID);
+                }
+                return success;
+            }
+        }
+
+        return false;
+    }
+
     bool BlockFile::readBlock(unsigned int pOffset, Block &pBlock, bool pIncludeTransactions)
     {
         if(mSPVMode)

@@ -1817,7 +1817,7 @@ namespace BitCoin
         else
             blockFile = new BlockFile(fileID);
 
-        bool success = blockFile->isValid() && blockFile->readBlock(offset, pBlockHeader, false);
+        bool success = blockFile->isValid() && blockFile->readHeader(offset, pBlockHeader);
 
         if(blockFile != mLastBlockFile)
             delete blockFile;
