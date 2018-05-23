@@ -101,22 +101,42 @@ namespace BitCoin
         return result ^ 0x01;
     }
 
-    NextCash::String encodeAddress(const NextCash::Hash &pHash, AddressType pType, AddressFormat pFormat)
+    NextCash::String encodePaymentCode(const NextCash::Hash &pHash,
+                                       PaymentRequest::Format pFormat,
+                                       BitCoin::Network pNetwork)
     {
         NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
         NextCash::Buffer data, check;
 
         switch(pFormat)
         {
-        case LEGACY:
+        case PaymentRequest::Format::LEGACY:
         {
             // Calculate check
-            digest.writeByte(static_cast<uint8_t>(pType));
+            switch(pNetwork)
+            {
+                default:
+                case MAINNET:
+                    digest.writeByte(PUB_KEY_HASH);
+                    break;
+                case TESTNET:
+                    digest.writeByte(TEST_PUB_KEY_HASH);
+                    break;
+            }
             pHash.write(&digest);
             digest.getResult(&check);
 
             // Write data for address
-            data.writeByte(static_cast<uint8_t>(pType));
+            switch(pNetwork)
+            {
+                default:
+                case MAINNET:
+                    digest.writeByte(PUB_KEY_HASH);
+                    break;
+                case TESTNET:
+                    digest.writeByte(TEST_PUB_KEY_HASH);
+                    break;
+            }
             pHash.write(&data);
             data.writeUnsignedInt(check.readUnsignedInt());
 
@@ -125,32 +145,21 @@ namespace BitCoin
             result.writeBase58(data.startPointer(), data.length());
             return result;
         }
-        case CASH:
+        case PaymentRequest::Format::CASH:
         {
             uint8_t versionByte = 0; // Top bit zero, next 4 type, next 3 size
             const char *prefix;
-            switch(pType)
+            switch(pNetwork)
             {
-            case PUB_KEY_HASH:
-                versionByte |= (0x00 << 3);
-                prefix = "bitcoincash";
-                break;
-            case TEST_PUB_KEY_HASH:
-                versionByte |= (0x00 << 3);
-                prefix = "bchtest";
-                break;
-            case SCRIPT_HASH:
-                versionByte |= (0x01 << 3);
-                prefix = "bitcoincash";
-                break;
-            case TEST_SCRIPT_HASH:
-                versionByte |= (0x01 << 3);
-                prefix = "bchtest";
-                break;
-            case PRIVATE_KEY:
-            case TEST_PRIVATE_KEY:
-            case UNKNOWN:
-                return NextCash::String(); // No private key type for this format
+                default:
+                case MAINNET:
+                    versionByte |= (0x00 << 3);
+                    prefix = "bitcoincash";
+                    break;
+                case TESTNET:
+                    versionByte |= (0x00 << 3);
+                    prefix = "bchtest";
+                    break;
             }
 
             if(pHash.size() == 20) // 160 bits
@@ -239,9 +248,11 @@ namespace BitCoin
 
             return NextCash::String(prefix) + ":" + encodedPayload + encodedCheckSum.readString(encodedCheckSum.length());
         }
+        default:
+        case PaymentRequest::Format::INVALID:
+            return NextCash::String();
+            break;
         }
-
-        return NextCash::String();
     }
 
     bool decodeLegacyAddress(const char *pText, NextCash::Hash &pHash, AddressType &pType)
@@ -460,20 +471,61 @@ namespace BitCoin
         return pHash.read(&decodedPayload, decodedSize);
     }
 
-    bool decodeAddress(const char *pText, NextCash::Hash &pHash, AddressType &pType, AddressFormat &pFormat)
+    PaymentRequest decodePaymentCode(const char *pText)
     {
-        if(decodeLegacyAddress(pText, pHash, pType))
+        PaymentRequest result;
+        AddressType type;
+
+        if(decodeLegacyAddress(pText, result.address, type))
         {
-            pFormat = LEGACY;
-            return true;
+            result.format = PaymentRequest::Format::LEGACY;
+            result.protocol = PaymentRequest::Protocol::ADDRESS;
+
+            switch(type)
+            {
+            case PUB_KEY_HASH:
+                result.network = MAINNET;
+                break;
+            case TEST_PUB_KEY_HASH:
+                result.network = TESTNET;
+                break;
+            case SCRIPT_HASH:
+            case PRIVATE_KEY:
+            case TEST_SCRIPT_HASH:
+            case TEST_PRIVATE_KEY:
+            default:
+            case UNKNOWN:
+                result.format = PaymentRequest::Format::INVALID;
+                result.protocol = PaymentRequest::Protocol::NONE;
+                break;
+            }
         }
-        else if(decodeCashAddress(pText, pHash, pType))
+        else if(decodeCashAddress(pText, result.address, type))
         {
-            pFormat = CASH;
-            return true;
+            result.format = PaymentRequest::Format::CASH;
+            result.protocol = PaymentRequest::Protocol::ADDRESS;
+
+            switch(type)
+            {
+                case PUB_KEY_HASH:
+                    result.network = MAINNET;
+                    break;
+                case TEST_PUB_KEY_HASH:
+                    result.network = TESTNET;
+                    break;
+                case SCRIPT_HASH:
+                case PRIVATE_KEY:
+                case TEST_SCRIPT_HASH:
+                case TEST_PRIVATE_KEY:
+                default:
+                case UNKNOWN:
+                    result.format = PaymentRequest::Format::INVALID;
+                    result.protocol = PaymentRequest::Protocol::NONE;
+                    break;
+            }
         }
-        else
-            return false;
+
+        return result;
     }
 
     void Signature::write(NextCash::OutputStream *pStream, bool pScriptFormat) const
@@ -750,7 +802,7 @@ namespace BitCoin
             return mHash;
     }
 
-    NextCash::String Key::address(AddressFormat pFormat) const
+    NextCash::String Key::address(PaymentRequest::Format pFormat) const
     {
         if(isPrivate())
         {
@@ -763,9 +815,9 @@ namespace BitCoin
         switch(mVersion)
         {
         case MAINNET_PUBLIC:
-            return encodeAddress(hash(), PUB_KEY_HASH, pFormat);
+            return encodePaymentCode(hash(), pFormat, MAINNET);
         case TESTNET_PUBLIC:
-            return encodeAddress(hash(), TEST_PUB_KEY_HASH, pFormat);
+            return encodePaymentCode(hash(), pFormat, TESTNET);
         default:
             return NextCash::String();
         }
@@ -2348,9 +2400,16 @@ namespace BitCoin
         return true;
     }
 
-    void KeyStore::writePrivate(NextCash::OutputStream *pStream, const uint8_t *pKey,
+    bool KeyStore::writePrivate(NextCash::OutputStream *pStream, const uint8_t *pKey,
       unsigned int pKeyLength) const
     {
+        if(mPrivateKeys.size() != mKeys.size())
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+              "Private/public key counts don't match");
+            return false;
+        }
+
         // Version
         pStream->writeUnsignedInt(1);
 
@@ -2370,6 +2429,7 @@ namespace BitCoin
             (*keyData)->write(&encryptor);
 
         encryptor.finalize();
+        return true;
     }
 
     bool KeyStore::readPrivate(NextCash::InputStream *pStream, const uint8_t *pKey,
@@ -2430,216 +2490,259 @@ namespace BitCoin
         mPrivateLoaded = mKeys.size() == 0;
     }
 
+    int KeyStore::add(Key *pKey, Key::DerivationPathMethod pMethod)
+    {
+        if(!mPrivateLoaded)
+            return 5; // Private keys need to be loaded to add a private key
+
+        for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
+          key != mPrivateKeys.end(); ++key)
+            if(*(*key)->key == *pKey)
+                return 3; // Already exists
+
+        PublicKeyData *newData = new PublicKeyData();
+        Key *chain;
+
+        // Prime the key for several derivation methods
+        switch(pMethod)
+        {
+            case Key::SIMPLE:
+                chain = pKey->chainKey(0, Key::SIMPLE);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+                else
+                {
+                    delete newData;
+                    return 4; // Invalid Derivation Method
+                }
+                chain = pKey->chainKey(1, Key::SIMPLE);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+                else
+                {
+                    delete newData;
+                    return 4; // Invalid Derivation Method
+                }
+                break;
+            case Key::BIP0032:
+                chain = pKey->chainKey(0, Key::BIP0032);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+                else
+                {
+                    delete newData;
+                    return 4; // Invalid Derivation Method
+                }
+                chain = pKey->chainKey(1, Key::BIP0032);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+                else
+                {
+                    delete newData;
+                    return 4; // Invalid Derivation Method
+                }
+                break;
+            case Key::BIP0044:
+                chain = pKey->chainKey(0, Key::BIP0044);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+                else
+                {
+                    delete newData;
+                    return 4; // Invalid Derivation Method
+                }
+                chain = pKey->chainKey(1, Key::BIP0044);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+                else
+                {
+                    delete newData;
+                    return 4; // Invalid Derivation Method
+                }
+                break;
+            case Key::UNKNOWN:
+                // Prime the key for several derivation methods
+                chain = pKey->chainKey(0, Key::SIMPLE);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+                chain = pKey->chainKey(1, Key::SIMPLE);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+
+                chain = pKey->chainKey(0, Key::BIP0032);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+                chain = pKey->chainKey(1, Key::BIP0032);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+
+                chain = pKey->chainKey(0, Key::BIP0044);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+                chain = pKey->chainKey(1, Key::BIP0044);
+                if(chain != NULL)
+                {
+                    if(chain->isPrivate())
+                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
+                    else
+                        newData->chainKeys.push_back(new Key(*chain));
+                }
+
+                if(newData->chainKeys.size() == 0)
+                {
+                    delete newData;
+                    return 4; // Invalid Derivation Method
+                }
+        }
+
+        PrivateKeyData *newPrivateData = new PrivateKeyData();
+        newPrivateData->key = pKey;
+        mPrivateKeys.push_back(newPrivateData);
+
+        for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
+          key != newData->chainKeys.end(); ++key)
+            (*key)->updateGap(20);
+
+        newData->hasPrivate = pKey->isPrivate();
+        newData->derivationPathMethod = pMethod;
+        mKeys.push_back(newData);
+        return 0; // Success
+    }
+
+    int KeyStore::addSeed(const char *pSeed, Key::DerivationPathMethod pMethod)
+    {
+        if(!mPrivateLoaded)
+            return 5; // Private keys need to be loaded to add a private key
+
+        Key *newKey = new Key();
+        if(!newKey->loadMnemonicSeed(BitCoin::MAINNET, pSeed))
+        {
+            delete newKey;
+            return 6;
+        }
+
+        int result = add(newKey, pMethod);
+
+        if(result != 0)
+            delete newKey;
+
+        mPrivateKeys.back()->seed = pSeed;
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+          "Added key from seed");
+        return result;
+    }
+
     int KeyStore::loadKey(const char *pText, Key::DerivationPathMethod pMethod)
     {
         if(!mPrivateLoaded)
             return 5; // Private keys need to be loaded to add a private key
 
-        Key *newKey = new Key(), *chain;
-        PublicKeyData *newData = new PublicKeyData();
-        NextCash::Hash addressHash;
-        AddressType addressType;
-        AddressFormat addressFormat;
+        Key *newKey = new Key();
+        PaymentRequest paymentRequest;
 
         if(newKey->decode(pText))
         {
-            for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
-              key != mPrivateKeys.end(); ++key)
-                if(*(*key)->key == *newKey)
-                {
-                    delete newKey;
-                    delete newData;
-                    return 3; // Already exists
-                }
-
-            // Prime the key for several derivation methods
-            switch(pMethod)
+            int result = add(newKey, pMethod);
+            if(result != 0)
             {
-                case Key::SIMPLE:
-                    chain = newKey->chainKey(0, Key::SIMPLE);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-                    else
-                    {
-                        delete newKey;
-                        return 4; // Invalid Derivation Method
-                    }
-                    chain = newKey->chainKey(1, Key::SIMPLE);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-                    else
-                    {
-                        delete newKey;
-                        return 4; // Invalid Derivation Method
-                    }
-                    break;
-                case Key::BIP0032:
-                    chain = newKey->chainKey(0, Key::BIP0032);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-                    else
-                    {
-                        delete newKey;
-                        return 4; // Invalid Derivation Method
-                    }
-                    chain = newKey->chainKey(1, Key::BIP0032);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-                    else
-                    {
-                        delete newKey;
-                        return 4; // Invalid Derivation Method
-                    }
-                    break;
-                case Key::BIP0044:
-                    chain = newKey->chainKey(0, Key::BIP0044);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-                    else
-                    {
-                        delete newKey;
-                        return 4; // Invalid Derivation Method
-                    }
-                    chain = newKey->chainKey(1, Key::BIP0044);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-                    else
-                    {
-                        delete newKey;
-                        return 4; // Invalid Derivation Method
-                    }
-                    break;
-                case Key::UNKNOWN:
-                    // Prime the key for several derivation methods
-                    chain = newKey->chainKey(0, Key::SIMPLE);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-                    chain = newKey->chainKey(1, Key::SIMPLE);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-
-                    chain = newKey->chainKey(0, Key::BIP0032);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-                    chain = newKey->chainKey(1, Key::BIP0032);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-
-                    chain = newKey->chainKey(0, Key::BIP0044);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
-                    chain = newKey->chainKey(1, Key::BIP0044);
-                    if(chain != NULL)
-                    {
-                        if(chain->isPrivate())
-                            newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                        else
-                            newData->chainKeys.push_back(new Key(*chain));
-                    }
+                delete newKey;
+                return result;
             }
 
-            PrivateKeyData *newPrivateData = new PrivateKeyData();
-            newPrivateData->key = newKey;
-            mPrivateKeys.push_back(newPrivateData);
-
-            for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
-              key != newData->chainKeys.end(); ++key)
-                (*key)->updateGap(20);
-
-            newData->hasPrivate = newKey->isPrivate();
-            newData->derivationPathMethod = pMethod;
-            mKeys.push_back(newData);
-
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
-              "Added BIP-0032 Key");
-            return 0; // Success
-        }
-        else if(decodeAddress(pText, addressHash, addressType, addressFormat) &&
-          addressType == PUB_KEY_HASH && addressHash.size() == ADDRESS_HASH_SIZE)
-        {
-            for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
-              keyData != mKeys.end(); ++keyData)
-                for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
-                  key != (*keyData)->chainKeys.end(); ++key)
-                    if((*key)->hash() == addressHash)
-                    {
-                        delete newKey;
-                        delete newData;
-                        return 3; // Already exists
-                    }
-
-            newKey->loadHash(addressHash);
-            newData->hasPrivate = false;
-            newData->chainKeys.push_back(newKey);
-            mPrivateKeys.push_back(new PrivateKeyData());
-            mKeys.push_back(newData);
-            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "Added Address");
+              "Loaded BIP-0032 key");
             return 0; // Success
         }
         else
         {
-            delete newKey;
-            delete newData;
-            return 2; // Invalid Format
+            paymentRequest = decodePaymentCode(pText);
+
+            if(paymentRequest.network == MAINNET && paymentRequest.address.size() == ADDRESS_HASH_SIZE)
+            {
+                for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
+                    keyData != mKeys.end(); ++keyData)
+                    for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
+                        key != (*keyData)->chainKeys.end(); ++key)
+                        if((*key)->hash() == paymentRequest.address)
+                        {
+                            delete newKey;
+                            return 3; // Already exists
+                        }
+
+                newKey->loadHash(paymentRequest.address);
+
+                PublicKeyData *newData = new PublicKeyData();
+                newData->hasPrivate = false;
+                newData->chainKeys.push_back(newKey);
+                mPrivateKeys.push_back(new PrivateKeyData());
+                mKeys.push_back(newData);
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                  "Added Address");
+                return 0; // Success
+            }
+            else
+            {
+                delete newKey;
+                return 2; // Invalid Format
+            }
         }
 
         delete newKey;
-        delete newData;
         return 1; // Unknown Failure
     }
 
@@ -2650,12 +2753,10 @@ namespace BitCoin
 
         NextCash::String line;
         unsigned char nextChar;
-        NextCash::Hash addressHash;
-        AddressType addressType;
-        AddressFormat addressFormat;
+        PaymentRequest paymentRequest;
         bool found;
         Key *newKey = new Key(), *chain;
-        PublicKeyData *newData = new PublicKeyData();
+        PublicKeyData *newData;
         Key::DerivationPathMethod method = Key::UNKNOWN;
 
         while(pStream->remaining())
@@ -2674,124 +2775,64 @@ namespace BitCoin
             {
                 if(newKey->decode(line))
                 {
-                    found = false;
-                    for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
-                      key != mPrivateKeys.end() && !found; ++key)
-                        if(*(*key)->key == *newKey)
-                        {
-                            found = true;
-                            break;
-                        }
+                    int result = add(newKey, method);
+                    if(result != 0)
+                        delete newKey;
 
-                    if(!found)
-                    {
-                        // Prime the key for several derivation methods
-                        chain = newKey->chainKey(0, Key::SIMPLE);
-                        if(chain != NULL)
-                        {
-                            if(chain->isPrivate())
-                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                            else
-                                newData->chainKeys.push_back(new Key(*chain));
-                        }
-                        chain = newKey->chainKey(1, Key::SIMPLE);
-                        if(chain != NULL)
-                        {
-                            if(chain->isPrivate())
-                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                            else
-                                newData->chainKeys.push_back(new Key(*chain));
-                        }
-
-                        chain = newKey->chainKey(0, Key::BIP0032);
-                        if(chain != NULL)
-                        {
-                            if(chain->isPrivate())
-                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                            else
-                                newData->chainKeys.push_back(new Key(*chain));
-                        }
-                        chain = newKey->chainKey(1, Key::BIP0032);
-                        if(chain != NULL)
-                        {
-                            if(chain->isPrivate())
-                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                            else
-                                newData->chainKeys.push_back(new Key(*chain));
-                        }
-
-                        chain = newKey->chainKey(0, Key::BIP0044);
-                        if(chain != NULL)
-                        {
-                            if(chain->isPrivate())
-                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                            else
-                                newData->chainKeys.push_back(new Key(*chain));
-                        }
-                        chain = newKey->chainKey(1, Key::BIP0044);
-                        if(chain != NULL)
-                        {
-                            if(chain->isPrivate())
-                                newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                            else
-                                newData->chainKeys.push_back(new Key(*chain));
-                        }
-
-                        for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
-                          key != newData->chainKeys.end(); ++key)
-                            (*key)->updateGap(20);
-
-                        if(newKey->isPrivate())
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                              "Added private key");
-                        else
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                              "Added public key");
-
-                        PrivateKeyData *newPrivateData = new PrivateKeyData();
-                        newPrivateData->key = newKey;
-                        mPrivateKeys.push_back(newPrivateData);
-
-                        newData->hasPrivate = newKey->isPrivate();
-                        newData->derivationPathMethod = method;
-                        mKeys.push_back(newData);
-
-                        newKey = new Key();
-                        newData = new PublicKeyData();
-                    }
+                    newKey = new Key();
                 }
-                else if(decodeAddress(line, addressHash, addressType, addressFormat) &&
-                  addressType == PUB_KEY_HASH && addressHash.size() == ADDRESS_HASH_SIZE)
+                else
                 {
-                    // Check if it is already in this block
-                    found = false;
-                    for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
-                      keyData != mKeys.end() && !found; ++keyData)
-                        for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
-                          key != (*keyData)->chainKeys.end(); ++key)
-                            if((*key)->hash() == addressHash)
-                            {
-                                found = true;
-                                break;
-                            }
+                    paymentRequest = decodePaymentCode(line);
 
-                    if(!found)
+                    if(paymentRequest.network == MAINNET && paymentRequest.address.size() == ADDRESS_HASH_SIZE)
                     {
-                        newKey->loadHash(addressHash);
-                        newData->hasPrivate = false;
-                        newData->chainKeys.push_back(newKey);
-                        mPrivateKeys.push_back(new PrivateKeyData());
-                        mKeys.push_back(newData);
+                        // Check if it is already in this block
+                        found = false;
+                        for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
+                            keyData != mKeys.end() && !found; ++keyData)
+                            for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
+                                key != (*keyData)->chainKeys.end(); ++key)
+                                if((*key)->hash() == paymentRequest.address)
+                                {
+                                    found = true;
+                                    break;
+                                }
 
-                        newKey = new Key();
-                        newData = new PublicKeyData();
+                        if(!found)
+                        {
+                            newKey->loadHash(paymentRequest.address);
+                            newData = new PublicKeyData();
+                            newData->hasPrivate = false;
+                            newData->chainKeys.push_back(newKey);
+                            mPrivateKeys.push_back(new PrivateKeyData());
+                            mKeys.push_back(newData);
+
+                            newKey = new Key();
+                        }
                     }
                 }
             }
         }
 
         delete newKey;
-        delete newData;
+        return true;
+    }
+
+    bool KeyStore::remove(unsigned int pOffset)
+    {
+        if(!mPrivateLoaded || pOffset >= mKeys.size())
+            return false; // Private keys need to be loaded to remove a key
+
+        std::vector<PublicKeyData *>::iterator publicKey = mKeys.begin() + pOffset;
+        std::vector<PrivateKeyData *>::iterator privateKey = mPrivateKeys.begin() + pOffset;
+
+        delete *publicKey;
+        delete *privateKey;
+
+        mKeys.erase(publicKey);
+        mPrivateKeys.erase(privateKey);
+
         return true;
     }
 
@@ -2801,7 +2842,6 @@ namespace BitCoin
 
         bool success = true;
         AddressType addressType;
-        AddressFormat addressFormat;
         NextCash::Hash hash;
         NextCash::Hash addressHash;
 
@@ -3259,6 +3299,7 @@ namespace BitCoin
         NextCash::Buffer resultProcessedSeed, correctProcessedSeed;
         NextCash::String resultMnemonic, correctMnemonic;
         unsigned int trezorCount = 24;
+        PaymentRequest paymentRequest;
 
         const char *trezorSeedHex[] =
         {
@@ -3661,7 +3702,8 @@ namespace BitCoin
 
                 if(addressKey != NULL)
                 {
-                    encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH, LEGACY);
+                    encodedAddress = encodePaymentCode(addressKey->hash(),
+                      PaymentRequest::Format::LEGACY, MAINNET);
                     if(encodedAddress != receivingAddresses[i])
                     {
                         walletSuccess = false;
@@ -3673,7 +3715,8 @@ namespace BitCoin
                           "Result  : %s", encodedAddress.text());
                     }
 
-                    if(!decodeAddress(receivingAddresses[i], hash, addressType, addressFormat))
+                    paymentRequest = decodePaymentCode(receivingAddresses[i]);
+                    if(paymentRequest.protocol == PaymentRequest::Protocol::NONE)
                     {
                         walletSuccess = false;
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3722,7 +3765,8 @@ namespace BitCoin
 
                 if(addressKey != NULL)
                 {
-                    encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH, LEGACY);
+                    encodedAddress = encodePaymentCode(addressKey->hash(),
+                      PaymentRequest::Format::LEGACY, MAINNET);
                     if(encodedAddress != changeAddresses[i])
                     {
                         walletSuccess = false;
@@ -4084,7 +4128,8 @@ namespace BitCoin
 
             if(addressKey != NULL)
             {
-                encodedAddress = encodeAddress(addressKey->hash(), PUB_KEY_HASH, LEGACY);
+                encodedAddress = encodePaymentCode(addressKey->hash(),
+                  PaymentRequest::Format::LEGACY);
                 if(encodedAddress != receivingAddresses[i])
                 {
                     readWriteSuccess = false;
@@ -4096,7 +4141,8 @@ namespace BitCoin
                       "Result  : %s", encodedAddress.text());
                 }
 
-                if(!decodeAddress(receivingAddresses[i], hash, addressType, addressFormat))
+                paymentRequest = decodePaymentCode(receivingAddresses[i]);
+                if(paymentRequest.protocol == PaymentRequest::Protocol::NONE)
                 {
                     readWriteSuccess = false;
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -4144,7 +4190,6 @@ namespace BitCoin
         NextCash::String cashAddressResult;
         bool cashAddressSuccess = true;
         NextCash::Hash correctAddressHash;
-        AddressType correctAddressType;
         NextCash::String legacyAddresses[] =
         {
             "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu",
@@ -4176,14 +4221,15 @@ namespace BitCoin
 
         for(unsigned int i=0;i<cashAddressCount;++i)
         {
-            if(!decodeAddress(legacyAddresses[i], correctAddressHash, correctAddressType, addressFormat))
+            paymentRequest = decodePaymentCode(legacyAddresses[i]);
+            if(paymentRequest.format == PaymentRequest::Format::INVALID)
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Failed Cash Address Encode %d : Decode of LEGACY failed", i);
                 cashAddressSuccess = false;
                 continue;
             }
-            else if(addressFormat != LEGACY)
+            else if(paymentRequest.format != PaymentRequest::Format::LEGACY)
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Failed Cash Address Encode %d : Decode format is not LEGACY", i);
@@ -4191,7 +4237,7 @@ namespace BitCoin
                 continue;
             }
 
-            cashAddressResult = encodeAddress(correctAddressHash, correctAddressType);
+            cashAddressResult = encodePaymentCode(correctAddressHash, paymentRequest.format);
 
             if(cashAddressResult != correctCashAddresses[i])
             {
@@ -4203,49 +4249,43 @@ namespace BitCoin
                   "Correct : %s", correctCashAddresses[i].text());
                 cashAddressSuccess = false;
             }
-            else if(!decodeAddress(correctCashAddresses[i], addressHash, addressType, addressFormat))
+            else
             {
-                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Failed Cash Address Decode %d : Decode failed", i);
-                cashAddressSuccess = false;
-            }
-            else if(addressType != correctAddressType)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Failed Cash Address Decode %d : Decode type is not correct", i);
-                cashAddressSuccess = false;
-            }
-            else if(addressFormat != CASH)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Failed Cash Address Decode %d : Decode format is not CASH", i);
-                cashAddressSuccess = false;
-            }
-            else if(addressHash != correctAddressHash)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Failed Cash Address Decode %d : Incorrect hash", i);
-                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Result  : %s", addressHash.hex().text());
-                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Correct : %s", correctAddressHash.hex().text());
-                cashAddressSuccess = false;
+                paymentRequest = decodePaymentCode(correctCashAddresses[i]);
+
+                if(paymentRequest.format == PaymentRequest::Format::INVALID)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed Cash Address Decode %d : Decode failed", i);
+                    cashAddressSuccess = false;
+                }
+                else if(paymentRequest.format != PaymentRequest::Format::CASH)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed Cash Address Decode %d : Decode format is not CASH", i);
+                    cashAddressSuccess = false;
+                }
+                else if(addressHash != correctAddressHash)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed Cash Address Decode %d : Incorrect hash", i);
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Result  : %s", addressHash.hex().text());
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Correct : %s", correctAddressHash.hex().text());
+                    cashAddressSuccess = false;
+                }
             }
 
             // Check uppercase
-            if(!decodeAddress(upperCashAddresses[i], addressHash, addressType, addressFormat))
+            paymentRequest = decodePaymentCode(upperCashAddresses[i]);
+            if(paymentRequest.format == PaymentRequest::Format::INVALID)
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Failed Cash Address Decode %d : Decode upper failed", i);
                 cashAddressSuccess = false;
             }
-            else if(addressType != correctAddressType)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Failed Cash Address Decode %d : Decode upper type is not correct", i);
-                cashAddressSuccess = false;
-            }
-            else if(addressFormat != CASH)
+            else if(paymentRequest.format != PaymentRequest::Format::CASH)
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Failed Cash Address Decode %d : Decode upper format is not CASH", i);

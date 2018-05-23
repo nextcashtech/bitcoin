@@ -379,11 +379,11 @@ namespace BitCoin
             // Return address data message (UTXOs, balances, spent/unspent)
             unsigned int addressLength = mReceiveBuffer.readByte();
             NextCash::String address = mReceiveBuffer.readString(addressLength);
-            NextCash::Hash addressHash;
-            AddressType addressType;
-            AddressFormat addressFormat;
+            PaymentRequest request;
 
-            if(!decodeAddress(address, addressHash, addressType, addressFormat))
+            request = decodePaymentCode(address);
+
+            if(request.format == PaymentRequest::Format::INVALID)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                   "Invalid address (%d bytes) : %s", addressLength, address.text());
@@ -391,7 +391,7 @@ namespace BitCoin
             }
             else
             {
-                if(addressType != PUB_KEY_HASH)
+                if(request.network != MAINNET)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                       "Wrong address type (%d bytes) : %s", addressLength, address.text());
@@ -400,7 +400,7 @@ namespace BitCoin
                 else
                 {
                     std::vector<FullOutputData> outputs;
-                    if(!mChain->addresses().getOutputs(addressHash, outputs))
+                    if(!mChain->addresses().getOutputs(request.address, outputs))
                     {
                         NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                           "Failed to get outputs for address : %s", address.text());

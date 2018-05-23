@@ -24,12 +24,6 @@
 
 namespace BitCoin
 {
-    enum AddressFormat
-    {
-        LEGACY,
-        CASH
-    };
-
     enum AddressType
     {
         PUB_KEY_HASH = 0x00, // Public key hash
@@ -43,12 +37,61 @@ namespace BitCoin
         UNKNOWN
     };
 
-    // Return Base58 address from hash and type.
-    NextCash::String encodeAddress(const NextCash::Hash &pHash, AddressType pType,
-      AddressFormat pFormat = CASH);
+    // Decode payment code.
+    class PaymentRequest
+    {
+    public:
 
-    // Decode address to hash, type, and format from any known format.
-    bool decodeAddress(const char *pText, NextCash::Hash &pHash, AddressType &pType, AddressFormat &pFormat);
+        enum Format { INVALID, LEGACY, CASH };
+        enum Protocol { NONE, ADDRESS, REQUEST_AMOUNT };
+
+        PaymentRequest()
+        {
+            format = Format::INVALID;
+            protocol = Protocol::NONE;
+            network = MAINNET;
+            amount = 0;
+            secure = false;
+        }
+        PaymentRequest(const PaymentRequest &pCopy)
+        {
+            format = pCopy.format;
+            protocol = pCopy.protocol;
+            network = pCopy.network;
+            address = pCopy.address;
+            amount = pCopy.amount;
+            secure = pCopy.secure;
+            description = pCopy.description;
+        }
+
+        PaymentRequest &operator = (const PaymentRequest &pRight)
+        {
+            format = pRight.format;
+            protocol = pRight.protocol;
+            network = pRight.network;
+            address = pRight.address;
+            amount = pRight.amount;
+            secure = pRight.secure;
+            description = pRight.description;
+            return *this;
+        }
+
+        Format format;
+        Protocol protocol;
+        Network network;
+        NextCash::Hash address;
+        uint64_t amount;
+        bool secure;
+        NextCash::String description;
+
+    };
+
+    // Return Base58 address from hash and type.
+    NextCash::String encodePaymentCode(const NextCash::Hash &pHash,
+      PaymentRequest::Format pFormat = PaymentRequest::Format::CASH,
+      BitCoin::Network pNetwork = MAINNET);
+
+    PaymentRequest decodePaymentCode(const char *pText);
 
     // Parse hash and type from Base58 encoded data.
     bool decodeLegacyAddress(const char *pText, NextCash::Hash &pHash, AddressType &pType);
@@ -145,7 +188,7 @@ namespace BitCoin
         const NextCash::Hash &hash() const; // SHA256 then RIPEMD160 of compressed key data
 
         // Encoded hash of compressed key data as specified text format.
-        NextCash::String address(AddressFormat pFormat = CASH) const;
+        NextCash::String address(PaymentRequest::Format pFormat = PaymentRequest::Format::CASH) const;
 
         bool operator == (const Key &pRight)
         {
@@ -286,10 +329,12 @@ namespace BitCoin
         bool loadBinarySeed(Network pNetwork, NextCash::InputStream *pStream);
 
         // Generate a master key from a mnemonic sentence and passphrase BIP-0039
-        bool loadMnemonicSeed(Network pNetwork, const char *pText, const char *pPassPhrase = "", const char *pSalt = "mnemonic");
+        bool loadMnemonicSeed(Network pNetwork, const char *pText, const char *pPassPhrase = "",
+                              const char *pSalt = "mnemonic");
 
         // Generate a random mnemonic sentence
-        static NextCash::String generateMnemonicSeed(Mnemonic::Language, unsigned int pBytesEntropy = 32);
+        static NextCash::String generateMnemonicSeed(Mnemonic::Language,
+                                                     unsigned int pBytesEntropy);
 
         // Serializes key data and all children
         void writeTree(NextCash::OutputStream *pStream);
@@ -350,6 +395,8 @@ namespace BitCoin
         bool isPrivateLoaded() { return mPrivateLoaded; }
         NextCash::String seed(unsigned int pOffset);
 
+        int addSeed(const char *pSeed, Key::DerivationPathMethod pMethod);
+
         // Load a key from text
         // Valid values are:
         //   Base58 encoded address key hashes.
@@ -370,6 +417,8 @@ namespace BitCoin
         //   Base58 encoded BIP-0032 key data.
         bool loadKeys(NextCash::InputStream *pStream);
 
+        bool remove(unsigned int pOffset);
+
         // Find an address level key with a matching hash
         Key *findAddress(const NextCash::Hash &pHash);
 
@@ -382,14 +431,14 @@ namespace BitCoin
         void write(NextCash::OutputStream *pStream) const;
         bool read(NextCash::InputStream *pStream);
 
-        void writePrivate(NextCash::OutputStream *pStream, const uint8_t *pKey, unsigned int pKeyLength) const;
+        bool writePrivate(NextCash::OutputStream *pStream, const uint8_t *pKey, unsigned int pKeyLength) const;
         bool readPrivate(NextCash::InputStream *pStream, const uint8_t *pKey, unsigned int pKeyLength);
 
         void unloadPrivate();
 
     private:
 
-        void add(Key *pKey);
+        int add(Key *pKey, Key::DerivationPathMethod pMethod);
 
         std::vector<PublicKeyData *> mKeys;
         bool mPrivateLoaded;

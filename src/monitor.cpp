@@ -496,9 +496,7 @@ namespace BitCoin
         unsigned int addedCount = 0;
         NextCash::String line;
         unsigned char nextChar;
-        NextCash::Hash addressHash;
-        AddressType addressType;
-        AddressFormat addressFormat;
+        PaymentRequest request;
 
         while(pStream->remaining())
         {
@@ -512,16 +510,20 @@ namespace BitCoin
                 line += nextChar;
             }
 
-            if(line.length() && decodeAddress(line, addressHash, addressType, addressFormat) &&
-              addressType == PUB_KEY_HASH && addressHash.size() == ADDRESS_HASH_SIZE)
+            if(line.length())
             {
-                // Check if it is already in this block
-                if(!mAddressHashes.contains(addressHash))
+                request = decodePaymentCode(line);
+                if(request.format != PaymentRequest::Format::INVALID &&
+                  request.network == MAINNET && request.address.size() == ADDRESS_HASH_SIZE)
                 {
-                    mAddressHashes.push_back(addressHash);
-                    ++addedCount;
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                      "Adding address hash : %s", line.text());
+                    // Check if it is already in this block
+                    if(!mAddressHashes.contains(request.address))
+                    {
+                        mAddressHashes.push_back(request.address);
+                        ++addedCount;
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                          "Adding address hash : %s", line.text());
+                    }
                 }
             }
         }
@@ -539,6 +541,39 @@ namespace BitCoin
         mKeyStore = pKeyStore;
         if(refreshKeyStore())
             startNewPass();
+        mMutex.unlock();
+    }
+
+    void Monitor::resetKeyStore()
+    {
+        mMutex.lock();
+
+        mAddressHashes.clear();
+        refreshKeyStore();
+
+        // Update all transactions and remove any that are no longer relevant
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
+          mTransactions.begin(); trans != mTransactions.end();)
+        {
+            refreshTransaction(*trans, false);
+            if((*trans)->payOutputs.size() == 0 && (*trans)->spendInputs.size() == 0)
+                trans = mTransactions.erase(trans);
+            else
+                ++trans;
+        }
+
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
+          mPendingTransactions.begin(); trans != mPendingTransactions.end();)
+        {
+            refreshTransaction(*trans, false);
+            if((*trans)->payOutputs.size() == 0 && (*trans)->spendInputs.size() == 0)
+                trans = mPendingTransactions.erase(trans);
+            else
+                ++trans;
+        }
+
+        refreshBloomFilter(true);
+
         mMutex.unlock();
     }
 

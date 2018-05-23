@@ -53,6 +53,11 @@ namespace BitCoin
         //   already generated under the "chain" key according to a known hierarchal structure.
         void setKeyStore(KeyStore *pKeyStore);
 
+        // Removes all addresses and adds them back from key store, then updates all transactions
+        //   and removes any that are no longer relevant.
+        // Call this after removing a key from the keystore.
+        void resetKeyStore();
+
         unsigned int setupBloomFilter(BloomFilter &pFilter);
 
         // Get hashes for blocks that need merkle blocks
