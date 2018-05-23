@@ -49,7 +49,6 @@ namespace BitCoin
         mNodeCount = 0;
         mIncomingNodes = 0;
         mOutgoingNodes = 0;
-        mLastPeerCount = 0;
         mLastOutputsPurgeTime = getTime();
         mLastAddressPurgeTime = getTime();
         mLastMemPoolCheckPending = getTime();
@@ -567,6 +566,7 @@ namespace BitCoin
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Key store public file not found to load");
 
+#ifndef ANDROID
         filePathName = Info::instance().path();
         filePathName.pathAppend("key_text");
         NextCash::FileInputStream textFile(filePathName);
@@ -600,13 +600,14 @@ namespace BitCoin
             return false;
         }
 
-        publicFile.close();
         privateFile.close();
+        publicFile.close();
 
         if(previousSize != mKeyStore.size())
             saveKeyStore();
 
         mKeyStore.unloadPrivate();
+#endif
         return true;
     }
 
@@ -623,6 +624,7 @@ namespace BitCoin
         }
         mKeyStore.write(&publicFile);
 
+#ifndef ANDROID
         if(mKeyStore.isPrivateLoaded())
         {
             filePathName = Info::instance().path();
@@ -630,6 +632,7 @@ namespace BitCoin
             NextCash::FileOutputStream privateFile(filePathName, true);
             mKeyStore.writePrivate(&privateFile, pPassword, pPasswordLength);
         }
+#endif
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Key store saved with %d keys", mKeyStore.size());
@@ -969,17 +972,6 @@ namespace BitCoin
         // else
             // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
               // "Chain latest header : %s", mChain.lastBlockHash().hex().text());
-    }
-
-    void Daemon::sendPeerRequest()
-    {
-        mNodeLock.readLock();
-        std::vector<Node *> nodes = mNodes; // Copy list of nodes
-        randomizeOutgoing(nodes);
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if((*node)->isReady() && (*node)->requestPeers())
-                break;
-        mNodeLock.readUnlock();
     }
 
     void Daemon::improvePing()
@@ -1326,7 +1318,6 @@ namespace BitCoin
         int32_t lastStatReportTime = startTime;
         int32_t lastRequestCheckTime = startTime;
         int32_t lastInfoSaveTime = startTime;
-        int32_t lastPeerRequestTime = 0;
         int32_t lastImprovement = startTime;
         int32_t lastTransactionRequest = startTime;
         int32_t time;
@@ -1436,17 +1427,6 @@ namespace BitCoin
             time = getTime();
             if(time - mStatistics.startTime > 3600)
                 saveStatistics();
-
-            if(mStopping)
-                break;
-
-            time = getTime();
-            if(mLastPeerCount > 0 && mLastPeerCount < 10000 &&
-              time - lastPeerRequestTime > 60)
-            {
-                lastPeerRequestTime = time;
-                sendPeerRequest();
-            }
 
             if(mStopping)
                 break;
@@ -1811,7 +1791,6 @@ namespace BitCoin
         mInfo.getRandomizedPeers(peers, -5, servicesMask);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d usable peers", peers.size());
-        mLastPeerCount = peers.size();
         for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end(); ++peer)
         for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
           !mStopRequested && usableCount < mOutgoingNodeMax - mGoodNodeMax; ++peer)

@@ -213,6 +213,8 @@ namespace BitCoin
                 sendMessage(&sendHeadersMessage);
             }
 
+            if(mIsGood)
+                requestPeers();
             requestHeaders();
 
             if(mVersionData != NULL && !mIsIncoming && !mIsSeed)
@@ -242,7 +244,7 @@ namespace BitCoin
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
               "Dropping. Not ready within %d seconds of connection.", mPingCutoff);
-            Info::instance().addPeerFail(mAddress, 2);
+            Info::instance().addPeerFail(mAddress, 5);
             close();
             return;
         }
@@ -1009,6 +1011,7 @@ namespace BitCoin
                   mVersionData->startBlockHeight < mChain->height()))
                 {
                     NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Low block height");
+                    info.addPeerFail(mAddress);
                     close();
                 }
                 else if(info.spvMode && !mIsSeed && !(mVersionData->transmittingServices & Message::VersionData::BLOOM_NODE_BIT))

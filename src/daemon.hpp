@@ -163,9 +163,7 @@ namespace BitCoin
         void checkSync();
         void sendRequests();
         void sendHeaderRequest();
-        void sendPeerRequest();
         void sendTransactionRequests();
-        unsigned int mLastPeerCount;
         void improvePing();
         void improveSpeed();
 
