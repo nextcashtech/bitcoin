@@ -2264,6 +2264,7 @@ namespace BitCoin
 
     KeyStore::KeyStore()
     {
+        mLoaded = false;
         mPrivateLoaded = true;
     }
 

@@ -514,8 +514,11 @@ namespace BitCoin
                   mMonitor.transactionCount());
         }
         else
+        {
+            mMonitor.markLoaded();
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Monitor file not found to load");
+        }
 
         // filePathName = Info::instance().path();
         // filePathName.pathAppend("address_text");
@@ -529,9 +532,9 @@ namespace BitCoin
 
     bool Daemon::saveMonitor()
     {
-        NextCash::String filePathName = Info::instance().path();
-        filePathName.pathAppend("monitor");
-        NextCash::FileOutputStream file(filePathName, true);
+        NextCash::String tempFilePathName = Info::instance().path();
+        tempFilePathName.pathAppend("monitor.temp");
+        NextCash::FileOutputStream file(tempFilePathName, true);
         if(!file.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -539,6 +542,12 @@ namespace BitCoin
             return false;
         }
         mMonitor.write(&file);
+        file.close();
+
+        NextCash::String realFilePathName = Info::instance().path();
+        realFilePathName.pathAppend("monitor");
+        NextCash::renameFile(tempFilePathName, realFilePathName);
+
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Monitor saved with %d addresses and %d transactions", mMonitor.size(),
           mMonitor.transactionCount());
@@ -563,8 +572,11 @@ namespace BitCoin
                   "Key store loaded with %d keys", mKeyStore.size());
         }
         else
+        {
+            mKeyStore.markLoaded();
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Key store public file not found to load");
+        }
 
 #ifndef ANDROID
         filePathName = Info::instance().path();
@@ -613,9 +625,9 @@ namespace BitCoin
 
     bool Daemon::saveKeyStore(const uint8_t *pPassword, unsigned int pPasswordLength)
     {
-        NextCash::String filePathName = Info::instance().path();
-        filePathName.pathAppend("keystore");
-        NextCash::FileOutputStream publicFile(filePathName, true);
+        NextCash::String tempFilePathName = Info::instance().path();
+        tempFilePathName.pathAppend("keystore.temp");
+        NextCash::FileOutputStream publicFile(tempFilePathName, true);
         if(!publicFile.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -623,6 +635,11 @@ namespace BitCoin
             return false;
         }
         mKeyStore.write(&publicFile);
+        publicFile.close();
+
+        NextCash::String realFilePathName = Info::instance().path();
+        realFilePathName.pathAppend("keystore");
+        NextCash::renameFile(tempFilePathName, realFilePathName);
 
 #ifndef ANDROID
         if(mKeyStore.isPrivateLoaded())

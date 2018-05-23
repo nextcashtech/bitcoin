@@ -381,6 +381,7 @@ namespace BitCoin
         KeyStore();
         ~KeyStore();
 
+        void markLoaded() { mLoaded = true; }
         void clear();
 
         unsigned int size() { return (unsigned int)mKeys.size(); }
@@ -440,6 +441,7 @@ namespace BitCoin
 
         int add(Key *pKey, Key::DerivationPathMethod pMethod);
 
+        bool mLoaded;
         std::vector<PublicKeyData *> mKeys;
         bool mPrivateLoaded;
         std::vector<PrivateKeyData *> mPrivateKeys;

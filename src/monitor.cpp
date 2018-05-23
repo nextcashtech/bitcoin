@@ -31,9 +31,7 @@ namespace BitCoin
         mChangeID = 0;
         mFilter.setup(0);
         mPasses.push_back(PassData());
-
-        NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_MONITOR_LOG_NAME,
-          "Creating monitor object");
+        mLoaded = false;
     }
 
     Monitor::~Monitor()
@@ -99,6 +97,12 @@ namespace BitCoin
     void Monitor::write(NextCash::OutputStream *pStream)
     {
         mMutex.lock();
+
+        if(!mLoaded)
+        {
+            mMutex.unlock();
+            return;
+        }
 
         // Version
         pStream->writeUnsignedInt(1);
@@ -188,6 +192,7 @@ namespace BitCoin
 
         refreshBloomFilter(true);
 
+        mLoaded = true;
         mMutex.unlock();
         return true;
     }
@@ -351,7 +356,7 @@ namespace BitCoin
             return false;
         }
 
-        if(pBlockOnly) // Check the output addresses against block addresses
+        if(pBlockOnly) // Check the output addresses against related addresses
             for(NextCash::HashList::iterator hash=pAddresses.begin();hash!=pAddresses.end();)
             {
                 if(mAddressHashes.contains(*hash))
@@ -382,7 +387,7 @@ namespace BitCoin
             // Find output being spent
             spentOutput = getOutput(input->outpoint.transactionID, input->outpoint.index,
               pAllowPending);
-            // Check that output actually pays block address
+            // Check that output actually pays related address
             if(spentOutput != NULL && getPayAddresses(spentOutput, payAddresses, true))
             {
                 pTransaction->spendInputs.push_back(index);
@@ -872,6 +877,110 @@ namespace BitCoin
         return true;
     }
 
+    bool Monitor::outputIsRelated(Output *pOutput, std::vector<Key *> *pRelatedToChainKeys)
+    {
+        if(pOutput == NULL)
+            return false;
+
+        // Parse the output for addresses
+        NextCash::HashList payAddresses;
+        ScriptInterpreter::ScriptType scriptType =
+          ScriptInterpreter::parseOutputScript(pOutput->script, payAddresses);
+        if(scriptType != ScriptInterpreter::P2PKH)
+            return false;
+
+        for(NextCash::HashList::iterator hash=payAddresses.begin();hash!=payAddresses.end();++hash)
+            for(std::vector<Key *>::iterator chainKey = pRelatedToChainKeys->begin();
+              chainKey != pRelatedToChainKeys->end(); ++chainKey)
+                if((*chainKey)->findAddress(*hash) != NULL)
+                    return true;
+
+        return false;
+    }
+
+    bool Monitor::updateRelatedTransactionData(RelatedTransactionData &pData,
+      std::vector<Key *> *pRelatedToChainKeys)
+    {
+        if(pData.transaction == NULL)
+            return false;
+
+        Output *spentOutput;
+        NextCash::HashList payAddresses;
+        ScriptInterpreter::ScriptType scriptType;
+        unsigned int offset = 0;
+        pData.relatedInputAmounts.resize(pData.transaction->inputs.size());
+        pData.inputAddresses.resize(pData.transaction->inputs.size());
+        for(std::vector<Input>::iterator input = pData.transaction->inputs.begin();
+          input != pData.transaction->inputs.end(); ++input, ++offset)
+        {
+            pData.relatedInputAmounts[offset] = 0;
+            pData.inputAddresses[offset].clear();
+
+            // Find output being spent
+            spentOutput = getOutput(input->outpoint.transactionID, input->outpoint.index, true);
+
+            // Check that output actually pays related address
+            if(spentOutput != NULL && outputIsRelated(spentOutput, pRelatedToChainKeys))
+            {
+                pData.relatedInputAmounts[offset] = spentOutput->amount;
+                scriptType = ScriptInterpreter::parseOutputScript(spentOutput->script,
+                  payAddresses);
+                if(scriptType == ScriptInterpreter::P2PKH)
+                    pData.inputAddresses[offset] = payAddresses.front();
+            }
+        }
+
+        offset = 0;
+        pData.relatedOutputs.resize(pData.transaction->outputs.size());
+        pData.outputAddresses.resize(pData.transaction->outputs.size());
+        for(std::vector<Output>::iterator output = pData.transaction->outputs.begin();
+          output != pData.transaction->outputs.end(); ++output, ++offset)
+        {
+            pData.relatedOutputs[offset] = outputIsRelated(&*output, pRelatedToChainKeys);
+            scriptType = ScriptInterpreter::parseOutputScript(output->script, payAddresses);
+            if(scriptType == ScriptInterpreter::P2PKH)
+                pData.outputAddresses[offset] = payAddresses.front();
+        }
+
+        return true;
+    }
+
+    bool Monitor::getTransaction(NextCash::Hash pID, std::vector<Key *> *pRelatedToChainKeys,
+      RelatedTransactionData &pTransaction)
+    {
+        mMutex.lock();
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
+          mTransactions.begin(); trans != mTransactions.end(); ++trans)
+        {
+            if((*trans)->transaction->hash == pID)
+            {
+                pTransaction.transaction = (*trans)->transaction;
+                pTransaction.blockHash = (*trans)->blockHash;
+                pTransaction.nodesVerified = 0xffffffff;
+                updateRelatedTransactionData(pTransaction, pRelatedToChainKeys);
+                mMutex.unlock();
+                return true;
+            }
+        }
+
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
+          mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
+        {
+            if((*trans)->transaction->hash == pID)
+            {
+                pTransaction.transaction = (*trans)->transaction;
+                pTransaction.blockHash = (*trans)->blockHash;
+                pTransaction.nodesVerified = (unsigned int)(*trans)->nodes.size();
+                updateRelatedTransactionData(pTransaction, pRelatedToChainKeys);
+                mMutex.unlock();
+                return true;
+            }
+        }
+
+        mMutex.unlock();
+        return false;
+    }
+
     bool Monitor::filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID)
     {
         mMutex.lock();
@@ -1271,7 +1380,7 @@ namespace BitCoin
         }
         else
         {
-            // Check if it relates to any block addresses
+            // Check if it relates to any related addresses
             //TODO Put into Pending Transactions
             //TODO Add a function when a block is validated to move the function from pending to
             //   confirmed
@@ -1471,7 +1580,7 @@ namespace BitCoin
                                 if((*trans)->payOutputs.size() > 0)
                                     resetNeeded = true;
 
-                                // Determine if transaction actually effects block addresses
+                                // Determine if transaction actually effects related addresses
                                 if((*trans)->payOutputs.size() > 0 ||
                                   (*trans)->spendInputs.size() > 0)
                                 {

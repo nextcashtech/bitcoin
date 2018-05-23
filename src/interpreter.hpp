@@ -342,6 +342,7 @@ namespace BitCoin
 
         static void removeCodeSeparators(NextCash::Buffer &pInputScript, NextCash::Buffer &pOutputScript);
 
+        static NextCash::String scriptText(NextCash::Buffer &pScript, Forks &pForks);
         static void printScript(NextCash::Buffer &pScript, Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::DEBUG);
 
         // Write to a script to push the following size of data to the stack

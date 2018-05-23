@@ -43,7 +43,27 @@ namespace BitCoin
         bool getTransactions(Key *pKey, std::vector<SPVTransactionData *> &pTransactions,
           bool pIncludePending);
 
+        class RelatedTransactionData
+        {
+        public:
+
+            Transaction *transaction;
+            NextCash::Hash blockHash;
+            unsigned int nodesVerified;
+
+            NextCash::HashList inputAddresses;
+            std::vector<int64_t> relatedInputAmounts;
+            NextCash::HashList outputAddresses;
+            std::vector<bool> relatedOutputs;
+
+        };
+
+        bool getTransaction(NextCash::Hash pID, std::vector<Key *> *pRelatedToChainKeys,
+          RelatedTransactionData &pTransaction);
+
         void clear();
+
+        void markLoaded() { mLoaded = true; }
 
         // Load and add any new addresses from a text file.
         bool loadAddresses(NextCash::InputStream *pStream);
@@ -221,8 +241,11 @@ namespace BitCoin
         void refreshBloomFilter(bool pLocked);
         // Returns true if the bloom filter is reset
         bool refreshTransaction(SPVTransactionData *pTransaction, bool pAllowPending);
+        bool updateRelatedTransactionData(RelatedTransactionData &pData,
+          std::vector<Key *> *pRelatedToChainKeys);
         Output *getOutput(NextCash::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending);
         bool getPayAddresses(Output *pOutput, NextCash::HashList &pAddresses, bool pBlockOnly);
+        static bool outputIsRelated(Output *pOutput, std::vector<Key *> *pRelatedToChainKeys);
 
         // Start a new "pass" to check new addresses for previous transactions
         void startNewPass();
@@ -240,6 +263,7 @@ namespace BitCoin
         std::vector<unsigned int> mNodesToResendFilter, mNodesToClose;
         std::vector<PassData> mPasses;
         NextCash::HashContainerList<MerkleRequestData *> mMerkleRequests;
+        bool mLoaded;
 
         // Transactions relating to the addresses in this block that have been confirmed in a block
         NextCash::HashContainerList<SPVTransactionData *> mTransactions;

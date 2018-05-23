@@ -343,16 +343,14 @@ namespace BitCoin
         }
     }
 
-    void ScriptInterpreter::printScript(NextCash::Buffer &pScript, Forks &pForks, NextCash::Log::Level pLevel)
+    NextCash::String ScriptInterpreter::scriptText(NextCash::Buffer &pScript, Forks &pForks)
     {
+        NextCash::String result;
+
         if(pScript.remaining() == 0)
-        {
-            NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, "EMPTY SCRIPT");
-            return;
-        }
+            return result;
 
         uint8_t opCode;
-        NextCash::String result;
 
         while(pScript.remaining())
         {
@@ -474,7 +472,7 @@ namespace BitCoin
                     break;
                 }
                 case OP_0: // An empty array of bytes is pushed to the stack
-                //case OP_FALSE:
+                    //case OP_FALSE:
                     result += "<OP_0>";
                     break;
                 case OP_1NEGATE: // The number -1 is pushed
@@ -619,7 +617,7 @@ namespace BitCoin
                     break;
 
 
-                // Stack
+                    // Stack
                 case OP_TOALTSTACK:
                     result += "<OP_TOALTSTACK>";
                     break;
@@ -679,7 +677,7 @@ namespace BitCoin
                     break;
 
 
-                // Splice
+                    // Splice
                 case OP_CAT: //  x1 x2  out  Concatenates two strings.
                     if(pForks.fork201805Active())
                         result += "<OP_CAT>";
@@ -709,7 +707,7 @@ namespace BitCoin
                     break;
 
 
-                // Bitwise logic
+                    // Bitwise logic
                 case OP_INVERT: //  in  out  Flips all of the bits in the input. disabled.
                     result += "<OP_INVERT disabled>";
                     break;
@@ -733,7 +731,7 @@ namespace BitCoin
                     break;
 
 
-                // Reserved
+                    // Reserved
                 case OP_RESERVED: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
                     result += "<OP_RESERVED>";
                     break;
@@ -756,8 +754,8 @@ namespace BitCoin
                 case OP_NOP1: // The word is ignored. Does not mark transaction as invalid.
                     result += "<OP_NOP1>";
                     break;
-                //OP_NOP2              = 0xb1, // Changed to OP_CHECKLOCKTIMEVERIFY
-                //OP_NOP3              = 0xb2, // Changed to OP_CHECKSEQUENCEVERIFY
+                    //OP_NOP2              = 0xb1, // Changed to OP_CHECKLOCKTIMEVERIFY
+                    //OP_NOP3              = 0xb2, // Changed to OP_CHECKSEQUENCEVERIFY
                 case OP_NOP4:  // The word is ignored. Does not mark transaction as invalid.
                     result += "<OP_NOP4>";
                     break;
@@ -782,13 +780,22 @@ namespace BitCoin
 
 
                 default:
-                    result += "<!!!UNDEFINED!!!>";
-                    NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, "Undefined : %x", opCode);
+                {
+                    NextCash::String undefinedText;
+                    undefinedText.writeFormatted("<!!!UNDEFINED 0x%02x!!!>", opCode);
+                    result += undefinedText;
                     break;
+                }
             }
         }
 
-        NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, result);
+        return result;
+    }
+
+    void ScriptInterpreter::printScript(NextCash::Buffer &pScript, Forks &pForks, NextCash::Log::Level pLevel)
+    {
+        NextCash::String text = scriptText(pScript, pForks);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, text);
     }
 
 
