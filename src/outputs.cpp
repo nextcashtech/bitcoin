@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                            *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@nextcash.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                   *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -80,13 +80,6 @@ namespace BitCoin
         script.setReadOffset(0);
         NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Script : (%d bytes)", script.length());
         ScriptInterpreter::printScript(script, pForks, pLevel);
-    }
-
-    Output &Output::operator = (const Output &pRight)
-    {
-        amount = pRight.amount;
-        script = pRight.script;
-        return *this;
     }
 
     bool TransactionReference::allocateOutputs(unsigned int pCount)

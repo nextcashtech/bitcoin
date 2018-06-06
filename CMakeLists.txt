@@ -8,7 +8,8 @@ include_directories( ../nextcash/src/base
                      ../nextcash/src/crypto
                      ../nextcash/src/dev
                      ../secp256k1/include
-                     src )
+                     src
+                     . )
 
 add_library( bitcoin STATIC SHARED
              src/addresses.cpp
@@ -27,7 +28,8 @@ add_library( bitcoin STATIC SHARED
              src/node.cpp
              src/outputs.cpp
              src/requests.cpp
-             src/transaction.cpp )
+             src/transaction.cpp
+             bitcoin_test.cpp )
 
 # Link NextCash and SECP256K1 libraries
 target_link_libraries( bitcoin nextcash secp256k1 )

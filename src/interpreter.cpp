@@ -73,7 +73,8 @@ namespace BitCoin
     }
 
     // Parse output script for standard type and hash
-    ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(NextCash::Buffer &pScript, NextCash::HashList &pHashes)
+    ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(NextCash::Buffer &pScript,
+      NextCash::HashList &pHashes)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Interpreter Parse Output");
@@ -927,7 +928,6 @@ namespace BitCoin
               "Signature check failed : 0x%02x - %s", (int)pSignature.hashType(), pSignature.hex().text());
             return false;
         }
-
     }
 
     void ScriptInterpreter::printStack(const char *pText)
@@ -1463,7 +1463,7 @@ namespace BitCoin
                 case OP_CODESEPARATOR: // All of the signature checking words will only match signatures to the data after the most recently-executed OP_CODESEPARATOR.
                     if(!ifStackTrue())
                         break;
-                    sigStartOffset = pScript.readOffset();
+                    sigStartOffset = (unsigned int)pScript.readOffset();
                     break;
 
                 case OP_CHECKSIG:
@@ -1495,12 +1495,12 @@ namespace BitCoin
                     // Pop the signature
                     Signature signature;
                     top()->setReadOffset(0);
-                    signature.read(top(), top()->length(), strictECDSA_DER_Sigs);
+                    signature.read(top(), (unsigned int)top()->length(), strictECDSA_DER_Sigs);
                     pop();
 
                     // Check the signature with the public key
-                    if(checkSignature(*mTransaction, mInputOffset, mOutputAmount, publicKey, signature,
-                      pScript, sigStartOffset, pForks))
+                    if(checkSignature(*mTransaction, mInputOffset, mOutputAmount, publicKey,
+                      signature, pScript, sigStartOffset, pForks))
                     {
                         if(opCode == OP_CHECKSIG)
                             push()->writeByte(1); // Push true onto the stack

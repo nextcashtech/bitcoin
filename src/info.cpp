@@ -365,8 +365,9 @@ namespace BitCoin
             readPeersFile();
 
         mPeerLock.readLock();
-        for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
-            if((*peer)->rating >= pMinimumRating && ((*peer)->services & mServicesRequiredMask) == mServicesRequiredMask)
+        for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
+            if((*peer)->rating >= pMinimumRating && ((*peer)->services &
+              mServicesRequiredMask) == mServicesRequiredMask)
                 pPeers.push_back(*peer);
         mPeerLock.readUnlock();
 
@@ -385,7 +386,7 @@ namespace BitCoin
 
         //bool remove = false;
         mPeerLock.readLock();
-        for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
+        for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
             if((*peer)->address.matches(pAddress))
             {
                 // Update

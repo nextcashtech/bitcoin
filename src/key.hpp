@@ -89,7 +89,8 @@ namespace BitCoin
     // Return Base58 address from hash and type.
     NextCash::String encodePaymentCode(const NextCash::Hash &pHash,
       PaymentRequest::Format pFormat = PaymentRequest::Format::CASH,
-      BitCoin::Network pNetwork = MAINNET);
+      BitCoin::Network pNetwork = MAINNET,
+      bool pIncludePrefix = false);
 
     PaymentRequest decodePaymentCode(const char *pText);
 
@@ -109,7 +110,7 @@ namespace BitCoin
             ALL          = 0x01, // Sign all outputs
             NONE         = 0x02, // Don't sign any outputs so anyone can modify them (i.e. miners)
             SINGLE       = 0x03, // Only sign one output so other outputs can be added later
-            FORKID       = 0x40, // Flag for BitCoin Cash only transaction
+            FORKID       = 0x40, // Signature contains a fork ID
             ANYONECANPAY = 0x80  // Only sign this input so that other inputs can be added later
         };
 
@@ -183,6 +184,7 @@ namespace BitCoin
         const uint8_t *key() const { return mKey; }
         const uint8_t *chainCode() const { return mChainCode; }
         unsigned int childCount() const { return mChildren.size(); }
+        const Key *publicKey() const { return mPublicKey; } // Null for public keys
         Key *publicKey() { return mPublicKey; } // Null for public keys
         bool used() const { return mUsed; } // Public key has received payment
         const NextCash::Hash &hash() const; // SHA256 then RIPEMD160 of compressed key data
@@ -298,7 +300,7 @@ namespace BitCoin
         bool updateGap(unsigned int pGap);
 
         // Find an already derived child key with the specified index
-        Key *findChild(uint32_t pIndex);
+        Key *findChild(uint32_t pIndex, bool pLocked = false);
 
         // Find an address level key with a matching hash
         Key *findAddress(const NextCash::Hash &pHash);
@@ -388,13 +390,18 @@ namespace BitCoin
 
         bool hasPrivate(unsigned int pOffset);
         NextCash::String name(unsigned int pOffset);
+        Key::DerivationPathMethod derivationPathMethod(unsigned int pOffset);
         std::vector<Key *> *chainKeys(unsigned int pOffset);
+        Key *chainKey(unsigned int pOffset, uint32_t pIndex);
 
         void setName(unsigned int pOffset, const char *pName);
 
         // These functions require private keys to be loaded/decrypted.
         bool isPrivateLoaded() { return mPrivateLoaded; }
         NextCash::String seed(unsigned int pOffset);
+        Key *fullKey(unsigned int pOffset);
+
+        bool synchronize(unsigned int pOffset);
 
         int addSeed(const char *pSeed, Key::DerivationPathMethod pMethod);
 

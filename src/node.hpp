@@ -105,8 +105,21 @@ namespace BitCoin
         bool announceBlock(Block *pBlock);
 
         // Send notification of a new transaction in the mempool
-        //TODO Make this send periodically with a list. Filter list to remove transaction inventory received from node
         bool announceTransaction(Transaction *pTransaction);
+
+        // Used to send transactions created by this wallet
+        bool sendTransaction(Transaction *pTransaction);
+
+        bool isNewlyReady()
+        {
+            if(!mWasReady && isReady())
+            {
+                mWasReady = true;
+                return true;
+            }
+
+            return false;
+        }
 
         const IPAddress &address() { return mAddress; }
         const uint8_t *ipv6Bytes() const { return mConnection->ipv6Bytes(); }
@@ -123,6 +136,8 @@ namespace BitCoin
 
         // Check if node should be closed
         void check();
+
+        bool failedStartBytes();
 
         bool processMessage();
 
@@ -159,6 +174,7 @@ namespace BitCoin
         bool mIsIncoming, mIsSeed, mIsGood;
         bool mSendBlocksCompact;
         bool mRejected;
+        bool mWasReady;
 
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;

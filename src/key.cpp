@@ -50,6 +50,7 @@ namespace BitCoin
         {
             // Create context
             sContext = secp256k1_context_create(pFlags);
+            //sContext = secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
             sContextFlags = pFlags;
             if(pFlags & SECP256K1_FLAGS_BIT_CONTEXT_SIGN)
                 randomizeContext(sContext);
@@ -103,7 +104,8 @@ namespace BitCoin
 
     NextCash::String encodePaymentCode(const NextCash::Hash &pHash,
                                        PaymentRequest::Format pFormat,
-                                       BitCoin::Network pNetwork)
+                                       BitCoin::Network pNetwork,
+                                       bool pIncludePrefix)
     {
         NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
         NextCash::Buffer data, check;
@@ -246,7 +248,11 @@ namespace BitCoin
             for(int i=0;i<8;++i)
                 encodedCheckSum.writeByte((uint8_t)NextCash::Math::base32Codes[(checkSum >> (5 * (7 - i))) & 0x1f]);
 
-            return NextCash::String(prefix) + ":" + encodedPayload + encodedCheckSum.readString(encodedCheckSum.length());
+            if(pIncludePrefix)
+                return NextCash::String(prefix) + ":" + encodedPayload +
+                  encodedCheckSum.readString(encodedCheckSum.length());
+            else
+                return encodedPayload + encodedCheckSum.readString(encodedCheckSum.length());
         }
         default:
         case PaymentRequest::Format::INVALID:
@@ -534,7 +540,8 @@ namespace BitCoin
         uint8_t output[length];
         if(!secp256k1_ecdsa_signature_serialize_der(Key::context(SECP256K1_CONTEXT_NONE), output,
           &length, (secp256k1_ecdsa_signature*)mData))
-            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to write signature");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Failed to write signature");
         if(pScriptFormat)
             ScriptInterpreter::writePushDataSize(length + 1, pStream);
         pStream->write(output, length);
@@ -952,7 +959,7 @@ namespace BitCoin
 
         mKey[0] = 0; // Private
         pStream->read(mKey + 1, 32);
-        return true;
+        return finalize();
     }
 
     bool Key::writePrivate(NextCash::OutputStream *pStream, bool pScriptFormat) const
@@ -1441,9 +1448,10 @@ namespace BitCoin
 
             Key *childKey;
             mChildLock.lock();
-            for(std::vector<Key *>::iterator otherChild=mChildren.begin();otherChild!=mChildren.end();++otherChild)
+            for(std::vector<Key *>::iterator otherChild = pOther->mChildren.begin();
+              otherChild != pOther->mChildren.end(); ++otherChild)
             {
-                // Derive of find child with matching index to synchronize
+                // Derive or find child with matching index to synchronize
                 childKey = deriveChild((*otherChild)->index(), true);
                 if(childKey == NULL)
                 {
@@ -1495,16 +1503,19 @@ namespace BitCoin
         mChildLock.unlock();
     }
 
-    Key *Key::findChild(uint32_t pIndex)
+    Key *Key::findChild(uint32_t pIndex, bool pLocked)
     {
-        mChildLock.lock();
+        if(!pLocked)
+            mChildLock.lock();
         for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
             if((*child)->index() == pIndex)
             {
-                mChildLock.unlock();
+                if(!pLocked)
+                    mChildLock.unlock();
                 return *child;
             }
-        mChildLock.unlock();
+        if(!pLocked)
+            mChildLock.unlock();
         return NULL;
     }
 
@@ -1570,7 +1581,7 @@ namespace BitCoin
 
     Key *Key::deriveChild(uint32_t pIndex, bool pLocked)
     {
-        Key *result = findChild(pIndex);
+        Key *result = findChild(pIndex, pLocked);
 
         if(result != NULL)
             return result; // Already created
@@ -2292,6 +2303,14 @@ namespace BitCoin
         return mKeys[pOffset]->name;
     }
 
+    Key::DerivationPathMethod KeyStore::derivationPathMethod(unsigned int pOffset)
+    {
+        if(pOffset >= mKeys.size())
+            return Key::DerivationPathMethod::UNKNOWN;
+
+        return mKeys[pOffset]->derivationPathMethod;
+    }
+
     std::vector<Key *> *KeyStore::chainKeys(unsigned int pOffset)
     {
         if(pOffset >= mKeys.size())
@@ -2300,12 +2319,46 @@ namespace BitCoin
         return &mKeys[pOffset]->chainKeys;
     }
 
+    Key *KeyStore::chainKey(unsigned int pOffset, uint32_t pIndex)
+    {
+        if(pOffset >= mKeys.size())
+            return NULL;
+
+        std::vector<Key *> &chainKeys = mKeys[pOffset]->chainKeys;
+        for(std::vector<Key *>::iterator key = chainKeys.begin(); key != chainKeys.end(); ++key)
+            if((*key)->index() == pIndex)
+                return *key;
+
+        return NULL;
+    }
+
     NextCash::String KeyStore::seed(unsigned int pOffset)
     {
         if(!mPrivateLoaded || pOffset >= mPrivateKeys.size())
             return NextCash::String();
 
         return mPrivateKeys[pOffset]->seed;
+    }
+
+    Key *KeyStore::fullKey(unsigned int pOffset)
+    {
+        if(!mPrivateLoaded || pOffset >= mPrivateKeys.size() || !synchronize(pOffset))
+            return NULL;
+
+        return mPrivateKeys[pOffset]->key;
+    }
+
+    bool KeyStore::synchronize(unsigned int pOffset)
+    {
+        if(!mPrivateLoaded || pOffset >= mPrivateKeys.size())
+            return false;
+
+        std::vector<Key *> &chainKeys = mKeys[pOffset]->chainKeys;
+        for(std::vector<Key *>::iterator key = chainKeys.begin();
+          key != chainKeys.end(); ++key)
+            mPrivateKeys[pOffset]->key->synchronize(*key);
+
+        return true;
     }
 
     void KeyStore::setName(unsigned int pOffset, const char *pName)

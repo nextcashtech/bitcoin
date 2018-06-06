@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2017-2018 NextCash, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@nextcash.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                   *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -35,7 +35,7 @@ namespace BitCoin
             output = NULL;
             signatureStatus = 0;
         }
-        Outpoint(const Outpoint &pCopy)
+        Outpoint(const Outpoint &pCopy) : transactionID(pCopy.transactionID)
         {
             index = pCopy.index;
             if(pCopy.output == NULL)
@@ -85,11 +85,12 @@ namespace BitCoin
     {
     public:
 
+        static const uint32_t SEQUENCE_NONE          = 0xffffffff;
         static const uint32_t SEQUENCE_DISABLE       = 1 << 31;
         static const uint32_t SEQUENCE_TYPE          = 1 << 22; // Determines time or block height
         static const uint32_t SEQUENCE_LOCKTIME_MASK = 0x0000ffff;
 
-        Input() { sequence = 0xffffffff; }
+        Input() { sequence = SEQUENCE_NONE; }
         Input(const Input &pCopy) : outpoint(pCopy.outpoint), script(pCopy.script)
         {
             sequence = pCopy.sequence;
@@ -141,6 +142,9 @@ namespace BitCoin
         void clear();
         void clearNoDelete();
 
+        typedef std::vector<Transaction *>::iterator iterator;
+        typedef std::vector<Transaction *>::const_iterator const_iterator;
+
     };
 
     class Transaction
@@ -152,15 +156,18 @@ namespace BitCoin
 
         Transaction()
         {
-            version = 2; // BIP-0068
+            version = 2;
+            lockTime = 0;
+
             mFee = 0;
-            lockTime = 0xffffffff;
             mSize = 0;
             mTime = getTime();
             mStatus = 0;
         }
         Transaction(const Transaction &pCopy);
         ~Transaction();
+
+        Transaction &operator = (const Transaction &pRight);
 
         void write(NextCash::OutputStream *pStream, bool pBlockFile = false);
 
@@ -194,6 +201,14 @@ namespace BitCoin
         int64_t fee() const { return mFee; }
         uint64_t feeRate(); // Satoshis per KB
 
+        uint64_t outputAmount()
+        {
+            uint64_t result = 0;
+            for(std::vector<Output>::iterator output=outputs.begin();output!=outputs.end();++output)
+                result += output->amount;
+            return result;
+        }
+
         /***********************************************************************************************
          * Transaction verification
          ***********************************************************************************************/
@@ -217,9 +232,9 @@ namespace BitCoin
         static const uint8_t STANDARD_VERIFIED_MASK = IS_VALID | IS_STANDARD | SIGS_VERIFIED;
         bool isStandardVerified() const { return (mStatus & STANDARD_VERIFIED_MASK) == STANDARD_VERIFIED_MASK; }
 
-        NextCash::stream_size calculatedSize();
-
+        void calculateSize();
         void calculateHash();
+        void setTime(int32_t pValue) { mTime = pValue; }
 
         bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           unsigned int pBlockHeight, bool pCoinBase, int32_t pBlockVersion, BlockStats &pBlockStats,
@@ -246,12 +261,13 @@ namespace BitCoin
          * 2. Call addXXXOutput to add all the outputs to be created.
          * 3. Call signXXXInput to sign each input and pass in the output being spent.
          ***********************************************************************************************/
-        bool addInput(const NextCash::Hash &pTransactionID, unsigned int pIndex, uint32_t pSequence = 0xffffffff);
+        bool addInput(const NextCash::Hash &pTransactionID, unsigned int pIndex,
+          uint32_t pSequence = Input::SEQUENCE_NONE);
         bool addCoinbaseInput(int pBlockHeight);
 
         // P2PKH Pay to Public Key Hash
         bool signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
-          const Key &pPublicKey, Signature::HashType pType, uint32_t pForkID);
+          Signature::HashType pType, uint32_t pForkID);
         bool addP2PKHOutput(const NextCash::Hash &pPublicKeyHash, uint64_t pAmount);
 
         // P2PK Pay to Public Key (not as secure as P2PKH)
@@ -288,8 +304,6 @@ namespace BitCoin
         bool writeSignatureData(NextCash::OutputStream *pStream, unsigned int pInputOffset,
           NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType,
           uint32_t pForkID);
-
-        Transaction &operator = (const Transaction &pRight);
 
     };
 }

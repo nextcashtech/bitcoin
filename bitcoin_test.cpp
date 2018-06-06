@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2017-2018 NextCash, LLC                                       *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@nextcash.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                   *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -19,54 +19,68 @@ bool chainTest();
 bool merkleTest1();
 bool merkleTest2();
 
+
+namespace BitCoin
+{
+    bool test()
+    {
+        int failed = 0;
+
+#ifndef ANDROID
+        NextCash::Log::setLevel(NextCash::Log::DEBUG);
+#endif
+
+        if(!BitCoin::Base::test())
+            failed++;
+
+        if(!BitCoin::Info::test())
+            failed++;
+
+        if(!BitCoin::Key::test())
+            failed++;
+
+        if(!BitCoin::Transaction::test())
+            failed++;
+
+        if(!BitCoin::ScriptInterpreter::test())
+            failed++;
+
+        if(!BitCoin::Message::test())
+            failed++;
+
+        if(!BitCoin::BloomFilter::test())
+            failed++;
+
+        if(!BitCoin::Chain::test())
+            failed++;
+
+        // if(!merkleTest1())
+            // failed++;
+
+        // if(!merkleTest2())
+            // failed++;
+
+        // BitCoin::Chain::tempTest();
+
+        // if(!chainTest())
+            // failed++;
+
+        // if(!cashDAATest())
+            // failed++;
+
+        if(failed)
+            return 1;
+        else
+            return 0;
+    }
+}
+
 int main(int pArgumentCount, char **pArguments)
 {
-    int failed = 0;
-
-    NextCash::Log::setLevel(NextCash::Log::DEBUG);
-
-    if(!BitCoin::Base::test())
-        failed++;
-
-    if(!BitCoin::Info::test())
-        failed++;
-
-    if(!BitCoin::Key::test())
-        failed++;
-
-    if(!BitCoin::Transaction::test())
-        failed++;
-
-    if(!BitCoin::ScriptInterpreter::test())
-        failed++;
-
-    if(!BitCoin::Message::test())
-        failed++;
-
-    if(!BitCoin::BloomFilter::test())
-        failed++;
-
-    if(!BitCoin::Chain::test())
-        failed++;
-
-    // if(!merkleTest1())
-        // failed++;
-
-    // if(!merkleTest2())
-        // failed++;
-
-    // BitCoin::Chain::tempTest();
-
-    // if(!chainTest())
-        // failed++;
-
-    // if(!cashDAATest())
-        // failed++;
-
-    if(failed)
-        return 1;
-    else
+    if(BitCoin::test())
         return 0;
+    else
+        return 1;
 }
 
 bool merkleTest1()
@@ -100,14 +114,17 @@ bool merkleTest1()
     BitCoin::BloomFilter filter(100);
     NextCash::Hash addressHash;
     BitCoin::AddressType addressType;
-    BitCoin::AddressFormat addressFormat;
+    BitCoin::PaymentRequest paymentRequest;
 
     NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
       filter.size(), filter.functionCount());
 
-    if(!BitCoin::decodeAddress("1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX", addressHash, addressType, addressFormat))
+    paymentRequest = BitCoin::decodePaymentCode("1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX");
+
+    if(paymentRequest.format == BitCoin::PaymentRequest::INVALID)
     {
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed decode address : %s", "1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX");
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed decode address : %s",
+          "1HPB2uYumdS6hSkpdaGxTMhqAypzT8SjeX");
         return false;
     }
 
@@ -275,14 +292,17 @@ bool merkleTest2()
     BitCoin::BloomFilter filter(100);
     NextCash::Hash addressHash;
     BitCoin::AddressType addressType;
-    BitCoin::AddressFormat addressFormat;
+    BitCoin::PaymentRequest paymentRequest;
 
     NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
       filter.size(), filter.functionCount());
 
-    if(!BitCoin::decodeAddress("1Ff79dW4CymX2msdyat4SbTupCG1d6imib", addressHash, addressType, addressFormat))
+    paymentRequest = BitCoin::decodePaymentCode("1Ff79dW4CymX2msdyat4SbTupCG1d6imib");
+
+    if(paymentRequest.format == BitCoin::PaymentRequest::INVALID)
     {
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed decode address : %s", "1Ff79dW4CymX2msdyat4SbTupCG1d6imib");
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed decode address : %s",
+          "1Ff79dW4CymX2msdyat4SbTupCG1d6imib");
         return false;
     }
 

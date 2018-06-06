@@ -16,6 +16,7 @@
 #include "info.hpp"
 #include "block.hpp"
 #include "chain.hpp"
+#include "interpreter.hpp"
 
 #include <csignal>
 #include <algorithm>
@@ -74,6 +75,39 @@ namespace BitCoin
 
         while(isRunning())
             NextCash::Thread::sleep(100);
+
+        for(std::vector<Transaction *>::iterator trans = mTransactionsToTransmit.begin();
+          trans != mTransactionsToTransmit.end(); ++trans)
+            delete *trans;
+    }
+
+    void Daemon::transmitTransactions()
+    {
+        // Check if transactions have confirmed
+        for(std::vector<Transaction *>::iterator trans = mTransactionsToTransmit.begin();
+            trans != mTransactionsToTransmit.end();)
+        {
+            if(mMonitor.isConfirmed((*trans)->hash))
+            {
+                delete *trans;
+                trans = mTransactionsToTransmit.erase(trans);
+            }
+            else
+                ++trans;
+        }
+
+        if(mTransactionsToTransmit.size() == 0)
+            return;
+
+        mNodeLock.readLock();
+        for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
+            if((*node)->isNewlyReady())
+            {
+                for(std::vector<Transaction *>::iterator trans = mTransactionsToTransmit.begin();
+                  trans != mTransactionsToTransmit.end(); ++trans)
+                    (*node)->sendTransaction(*trans);
+            }
+        mNodeLock.readUnlock();
     }
 
     unsigned int Daemon::peerCount()
@@ -526,7 +560,7 @@ namespace BitCoin
         // if(textFile.isValid() && !mMonitor.loadAddresses(&textFile))
             // return false;
 
-        mMonitor.setKeyStore(&mKeyStore);
+        mMonitor.setKeyStore(&mKeyStore, true);
         return true;
     }
 
@@ -654,6 +688,236 @@ namespace BitCoin
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Key store saved with %d keys", mKeyStore.size());
         return true;
+    }
+
+    int signTransaction(Transaction &pTransaction, Key *pKey, Signature::HashType pHashType,
+      uint32_t pForkID)
+    {
+        Key *key;
+        ScriptInterpreter::ScriptType scriptType;
+        NextCash::HashList payAddresses;
+        uint32_t inputOffset = 0;
+        for(std::vector<Input>::iterator input = pTransaction.inputs.begin();
+          input != pTransaction.inputs.end(); ++input, ++inputOffset)
+        {
+            // Parse the output for addresses
+            scriptType = ScriptInterpreter::parseOutputScript(input->outpoint.output->script,
+              payAddresses);
+            if(scriptType != ScriptInterpreter::P2PKH)
+            {
+                payAddresses.clear();
+                return 1;
+            }
+
+            for(NextCash::HashList::iterator hash = payAddresses.begin();
+              hash != payAddresses.end(); ++hash)
+            {
+                key = pKey->findAddress(*hash);
+                if(key == NULL)
+                    return 1;
+
+                if(!pTransaction.signP2PKHInput(*input->outpoint.output, inputOffset, *key,
+                  pHashType, pForkID))
+                    return 5; // Issue with signing
+            }
+        }
+
+        return 0;
+    }
+
+    void checkSignature(Transaction &pTransaction, Monitor &pMonitor,
+      std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd,
+      BlockStats &pBlockStats, Forks &pForks)
+    {
+        TransactionOutputPool tempOutputPool;
+        TransactionList tempMemPool;
+        NextCash::HashList outpoints;
+        std::vector<Monitor::RelatedTransactionData> relatedTransactions;
+        std::vector<unsigned int> spentAges;
+
+        pMonitor.getTransactions(pChainKeyBegin, pChainKeyEnd, relatedTransactions, true);
+
+        std::vector<Transaction *> transactions;
+        for(std::vector<Monitor::RelatedTransactionData>::iterator trans =
+          relatedTransactions.begin(); trans != relatedTransactions.end(); ++trans)
+            transactions.push_back(&trans->transaction);
+
+        tempOutputPool.markValid();
+
+        tempOutputPool.add(transactions, 0);
+        tempOutputPool.commit(transactions, 0);
+
+        if(!pTransaction.process(tempOutputPool, transactions,
+          0, false, pBlockStats.version((unsigned int)pBlockStats.height()),
+          pBlockStats, pForks, spentAges))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Failed to process transaction");
+        }
+
+//        if(!pTransaction.check(tempOutputPool, tempMemPool, outpoints,
+//          pBlockStats.version((unsigned int)pBlockStats.height()), pBlockStats, pForks))
+//        {
+//            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+//              "Failed to check transaction");
+//        }
+
+//        if(pTransaction.isStandardVerified())
+//        {
+//            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+//              "Transaction verified as standard");
+//        }
+    }
+
+    int Daemon::sendPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash,
+      uint64_t pAmount, double pFeeRate)
+    {
+        Key *fullKey = mKeyStore.fullKey(pKeyOffset);
+        if(fullKey == NULL)
+            return 1;
+
+        // Get UTXOs from monitor
+        std::vector<Outpoint> unspentOutputs;
+        if(!mMonitor.getUnspentOutputs(fullKey, unspentOutputs, true))
+            return 1;
+
+        // Create transaction
+        Transaction *transaction = new Transaction();
+        uint64_t inputAmount = 0, estimatedFee = (uint64_t)(250.0 * pFeeRate);
+
+        for(std::vector<Outpoint>::iterator output = unspentOutputs.begin();
+          output != unspentOutputs.end() && inputAmount <= pAmount + estimatedFee; ++output)
+        {
+            transaction->addInput(output->transactionID, output->index);
+            transaction->inputs.back().outpoint.output = new Output(*output->output);
+            inputAmount += output->output->amount;
+        }
+
+        if(inputAmount < pAmount + estimatedFee)
+        {
+            delete transaction;
+            return 2; // Insufficient funds
+        }
+
+        // Add outputs
+        if(pPublicKeyHash.size() != 20) // Required for P2PKH
+        {
+            delete transaction;
+            return 3; // Invalid Hash
+        }
+
+        // Add payment output
+        transaction->addP2PKHOutput(pPublicKeyHash, pAmount);
+
+        // Add change output
+        Key *changeChainKey = mKeyStore.chainKey(pKeyOffset, 1);
+        if(changeChainKey == NULL)
+        {
+            delete transaction;
+            return 4; // No change address
+        }
+
+        mKeyStore.synchronize(pKeyOffset);
+
+        transaction->addP2PKHOutput(changeChainKey->getNextUnused()->hash(),
+          inputAmount - pAmount - estimatedFee);
+
+        // Sign inputs
+        Signature::HashType hashType = static_cast<Signature::HashType>(Signature::ALL |
+          Signature::FORKID);
+        int result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());
+        if(result != 0)
+        {
+            delete transaction;
+            return result;
+        }
+
+        // Adjust change amount to make fee correct
+        transaction->calculateSize();
+        uint64_t actualFee = (uint64_t)((double)transaction->size() * pFeeRate);
+        transaction->outputs.back().amount = inputAmount - pAmount - actualFee;
+
+        // Re-sign transaction
+        result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());
+        if(result != 0)
+        {
+            delete transaction;
+            return result;
+        }
+
+        // Finalize transaction
+        transaction->calculateHash();
+
+        // Check Fee
+        uint64_t calculatedFee = inputAmount - transaction->outputAmount();
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+          "Created %d byte transaction with fee of %d sat (%0.2f sat/byte)",
+          transaction->size(), calculatedFee, (float)calculatedFee / (float)transaction->size());
+
+        Transaction *newTransaction = new Transaction(*transaction);
+
+        // TODO Remove
+        std::vector<Key *> *chainKey = mKeyStore.chainKeys(pKeyOffset);
+        checkSignature(*newTransaction, mMonitor, chainKey->begin(), chainKey->end(),
+          mChain.blockStats(), mChain.forks());
+
+        // Add to monitor
+        mMonitor.addTransactionAnnouncement(transaction->hash, 0);
+
+        Message::TransactionData data;
+        data.transaction = transaction;
+        mMonitor.addTransaction(mChain, &data);
+
+        if(data.transaction != NULL)
+        {
+            delete transaction;
+            return 1;
+        }
+
+        // TODO Remove
+        if(transaction->hash != newTransaction->hash)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Failed to copy transaction %s != %s", transaction->hash.hex().text(),
+              newTransaction->hash.hex().text());
+            return 1;
+        }
+
+        NextCash::Buffer testBuffer;
+        transaction->write(&testBuffer);
+        Transaction readTest;
+        if(!readTest.read(&testBuffer))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Failed to read message");
+            return 1;
+        }
+
+        if(readTest.hash != newTransaction->hash)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Read transaction hash doesn't match %s != %s", readTest.hash.hex().text(),
+              newTransaction->hash.hex().text());
+            return 1;
+        }
+
+        transaction->print(mChain.forks());
+
+        NextCash::Buffer buffer;
+        newTransaction->write(&buffer, false);
+        NextCash::String hex = buffer.readHexString(buffer.length());
+
+        // Transmit to all currently "ready" nodes.
+        mNodeLock.readLock();
+        for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
+            if((*node)->isReady())
+                (*node)->sendTransaction(transaction);
+        mNodeLock.readUnlock();
+
+        // Save to transmit to other nodes.
+        mTransactionsToTransmit.push_back(newTransaction);
+
+        return 0;
     }
 
     void sortOutgoingNodesByPing(std::vector<Node *> &pNodes)
@@ -1337,6 +1601,7 @@ namespace BitCoin
         int32_t lastInfoSaveTime = startTime;
         int32_t lastImprovement = startTime;
         int32_t lastTransactionRequest = startTime;
+        int32_t lastTransactionTransmit = startTime;
         int32_t time;
 #ifdef PROFILER_ON
         uint32_t lastProfilerWrite = startTime;
@@ -1379,6 +1644,16 @@ namespace BitCoin
                 break;
             }
 #endif
+
+            time = getTime();
+            if(time - lastTransactionTransmit > 10)
+            {
+                lastTransactionTransmit = getTime();
+                transmitTransactions();
+            }
+
+            if(mStopping)
+                break;
 
             if(!mChain.isInSync())
             {
@@ -1805,10 +2080,10 @@ namespace BitCoin
         }
 
         peers.clear();
-        mInfo.getRandomizedPeers(peers, -5, servicesMask);
+        mInfo.getRandomizedPeers(peers, 0, servicesMask);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d usable peers", peers.size());
-        for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end(); ++peer)
+        int32_t startTime = getTime();
         for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
           !mStopRequested && usableCount < mOutgoingNodeMax - mGoodNodeMax; ++peer)
         {
@@ -1826,7 +2101,8 @@ namespace BitCoin
             if(found)
                 continue;
 
-            connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip, (*peer)->address.port, 5);
+            connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
+              (*peer)->address.port, 5);
             if(!connection->isOpen())
                 delete connection;
             else if(addNode(connection, false, false, false, 0))
@@ -1838,7 +2114,8 @@ namespace BitCoin
 #endif
             }
 
-            if(mStopping)
+            // Max 30 seconds connecting to usable peers
+            if(mStopping || getTime() - startTime > 30)
                 break;
 
 #ifdef SINGLE_THREAD
@@ -1973,7 +2250,7 @@ namespace BitCoin
     {
         NextCash::Network::Connection *newConnection;
 
-        if(mOutgoingNodes < mOutgoingNodeMax && getTime() - mLastFillNodesTime > 30)
+        if(mOutgoingNodes < mOutgoingNodeMax)
         {
             recruitPeers();
             mLastFillNodesTime = getTime();

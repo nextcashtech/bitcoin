@@ -99,6 +99,9 @@ namespace BitCoin
             }
             void clearNoDelete() { std::vector<InventoryHash *>::clear(); }
 
+            typedef std::vector<InventoryHash *>::iterator iterator;
+            typedef std::vector<InventoryHash *>::const_iterator const_iterator;
+
         private:
             Inventory(Inventory &pCopy);
             Inventory &operator = (Inventory &pRight);

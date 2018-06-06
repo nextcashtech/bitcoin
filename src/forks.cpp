@@ -959,7 +959,6 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
               "2018 May fork activated at block height %d", pBlockHeight);
             mFork201805BlockHeight = mHeight - 1;
-            mForkID = 0x00FF0001;
             mBlockMaxSize = FORK_201805_MAX_BLOCK_SIZE;
         }
 

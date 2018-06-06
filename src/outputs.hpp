@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                            *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@nextcash.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                   *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -38,7 +38,13 @@ namespace BitCoin
             blockFileOffset = pCopy.blockFileOffset;
         }
 
-        Output &operator = (const Output &pRight);
+        Output &operator = (const Output &pRight)
+        {
+            amount = pRight.amount;
+            script = pRight.script;
+            blockFileOffset = pRight.blockFileOffset;
+            return *this;
+        }
 
         // 8 amount + script length size + script length
         unsigned int size() { return 8 + compactIntegerSize(script.length()) + script.length(); }
@@ -56,7 +62,7 @@ namespace BitCoin
         NextCash::Buffer script;
 
         // Collected when reading/writing and used for output references
-        unsigned int blockFileOffset;
+        NextCash::stream_size blockFileOffset;
 
     };
 
@@ -256,6 +262,9 @@ namespace BitCoin
         unsigned int transactionCount() const;
 
         bool needsPurge() { return cacheDataSize() > (NextCash::stream_size)((double)targetCacheDataSize() * 1.5); }
+
+        // Debug Only
+        void markValid() { mIsValid = true; }
 
         bool load(const char *pFilePath, uint64_t pCacheDataTargetSize);
         bool save();

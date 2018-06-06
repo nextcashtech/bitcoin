@@ -1,7 +1,7 @@
 /**************************************************************************
- * Copyright 2018 NextCash, LLC                                            *
+ * Copyright 2018 NextCash, LLC                                           *
  * Contributors :                                                         *
- *   Curtis Ellis <curtis@nextcash.com>                                    *
+ *   Curtis Ellis <curtis@nextcash.com>                                   *
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
@@ -37,17 +37,18 @@ namespace BitCoin
 
         unsigned int height(); // The block height of the lowest "pass"
         int64_t balance(bool pLocked = false); // Return total balance of all keys
-        int64_t balance(Key *pKey, bool pIncludePending = false); // Return balance associated with a specific key
+        // Return balance associated with a specific key
+        int64_t balance(std::vector<Key *>::iterator pChainKeyBegin,
+          std::vector<Key *>::iterator pChainKeyEnd, bool pIncludePending = false);
         unsigned int size() const { return mAddressHashes.size(); }
         unsigned int transactionCount() const { return mTransactions.size(); }
-        bool getTransactions(Key *pKey, std::vector<SPVTransactionData *> &pTransactions,
-          bool pIncludePending);
+        bool getUnspentOutputs(Key *pKey, std::vector<Outpoint> &pOutputs, bool pIncludePending);
 
         class RelatedTransactionData
         {
         public:
 
-            Transaction *transaction;
+            Transaction transaction;
             NextCash::Hash blockHash;
             unsigned int nodesVerified;
 
@@ -56,10 +57,15 @@ namespace BitCoin
             NextCash::HashList outputAddresses;
             std::vector<bool> relatedOutputs;
 
+            int64_t amount() const;
+
         };
 
-        bool getTransaction(NextCash::Hash pID, std::vector<Key *> *pRelatedToChainKeys,
-          RelatedTransactionData &pTransaction);
+        bool getTransaction(NextCash::Hash pID, std::vector<Key *>::iterator pChainKeyBegin,
+          std::vector<Key *>::iterator pChainKeyEnd, RelatedTransactionData &pTransaction);
+        bool getTransactions(std::vector<Key *>::iterator pChainKeyBegin,
+          std::vector<Key *>::iterator pChainKeyEnd,
+          std::vector<RelatedTransactionData> &pTransactions, bool pIncludePending);
 
         void clear();
 
@@ -71,7 +77,7 @@ namespace BitCoin
         // Sets up monitoring on a key store.
         // Each key in the key store must be "primed". Meaning there must be some address keys
         //   already generated under the "chain" key according to a known hierarchal structure.
-        void setKeyStore(KeyStore *pKeyStore);
+        void setKeyStore(KeyStore *pKeyStore, bool pStartNewPass);
 
         // Removes all addresses and adds them back from key store, then updates all transactions
         //   and removes any that are no longer relevant.
@@ -90,6 +96,9 @@ namespace BitCoin
 
         int changeID() const { return mChangeID; }
 
+        // Start a new "pass" to check new addresses for previous transactions
+        void startNewPass(unsigned int pBlockHeight = 0);
+
         bool filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID);
         bool needsClose(unsigned int pNodeID);
         void release(unsigned int pNodeID); // Release everything associated with the node
@@ -103,6 +112,8 @@ namespace BitCoin
 
         // Add a received transaction if it was confirmed in a merkle block
         bool addTransaction(Chain &pChain, Message::TransactionData *pTransactionData); // Return true if added
+
+        bool isConfirmed(NextCash::Hash &pHash);
 
         void revertBlock(const NextCash::Hash &pBlockHash, unsigned int pBlockHeight);
 
@@ -217,7 +228,7 @@ namespace BitCoin
         {
         public:
 
-            PassData();
+            PassData(unsigned int pBlockHeight = 0);
             PassData(const PassData &pCopy);
 
             const PassData &operator =(const PassData &pRight);
@@ -242,13 +253,11 @@ namespace BitCoin
         // Returns true if the bloom filter is reset
         bool refreshTransaction(SPVTransactionData *pTransaction, bool pAllowPending);
         bool updateRelatedTransactionData(RelatedTransactionData &pData,
-          std::vector<Key *> *pRelatedToChainKeys);
+          std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd);
         Output *getOutput(NextCash::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending);
         bool getPayAddresses(Output *pOutput, NextCash::HashList &pAddresses, bool pBlockOnly);
-        static bool outputIsRelated(Output *pOutput, std::vector<Key *> *pRelatedToChainKeys);
-
-        // Start a new "pass" to check new addresses for previous transactions
-        void startNewPass();
+        static bool outputIsRelated(Output *pOutput, std::vector<Key *>::iterator pChainKeyBegin,
+          std::vector<Key *>::iterator pChainKeyEnd);
 
         // Cancel all pending merkle requests and update the bloom filter.
         void restartBloomFilter();

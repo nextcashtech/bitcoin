@@ -72,6 +72,15 @@ namespace BitCoin
         Monitor *monitor() { return &mMonitor; }
         KeyStore *keyStore() { return &mKeyStore; }
 
+        // Result:
+        //   1 : Undefined failure
+        //   2 : Insuffecient Funds
+        //   3 : Invalid Public Key Hash
+        //   4 : No change address
+        //   5 : Signing Issue
+        int sendPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash, uint64_t pAmount,
+          double pFeeRate = 2.0);
+
         bool loadMonitor();
         bool saveMonitor();
 
@@ -172,6 +181,11 @@ namespace BitCoin
 
         KeyStore mKeyStore;
         Monitor mMonitor;
+
+        std::vector<Transaction *> mTransactionsToTransmit;
+
+        // Transmit any created transactions
+        void transmitTransactions();
 
         // Request Channels
         NextCash::ReadersLock mRequestsLock;

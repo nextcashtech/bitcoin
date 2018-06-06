@@ -84,11 +84,11 @@ debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} main.cpp
 	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/main.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o ${OUTPUT}.debug ${LINK_FLAGS}
 	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
-test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} test.cpp
+test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} bitcoin_test.cpp
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
-	${COMPILER} -c -o ${OBJECT_DIRECTORY}/test.o test.cpp ${COMPILE_FLAGS}
+	${COMPILER} -c -o ${OBJECT_DIRECTORY}/test.o bitcoin_test.cpp ${COMPILE_FLAGS}
 	${COMPILER} ${OBJECTS} ${OBJECT_DIRECTORY}/test.o ${LIBRARY_PATHS} ${LIBRARIES} -o test ${LINK_FLAGS}
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mTESTING\033[0m"
@@ -98,11 +98,11 @@ test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} test.cpp
 
 all: clean release debug test
 
-test.debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} test.cpp
+test.debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} bitcoin_test.cpp
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING DEBUG TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
-	${COMPILER} -c -ggdb -o ${OBJECT_DIRECTORY}/test.o.debug test.cpp ${COMPILE_FLAGS}
+	${COMPILER} -c -ggdb -o ${OBJECT_DIRECTORY}/test.o.debug bitcoin_test.cpp ${COMPILE_FLAGS}
 	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/test.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o test.debug ${LINK_FLAGS}
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 
