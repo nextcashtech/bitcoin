@@ -638,7 +638,7 @@ namespace BitCoin
 
     bool Node::sendTransaction(Transaction *pTransaction)
     {
-        if(!isOpen() || mVersionData == NULL)
+        if(!isOpen() || mVersionData == NULL || mSentTransactions.contains(pTransaction->hash))
             return false;
 
         bool filterContains = mFilter.contains(*pTransaction);
@@ -652,8 +652,11 @@ namespace BitCoin
         transactionData.transaction = NULL;
 
         if(result)
+        {
+            mSentTransactions.push_back(pTransaction->hash);
             NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
               "Sent transaction : %s", pTransaction->hash.hex().text());
+        }
         else
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
               "Failed to send transaction : %s", pTransaction->hash.hex().text());

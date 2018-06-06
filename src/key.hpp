@@ -42,7 +42,7 @@ namespace BitCoin
     {
     public:
 
-        enum Format { INVALID, LEGACY, LEGACY_SCRIPT, CASH };
+        enum Format { INVALID, LEGACY, CASH };
         enum Protocol { NONE, PUB_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY, PUB_KEY_HASH_AMOUNT };
 
         PaymentRequest()

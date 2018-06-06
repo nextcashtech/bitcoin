@@ -204,7 +204,7 @@ namespace BitCoin
         int32_t mBlockRequestTime, mBlockReceiveTime;
 
         NextCash::Mutex mAnnounceMutex;
-        NextCash::HashList mAnnounceBlocks, mAnnounceTransactions;
+        NextCash::HashList mAnnounceBlocks, mAnnounceTransactions, mSentTransactions;
 
         void addAnnouncedBlock(const NextCash::Hash &pHash);
         bool addAnnouncedTransaction(const NextCash::Hash &pHash);
