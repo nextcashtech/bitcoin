@@ -2348,6 +2348,21 @@ namespace BitCoin
         transaction.signP2PKHInput(spendable.outputs[0], 0, privateKey1, Signature::ALL,
           forks.forkID());
 
+        NextCash::Buffer inputScript;
+        transaction.inputs[0].script.setReadOffset(0);
+        inputScript.writeHex("48304502210086f3bd9b0b0020cba317ee197e71cfcabed272c3d096f256d8f238febc65464402205c88f0059425bc774f4269b08895af62936d720da3c324be70979de800d392be012103077b2a0406db4b4e2cddbe9aca5e9f1a3cf039feb843992d05cc0b7a75046635");
+        if(inputScript == transaction.inputs[0].script)
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script matching");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2PKH input script matching");
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Result : %s",
+              transaction.inputs[0].script.readHexString(transaction.inputs[0].script.length()).text());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Correct : %s",
+              inputScript.readHexString(inputScript.length()).text());
+            success = false;
+        }
+
         transaction.calculateHash();
 
         NextCash::HashList checkHashes;
