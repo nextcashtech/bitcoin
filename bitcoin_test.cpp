@@ -68,10 +68,7 @@ namespace BitCoin
         // if(!cashDAATest())
             // failed++;
 
-        if(failed)
-            return 1;
-        else
-            return 0;
+        return failed == 0;
     }
 }
 
@@ -113,7 +110,6 @@ bool merkleTest1()
 
     BitCoin::BloomFilter filter(100);
     NextCash::Hash addressHash;
-    BitCoin::AddressType addressType;
     BitCoin::PaymentRequest paymentRequest;
 
     NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",
@@ -291,7 +287,6 @@ bool merkleTest2()
 
     BitCoin::BloomFilter filter(100);
     NextCash::Hash addressHash;
-    BitCoin::AddressType addressType;
     BitCoin::PaymentRequest paymentRequest;
 
     NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Created bloom filter with %d bytes and %d functions",

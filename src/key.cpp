@@ -102,10 +102,9 @@ namespace BitCoin
         return result ^ 0x01;
     }
 
-    NextCash::String encodePaymentCode(const NextCash::Hash &pHash,
-                                       PaymentRequest::Format pFormat,
-                                       BitCoin::Network pNetwork,
-                                       bool pIncludePrefix)
+    NextCash::String encodeHashPaymentCode(const NextCash::Hash &pHash,
+      PaymentRequest::Format pFormat, BitCoin::Network pNetwork, bool pIncludePrefix,
+      bool pIsScriptHash)
     {
         NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
         NextCash::Buffer data, check;
@@ -119,7 +118,7 @@ namespace BitCoin
             {
                 default:
                 case MAINNET:
-                    digest.writeByte(PUB_KEY_HASH);
+                    digest.writeByte(MAIN_PUB_KEY_HASH);
                     break;
                 case TESTNET:
                     digest.writeByte(TEST_PUB_KEY_HASH);
@@ -133,10 +132,10 @@ namespace BitCoin
             {
                 default:
                 case MAINNET:
-                    digest.writeByte(PUB_KEY_HASH);
+                    data.writeByte(MAIN_PUB_KEY_HASH);
                     break;
                 case TESTNET:
-                    digest.writeByte(TEST_PUB_KEY_HASH);
+                    data.writeByte(TEST_PUB_KEY_HASH);
                     break;
             }
             pHash.write(&data);
@@ -155,14 +154,15 @@ namespace BitCoin
             {
                 default:
                 case MAINNET:
-                    versionByte |= (0x00 << 3);
                     prefix = "bitcoincash";
                     break;
                 case TESTNET:
-                    versionByte |= (0x00 << 3);
                     prefix = "bchtest";
                     break;
             }
+
+            if(pIsScriptHash)
+                versionByte |= (0x01 << 3);
 
             if(pHash.size() == 20) // 160 bits
                 versionByte |= 0x00;
@@ -406,7 +406,7 @@ namespace BitCoin
             {
                 validCheckSum = true;
                 if(*prefixAttempt == "bitcoincash")
-                    pType = PUB_KEY_HASH;
+                    pType = MAIN_PUB_KEY_HASH;
                 else if(*prefixAttempt == "bchtest")
                     pType = TEST_PUB_KEY_HASH;
                 else
@@ -463,8 +463,8 @@ namespace BitCoin
             // Already set as main net pub key hash
             break;
         case 1: // P2SH
-            if(pType == PUB_KEY_HASH)
-                pType = SCRIPT_HASH;
+            if(pType == MAIN_PUB_KEY_HASH)
+                pType = MAIN_SCRIPT_HASH;
             else if(pType == TEST_PUB_KEY_HASH)
                 pType = TEST_SCRIPT_HASH;
             break;
@@ -483,52 +483,47 @@ namespace BitCoin
         AddressType type;
 
         if(decodeLegacyAddress(pText, result.address, type))
-        {
             result.format = PaymentRequest::Format::LEGACY;
-            result.protocol = PaymentRequest::Protocol::ADDRESS;
-
-            switch(type)
-            {
-            case PUB_KEY_HASH:
-                result.network = MAINNET;
-                break;
-            case TEST_PUB_KEY_HASH:
-                result.network = TESTNET;
-                break;
-            case SCRIPT_HASH:
-            case PRIVATE_KEY:
-            case TEST_SCRIPT_HASH:
-            case TEST_PRIVATE_KEY:
-            default:
-            case UNKNOWN:
-                result.format = PaymentRequest::Format::INVALID;
-                result.protocol = PaymentRequest::Protocol::NONE;
-                break;
-            }
-        }
         else if(decodeCashAddress(pText, result.address, type))
-        {
             result.format = PaymentRequest::Format::CASH;
-            result.protocol = PaymentRequest::Protocol::ADDRESS;
+        else
+        {
+            result.format = PaymentRequest::Format::INVALID;
+            result.protocol = PaymentRequest::Protocol::NONE;
+            return result;
+        }
 
-            switch(type)
-            {
-                case PUB_KEY_HASH:
-                    result.network = MAINNET;
-                    break;
-                case TEST_PUB_KEY_HASH:
-                    result.network = TESTNET;
-                    break;
-                case SCRIPT_HASH:
-                case PRIVATE_KEY:
-                case TEST_SCRIPT_HASH:
-                case TEST_PRIVATE_KEY:
-                default:
-                case UNKNOWN:
-                    result.format = PaymentRequest::Format::INVALID;
-                    result.protocol = PaymentRequest::Protocol::NONE;
-                    break;
-            }
+        switch(type)
+        {
+        case MAIN_SCRIPT_HASH:
+            result.network = MAINNET;
+            result.protocol = PaymentRequest::Protocol::SCRIPT_HASH;
+            break;
+        case AddressType::MAIN_PUB_KEY_HASH:
+            result.network = MAINNET;
+            result.protocol = PaymentRequest::Protocol::PUB_KEY_HASH;
+            break;
+        case MAIN_PRIVATE_KEY:
+            result.network = MAINNET;
+            result.protocol = PaymentRequest::Protocol::PRIVATE_KEY;
+            break;
+        case TEST_SCRIPT_HASH:
+            result.network = TESTNET;
+            result.protocol = PaymentRequest::Protocol::SCRIPT_HASH;
+            break;
+        case TEST_PUB_KEY_HASH:
+            result.network = TESTNET;
+            result.protocol = PaymentRequest::Protocol::PUB_KEY_HASH;
+            break;
+        case TEST_PRIVATE_KEY:
+            result.network = TESTNET;
+            result.protocol = PaymentRequest::Protocol::PRIVATE_KEY;
+            break;
+        default:
+        case UNKNOWN:
+            result.format = PaymentRequest::Format::INVALID;
+            result.protocol = PaymentRequest::Protocol::NONE;
+            break;
         }
 
         return result;
@@ -822,9 +817,9 @@ namespace BitCoin
         switch(mVersion)
         {
         case MAINNET_PUBLIC:
-            return encodePaymentCode(hash(), pFormat, MAINNET);
+            return encodeHashPaymentCode(hash(), pFormat, MAINNET);
         case TESTNET_PUBLIC:
-            return encodePaymentCode(hash(), pFormat, TESTNET);
+            return encodeHashPaymentCode(hash(), pFormat, TESTNET);
         default:
             return NextCash::String();
         }
@@ -2809,7 +2804,7 @@ namespace BitCoin
         unsigned char nextChar;
         PaymentRequest paymentRequest;
         bool found;
-        Key *newKey = new Key(), *chain;
+        Key *newKey = new Key();
         PublicKeyData *newData;
         Key::DerivationPathMethod method = Key::UNKNOWN;
 
@@ -2895,7 +2890,6 @@ namespace BitCoin
         NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "------------- Starting Key Tests -------------");
 
         bool success = true;
-        AddressType addressType;
         NextCash::Hash hash;
         NextCash::Hash addressHash;
 
@@ -3756,7 +3750,7 @@ namespace BitCoin
 
                 if(addressKey != NULL)
                 {
-                    encodedAddress = encodePaymentCode(addressKey->hash(),
+                    encodedAddress = encodeHashPaymentCode(addressKey->hash(),
                       PaymentRequest::Format::LEGACY, MAINNET);
                     if(encodedAddress != receivingAddresses[i])
                     {
@@ -3778,13 +3772,19 @@ namespace BitCoin
                     }
                     else
                     {
-                        if(addressType != PUB_KEY_HASH)
+                        if(paymentRequest.network != MAINNET)
                         {
                             walletSuccess = false;
                             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                              "Failed decode address type %d : type %d", i, addressType);
+                              "Failed decode address network %d", i);
                         }
-                        else if(hash != addressKey->hash())
+                        else if(paymentRequest.format != PaymentRequest::LEGACY)
+                        {
+                            walletSuccess = false;
+                            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                              "Failed decode address format %d", i);
+                        }
+                        else if(paymentRequest.address != addressKey->hash())
                         {
                             walletSuccess = false;
                             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3819,7 +3819,7 @@ namespace BitCoin
 
                 if(addressKey != NULL)
                 {
-                    encodedAddress = encodePaymentCode(addressKey->hash(),
+                    encodedAddress = encodeHashPaymentCode(addressKey->hash(),
                       PaymentRequest::Format::LEGACY, MAINNET);
                     if(encodedAddress != changeAddresses[i])
                     {
@@ -4182,7 +4182,7 @@ namespace BitCoin
 
             if(addressKey != NULL)
             {
-                encodedAddress = encodePaymentCode(addressKey->hash(),
+                encodedAddress = encodeHashPaymentCode(addressKey->hash(),
                   PaymentRequest::Format::LEGACY);
                 if(encodedAddress != receivingAddresses[i])
                 {
@@ -4204,13 +4204,19 @@ namespace BitCoin
                 }
                 else
                 {
-                    if(addressType != PUB_KEY_HASH)
+                    if(paymentRequest.network != MAINNET)
                     {
                         readWriteSuccess = false;
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                          "Failed decode address type %d : type %d", i, addressType);
+                          "Failed decode address network %d", i);
                     }
-                    else if(hash != addressKey->hash())
+                    else if(paymentRequest.format != PaymentRequest::LEGACY)
+                    {
+                        readWriteSuccess = false;
+                        NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                          "Failed decode address format %d", i);
+                    }
+                    else if(paymentRequest.address != addressKey->hash())
                     {
                         readWriteSuccess = false;
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -4272,7 +4278,6 @@ namespace BitCoin
             "BITCOINCASH:PQQ3728YW0Y47SQN6L2NA30MCW6ZM78DZQ5UCQZC37",
         };
 
-
         for(unsigned int i=0;i<cashAddressCount;++i)
         {
             paymentRequest = decodePaymentCode(legacyAddresses[i]);
@@ -4291,7 +4296,9 @@ namespace BitCoin
                 continue;
             }
 
-            cashAddressResult = encodePaymentCode(correctAddressHash, paymentRequest.format);
+            cashAddressResult = encodeHashPaymentCode(paymentRequest.address,
+              PaymentRequest::Format::CASH, MAINNET, true,
+              paymentRequest.protocol == PaymentRequest::SCRIPT_HASH);
 
             if(cashAddressResult != correctCashAddresses[i])
             {
@@ -4306,7 +4313,6 @@ namespace BitCoin
             else
             {
                 paymentRequest = decodePaymentCode(correctCashAddresses[i]);
-
                 if(paymentRequest.format == PaymentRequest::Format::INVALID)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,

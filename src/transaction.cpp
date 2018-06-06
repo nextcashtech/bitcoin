@@ -2297,11 +2297,13 @@ namespace BitCoin
           "------------- Starting Transaction Tests -------------");
 
         bool success = true;
-        Key privateKey1, privateKey2;
+        Key privateKey1, privateKey2, privateKey3;
         //Key publicKey1, publicKey2;
         Signature signature;
         NextCash::Buffer data;
         Forks forks;
+
+        privateKey3.generatePrivate(MAINNET);
 
         // Initialize private key
         data.writeHex("d68e0869df44615cc57f196208a896653e969f69960c6435f38ae47f6b6d082d");
@@ -2322,11 +2324,13 @@ namespace BitCoin
 //        publicKey2.readPublic(&data);
 
         // Create unspent transaction output (so we can spend it)
-        Transaction spendable, transaction;
+        Transaction spendable, spendable3, transaction;
 
         spendable.addP2PKHOutput(privateKey1.hash(), 51000);
-
         spendable.calculateHash();
+
+        spendable3.addP2PKHOutput(privateKey3.hash(), 51000);
+        spendable3.calculateHash();
 
         /***********************************************************************************************
          * Process Valid P2PKH Transaction
@@ -2407,7 +2411,7 @@ namespace BitCoin
         transaction.addP2PKHOutput(privateKey2.hash(), 50000);
 
         // Sign the input
-        if(!transaction.signP2PKHInput(spendable.outputs[0], 0, privateKey1, Signature::ALL, forks.forkID()))
+        if(!transaction.signP2PKHInput(spendable.outputs[0], 0, privateKey2, Signature::ALL, forks.forkID()))
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed P2PKH sign with wrong public key");
         else
         {
@@ -2471,28 +2475,32 @@ namespace BitCoin
         transaction.clear();
 
         // Add input
-        transaction.addInput(spendable.hash, 0);
+        transaction.addInput(spendable3.hash, 0);
 
         // Add output
         transaction.addP2PKHOutput(privateKey2.hash(), 50000);
 
-        // Sign the input
-        if(transaction.signP2PKHInput(spendable.outputs[0], 0, privateKey2, Signature::ALL, forks.forkID()))
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed P2PKH sign with wrong private key");
+        // Sign the input with the wrong output
+        if(transaction.signP2PKHInput(spendable3.outputs[0], 0, privateKey3, Signature::ALL, forks.forkID()))
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME,
+              "Passed P2PKH sign with wrong private key");
         else
         {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed P2PKH sign with wrong private key");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+              "Failed P2PKH sign with wrong private key");
             success = false;
         }
 
         transaction.inputs[0].script.setReadOffset(0);
         transaction.calculateHash();
-        //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+        //  "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0].script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0].sequence, spendable.outputs[0].amount);
         if(!interpreter.process(transaction.inputs[0].script, 4, forks))
         {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+              "Failed to process signature script");
             success = false;
         }
         else
@@ -2500,16 +2508,19 @@ namespace BitCoin
             spendable.outputs[0].script.setReadOffset(0);
             if(!interpreter.process(spendable.outputs[0].script, 4, forks))
             {
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Failed to process UTXO script");
                 success = false;
             }
             else
             {
                 if(interpreter.isValid() && !interpreter.isVerified())
-                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process P2PKH transaction bad sig");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Passed process P2PKH transaction bad sig");
                 else
                 {
-                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process P2PKH transaction bad sig");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Failed process P2PKH transaction bad sig");
                     success = false;
                 }
             }
@@ -2533,6 +2544,7 @@ namespace BitCoin
         spendable.addP2SHOutput(redeemHash, 51000);
         spendable.calculateHash();
 
+        interpreter.clear();
         transaction.clear();
 
         // Add input
@@ -2544,37 +2556,47 @@ namespace BitCoin
         // Create signature script
         redeemScript.setReadOffset(0);
         if(transaction.authorizeP2SHInput(spendable.outputs[0], 0, redeemScript))
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed sign P2SH script");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME,
+              "Passed sign P2SH script");
         else
         {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed sign P2SH script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+              "Failed sign P2SH script");
             success = false;
         }
 
-        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0].script, checkHashes) == ScriptInterpreter::P2SH)
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2SH script");
+        if(ScriptInterpreter::parseOutputScript(spendable.outputs[0].script, checkHashes) ==
+          ScriptInterpreter::P2SH)
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME,
+              "Passed check P2SH script");
         else
         {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2SH script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+              "Failed check P2SH script");
             success = false;
         }
 
         if(checkHashes.size() != 1 || redeemHash == checkHashes.front())
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2SH script hash");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME,
+              "Passed check P2SH script hash");
         else
         {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed check P2SH script hash");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+              "Failed check P2SH script hash");
             success = false;
         }
 
         transaction.inputs[0].script.setReadOffset(0);
         transaction.calculateHash();
-        //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
+        //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+        //  "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0].script.setReadOffset(0);
-        interpreter.initialize(&transaction, 0, transaction.inputs[0].sequence, spendable.outputs[0].amount);
+        interpreter.initialize(&transaction, 0, transaction.inputs[0].sequence,
+          spendable.outputs[0].amount);
         if(!interpreter.process(transaction.inputs[0].script, 4, forks))
         {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+              "Failed to process signature script");
             success = false;
         }
         else
@@ -2582,16 +2604,19 @@ namespace BitCoin
             spendable.outputs[0].script.setReadOffset(0);
             if(!interpreter.process(spendable.outputs[0].script, 4, forks))
             {
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Failed to process UTXO script");
                 success = false;
             }
             else
             {
                 if(interpreter.isValid() && interpreter.isVerified())
-                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed process valid P2SH transaction");
+                    NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Passed process valid P2SH transaction");
                 else
                 {
-                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed process valid P2SH transaction");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Failed process valid P2SH transaction");
                     success = false;
                 }
             }
@@ -2697,10 +2722,6 @@ namespace BitCoin
         interpreter.clear();
         transaction.clear();
         spendable.clear();
-
-        Key privateKey3;
-
-        privateKey3.generatePrivate(MAINNET);
 
         publicKeys.clear();
         publicKeys.push_back(privateKey1.publicKey());

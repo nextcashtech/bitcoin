@@ -678,10 +678,16 @@ namespace BitCoin
 #ifndef ANDROID
         if(mKeyStore.isPrivateLoaded())
         {
-            filePathName = Info::instance().path();
-            filePathName.pathAppend(".private_keystore");
-            NextCash::FileOutputStream privateFile(filePathName, true);
+            tempFilePathName = Info::instance().path();
+            tempFilePathName.pathAppend(".private_keystore.temp");
+            NextCash::FileOutputStream privateFile(tempFilePathName, true);
             mKeyStore.writePrivate(&privateFile, pPassword, pPasswordLength);
+
+            privateFile.close();
+
+            NextCash::String realFilePathName = Info::instance().path();
+            realFilePathName.pathAppend("private_keystore");
+            NextCash::renameFile(tempFilePathName, realFilePathName);
         }
 #endif
 

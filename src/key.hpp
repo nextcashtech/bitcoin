@@ -26,9 +26,9 @@ namespace BitCoin
 {
     enum AddressType
     {
-        PUB_KEY_HASH = 0x00, // Public key hash
-        SCRIPT_HASH  = 0x05, // Script hash
-        PRIVATE_KEY  = 0x80, // Private key
+        MAIN_PUB_KEY_HASH = 0x00, // Mainnet Public key hash
+        MAIN_SCRIPT_HASH  = 0x05, // Mainnet Script hash
+        MAIN_PRIVATE_KEY  = 0x80, // Mainnet Private key
 
         TEST_PUB_KEY_HASH = 0x6f, // Testnet Public key hash
         TEST_SCRIPT_HASH  = 0xc4, // Testnet Script hash
@@ -42,8 +42,8 @@ namespace BitCoin
     {
     public:
 
-        enum Format { INVALID, LEGACY, CASH };
-        enum Protocol { NONE, ADDRESS, REQUEST_AMOUNT };
+        enum Format { INVALID, LEGACY, LEGACY_SCRIPT, CASH };
+        enum Protocol { NONE, PUB_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY, PUB_KEY_HASH_AMOUNT };
 
         PaymentRequest()
         {
@@ -87,10 +87,9 @@ namespace BitCoin
     };
 
     // Return Base58 address from hash and type.
-    NextCash::String encodePaymentCode(const NextCash::Hash &pHash,
+    NextCash::String encodeHashPaymentCode(const NextCash::Hash &pHash,
       PaymentRequest::Format pFormat = PaymentRequest::Format::CASH,
-      BitCoin::Network pNetwork = MAINNET,
-      bool pIncludePrefix = false);
+      BitCoin::Network pNetwork = MAINNET, bool pIncludePrefix = false, bool pIsScriptHash = false);
 
     PaymentRequest decodePaymentCode(const char *pText);
 

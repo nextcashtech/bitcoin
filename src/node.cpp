@@ -946,7 +946,6 @@ namespace BitCoin
         // Start String
         const uint8_t *startBytes = networkStartBytes();
         unsigned int matchOffset = 0;
-        bool startStringFound = false;
         NextCash::stream_size startReadOffset = mReceiveBuffer.readOffset();
 
         // Search for start string
