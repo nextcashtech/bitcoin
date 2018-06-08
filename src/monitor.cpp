@@ -799,9 +799,9 @@ namespace BitCoin
     bool Monitor::getUnspentOutputs(Key *pKey, std::vector<Outpoint> &pOutputs,
       bool pIncludePending)
     {
-        pOutputs.clear();
-
         NextCash::HashList payAddresses;
+
+        pOutputs.clear();
 
         mMutex.lock();
 
@@ -810,7 +810,6 @@ namespace BitCoin
         {
             for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
               index != (*trans)->spendInputs.end(); ++index)
-            {
                 for(std::vector<Outpoint>::iterator output = pOutputs.begin();
                   output != pOutputs.end(); ++output)
                     if(*output == (*trans)->transaction->inputs[*index].outpoint)
@@ -818,11 +817,9 @@ namespace BitCoin
                         pOutputs.erase(output);
                         break;
                     }
-            }
 
             for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
               index != (*trans)->payOutputs.end(); ++index)
-            {
                 if(getPayAddresses(&(*trans)->transaction->outputs[*index], payAddresses, true))
                 {
                     for(NextCash::HashList::iterator hash = payAddresses.begin();
@@ -835,7 +832,6 @@ namespace BitCoin
                             break;
                         }
                 }
-            }
         }
 
         if(pIncludePending)
@@ -844,8 +840,7 @@ namespace BitCoin
               mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
             {
                 for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
-                    index != (*trans)->spendInputs.end(); ++index)
-                {
+                  index != (*trans)->spendInputs.end(); ++index)
                     for(std::vector<Outpoint>::iterator output = pOutputs.begin();
                         output != pOutputs.end(); ++output)
                         if(*output == (*trans)->transaction->inputs[*index].outpoint)
@@ -853,11 +848,9 @@ namespace BitCoin
                             pOutputs.erase(output);
                             break;
                         }
-                }
 
                 for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
-                    index != (*trans)->payOutputs.end(); ++index)
-                {
+                  index != (*trans)->payOutputs.end(); ++index)
                     if(getPayAddresses(&(*trans)->transaction->outputs[*index], payAddresses, true))
                     {
                         for(NextCash::HashList::iterator hash = payAddresses.begin();
@@ -870,7 +863,6 @@ namespace BitCoin
                                 break;
                             }
                     }
-                }
             }
         }
 

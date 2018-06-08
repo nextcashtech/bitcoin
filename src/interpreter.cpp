@@ -1684,8 +1684,10 @@ namespace BitCoin
                     }
 
                     // Check that the lock time and time in the stack are both the same type (block height or timestamp)
-                    if(((uint32_t)value < Transaction::LOCKTIME_THRESHOLD && mTransaction->lockTime > Transaction::LOCKTIME_THRESHOLD) ||
-                      ((uint32_t)value > Transaction::LOCKTIME_THRESHOLD && mTransaction->lockTime < Transaction::LOCKTIME_THRESHOLD))
+                    if(((uint32_t)value < Transaction::LOCKTIME_THRESHOLD &&
+                      mTransaction->lockTime > Transaction::LOCKTIME_THRESHOLD) ||
+                      ((uint32_t)value > Transaction::LOCKTIME_THRESHOLD &&
+                        mTransaction->lockTime < Transaction::LOCKTIME_THRESHOLD))
                     {
                         NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "OP_CHECKLOCKTIMEVERIFY value and lock time are different \"types\" : value %d > lock time %d",
@@ -1698,8 +1700,8 @@ namespace BitCoin
                     if(mTransaction == NULL || (uint32_t)value > mTransaction->lockTime)
                     {
                         NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_CHECKLOCKTIMEVERIFY value greater than lock time : value %d > lock time %d", (uint32_t)value,
-                          mTransaction->lockTime);
+                          "OP_CHECKLOCKTIMEVERIFY value greater than lock time : value %d > lock time %d",
+                          (uint32_t)value, mTransaction->lockTime);
                         mVerified = false;
                         return true;
                     }

@@ -1078,6 +1078,12 @@ namespace BitCoin
                 mAddress.port = mVersionData->transmittingPort;
                 mMessageInterpreter.version = mVersionData->version;
 
+                if(!mAddress.isValid() || mAddress.port == 0)
+                {
+                    std::memcpy(mAddress.ip, mConnection->ipv6Address(), 16);
+                    mAddress.port = mConnection->port();
+                }
+
                 // Require full node bit for outgoing nodes
                 if(!mIsIncoming && !mIsSeed && !(mVersionData->transmittingServices &
                   Message::VersionData::FULL_NODE_BIT))
@@ -1245,7 +1251,7 @@ namespace BitCoin
                   ++address)
                 {
                     ip.set(address->ip, address->port);
-                    info.updatePeer(ip, NULL, address->services);
+                    info.addPeer(ip, address->services);
                 }
 
                 if(mIsSeed)

@@ -314,8 +314,9 @@ namespace BitCoin
         file.setOutputEndian(NextCash::Endian::LITTLE);
 
         mPeerLock.readLock();
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Writing peers file with %d peers", mPeers.size());
-        for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
+          "Writing peers file with %d peers", mPeers.size());
+        for(std::list<Peer *>::iterator i = mPeers.begin(); i != mPeers.end(); ++i)
             (*i)->write(&file);
         mPeerLock.readUnlock();
 
@@ -340,7 +341,7 @@ namespace BitCoin
         file.setInputEndian(NextCash::Endian::LITTLE);
 
         mPeerLock.writeLock("Load");
-        for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
+        for(std::list<Peer *>::iterator i = mPeers.begin(); i != mPeers.end(); ++i)
             delete (*i);
         mPeers.clear();
 
@@ -352,11 +353,13 @@ namespace BitCoin
                 mPeers.push_back(newPeer);
         }
 
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Read peers file with %d peers", mPeers.size());
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
+          "Read peers file with %d peers", mPeers.size());
         mPeerLock.writeUnlock();
     }
 
-    void Info::getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating, uint64_t mServicesRequiredMask)
+    void Info::getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating,
+      uint64_t mServicesRequiredMask)
     {
         pPeers.clear();
 
@@ -415,7 +418,8 @@ namespace BitCoin
 
     void Info::updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices)
     {
-        if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) || pServices == 0)
+        if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) ||
+          pServices == 0)
             return;
 
         // For scenario when path was not set before loading instance
@@ -423,24 +427,24 @@ namespace BitCoin
             readPeersFile();
 
         mPeerLock.readLock();
-        for(std::list<Peer *>::iterator peer=mPeers.begin();peer!=mPeers.end();++peer)
-        {
+        for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
             if((*peer)->address.matches(pAddress))
             {
                 // Update existing
                 (*peer)->updateTime();
                 (*peer)->services = pServices;
-                (*peer)->userAgent = pUserAgent;
+                if(pUserAgent != NULL)
+                    (*peer)->userAgent = pUserAgent;
                 (*peer)->address = pAddress;
                 (*peer)->rating++;
                 mPeersModified = true;
                 mPeerLock.readUnlock();
                 return;
             }
-        }
         mPeerLock.readUnlock();
 
         mPeerLock.writeLock("Add");
+
         // Add new
         NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Adding new peer");
         Peer *newPeer = new Peer;
@@ -452,7 +456,41 @@ namespace BitCoin
         newPeer->services = pServices;
         mPeers.push_front(newPeer);
         mPeersModified = true;
+
         mPeerLock.writeUnlock();
+    }
+
+    bool Info::addPeer(const IPAddress &pAddress, uint64_t pServices)
+    {
+        if(!pAddress.isValid() || pServices == 0)
+            return false;
+
+        // For scenario when path was not set before loading instance
+        if(mPeers.size() == 0)
+            readPeersFile();
+
+        mPeerLock.readLock();
+        for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
+            if((*peer)->address.matches(pAddress))
+            {
+                mPeerLock.readUnlock();
+                return false;
+            }
+        mPeerLock.readUnlock();
+
+        // Add new
+        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Adding new peer");
+        Peer *newPeer = new Peer;
+        newPeer->rating = 0;
+        newPeer->updateTime();
+        newPeer->address = pAddress;
+        newPeer->services = pServices;
+
+        mPeerLock.writeLock("Add");
+        mPeers.push_front(newPeer);
+        mPeerLock.writeUnlock();
+        mPeersModified = true;
+        return true;
     }
 
     bool Info::test()

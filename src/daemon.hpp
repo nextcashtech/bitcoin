@@ -79,7 +79,7 @@ namespace BitCoin
         //   4 : No change address
         //   5 : Signing Issue
         int sendPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash, uint64_t pAmount,
-          double pFeeRate = 2.0);
+          double pFeeRate = 1.0);
 
         bool loadMonitor();
         bool saveMonitor();
@@ -135,6 +135,10 @@ namespace BitCoin
         // Query peers from a seed
         // Returns number of peers actually connected
         unsigned int querySeed(const char *pName);
+        const char *getRandomSeed();
+
+        bool mSeedsRandomized;
+        std::vector<const char *> mRandomSeeds;
 
         // Nodes
         NextCash::ReadersLock mNodeLock;

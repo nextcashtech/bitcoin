@@ -156,7 +156,7 @@ namespace BitCoin
 
         Transaction()
         {
-            version = 2;
+            version = 1;
             lockTime = 0;
 
             mFee = 0;
@@ -194,7 +194,7 @@ namespace BitCoin
         uint32_t version;
         std::vector<Input> inputs;
         std::vector<Output> outputs;
-        uint32_t lockTime;
+        uint32_t lockTime; // Time/Block height at or after which a transaction can be confirmed.
 
         unsigned int size() const { return mSize; }
         int32_t time() const { return mTime; }

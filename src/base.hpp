@@ -93,7 +93,10 @@ namespace BitCoin
         void write(NextCash::OutputStream *pStream) const;
         bool read(NextCash::InputStream *pStream);
 
-        bool matches(const IPAddress &pOther) const { return std::memcmp(ip, pOther.ip, INET6_ADDRLEN) == 0 && port == pOther.port; }
+        bool matches(const IPAddress &pOther) const
+        {
+            return std::memcmp(ip, pOther.ip, INET6_ADDRLEN) == 0 && port == pOther.port;
+        }
 
         bool operator == (const IPAddress &pRight) const
         {

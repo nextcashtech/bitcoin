@@ -1150,6 +1150,7 @@ namespace BitCoin
         mCashForkBlockHeight = file.readInt();
         mBlockMaxSize = file.readUnsignedInt();
         mForkID = file.readUnsignedInt();
+        mForkID = 0; // TODO Remove
 
         if(mCashForkBlockHeight != -1)
         {
@@ -1190,6 +1191,7 @@ namespace BitCoin
         }
 
         mModified = false;
+        mModified = true; // TODO Remove
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
           "Loaded %d soft forks at height %d", mForks.size(), mHeight);
         mMutex.unlock();

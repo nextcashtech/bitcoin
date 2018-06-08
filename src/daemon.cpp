@@ -61,6 +61,7 @@ namespace BitCoin
         mRequestsListener = NULL;
         mGoodNodeMax = 5;
         mOutgoingNodeMax = 8;
+        mSeedsRandomized = false;
 
         NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME, "Creating daemon object");
     }
@@ -789,7 +790,7 @@ namespace BitCoin
 
         // Create transaction
         Transaction *transaction = new Transaction();
-        uint64_t inputAmount = 0, estimatedFee = (uint64_t)(250.0 * pFeeRate);
+        uint64_t inputAmount = 0, estimatedFee = (uint64_t)(150.0 * pFeeRate);
 
         for(std::vector<Outpoint>::iterator output = unspentOutputs.begin();
           output != unspentOutputs.end() && inputAmount <= pAmount + estimatedFee; ++output)
@@ -797,6 +798,7 @@ namespace BitCoin
             transaction->addInput(output->transactionID, output->index);
             transaction->inputs.back().outpoint.output = new Output(*output->output);
             inputAmount += output->output->amount;
+            estimatedFee += (uint64_t)(100.0 * pFeeRate);
         }
 
         if(inputAmount < pAmount + estimatedFee)
@@ -1942,8 +1944,32 @@ namespace BitCoin
             };
     static const int SEED_COUNT = 7;
 
+    const char *Daemon::getRandomSeed()
+    {
+        if(!mSeedsRandomized)
+        {
+            for(unsigned int i = 0; i < SEED_COUNT; ++i)
+                mRandomSeeds.push_back(SEEDS[i]);
+
+            std::random_shuffle(mRandomSeeds.begin(), mRandomSeeds.end());
+            mSeedsRandomized = true;
+        }
+
+        if(mRandomSeeds.size() > 0)
+        {
+            const char *result = mRandomSeeds.back();
+            mRandomSeeds.pop_back();
+            return result;
+        }
+        else
+            return NULL;
+    }
+
     unsigned int Daemon::querySeed(const char *pName)
     {
+        if(pName == NULL)
+            return 0;
+
         mQueryingSeed = true;
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Querying seed %s", pName);
@@ -2008,7 +2034,7 @@ namespace BitCoin
     {
         NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Recruiting peers");
         std::vector<Peer *> peers;
-        unsigned int count = 0;
+        unsigned int newCount = 0;
         bool found;
         uint64_t servicesMask = Message::VersionData::FULL_NODE_BIT;
 #ifdef SINGLE_THREAD
@@ -2019,14 +2045,13 @@ namespace BitCoin
 
         mNodeLock.readLock();
         unsigned int goodCount = 0;
-        unsigned int usableCount = 0;
+        unsigned int allCount = 0;
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
             if(!(*node)->isIncoming() && !(*node)->isSeed())
             {
                 if((*node)->isGood())
                     ++goodCount;
-                else
-                    ++usableCount;
+                ++allCount;
             }
         mNodeLock.readUnlock();
 
@@ -2035,6 +2060,8 @@ namespace BitCoin
 
         // Try peers with good ratings first
         mInfo.getRandomizedPeers(peers, 5, servicesMask);
+        if(peers.size() < 50)
+            mInfo.getRandomizedPeers(peers, 1, servicesMask);
         NextCash::Network::Connection *connection;
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d good peers", peers.size());
@@ -2062,7 +2089,8 @@ namespace BitCoin
             else if(addNode(connection, false, false, true, (*peer)->services))
             {
                 ++goodCount;
-                ++count;
+                ++allCount;
+                ++newCount;
 #ifdef SINGLE_THREAD
                 break;
 #endif
@@ -2086,12 +2114,12 @@ namespace BitCoin
         }
 
         peers.clear();
-        mInfo.getRandomizedPeers(peers, 0, servicesMask);
+        mInfo.getRandomizedPeers(peers, -3, servicesMask);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d usable peers", peers.size());
         int32_t startTime = getTime();
         for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
-          !mStopRequested && usableCount < mOutgoingNodeMax - mGoodNodeMax; ++peer)
+          !mStopRequested && allCount < mOutgoingNodeMax; ++peer)
         {
             // Skip nodes already connected
             found = false;
@@ -2113,8 +2141,8 @@ namespace BitCoin
                 delete connection;
             else if(addNode(connection, false, false, false, 0))
             {
-                ++usableCount;
-                ++count;
+                ++allCount;
+                ++newCount;
 #ifdef SINGLE_THREAD
                 break;
 #endif
@@ -2138,15 +2166,15 @@ namespace BitCoin
 #endif
         }
 
-        if(count == 0)
+        if(newCount == 0)
         {
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Choosing random seed");
-            querySeed(SEEDS[NextCash::Math::randomInt(SEED_COUNT)]);
+            querySeed(getRandomSeed());
         }
 
         mConnecting = false;
-        return count;
+        return newCount;
     }
 
     void Daemon::cleanNodes()

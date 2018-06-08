@@ -102,6 +102,7 @@ namespace BitCoin
         // Return list of peers in random order
         void getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating, uint64_t mServicesRequiredMask = 0);
         void updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices);
+        bool addPeer(const IPAddress &pAddress, uint64_t pServices);
         void addPeerFail(const IPAddress &pAddress, int pCount = 1);
 
         void save();
