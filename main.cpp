@@ -43,13 +43,7 @@ int main(int pArgumentCount, char **pArguments)
     bool start = false;
     bool noDaemon = false;
     bool stop = false;
-    bool validate = false;
-    bool rebuild = false;
-    bool listblocks = false;
     bool testnet = false;
-    NextCash::String printBlock, address;
-    bool nextIsPrintBlock = false;
-    bool nextIsAddress = false;
 
     if(pArgumentCount < 2)
     {
@@ -62,16 +56,6 @@ int main(int pArgumentCount, char **pArguments)
         start = true;
     else if(std::strcmp(pArguments[1], "stop") == 0)
         stop = true;
-    else if(std::strcmp(pArguments[1], "validate") == 0)
-        validate = true;
-    else if(std::strcmp(pArguments[1], "rebuild") == 0)
-        rebuild = true;
-    else if(std::strcmp(pArguments[1], "listblocks") == 0)
-        listblocks = true;
-    else if(std::strcmp(pArguments[1], "printblock") == 0)
-        nextIsPrintBlock = true;
-    else if(std::strcmp(pArguments[1], "address") == 0)
-        nextIsAddress = true;
     else if(std::strcmp(pArguments[1], "help") == 0)
     {
         printHelp(path);
@@ -90,16 +74,6 @@ int main(int pArgumentCount, char **pArguments)
             if(path[path.length()-1] != '/')
                 path += "/";
             nextIsPath = false;
-        }
-        else if(nextIsPrintBlock)
-        {
-            printBlock = pArguments[i];
-            nextIsPrintBlock = false;
-        }
-        else if(nextIsAddress)
-        {
-            address = pArguments[i];
-            nextIsAddress = false;
         }
         else if(std::strcmp(pArguments[i], "-v") == 0)
             NextCash::Log::setLevel(NextCash::Log::VERBOSE);
@@ -139,157 +113,6 @@ int main(int pArgumentCount, char **pArguments)
 
     NextCash::createDirectory(path);
     BitCoin::Info::setPath(path);
-
-    if(printBlock)
-    {
-        BitCoin::Block block;
-        BitCoin::BlockStats blockStats;
-        BitCoin::Forks forks;
-
-        if(!blockStats.load() || !forks.load(blockStats))
-        {
-            NextCash::Log::add(NextCash::Log::ERROR, MAIN_LOG_NAME,
-              "Failed to load block stats or forks");
-            return 1;
-        }
-
-        if(printBlock.length() == 64)
-        {
-            NextCash::Hash hash;
-            BitCoin::Chain chain;
-            chain.load(false);
-            NextCash::Buffer buffer;
-            buffer.writeHex(printBlock.text());
-            hash.read(&buffer, 32);
-
-            if(!chain.getBlock(hash, block))
-            {
-                NextCash::Log::add(NextCash::Log::ERROR, MAIN_LOG_NAME, "Failed to read block");
-                return 1;
-            }
-        }
-        else
-        {
-            unsigned int height = std::stol(printBlock.text());
-            if(!BitCoin::BlockFile::readBlock(height, block))
-            {
-                NextCash::Log::addFormatted(NextCash::Log::ERROR, MAIN_LOG_NAME,
-                  "Failed to find block at height %d", height);
-                return 1;
-            }
-        }
-
-        block.print(forks, NextCash::Log::INFO, false);
-        return 0;
-    }
-
-    if(address)
-    {
-        NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME,
-          "Checking address : %s", address.text());
-
-        NextCash::Hash keyHash;
-        BitCoin::AddressType addressType;
-        BitCoin::AddressFormat addressFormat;
-
-        if(!BitCoin::decodeAddress(address.text(), keyHash, addressType, addressFormat))
-            return 1;
-
-        if(addressType != BitCoin::PUB_KEY_HASH)
-        {
-            NextCash::Log::add(NextCash::Log::INFO, MAIN_LOG_NAME,
-              "Not a public key hash address");
-            return 1;
-        }
-
-        NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME,
-          "Public key hash : %s", keyHash.hex().text());
-
-        if(!keyHash.isEmpty())
-        {
-            BitCoin::Addresses addresses;
-            BitCoin::TransactionOutputPool outputs;
-            std::vector<BitCoin::FullOutputData> outputList;
-            BitCoin::TransactionOutputPool::Iterator reference;
-            BitCoin::OutputReference *outputReference;
-            uint64_t balance = 0;
-            addresses.load(BitCoin::Info::instance().path(), 0);
-            outputs.load(BitCoin::Info::instance().path(), BitCoin::Info::instance().outputsThreshold);
-
-            if(!addresses.getOutputs(keyHash, outputList))
-                return false;
-
-            // Print addresses
-            for(std::vector<BitCoin::FullOutputData>::iterator output=outputList.begin();output!=outputList.end();++output)
-            {
-                output->print();
-                reference = outputs.get(output->transactionID);
-                if(reference)
-                {
-                    outputReference = ((BitCoin::TransactionReference *)*reference)->outputAt(output->index);
-                    if(outputReference != NULL)
-                    {
-                        if(outputReference->spentBlockHeight == 0)
-                        {
-                            NextCash::Log::add(NextCash::Log::INFO, MAIN_LOG_NAME, "Unspent");
-                            balance += output->output.amount;
-                        }
-                        else
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME,
-                              "Spent at block height %d", outputReference->spentBlockHeight);
-                    }
-                    else
-                    {
-                        NextCash::Log::addFormatted(NextCash::Log::ERROR, MAIN_LOG_NAME,
-                          "Transaction Output Reference not found : index %d - %s", output->index,
-                          output->transactionID.hex().text());
-                        return 1;
-                    }
-                }
-                else
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::ERROR, MAIN_LOG_NAME,
-                      "Transaction Reference not found : %s", output->transactionID.hex().text());
-                    return 1;
-                }
-            }
-
-            NextCash::Log::addFormatted(NextCash::Log::INFO, MAIN_LOG_NAME,
-              "Balance : %f bitcoins", BitCoin::bitcoins(balance));
-        }
-
-        return 0;
-    }
-
-    // These have to be static or they overflows the stack
-    static BitCoin::Chain chain;
-
-    if(listblocks)
-    {
-        NextCash::Log::setOutput(new NextCash::FileOutputStream(std::cout), true);
-        if(chain.load(true))
-            return 0;
-        else
-            return 1;
-    }
-
-    if(validate || rebuild)
-    {
-        NextCash::Log::setOutput(new NextCash::FileOutputStream(std::cout), true);
-        if(!chain.validate(rebuild))
-            return 1;
-
-        // if(validate)
-        // {
-            // // Compare pool transaction outputs with those loaded from files
-            // BitCoin::TransactionOutputPool savedPool;
-            // if(!savedPool.load())
-                // return 1;
-            // pool.compare(savedPool, "Calculated", "Saved");
-        // }
-
-        return 0;
-    }
 
     NextCash::String logFilePath = BitCoin::Info::path();
     logFilePath.pathAppend("logs");
@@ -417,11 +240,6 @@ void printHelp(const char *pPath)
     std::cerr << "    help                            -> Display this message" << std::endl;
     std::cerr << "    start                           -> Start daemon" << std::endl;
     std::cerr << "    stop                            -> Stop active daemon" << std::endl;
-    std::cerr << "    listblocks                      -> List hashes of all blocks" << std::endl;
-    std::cerr << "    printblock BLOCKNUM or HASH     -> Display block information" << std::endl;
-    std::cerr << "    address BASE_58_PUBKEYHASH      -> Display address information" << std::endl;
-    std::cerr << "    validate                        -> Validate local block chain" << std::endl;
-    std::cerr << "    rebuild                         -> Validate and rebuild unspent transactions from block chain" << std::endl;
     std::cerr << "Options :" << std::endl;
     std::cerr << "    --help or -h                    -> Display this message" << std::endl;
     std::cerr << "    --path PATH                     -> Specify directory for daemon files. Default : " << pPath << std::endl;
