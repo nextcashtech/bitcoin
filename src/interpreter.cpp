@@ -1489,13 +1489,25 @@ namespace BitCoin
                     // Pop the public key
                     Key publicKey;
                     top()->setReadOffset(0);
-                    publicKey.readPublic(top());
+                    if(!publicKey.readPublic(top()))
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid public key for OP_CHECKSIG");
+                        mValid = false;
+                        return false;
+                    }
                     pop();
 
                     // Pop the signature
                     Signature signature;
                     top()->setReadOffset(0);
-                    signature.read(top(), (unsigned int)top()->length(), strictECDSA_DER_Sigs);
+                    if(!signature.read(top(), (unsigned int)top()->length(), strictECDSA_DER_Sigs))
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid signature for OP_CHECKSIG");
+                        mValid = false;
+                        return false;
+                    }
                     pop();
 
                     // Check the signature with the public key
@@ -1563,7 +1575,13 @@ namespace BitCoin
                     {
                         publicKeys[i] = new Key();
                         top()->setReadOffset(0);
-                        publicKeys[i]->readPublic(top());
+                        if(!publicKeys[i]->readPublic(top()))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Invalid public key for OP_CHECKMULTISIG");
+                            mValid = false;
+                            return false;
+                        }
                         pop();
                     }
 
@@ -1582,7 +1600,14 @@ namespace BitCoin
                     for(unsigned int i=0;i<signatureCount;i++)
                     {
                         top()->setReadOffset(0);
-                        signatures[i].read(top(), top()->length(), strictECDSA_DER_Sigs);
+                        if(!signatures[i].read(top(), (unsigned int)top()->length(),
+                          strictECDSA_DER_Sigs))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Invalid signature for OP_CHECKMULTISIG");
+                            mValid = false;
+                            return false;
+                        }
                         pop();
                     }
 
