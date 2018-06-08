@@ -704,29 +704,30 @@ namespace BitCoin
         ScriptInterpreter::ScriptType scriptType;
         NextCash::HashList payAddresses;
         uint32_t inputOffset = 0;
+
+        pTransaction.clearCache();
+
         for(std::vector<Input>::iterator input = pTransaction.inputs.begin();
           input != pTransaction.inputs.end(); ++input, ++inputOffset)
         {
             // Parse the output for addresses
             scriptType = ScriptInterpreter::parseOutputScript(input->outpoint.output->script,
               payAddresses);
-            if(scriptType != ScriptInterpreter::P2PKH)
+            if(scriptType != ScriptInterpreter::P2PKH || payAddresses.size() != 1)
             {
                 payAddresses.clear();
                 return 1;
             }
 
-            for(NextCash::HashList::iterator hash = payAddresses.begin();
-              hash != payAddresses.end(); ++hash)
-            {
-                key = pKey->findAddress(*hash);
-                if(key == NULL)
-                    return 1;
+            // Find private key for public key hash
+            key = pKey->findAddress(payAddresses.front());
+            if(key == NULL)
+                return 1;
 
-                if(!pTransaction.signP2PKHInput(*input->outpoint.output, inputOffset, *key,
-                  pHashType, pForkID))
-                    return 5; // Issue with signing
-            }
+            // Sign input with private key
+            if(!pTransaction.signP2PKHInput(*input->outpoint.output, inputOffset, *key,
+              pHashType, pForkID))
+                return 5; // Issue with signing
         }
 
         return 0;
@@ -844,6 +845,7 @@ namespace BitCoin
         transaction->calculateSize();
         uint64_t actualFee = (uint64_t)((double)transaction->size() * pFeeRate);
         transaction->outputs.back().amount = inputAmount - pAmount - actualFee;
+        transaction->clearCache(); // Clear output sig hash because an output has been modified
 
         // Re-sign transaction
         result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());

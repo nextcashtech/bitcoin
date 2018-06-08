@@ -543,7 +543,8 @@ namespace BitCoin
         pStream->writeByte(mHashType);
     }
 
-    bool Signature::read(NextCash::InputStream *pStream, unsigned int pLength, bool pStrictECDSA_DER_Sigs)
+    bool Signature::read(NextCash::InputStream *pStream, unsigned int pLength,
+      bool pStrictECDSA_DER_Sigs)
     {
         uint8_t input[pLength + 2];
         unsigned int totalLength = pLength - 1;
@@ -565,7 +566,8 @@ namespace BitCoin
                 NextCash::String hex;
                 hex.writeHex(input, totalLength);
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "Invalid compound header byte in signature (%d bytes) : %s", totalLength, hex.text());
+                  "Invalid compound header byte in signature (%d bytes) : %s", totalLength,
+                  hex.text());
                 return false;
             }
 

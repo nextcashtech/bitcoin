@@ -166,6 +166,9 @@ namespace BitCoin
         newInput.outpoint.transactionID = pTransactionID;
         newInput.outpoint.index = pIndex;
         newInput.sequence = pSequence;
+
+        mOutpointHash.clear();
+        mSequenceHash.clear();
         return true;
     }
 
@@ -177,6 +180,9 @@ namespace BitCoin
 
         ScriptInterpreter::writeArithmeticInteger(newInput.script, pBlockHeight);
         newInput.script.compact();
+
+        mOutpointHash.clear();
+        mSequenceHash.clear();
         return true;
     }
 
@@ -276,6 +282,7 @@ namespace BitCoin
         newOutput.script.writeByte(OP_CHECKSIG);
         newOutput.script.compact();
 
+        mOutputHash.clear();
         return true;
     }
 
@@ -377,6 +384,7 @@ namespace BitCoin
         newOutput.script.writeByte(OP_CHECKSIG);
         newOutput.script.compact();
 
+        mOutputHash.clear();
         return true;
     }
 
@@ -441,6 +449,7 @@ namespace BitCoin
         newOutput.script.writeByte(OP_EQUAL);
         newOutput.script.compact();
 
+        mOutputHash.clear();
         return true;
     }
 
@@ -735,6 +744,7 @@ namespace BitCoin
         newOutput.script.writeByte(OP_CHECKMULTISIG);
         newOutput.script.compact();
 
+        mOutputHash.clear();
         return true;
     }
 
@@ -2387,7 +2397,7 @@ namespace BitCoin
 
         NextCash::Buffer inputScript;
         transaction.inputs[0].script.setReadOffset(0);
-        inputScript.writeHex("47304402207e1e7ba265a188ddc8e4931ce8ce600c02c4415c6fc814048d78ae487674d4080220201ab609ad2a53cfd62d59f66415ed7f5a5e9196ccfbd4c7e4d265dcf1075e68012103077b2a0406db4b4e2cddbe9aca5e9f1a3cf039feb843992d05cc0b7a75046635");
+        inputScript.writeHex("48304502210086f3bd9b0b0020cba317ee197e71cfcabed272c3d096f256d8f238febc65464402205c88f0059425bc774f4269b08895af62936d720da3c324be70979de800d392be012103077b2a0406db4b4e2cddbe9aca5e9f1a3cf039feb843992d05cc0b7a75046635");
         if(inputScript == transaction.inputs[0].script)
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed check P2PKH script matching");
         else

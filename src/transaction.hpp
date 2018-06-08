@@ -156,7 +156,7 @@ namespace BitCoin
 
         Transaction()
         {
-            version = 1;
+            version = 2;
             lockTime = 0;
 
             mFee = 0;
