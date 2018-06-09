@@ -51,6 +51,7 @@ namespace BitCoin
         if(!BitCoin::BloomFilter::test())
             failed++;
 
+#ifndef ANDROID
         if(!BitCoin::Chain::test())
             failed++;
 
@@ -67,6 +68,7 @@ namespace BitCoin
 
         // if(!cashDAATest())
             // failed++;
+#endif
 
         return failed == 0;
     }

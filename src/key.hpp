@@ -331,11 +331,15 @@ namespace BitCoin
 
         // Generate a master key from a mnemonic sentence and passphrase BIP-0039
         bool loadMnemonicSeed(Network pNetwork, const char *pText, const char *pPassPhrase = "",
-                              const char *pSalt = "mnemonic");
+          const char *pSalt = "mnemonic");
 
         // Generate a random mnemonic sentence
         static NextCash::String generateMnemonicSeed(Mnemonic::Language,
                                                      unsigned int pBytesEntropy);
+
+        // Validate check bits in mnemonic sentence
+        bool static validateMnemonicSeed(const char *pText, const char *pPassPhrase = "",
+                                         const char *pSalt = "mnemonic");
 
         // Serializes key data and all children
         void writeTree(NextCash::OutputStream *pStream);

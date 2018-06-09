@@ -1735,7 +1735,8 @@ namespace BitCoin
 
             // Combine generated public key and parent public key into new child key
             secp256k1_pubkey newPublicKey;
-            if(!secp256k1_ec_pubkey_combine(thisContext, &newPublicKey, publicKeys, 2))
+            if(!secp256k1_ec_pubkey_combine(thisContext, &newPublicKey,
+              (const secp256k1_pubkey * const *)publicKeys, 2))
             {
                 NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                   "Failed to combine public keys");
@@ -1814,13 +1815,14 @@ namespace BitCoin
           mKey + 1) && finalize();
     }
 
-    NextCash::String createMnemonicFromSeed(Mnemonic::Language pLanguage, NextCash::InputStream *pSeed)
+    NextCash::String createMnemonicFromSeed(Mnemonic::Language pLanguage,
+      NextCash::InputStream *pSeed)
     {
         NextCash::String result;
         NextCash::Digest digest(NextCash::Digest::SHA256);
         NextCash::Buffer checkSum;
         std::vector<bool> bits;
-        uint8_t nextByte;
+        unsigned int nextByte, bitMask;
 
         // Calculate checksum
         pSeed->setReadOffset(0);
@@ -1834,22 +1836,23 @@ namespace BitCoin
         while(pSeed->remaining())
         {
             nextByte = pSeed->readByte();
-            for(unsigned int bit=0;bit<8;++bit)
-                bits.push_back(NextCash::Math::bit(nextByte, bit));
+            for(bitMask = 0x01 << 7; bitMask != 0; bitMask >>= 1)
+                bits.push_back((nextByte & bitMask) != 0);
         }
 
         // Append check sum
         while(checkSumBits > 0)
         {
             nextByte = checkSum.readByte();
-            for(unsigned int bit=0;bit<8&&checkSumBits>0;++bit,--checkSumBits)
-                bits.push_back(NextCash::Math::bit(nextByte, bit));
+            for(bitMask = 0x01 << 7; bitMask != 0 && checkSumBits > 0;
+              bitMask >>= 1, --checkSumBits)
+                bits.push_back((nextByte & bitMask) != 0);
         }
 
         // Parse 11 bits at a time and add words to the sentence
         uint16_t value = 0;
-        uint8_t valueBits = 0;
-        for(std::vector<bool>::iterator bit=bits.begin();bit!=bits.end();++bit)
+        int valueBits = 0;
+        for(std::vector<bool>::iterator bit = bits.begin(); bit != bits.end(); ++bit)
         {
             ++valueBits;
             value <<= 1;
@@ -1889,6 +1892,155 @@ namespace BitCoin
         for(unsigned int i=0;i<pBytesEntropy;i+=4)
             seed.writeUnsignedInt(NextCash::Math::randomInt());
         return createMnemonicFromSeed(pLanguage, &seed);
+    }
+
+    bool Key::validateMnemonicSeed(const char *pText, const char *pPassPhrase, const char *pSalt)
+    {
+        std::vector<bool> bits;
+        const char *ptr;
+        const char **checkWord;
+        NextCash::String word;
+        bool found;
+        unsigned int value;
+        unsigned int highMask = 0x01 << 11;
+
+        // Loop through languages
+        for(unsigned int languageIndex = 0; languageIndex < Mnemonic::LANGUAGE_COUNT;
+          ++languageIndex)
+        {
+            // Parse words from text
+            bits.clear();
+            ptr = pText;
+            while(*ptr)
+            {
+                if(*ptr == ' ' && word.length())
+                {
+                    // Lookup word in mnemonics and add value to list
+                    // TODO Implement binary search
+                    found = false;
+                    checkWord = Mnemonic::WORDS[languageIndex];
+                    for(value = 0; value < Mnemonic::WORD_COUNT; ++value, ++checkWord)
+                        if(word == *checkWord)
+                        {
+                            for(unsigned int mask = 0x01 << 10; mask != 0; mask >>= 1)
+                                bits.push_back((value & mask) != 0);
+                            found = true;
+                            break;
+                        }
+
+                    word.clear();
+
+                    if(!found)
+                        break;
+                }
+                else
+                    word += NextCash::lower(*ptr);
+
+                ++ptr;
+            }
+
+            if(!found)
+                continue; // Next language
+
+            if(word.length())
+            {
+                found = false;
+                checkWord = Mnemonic::WORDS[languageIndex];
+                for(value = 0; value < Mnemonic::WORD_COUNT; ++value, ++checkWord)
+                    if(word == *checkWord)
+                    {
+                        for(unsigned int mask = 0x01 << 10; mask != 0; mask >>= 1)
+                            bits.push_back((value & mask) != 0);
+                        found = true;
+                        break;
+                    }
+
+                if(!found)
+                    continue; // Next language
+            }
+        }
+
+        // Check if values is a valid seed
+        if(bits.size() < 128)
+            return false;
+
+        int checkSumBits = 0, seedBits = 0;
+        for(unsigned int i = 128; i <= 256; i += 32)
+            if(bits.size() == i + (i / 32))
+            {
+                seedBits = i;
+                checkSumBits = i / 32;
+                break;
+            }
+
+        if(checkSumBits == 0)
+            return false;
+
+        // Parse bits
+        NextCash::Buffer seedData, checkSumData;
+        unsigned int valueBits = 0;
+        unsigned int valueMask = 0x01 << 7;
+
+        value = 0;
+
+        for(std::vector<bool>::iterator bit = bits.begin(); bit != bits.end(); ++bit)
+        {
+            --seedBits;
+            ++valueBits;
+            if(*bit)
+                value |= valueMask;
+            valueMask >>= 1;
+
+            if(valueBits == 8)
+            {
+                if(seedBits >= 0)
+                    seedData.writeByte(value);
+                else
+                    checkSumData.writeByte(value);
+                value = 0;
+                valueBits = 0;
+                valueMask = 0x01 << 7;
+            }
+        }
+
+        if(valueBits > 0)
+        {
+            //value <<= (8 - valueBits);
+            if(seedBits >= 0)
+                seedData.writeByte(value);
+            else
+                checkSumData.writeByte(value);
+        }
+
+        // Calculate checksum
+        NextCash::Digest digest(NextCash::Digest::SHA256);
+        NextCash::Buffer checkSum;
+
+        seedData.setReadOffset(0);
+        digest.writeStream(&seedData, seedData.length());
+        checkSum.clear();
+        digest.getResult(&checkSum);
+
+        // Verify checksum
+        bool matches = true;
+        for(int bit = checkSumBits; bit > 0; bit -= 8)
+        {
+            if(bit >= 8)
+            {
+                if(checkSum.readByte() != checkSumData.readByte())
+                {
+                    matches = false;
+                    break;
+                }
+            }
+            else if((checkSum.readByte() >> bit) != (checkSumData.readByte() >> bit))
+            {
+                matches = false;
+                break;
+            }
+        }
+
+        return matches;
     }
 
     // PBKDF2 with HMAC SHA512, 2048 iterations, and output length of 512 bits.
@@ -1957,161 +2109,6 @@ namespace BitCoin
       const char *pPassPhrase, const char *pSalt)
     {
         clear();
-
-        //TODO Validate Mnemonic Sentence
-        // // Loop through languages
-        // for(unsigned int languageIndex=0;languageIndex<Mnemonic::LANGUAGE_COUNT;++languageIndex)
-        // {
-            // // Parse words from text
-            // bits.clear();
-            // ptr = pText;
-            // while(*ptr)
-            // {
-                // if(*ptr == ' ' && word.length())
-                // {
-                    // // Lookup word in mnemonics and add value to list
-                    // // TODO Implement binary search
-                    // found = false;
-                    // for(value=0;value<Mnemonic::WORD_COUNT;++value)
-                        // if(word == Mnemonic::WORDS[languageIndex][value])
-                        // {
-                            // for(int bit=5;bit<16;++bit)
-                            // {
-                                // if(bit >= 8)
-                                    // bits.push_back(NextCash::Math::bit(value & 0xff, bit - 8));
-                                // else
-                                    // bits.push_back(NextCash::Math::bit(value >> 8, bit));
-                            // }
-                            // found = true;
-                            // break;
-                        // }
-
-                    // word.clear();
-
-                    // if(!found)
-                        // break;
-                // }
-                // else
-                    // word += NextCash::lower(*ptr);
-
-                // ++ptr;
-            // }
-
-            // if(!found)
-                // continue; // Next language
-
-            // if(word.length())
-            // {
-                // found = false;
-                // for(value=0;value<Mnemonic::WORD_COUNT;++value)
-                    // if(word == Mnemonic::WORDS[languageIndex][value])
-                    // {
-                        // for(int bit=5;bit<16;++bit)
-                        // {
-                            // if(bit >= 8)
-                                // bits.push_back(NextCash::Math::bit(value & 0xff, bit - 8));
-                            // else
-                                // bits.push_back(NextCash::Math::bit(value >> 8, bit));
-                        // }
-                        // found = true;
-                        // break;
-                    // }
-
-                // if(!found)
-                    // continue; // Next language
-            // }
-
-            // // Check if values is a valid seed
-            // if(bits.size() > 128)
-            // {
-                // checkSumBits = 0;
-                // if(pIncludesCheckSum)
-                // {
-                    // for(unsigned int i=128;i<=256;i+=32)
-                        // if(bits.size() == i + (i / 32))
-                        // {
-                            // seedBits = i;
-                            // checkSumBits = i / 32;
-                            // break;
-                        // }
-
-                    // if(checkSumBits == 0)
-                        // continue;
-                // }
-                // else
-                    // seedBits = bits.size();
-
-                // // Parse bits
-                // mSeed.clear();
-                // mnemonicCheckSum.clear();
-                // value = 0;
-                // valueBits = 0;
-                // for(std::vector<bool>::iterator bit=bits.begin();bit!=bits.end();++bit)
-                // {
-                    // --seedBits;
-                    // ++valueBits;
-                    // value <<= 1;
-                    // if(*bit)
-                        // value |= 0x01;
-
-                    // if(valueBits == 8)
-                    // {
-                        // if(seedBits >= 0)
-                            // mSeed.writeByte(value);
-                        // else
-                            // mnemonicCheckSum.writeByte(value);
-                        // value = 0;
-                        // valueBits = 0;
-                    // }
-                // }
-
-                // if(valueBits > 0)
-                // {
-                    // if(valueBits < 8)
-                        // value <<= (8 - valueBits);
-                    // if(seedBits >= 0)
-                        // mSeed.writeByte(value);
-                    // else
-                        // mnemonicCheckSum.writeByte(value);
-                // }
-
-                // if(pIncludesCheckSum)
-                // {
-                    // // Calculate checksum
-                    // NextCash::Digest digest(NextCash::Digest::SHA256);
-                    // mSeed.setReadOffset(0);
-                    // digest.writeStream(&mSeed, mSeed.length());
-                    // checkSum.clear();
-                    // digest.getResult(&checkSum);
-
-                    // // Verify checksum
-                    // bool matches = true;
-                    // for(int bit=checkSumBits;bit>0;bit-=8)
-                    // {
-                        // if(bit >= 8)
-                        // {
-                            // if(checkSum.readByte() != mnemonicCheckSum.readByte())
-                            // {
-                                // matches = false;
-                                // break;
-                            // }
-                        // }
-                        // else if((checkSum.readByte() >> bit) != (mnemonicCheckSum.readByte() >> bit))
-                        // {
-                            // matches = false;
-                            // break;
-                        // }
-                    // }
-
-                    // if(matches)
-                        // return generateMnemonicMaster();
-                // }
-                // else
-                    // return generateMnemonicMaster();
-            // }
-        // }
-
-        // return false;
 
         NextCash::Buffer sentence, salt, seed;
         sentence.writeString(pMnemonicSentence);
@@ -2889,12 +2886,99 @@ namespace BitCoin
 
     bool Key::test()
     {
-        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "------------- Starting Key Tests -------------");
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+          "------------- Starting Key Tests -------------");
 
         bool success = true;
         NextCash::Hash hash;
         NextCash::Hash addressHash;
 
+        /******************************************************************************************
+         * BIP-0032 Test Seed Check Sums
+         *****************************************************************************************/
+        unsigned int seedCheckCount = 3;
+        const char *seedCheckData[] =
+          {
+            "abcdef0123456789abcdef0123456789",
+            "abcdef0123456789abcdef0123456789abcdef0123456789",
+            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+          };
+        const char *seedCheckText[] =
+          {
+            "profit hunt scare educate filter shadow quality sadness abuse boss fly bar",
+            "profit hunt scare educate filter shadow quality sadness abuse boss fly battle rubber wasp afraid hamster guide entry",
+            "profit hunt scare educate filter shadow quality sadness abuse boss fly battle rubber wasp afraid hamster guide essence vibrant task banana pencil owner cloud",
+          };
+
+        NextCash::Buffer seedData;
+        NextCash::String seed;
+
+        for(unsigned int i = 0; i < seedCheckCount; ++i)
+        {
+            seedData.clear();
+            seedData.writeHex(seedCheckData[i]);
+            seed = createMnemonicFromSeed(Mnemonic::English, &seedData);
+
+            if(seed == seedCheckText[i])
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                  "Passed BIP-0032 Seed Text %d", i + 1);
+            else
+            {
+                success = false;
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Seed Text %d", i + 1);
+            }
+
+            if(Key::validateMnemonicSeed(seed, ""))
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                  "Passed BIP-0032 Seed Check Sum %d", i + 1);
+            else
+            {
+                success = false;
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Seed Check Sum %d", i + 1);
+            }
+        }
+
+        unsigned int seedTextsToValidateLength = 2;
+        const char *seedTextsToValidate[] =
+          {
+            "waste embark lemon divert practice ramp cement orange route reveal live frown",
+            "puzzle void garage bicycle reopen kangaroo spread meat evolve lava hungry gas"
+          };
+
+        for(unsigned int i = 0; i < seedTextsToValidateLength; ++i)
+        {
+            if(Key::validateMnemonicSeed(seedTextsToValidate[i], ""))
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                  "Passed BIP-0032 Seed Validate %d", i + 1);
+            else
+            {
+                success = false;
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Seed Validate %d", i + 1);
+            }
+        }
+
+        unsigned int seedTextsToValidateBadLength = 2;
+        const char *seedTextsToValidateBad[] =
+          {
+            "waste embark lemon divert practice ramp cement orange route reveal live gas",
+            "puzzle void garage bicycle reopen kangaroo spread meat evolve lava hungry frown"
+          };
+
+        for(unsigned int i = 0; i < seedTextsToValidateBadLength; ++i)
+        {
+            if(!Key::validateMnemonicSeed(seedTextsToValidateBad[i], ""))
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+                  "Passed BIP-0032 Seed Validate Bad %d", i + 1);
+            else
+            {
+                success = false;
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Seed Validate Bad %d", i + 1);
+            }
+        }
 
         /******************************************************************************************
          * BIP-0032 Test 1
