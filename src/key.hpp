@@ -391,13 +391,20 @@ namespace BitCoin
 
         unsigned int size() { return (unsigned int)mKeys.size(); }
 
+        bool allAreSynchronized();
+        void setAllSynchronized();
+
         bool hasPrivate(unsigned int pOffset);
         NextCash::String name(unsigned int pOffset);
+        bool isSynchronized(unsigned int pOffset);
+        bool isBackedUp(unsigned int pOffset);
         Key::DerivationPathMethod derivationPathMethod(unsigned int pOffset);
         std::vector<Key *> *chainKeys(unsigned int pOffset);
         Key *chainKey(unsigned int pOffset, uint32_t pIndex);
 
         void setName(unsigned int pOffset, const char *pName);
+        void setSynchronized(unsigned int pOffset);
+        void setBackedUp(unsigned int pOffset);
 
         // These functions require private keys to be loaded/decrypted.
         bool isPrivateLoaded() { return mPrivateLoaded; }

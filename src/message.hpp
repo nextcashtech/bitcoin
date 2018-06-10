@@ -15,7 +15,7 @@
 #include "buffer.hpp"
 #include "network.hpp"
 #include "base.hpp"
-#include "info.hpp"
+#include "peer.hpp"
 #include "transaction.hpp"
 #include "block.hpp"
 #include "key.hpp"

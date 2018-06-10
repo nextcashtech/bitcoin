@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                           *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -13,6 +13,7 @@
 #include "log.hpp"
 #include "digest.hpp"
 #include "email.hpp"
+#include "message.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -32,77 +33,6 @@ namespace BitCoin
             return;
 
         NextCash::Email::send(NULL, emailAddress, pSubject, pMessage);
-    }
-
-    void Peer::write(NextCash::OutputStream *pStream) const
-    {
-        // Validation Header
-        pStream->writeString("AMPR");
-
-        // User Agent Bytes
-        writeCompactInteger(pStream, userAgent.length());
-
-        // User Agent
-        pStream->writeString(userAgent);
-
-        // Rating
-        pStream->writeInt(rating);
-
-        // Time
-        pStream->writeUnsignedInt(time);
-
-        // Services
-        pStream->writeUnsignedLong(services);
-
-        // Address
-        address.write(pStream);
-    }
-
-    bool Peer::read(NextCash::InputStream *pStream)
-    {
-        static const char *match = "AMPR";
-        bool matchFound = false;
-        unsigned int matchOffset = 0;
-
-        // Search for start string
-        while(pStream->remaining())
-        {
-            if(pStream->readByte() == match[matchOffset])
-            {
-                matchOffset++;
-                if(matchOffset == 4)
-                {
-                    matchFound = true;
-                    break;
-                }
-            }
-            else
-                matchOffset = 0;
-        }
-
-        if(!matchFound)
-            return false;
-
-        // User Agent Bytes
-        uint64_t userAgentLength = readCompactInteger(pStream);
-
-        if(userAgentLength > 256)
-            return false;
-
-        // User Agent
-        userAgent = pStream->readString(userAgentLength);
-
-        // Rating
-        rating = pStream->readInt();
-
-        // Time
-        time = pStream->readUnsignedInt();
-
-        // Services
-        services = pStream->readUnsignedLong();
-
-        // Address
-        return address.read(pStream);
     }
 
     Info *Info::sInstance = NULL;
@@ -167,16 +97,14 @@ namespace BitCoin
         merkleBlockCountRequired = 4;
         spvMemPoolCountRequired = 4;
 
-        if(sPath)
-        {
-            NextCash::String configFilePath = sPath;
-            configFilePath.pathAppend("config");
-            readSettingsFile(configFilePath);
+        mDataModified = false;
+        mInitialBlockDownloadComplete = false;
 
-            NextCash::String dataFilePath = sPath;
-            dataFilePath.pathAppend("data");
-            readSettingsFile(dataFilePath);
-        }
+        NextCash::String configPath = sPath;
+        configPath.pathAppend("config");
+        NextCash::FileInputStream configFile(configPath);
+        if(configFile.isValid())
+            readSettingsFile(&configFile);
     }
 
     Info::~Info()
@@ -185,9 +113,18 @@ namespace BitCoin
         writePeersFile();
 
         mPeerLock.writeLock("Destroy");
-        for(std::list<Peer *>::iterator i=mPeers.begin();i!=mPeers.end();++i)
+        for(std::list<Peer *>::iterator i = mPeers.begin(); i != mPeers.end(); ++i)
             delete *i;
         mPeerLock.writeUnlock();
+    }
+
+    bool Info::load()
+    {
+        if(!readDataFile())
+            return false;
+        if(!readPeersFile())
+            return false;
+        return true;
     }
 
     void Info::save()
@@ -256,17 +193,15 @@ namespace BitCoin
         delete[] value;
     }
 
-    void Info::readSettingsFile(const char *pPath)
+    void Info::readSettingsFile(NextCash::InputStream *pStream)
     {
-        NextCash::FileInputStream file(pPath);
-
         char newByte;
         bool equalFound = false;
         NextCash::Buffer name, value;
 
-        while(file.remaining())
+        while(pStream->remaining())
         {
-            newByte = file.readByte();
+            newByte = pStream->readByte();
 
             if(!equalFound && newByte == '=')
                 equalFound = true;
@@ -286,10 +221,70 @@ namespace BitCoin
         applyValue(name, value);
     }
 
-    void Info::writeDataFile()
+    bool Info::readDataFile()
     {
         if(!sPath)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INFO_LOG_NAME,
+              "No Path. Not reading data file.");
+            return false;
+        }
+
+        NextCash::String dataFilePath = sPath;
+        dataFilePath.pathAppend("data");
+
+        if(!NextCash::fileExists(dataFilePath))
+            return true;
+
+        NextCash::FileInputStream file(dataFilePath);
+
+        uint32_t version = file.readUnsignedInt();
+
+        if(version != 1)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INFO_LOG_NAME,
+              "Data file version %d not supported", version);
+            return false;
+        }
+
+        mInitialBlockDownloadComplete = file.readByte() != 0;
+
+        return true;
+    }
+
+    void Info::writeDataFile()
+    {
+        if(!mDataModified)
             return;
+
+        if(!sPath)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INFO_LOG_NAME,
+              "No Path. Not writing data file.");
+            return;
+        }
+
+        // Write to temp file
+        NextCash::String dataFileTempPath = sPath;
+        dataFileTempPath.pathAppend("data.temp");
+        NextCash::FileOutputStream file(dataFileTempPath, true);
+
+        file.writeUnsignedInt(1); // Version
+
+        // IBD Complete
+        if(mInitialBlockDownloadComplete)
+            file.writeByte(0x01);
+        else
+            file.writeByte(0x00);
+
+        file.close();
+
+        // Rename to actual file
+        NextCash::String dataFilePath = sPath;
+        dataFilePath.pathAppend("data");
+        NextCash::renameFile(dataFileTempPath, dataFilePath);
+
+        mDataModified = false;
 
         //NextCash::String dataFilePath = sPath;
         //dataFilePath.pathAppend("data");
@@ -303,7 +298,8 @@ namespace BitCoin
 
         if(!sPath)
         {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INFO_LOG_NAME, "No Path. Not writing peers file.");
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INFO_LOG_NAME,
+              "No Path. Not writing peers file.");
             return;
         }
 
@@ -330,15 +326,18 @@ namespace BitCoin
         mPeersModified = false;
     }
 
-    void Info::readPeersFile()
+    bool Info::readPeersFile()
     {
         if(!sPath)
-            return;
+            return false;
 
         NextCash::String dataFilePath = sPath;
         dataFilePath.pathAppend("peers");
         NextCash::FileInputStream file(dataFilePath);
         file.setInputEndian(NextCash::Endian::LITTLE);
+
+        if(!file.isValid())
+            return true;
 
         mPeerLock.writeLock("Load");
         for(std::list<Peer *>::iterator i = mPeers.begin(); i != mPeers.end(); ++i)
@@ -356,6 +355,7 @@ namespace BitCoin
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
           "Read peers file with %d peers", mPeers.size());
         mPeerLock.writeUnlock();
+        return true;
     }
 
     void Info::getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating,
@@ -483,7 +483,7 @@ namespace BitCoin
 
     bool Info::addPeer(const IPAddress &pAddress, uint64_t pServices)
     {
-        if(!pAddress.isValid() || pServices == 0)
+        if(!pAddress.isValid() || (pServices & Message::VersionData::FULL_NODE_BIT) == 0)
             return false;
 
         // For scenario when path was not set before loading instance

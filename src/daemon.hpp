@@ -103,6 +103,7 @@ namespace BitCoin
 
         void stop();
         bool mRunning, mStopping, mStopRequested, mLoading, mLoaded, mQueryingSeed, mConnecting;
+        bool mKeysSynchronized;
         int mFinishMode;
 
 #ifndef SINGLE_THREAD

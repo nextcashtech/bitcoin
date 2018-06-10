@@ -2128,17 +2128,20 @@ namespace BitCoin
         {
             hasPrivate = false;
             derivationPathMethod = Key::UNKNOWN;
+            flags = 0;
         }
         PublicKeyData(const PublicKeyData &pCopy) : chainKeys(pCopy.chainKeys)
         {
             hasPrivate = pCopy.hasPrivate;
             name = pCopy.name;
+            flags = pCopy.flags;
             derivationPathMethod = pCopy.derivationPathMethod;
         }
         PublicKeyData &operator = (const PublicKeyData &pRight)
         {
             hasPrivate = pRight.hasPrivate;
             name = pRight.name;
+            flags = pRight.flags;
             derivationPathMethod = pRight.derivationPathMethod;
             chainKeys = pRight.chainKeys;
             return *this;
@@ -2159,6 +2162,7 @@ namespace BitCoin
                 pStream->writeByte(0);
             pStream->writeUnsignedInt(name.length());
             pStream->writeString(name);
+            pStream->writeUnsignedInt(flags);
 
             pStream->writeByte(derivationPathMethod);
 
@@ -2178,6 +2182,8 @@ namespace BitCoin
 
             unsigned int nameLength = pStream->readUnsignedInt();
             name = pStream->readString(nameLength);
+
+            flags = pStream->readUnsignedInt();
 
             derivationPathMethod = static_cast<Key::DerivationPathMethod>(pStream->readByte());
 
@@ -2204,6 +2210,11 @@ namespace BitCoin
         bool hasPrivate;
         NextCash::String name;
         Key::DerivationPathMethod derivationPathMethod;
+        uint32_t flags;
+
+        // Flag values
+        static const uint32_t SYNCHRONIZED = 0x01;
+        static const uint32_t BACKED_UP    = 0x02;
 
         // Public keys used to generate addresses without access to private keys
         std::vector<Key *> chainKeys;
@@ -2281,6 +2292,23 @@ namespace BitCoin
             delete *key;
     }
 
+    bool KeyStore::allAreSynchronized()
+    {
+        bool result = true;
+
+        for(std::vector<PublicKeyData *>::iterator key = mKeys.begin(); key != mKeys.end(); ++key)
+            if(((*key)->flags & PublicKeyData::SYNCHRONIZED) == 0)
+                result = false;
+
+        return result;
+    }
+
+    void KeyStore::setAllSynchronized()
+    {
+        for(std::vector<PublicKeyData *>::iterator key = mKeys.begin(); key != mKeys.end(); ++key)
+            (*key)->flags |= PublicKeyData::SYNCHRONIZED;
+    }
+
     bool KeyStore::hasPrivate(unsigned int pOffset)
     {
         if(pOffset >= mKeys.size())
@@ -2295,6 +2323,22 @@ namespace BitCoin
             return NextCash::String();
 
         return mKeys[pOffset]->name;
+    }
+
+    bool KeyStore::isSynchronized(unsigned int pOffset)
+    {
+        if(pOffset >= mKeys.size())
+            return NextCash::String();
+
+        return (mKeys[pOffset]->flags & PublicKeyData::SYNCHRONIZED) != 0;
+    }
+
+    bool KeyStore::isBackedUp(unsigned int pOffset)
+    {
+        if(pOffset >= mKeys.size())
+            return NextCash::String();
+
+        return (mKeys[pOffset]->flags & PublicKeyData::BACKED_UP) != 0;
     }
 
     Key::DerivationPathMethod KeyStore::derivationPathMethod(unsigned int pOffset)
@@ -2359,6 +2403,18 @@ namespace BitCoin
     {
         if(pOffset < mKeys.size())
             mKeys[pOffset]->name = pName;
+    }
+
+    void KeyStore::setSynchronized(unsigned int pOffset)
+    {
+        if(pOffset < mKeys.size())
+            mKeys[pOffset]->flags |= PublicKeyData::SYNCHRONIZED;
+    }
+
+    void KeyStore::setBackedUp(unsigned int pOffset)
+    {
+        if(pOffset < mKeys.size())
+            mKeys[pOffset]->flags |= PublicKeyData::BACKED_UP;
     }
 
     void KeyStore::clear()

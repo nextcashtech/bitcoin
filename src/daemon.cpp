@@ -63,6 +63,7 @@ namespace BitCoin
         mOutgoingNodeMax = 8;
         mSeedsRandomized = false;
         mFinishTime = 0;
+        mKeysSynchronized = true;
 
         NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME, "Creating daemon object");
     }
@@ -203,6 +204,12 @@ namespace BitCoin
             return true;
 
         mLoading = true;
+
+        if(!mInfo.load())
+        {
+            mLoading = false;
+            return false;
+        }
 
         if(!loadKeyStore())
         {
@@ -406,6 +413,7 @@ namespace BitCoin
         saveKeyStore();
         mChain.save();
         mChain.clearInSync();
+        mInfo.save();
 
 #ifdef PROFILER_ON
         NextCash::String profilerTime;
@@ -620,6 +628,8 @@ namespace BitCoin
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Key store public file not found to load");
         }
+
+        mKeysSynchronized = mKeyStore.allAreSynchronized();
 
 #ifndef ANDROID
         filePathName = Info::instance().path();
@@ -1631,6 +1641,13 @@ namespace BitCoin
         while(!mStopping)
         {
             time = getTime();
+            if(!mKeysSynchronized && mChain.isInSync() &&
+              (int)mMonitor.height() == mChain.height())
+            {
+                mKeysSynchronized = false;
+                mKeyStore.setAllSynchronized();
+            }
+
             if(mFinishMode == FINISH_ON_SYNC && mChain.isInSync() &&
               (int)mMonitor.height() == mChain.height() &&
               (mFinishTime == 0 || mFinishTime <= time))

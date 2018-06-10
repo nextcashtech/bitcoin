@@ -20,6 +20,7 @@ add_library( bitcoin STATIC SHARED
              src/daemon.cpp
              src/forks.cpp
              src/info.cpp
+             src/peer.cpp
              src/interpreter.cpp
              src/key.cpp
              src/mem_pool.cpp

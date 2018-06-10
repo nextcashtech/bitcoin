@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                           *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -12,6 +12,7 @@
 #include "mutex.hpp"
 #include "buffer.hpp"
 #include "base.hpp"
+#include "peer.hpp"
 #include "block.hpp"
 
 #include <cstdint>
@@ -21,42 +22,6 @@
 namespace BitCoin
 {
     void notify(const char *pSubject, const char *pMessage);
-
-    class Peer
-    {
-    public:
-
-        Peer() { rating = 0; }
-        Peer(const Peer &pCopy)
-        {
-            time = pCopy.time;
-            services = pCopy.services;
-            userAgent = pCopy.userAgent;
-            rating = pCopy.rating;
-            address = pCopy.address;
-        }
-
-        void write(NextCash::OutputStream *pStream) const;
-        bool read(NextCash::InputStream *pStream);
-
-        void updateTime() { time = getTime(); }
-
-        Peer &operator = (const Peer &pRight)
-        {
-            time = pRight.time;
-            services = pRight.services;
-            userAgent = pRight.userAgent;
-            rating = pRight.rating;
-            address = pRight.address;
-            return *this;
-        }
-
-        uint32_t time;
-        uint64_t services;
-        NextCash::String userAgent;
-        int32_t rating;
-        IPAddress address;
-    };
 
     class Info
     {
@@ -106,6 +71,17 @@ namespace BitCoin
         void addPeerSuccess(const IPAddress &pAddress, int pCount = 1);
         void addPeerFail(const IPAddress &pAddress, int pCount = 1);
 
+        bool initialBlockDownloadIsComplete() { return mInitialBlockDownloadComplete; }
+        void setInitialBlockDownloadComplete()
+        {
+            if(!mInitialBlockDownloadComplete)
+            {
+                mInitialBlockDownloadComplete = true;
+                mDataModified = true;
+            }
+        }
+
+        bool load();
         void save();
 
         static bool test();
@@ -115,13 +91,14 @@ namespace BitCoin
         Info();
         ~Info();
 
-        void readSettingsFile(const char *pPath);
+        void readSettingsFile(NextCash::InputStream *pStream);
         void applyValue(NextCash::Buffer &pName, NextCash::Buffer &pValue);
 
         void writeDataFile();
+        bool readDataFile();
 
         void writePeersFile();
-        void readPeersFile();
+        bool readPeersFile();
 
         // Peers
         bool mPeersModified;
@@ -135,6 +112,9 @@ namespace BitCoin
     private:
         Info(const Info &pCopy);
         const Info &operator = (const Info &pRight);
+
+        bool mDataModified;
+        bool mInitialBlockDownloadComplete;
     };
 }
 
