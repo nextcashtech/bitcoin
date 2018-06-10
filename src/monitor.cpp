@@ -805,19 +805,10 @@ namespace BitCoin
 
         mMutex.lock();
 
+        // Get outputs
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mTransactions.begin(); trans != mTransactions.end(); ++trans)
         {
-            for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
-              index != (*trans)->spendInputs.end(); ++index)
-                for(std::vector<Outpoint>::iterator output = pOutputs.begin();
-                  output != pOutputs.end(); ++output)
-                    if(*output == (*trans)->transaction->inputs[*index].outpoint)
-                    {
-                        pOutputs.erase(output);
-                        break;
-                    }
-
             for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
               index != (*trans)->payOutputs.end(); ++index)
                 if(getPayAddresses(&(*trans)->transaction->outputs[*index], payAddresses, true))
@@ -834,27 +825,33 @@ namespace BitCoin
                 }
         }
 
+        // Remove spent
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
+          mTransactions.begin(); trans != mTransactions.end(); ++trans)
+        {
+            for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
+              index != (*trans)->spendInputs.end(); ++index)
+                for(std::vector<Outpoint>::iterator output = pOutputs.begin();
+                  output != pOutputs.end(); ++output)
+                    if(*output == (*trans)->transaction->inputs[*index].outpoint)
+                    {
+                        pOutputs.erase(output);
+                        break;
+                    }
+        }
+
         if(pIncludePending)
         {
+            // Get pending outputs
             for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
               mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
             {
-                for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
-                  index != (*trans)->spendInputs.end(); ++index)
-                    for(std::vector<Outpoint>::iterator output = pOutputs.begin();
-                        output != pOutputs.end(); ++output)
-                        if(*output == (*trans)->transaction->inputs[*index].outpoint)
-                        {
-                            pOutputs.erase(output);
-                            break;
-                        }
-
                 for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
                   index != (*trans)->payOutputs.end(); ++index)
                     if(getPayAddresses(&(*trans)->transaction->outputs[*index], payAddresses, true))
                     {
                         for(NextCash::HashList::iterator hash = payAddresses.begin();
-                            hash != payAddresses.end(); ++hash)
+                          hash != payAddresses.end(); ++hash)
                             if(pKey->findAddress(*hash) != NULL)
                             {
                                 pOutputs.emplace_back((*trans)->transaction->hash, *index);
@@ -864,6 +861,21 @@ namespace BitCoin
                             }
                     }
             }
+        }
+
+        // Remove spent
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
+          mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
+        {
+            for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
+              index != (*trans)->spendInputs.end(); ++index)
+                for(std::vector<Outpoint>::iterator output = pOutputs.begin();
+                  output != pOutputs.end(); ++output)
+                    if(*output == (*trans)->transaction->inputs[*index].outpoint)
+                    {
+                        pOutputs.erase(output);
+                        break;
+                    }
         }
 
         mMutex.unlock();
