@@ -60,7 +60,7 @@ namespace BitCoin
 
     bool Peer::read(NextCash::InputStream *pStream)
     {
-        const char *match = "AMPR";
+        static const char *match = "AMPR";
         bool matchFound = false;
         unsigned int matchOffset = 0;
 

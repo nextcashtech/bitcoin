@@ -59,6 +59,7 @@ namespace BitCoin
         // Set criteria for daemon stopping on its own
         int finishMode() { return mFinishMode; }
         void setFinishMode(int pMode);
+        void setFinishTime(int32_t pTime); // Set time to stop daemon (zero clears)
         void requestStop() { mStopRequested = true; mChain.requestStop(); }
 
         // Signals
@@ -121,6 +122,7 @@ namespace BitCoin
         int32_t mLastMonitorProcess;
         int32_t mLastFillNodesTime;
         int32_t mLastCleanTime;
+        int32_t mFinishTime;
 
         NextCash::Hash mLastBlockHash;
         NextCash::Network::Listener *mNodeListener;

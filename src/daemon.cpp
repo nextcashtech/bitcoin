@@ -62,6 +62,7 @@ namespace BitCoin
         mGoodNodeMax = 5;
         mOutgoingNodeMax = 8;
         mSeedsRandomized = false;
+        mFinishTime = 0;
 
         NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME, "Creating daemon object");
     }
@@ -153,13 +154,20 @@ namespace BitCoin
         if(pMode != mFinishMode)
         {
             if(pMode == FINISH_ON_REQUEST)
-                NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Finish mode set to on request");
             else
-                NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Finish mode set to on sync");
         }
         mFinishMode = pMode;
+    }
+
+    void Daemon::setFinishTime(int32_t pTime)
+    {
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Finish time set to %d", pTime);
+        mFinishTime = pTime;
     }
 
     static Daemon *sSignalInstance = NULL;
@@ -1622,8 +1630,10 @@ namespace BitCoin
 
         while(!mStopping)
         {
+            time = getTime();
             if(mFinishMode == FINISH_ON_SYNC && mChain.isInSync() &&
-              (int)mMonitor.height() == mChain.height())
+              (int)mMonitor.height() == mChain.height() &&
+              (mFinishTime == 0 || mFinishTime <= time))
             {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Stopping because of finish on sync");
@@ -1634,7 +1644,6 @@ namespace BitCoin
             if(mStopping)
                 break;
 
-            time = getTime();
             if(time - lastStatReportTime > 180)
             {
                 lastStatReportTime = getTime();
