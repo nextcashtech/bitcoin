@@ -435,8 +435,7 @@ namespace BitCoin
                 (*peer)->services = pServices;
                 if(pUserAgent != NULL)
                     (*peer)->userAgent = pUserAgent;
-                (*peer)->address = pAddress;
-                (*peer)->rating++;
+                (*peer)->rating += 5;
                 mPeersModified = true;
                 mPeerLock.readUnlock();
                 return;
@@ -449,8 +448,7 @@ namespace BitCoin
         NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Adding new peer");
         Peer *newPeer = new Peer;
         newPeer->userAgent = pUserAgent;
-        if(pUserAgent != NULL)
-            newPeer->rating = 1;
+        newPeer->rating = 5;
         newPeer->updateTime();
         newPeer->address = pAddress;
         newPeer->services = pServices;
@@ -458,6 +456,29 @@ namespace BitCoin
         mPeersModified = true;
 
         mPeerLock.writeUnlock();
+    }
+
+    void Info::addPeerSuccess(const IPAddress &pAddress, int pCount)
+    {
+        if(!pAddress.isValid())
+            return;
+
+        // For scenario when path was not set before loading instance
+        if(mPeers.size() == 0)
+            readPeersFile();
+
+        mPeerLock.readLock();
+        for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
+            if((*peer)->address.matches(pAddress))
+            {
+                // Update existing
+                (*peer)->updateTime();
+                (*peer)->rating += 5;
+                mPeersModified = true;
+                mPeerLock.readUnlock();
+                return;
+            }
+        mPeerLock.readUnlock();
     }
 
     bool Info::addPeer(const IPAddress &pAddress, uint64_t pServices)

@@ -219,10 +219,8 @@ namespace BitCoin
             requestHeaders();
 
             if(mVersionData != NULL && !mIsIncoming && !mIsSeed)
-            {
                 info.updatePeer(mAddress, mVersionData->userAgent,
                   mVersionData->transmittingServices);
-            }
 
             mPrepared = true;
         }
@@ -1635,8 +1633,7 @@ namespace BitCoin
                     {
                         if(addedCount > 0)
                         {
-                            info.updatePeer(mAddress, mVersionData->userAgent,
-                              mVersionData->transmittingServices);
+                            info.addPeerSuccess(mAddress, 1);
 
                             // Immediately request more headers if in SPV mode so all the headers
                             //   come back to back
@@ -1724,8 +1721,7 @@ namespace BitCoin
                             // Memory has been handed off
                             ((Message::BlockData *)message)->block = NULL;
                             if(!mIsSeed && mVersionData != NULL)
-                                info.updatePeer(mAddress, mVersionData->userAgent,
-                                  mVersionData->transmittingServices);
+                                info.addPeerSuccess(mAddress, 1);
                         }
                     }
                 }

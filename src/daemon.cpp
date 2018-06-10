@@ -2070,9 +2070,9 @@ namespace BitCoin
             servicesMask |= Message::VersionData::BLOOM_NODE_BIT;
 
         // Try peers with good ratings first
-        mInfo.getRandomizedPeers(peers, 5, servicesMask);
+        mInfo.getRandomizedPeers(peers, 20, servicesMask);
         if(peers.size() < 50)
-            mInfo.getRandomizedPeers(peers, 1, servicesMask);
+            mInfo.getRandomizedPeers(peers, 5, servicesMask);
         NextCash::Network::Connection *connection;
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d good peers", peers.size());
@@ -2096,7 +2096,10 @@ namespace BitCoin
             connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
               (*peer)->address.port, 5);
             if(!connection->isOpen())
+            {
+                mInfo.addPeerFail((*peer)->address);
                 delete connection;
+            }
             else if(addNode(connection, false, false, true, (*peer)->services))
             {
                 ++goodCount;
@@ -2125,7 +2128,7 @@ namespace BitCoin
         }
 
         peers.clear();
-        mInfo.getRandomizedPeers(peers, -3, servicesMask);
+        mInfo.getRandomizedPeers(peers, -4, servicesMask);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d usable peers", peers.size());
         int32_t startTime = getTime();
@@ -2149,7 +2152,10 @@ namespace BitCoin
             connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
               (*peer)->address.port, 5);
             if(!connection->isOpen())
+            {
+                mInfo.addPeerFail((*peer)->address);
                 delete connection;
+            }
             else if(addNode(connection, false, false, false, 0))
             {
                 ++allCount;
