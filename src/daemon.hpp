@@ -80,7 +80,7 @@ namespace BitCoin
         //   4 : No change address
         //   5 : Signing Issue
         int sendPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash, uint64_t pAmount,
-          double pFeeRate = 2.0);
+          double pFeeRate);
 
         bool loadMonitor();
         bool saveMonitor();

@@ -799,12 +799,13 @@ namespace BitCoin
       uint64_t pAmount, double pFeeRate)
     {
         Key *fullKey = mKeyStore.fullKey(pKeyOffset);
-        if(fullKey == NULL)
+        std::vector<BitCoin::Key *> *chainKeys = mKeyStore.chainKeys(pKeyOffset);
+        if(fullKey == NULL || chainKeys == NULL)
             return 1;
 
         // Get UTXOs from monitor
         std::vector<Outpoint> unspentOutputs;
-        if(!mMonitor.getUnspentOutputs(fullKey, unspentOutputs, true))
+        if(!mMonitor.getUnspentOutputs(chainKeys->begin(), chainKeys->end(), unspentOutputs, true))
             return 1;
 
         // Create transaction
@@ -1962,7 +1963,6 @@ namespace BitCoin
 
     static const char *SEEDS[] =
             {
-              "nextcash.tech",
               "seed.bitcoinabc.org",
               "seed-abc.bitcoinforks.org",
               "btccash-seeder.bitcoinunlimited.info",
@@ -1970,7 +1970,7 @@ namespace BitCoin
               "seed.deadalnix.me",
               "seeder.criptolayer.net"
             };
-    static const int SEED_COUNT = 7;
+    static const int SEED_COUNT = 6;
 
     const char *Daemon::getRandomSeed()
     {

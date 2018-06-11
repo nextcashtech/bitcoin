@@ -42,7 +42,9 @@ namespace BitCoin
           std::vector<Key *>::iterator pChainKeyEnd, bool pIncludePending = false);
         unsigned int size() const { return mAddressHashes.size(); }
         unsigned int transactionCount() const { return mTransactions.size(); }
-        bool getUnspentOutputs(Key *pKey, std::vector<Outpoint> &pOutputs, bool pIncludePending);
+        bool getUnspentOutputs(std::vector<Key *>::iterator pChainKeyBegin,
+          std::vector<Key *>::iterator pChainKeyEnd, std::vector<Outpoint> &pOutputs,
+          bool pIncludePending);
 
         class RelatedTransactionData
         {

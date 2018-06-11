@@ -796,7 +796,17 @@ namespace BitCoin
         return result;
     }
 
-    bool Monitor::getUnspentOutputs(Key *pKey, std::vector<Outpoint> &pOutputs,
+    bool containsAddress(const NextCash::Hash &pHash, std::vector<Key *>::iterator pChainKeyBegin,
+      std::vector<Key *>::iterator pChainKeyEnd)
+    {
+        for(std::vector<Key *>::iterator key = pChainKeyBegin; key != pChainKeyEnd; ++ key)
+            if((*key)->findAddress(pHash))
+                return true;
+        return false;
+    }
+
+    bool Monitor::getUnspentOutputs(std::vector<Key *>::iterator pChainKeyBegin,
+      std::vector<Key *>::iterator pChainKeyEnd, std::vector<Outpoint> &pOutputs,
       bool pIncludePending)
     {
         NextCash::HashList payAddresses;
@@ -815,7 +825,7 @@ namespace BitCoin
                 {
                     for(NextCash::HashList::iterator hash = payAddresses.begin();
                       hash != payAddresses.end(); ++hash)
-                        if(pKey->findAddress(*hash) != NULL)
+                        if(containsAddress(*hash, pChainKeyBegin, pChainKeyEnd))
                         {
                             pOutputs.emplace_back((*trans)->transaction->hash, *index);
                             pOutputs.back().output =
@@ -852,7 +862,7 @@ namespace BitCoin
                     {
                         for(NextCash::HashList::iterator hash = payAddresses.begin();
                           hash != payAddresses.end(); ++hash)
-                            if(pKey->findAddress(*hash) != NULL)
+                            if(containsAddress(*hash, pChainKeyBegin, pChainKeyEnd))
                             {
                                 pOutputs.emplace_back((*trans)->transaction->hash, *index);
                                 pOutputs.back().output =
@@ -920,7 +930,7 @@ namespace BitCoin
         for(std::vector<Input>::iterator input = pData.transaction.inputs.begin();
           input != pData.transaction.inputs.end(); ++input, ++offset)
         {
-            pData.relatedInputAmounts[offset] = 0;
+            pData.relatedInputAmounts[offset] = -1;
             pData.inputAddresses[offset].clear();
 
             // Find output being spent
