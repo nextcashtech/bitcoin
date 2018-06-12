@@ -1662,8 +1662,9 @@ namespace BitCoin
             if(!mKeysSynchronized && mChain.isInSync() &&
               (int)mMonitor.height() == mChain.height())
             {
-                mKeysSynchronized = false;
+                mKeysSynchronized = true;
                 mKeyStore.setAllSynchronized();
+                mMonitor.incrementChange();
             }
 
             if(mFinishMode == FINISH_ON_SYNC && mChain.isInSync() &&

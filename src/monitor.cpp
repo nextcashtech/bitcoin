@@ -482,7 +482,9 @@ namespace BitCoin
 
         mPasses.back().addressesIncluded = mAddressHashes.size();
 
+        mMutex.lock();
         restartBloomFilter();
+        mMutex.unlock();
     }
 
     void Monitor::restartBloomFilter()

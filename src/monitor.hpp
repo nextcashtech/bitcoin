@@ -97,6 +97,7 @@ namespace BitCoin
 #endif
 
         int changeID() const { return mChangeID; }
+        void incrementChange() { ++mChangeID; }
 
         // Start a new "pass" to check new addresses for previous transactions
         void startNewPass(unsigned int pBlockHeight = 0);
