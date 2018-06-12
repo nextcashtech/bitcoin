@@ -73,14 +73,21 @@ namespace BitCoin
         Monitor *monitor() { return &mMonitor; }
         KeyStore *keyStore() { return &mKeyStore; }
 
+        // Send a P2PKH payment to the specified public key hash.
+        //
+        // pAmount is in satoshis.
+        // pFeeRate is satoshis/byte.
+        // pSendAll sends entire key balance when true.
+        //
         // Result:
         //   1 : Undefined failure
         //   2 : Insuffecient Funds
         //   3 : Invalid Public Key Hash
         //   4 : No change address
         //   5 : Signing Issue
-        int sendPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash, uint64_t pAmount,
-          double pFeeRate);
+        //   6 : Amount below dust
+        int sendP2PKHPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash, uint64_t pAmount,
+          double pFeeRate, bool pSendAll);
 
         bool loadMonitor();
         bool saveMonitor();

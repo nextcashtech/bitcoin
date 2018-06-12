@@ -751,7 +751,7 @@ namespace BitCoin
         return 0;
     }
 
-    void checkSignature(Transaction &pTransaction, Monitor &pMonitor,
+    bool checkSignature(Transaction &pTransaction, Monitor &pMonitor,
       std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd,
       BlockStats &pBlockStats, Forks &pForks)
     {
@@ -779,25 +779,44 @@ namespace BitCoin
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
               "Failed to process transaction");
+            return false;
         }
 
-//        if(!pTransaction.check(tempOutputPool, tempMemPool, outpoints,
-//          pBlockStats.version((unsigned int)pBlockStats.height()), pBlockStats, pForks))
-//        {
-//            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
-//              "Failed to check transaction");
-//        }
-
-//        if(pTransaction.isStandardVerified())
-//        {
-//            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-//              "Transaction verified as standard");
-//        }
+        return true;
     }
 
-    int Daemon::sendPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash,
-      uint64_t pAmount, double pFeeRate)
+    int estimatedP2PKHSize(int pInputCount, int pOutputCount)
     {
+        // P2PKH input size
+        //   Previous Transaction ID = 32 bytes
+        //   Previous Transction Output Index = 4 bytes
+        //   Signature push to stack = 75
+        //       push size = 1 byte
+        //       signature up to = 73 bytes
+        //       signature hash type = 1 byte
+        //   Public key push to stack = 34
+        //       push size = 1 byte
+        //       public key size = 33 bytes
+        int inputSize = 32 + 4 + 75 + 34;
+
+        // P2PKH output size
+        //   amount = 8 bytes
+        //   push size = 1 byte
+        //   Script (24 bytes) OP_DUP OP_HASH160 <PUB KEY HASH (20 bytes)> OP_EQUALVERIFY OP_CHECKSIG
+        int outputSize = 8 + 25;
+
+        return (inputSize * pInputCount) + (pOutputCount * outputSize);
+    }
+
+    int Daemon::sendP2PKHPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash,
+      uint64_t pAmount, double pFeeRate, bool pSendAll)
+    {
+        if(pAmount < Transaction::DUST)
+            return 6; // Below dust
+
+        if(pPublicKeyHash.size() != 20) // Required for P2PKH
+            return 3; // Invalid Hash
+
         Key *fullKey = mKeyStore.fullKey(pKeyOffset);
         std::vector<BitCoin::Key *> *chainKeys = mKeyStore.chainKeys(pKeyOffset);
         if(fullKey == NULL || chainKeys == NULL)
@@ -810,45 +829,50 @@ namespace BitCoin
 
         // Create transaction
         Transaction *transaction = new Transaction();
-        uint64_t inputAmount = 0, estimatedFee = (uint64_t)(150.0 * pFeeRate);
+        uint64_t inputAmount = 0;
+        uint64_t sendAmount = pAmount;
 
         for(std::vector<Outpoint>::iterator output = unspentOutputs.begin();
-          output != unspentOutputs.end() && inputAmount <= pAmount + estimatedFee; ++output)
+          output != unspentOutputs.end() && (pSendAll || inputAmount <= sendAmount +
+          estimatedP2PKHSize((unsigned int)transaction->inputs.size(), pSendAll ? 1 : 2));
+          ++output)
         {
             transaction->addInput(output->transactionID, output->index);
             transaction->inputs.back().outpoint.output = new Output(*output->output);
             inputAmount += output->output->amount;
-            estimatedFee += (uint64_t)(100.0 * pFeeRate);
         }
 
-        if(inputAmount < pAmount + estimatedFee)
+        if(pSendAll)
+            sendAmount = inputAmount;
+        else if(inputAmount < sendAmount +
+          estimatedP2PKHSize((unsigned int)transaction->inputs.size(), pSendAll ? 1 : 2))
         {
             delete transaction;
             return 2; // Insufficient funds
         }
 
-        // Add outputs
-        if(pPublicKeyHash.size() != 20) // Required for P2PKH
-        {
-            delete transaction;
-            return 3; // Invalid Hash
-        }
-
         // Add payment output
-        transaction->addP2PKHOutput(pPublicKeyHash, pAmount);
+        transaction->addP2PKHOutput(pPublicKeyHash, sendAmount);
 
-        // Add change output
-        Key *changeChainKey = mKeyStore.chainKey(pKeyOffset, 1);
-        if(changeChainKey == NULL)
+        bool sendingChange = !pSendAll && inputAmount - sendAmount -
+          estimatedP2PKHSize((unsigned int)transaction->inputs.size(), 2) >
+          Transaction::DUST * 2;
+        if(sendingChange)
         {
-            delete transaction;
-            return 4; // No change address
+            // Add change output
+            Key *changeChainKey = mKeyStore.chainKey(pKeyOffset, 1);
+            if(changeChainKey == NULL)
+            {
+                delete transaction;
+                return 4; // No change address
+            }
+
+            mKeyStore.synchronize(pKeyOffset);
+
+            transaction->addP2PKHOutput(changeChainKey->getNextUnused()->hash(),
+              inputAmount - sendAmount -
+              estimatedP2PKHSize((unsigned int)transaction->inputs.size(), 2));
         }
-
-        mKeyStore.synchronize(pKeyOffset);
-
-        transaction->addP2PKHOutput(changeChainKey->getNextUnused()->hash(),
-          inputAmount - pAmount - estimatedFee);
 
         // Sign inputs
         Signature::HashType hashType = static_cast<Signature::HashType>(Signature::ALL |
@@ -860,18 +884,39 @@ namespace BitCoin
             return result;
         }
 
-        // Adjust change amount to make fee correct
-        transaction->calculateSize();
-        uint64_t actualFee = (uint64_t)((double)transaction->size() * pFeeRate);
-        transaction->outputs.back().amount = inputAmount - pAmount - actualFee;
-        transaction->clearCache(); // Clear output sig hash because an output has been modified
-
-        // Re-sign transaction
-        result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());
-        if(result != 0)
+        if(pSendAll)
         {
-            delete transaction;
-            return result;
+            // Adjust send amount to make fee correct
+            transaction->calculateSize();
+            uint64_t actualFee = (uint64_t)((double)transaction->size() * pFeeRate);
+
+            transaction->outputs.back().amount = inputAmount - actualFee;
+            transaction->clearCache(); // Clear output sig hash because an output has been modified
+
+            // Re-sign transaction
+            result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());
+            if(result != 0)
+            {
+                delete transaction;
+                return result;
+            }
+        }
+        else if(sendingChange)
+        {
+            // Adjust change amount to make fee correct
+            transaction->calculateSize();
+            uint64_t actualFee = (uint64_t)((double)transaction->size() * pFeeRate);
+
+            transaction->outputs.back().amount = inputAmount - sendAmount - actualFee;
+            transaction->clearCache(); // Clear output sig hash because an output has been modified
+
+            // Re-sign transaction
+            result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());
+            if(result != 0)
+            {
+                delete transaction;
+                return result;
+            }
         }
 
         // Finalize transaction
@@ -885,10 +930,13 @@ namespace BitCoin
 
         Transaction *newTransaction = new Transaction(*transaction);
 
-        // TODO Remove
-        std::vector<Key *> *chainKey = mKeyStore.chainKeys(pKeyOffset);
-        checkSignature(*newTransaction, mMonitor, chainKey->begin(), chainKey->end(),
-          mChain.blockStats(), mChain.forks());
+        // Verify Transaction
+        if(!checkSignature(*newTransaction, mMonitor, chainKeys->begin(), chainKeys->end(),
+          mChain.blockStats(), mChain.forks()))
+        {
+            delete transaction;
+            return 1;
+        }
 
         // Add to monitor
         mMonitor.addTransactionAnnouncement(transaction->hash, 0);
@@ -903,38 +951,7 @@ namespace BitCoin
             return 1;
         }
 
-        // TODO Remove
-        if(transaction->hash != newTransaction->hash)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
-              "Failed to copy transaction %s != %s", transaction->hash.hex().text(),
-              newTransaction->hash.hex().text());
-            return 1;
-        }
-
-        NextCash::Buffer testBuffer;
-        transaction->write(&testBuffer);
-        Transaction readTest;
-        if(!readTest.read(&testBuffer))
-        {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
-              "Failed to read message");
-            return 1;
-        }
-
-        if(readTest.hash != newTransaction->hash)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
-              "Read transaction hash doesn't match %s != %s", readTest.hash.hex().text(),
-              newTransaction->hash.hex().text());
-            return 1;
-        }
-
         transaction->print(mChain.forks());
-
-        NextCash::Buffer buffer;
-        newTransaction->write(&buffer, false);
-        NextCash::String hex = buffer.readHexString(buffer.length());
 
         // Transmit to all currently "ready" nodes.
         mNodeLock.readLock();

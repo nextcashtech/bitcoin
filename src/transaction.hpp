@@ -151,6 +151,8 @@ namespace BitCoin
     {
     public:
 
+        static const uint64_t DUST = 546;
+
         // Value below which lock times are considered block heights instead of timestamps
         static const uint32_t LOCKTIME_THRESHOLD = 500000000;
 
