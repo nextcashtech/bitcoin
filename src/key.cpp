@@ -482,9 +482,78 @@ namespace BitCoin
         PaymentRequest result;
         AddressType type;
 
-        if(decodeLegacyAddress(pText, result.address, type))
+        NextCash::String address, label, message, amount;
+        bool parameterStart = false;
+        bool valueStart = false;
+        NextCash::String name, value;
+
+        for(const char *ptr = pText; *ptr != '\0'; ++ptr)
+        {
+            if(parameterStart)
+            {
+                if(valueStart)
+                {
+                    if(*ptr == '&')
+                    {
+                        // Process value
+                        if(name == "label")
+                            result.label = value;
+                        else if(name == "message")
+                            result.message = value;
+                        else if(name == "amount")
+                        {
+                            // Parse amount as double of bitcoins
+                            double bitcoins = std::atof(value.text());
+                            // Convert to satoshis for result.amount
+                            result.amount = (uint64_t)satoshisFromBitcoins(bitcoins);
+                        }
+                        else if(name.length() >= 4 && std::memcmp(name.text(), "req-", 4) == 0)
+                        {
+                            // Unknown required value
+                            result.format = PaymentRequest::Format::INVALID;
+                            result.protocol = PaymentRequest::Protocol::NONE;
+                            return result;
+                        }
+                    }
+                    else
+                        value += *ptr;
+                }
+                else if(*ptr == '=')
+                    valueStart = true;
+                else if(*ptr == '&')
+                    name.clear();  // No value found
+                else
+                    name += *ptr;
+            }
+            else if(*ptr == '?')
+                parameterStart = true;
+            else
+                address += *ptr;
+        }
+
+        // Process value
+        if(name == "label")
+            result.label = value;
+        else if(name == "message")
+            result.message = value;
+        else if(name == "amount")
+        {
+            // Parse amount as double of bitcoins
+            double bitcoins = std::atof(value.text());
+            // Convert to satoshis for result.amount
+            result.amount = (uint64_t)satoshisFromBitcoins(bitcoins);
+        }
+        else if(name.length() >= 4 && std::memcmp(name.text(), "req-", 4) == 0)
+        {
+            // Unknown required value
+            result.format = PaymentRequest::Format::INVALID;
+            result.protocol = PaymentRequest::Protocol::NONE;
+            return result;
+        }
+
+        if(decodeLegacyAddress(address, result.address, type))
             result.format = PaymentRequest::Format::LEGACY;
-        else if(decodeCashAddress(pText, result.address, type))
+        else if(decodeCashAddress(address, result.address, type))
             result.format = PaymentRequest::Format::CASH;
         else
         {

@@ -16,7 +16,7 @@
 
 // BIP-0014 Specifies User Agent Format
 #ifdef ANDROID
-#define BITCOIN_USER_AGENT "/NextCash:0.9.0/NextCashWallet:0.5.1(Android)/"
+#define BITCOIN_USER_AGENT "/NextCash:0.9.0/NextCashWallet:0.5.2(Android)/"
 #else
 #define BITCOIN_USER_AGENT "/NextCash:0.9.0/"
 #endif
@@ -42,6 +42,11 @@ namespace BitCoin
     inline double bitcoins(int64_t pSatoshis)
     {
         return (double)pSatoshis / 100000000;
+    }
+
+    inline int64_t satoshisFromBitcoins(double pBitcoins)
+    {
+        return (uint64_t)(pBitcoins * 100000000.0);
     }
 
     // Amount of Satoshis generated for mining a block at this height

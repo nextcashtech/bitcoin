@@ -43,7 +43,7 @@ namespace BitCoin
     public:
 
         enum Format { INVALID, LEGACY, CASH };
-        enum Protocol { NONE, PUB_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY, PUB_KEY_HASH_AMOUNT };
+        enum Protocol { NONE, PUB_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY };
 
         PaymentRequest()
         {
@@ -61,7 +61,8 @@ namespace BitCoin
             address = pCopy.address;
             amount = pCopy.amount;
             secure = pCopy.secure;
-            description = pCopy.description;
+            label = pCopy.label;
+            message = pCopy.message;
         }
 
         PaymentRequest &operator = (const PaymentRequest &pRight)
@@ -72,7 +73,8 @@ namespace BitCoin
             address = pRight.address;
             amount = pRight.amount;
             secure = pRight.secure;
-            description = pRight.description;
+            label = pRight.label;
+            message = pRight.message;
             return *this;
         }
 
@@ -82,14 +84,14 @@ namespace BitCoin
         NextCash::Hash address;
         uint64_t amount;
         bool secure;
-        NextCash::String description;
+        NextCash::String label, message;
 
     };
 
     // Return Base58 address from hash and type.
     NextCash::String encodeHashPaymentCode(const NextCash::Hash &pHash,
       PaymentRequest::Format pFormat = PaymentRequest::Format::CASH,
-      BitCoin::Network pNetwork = MAINNET, bool pIncludePrefix = false, bool pIsScriptHash = false);
+      BitCoin::Network pNetwork = MAINNET, bool pIncludePrefix = true, bool pIsScriptHash = false);
 
     PaymentRequest decodePaymentCode(const char *pText);
 
