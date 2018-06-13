@@ -400,7 +400,7 @@ namespace BitCoin
                 else
                 {
                     std::vector<FullOutputData> outputs;
-                    if(!mChain->addresses().getOutputs(request.address, outputs))
+                    if(!mChain->addresses().getOutputs(request.pubKeyHash, outputs))
                     {
                         NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                           "Failed to get outputs for address : %s", address.text());

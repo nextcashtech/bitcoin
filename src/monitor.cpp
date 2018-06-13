@@ -157,16 +157,16 @@ namespace BitCoin
         // Addresses
         unsigned int addressCount = pStream->readUnsignedInt();
         mAddressHashes.reserve(addressCount);
-        NextCash::Hash addressHash(ADDRESS_HASH_SIZE);
+        NextCash::Hash pubKeyHash(PUB_KEY_HASH_SIZE);
         for(unsigned int i=0;i<addressCount;++i)
         {
-            if(!addressHash.read(pStream, ADDRESS_HASH_SIZE))
+            if(!pubKeyHash.read(pStream, PUB_KEY_HASH_SIZE))
             {
                 mMutex.unlock();
                 clear();
                 return false;
             }
-            mAddressHashes.push_back(addressHash);
+            mAddressHashes.push_back(pubKeyHash);
         }
 
         // Transactions
@@ -521,12 +521,12 @@ namespace BitCoin
             {
                 request = decodePaymentCode(line);
                 if(request.format != PaymentRequest::Format::INVALID &&
-                  request.network == MAINNET && request.address.size() == ADDRESS_HASH_SIZE)
+                  request.network == MAINNET && request.pubKeyHash.size() == PUB_KEY_HASH_SIZE)
                 {
                     // Check if it is already in this block
-                    if(!mAddressHashes.contains(request.address))
+                    if(!mAddressHashes.contains(request.pubKeyHash))
                     {
-                        mAddressHashes.push_back(request.address);
+                        mAddressHashes.push_back(request.pubKeyHash);
                         ++addedCount;
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                           "Adding address hash : %s", line.text());

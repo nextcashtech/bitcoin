@@ -43,12 +43,11 @@ namespace BitCoin
     public:
 
         enum Format { INVALID, LEGACY, CASH };
-        enum Protocol { NONE, PUB_KEY_HASH, SCRIPT_HASH, PRIVATE_KEY };
 
         PaymentRequest()
         {
             format = Format::INVALID;
-            protocol = Protocol::NONE;
+            type = AddressType::UNKNOWN;
             network = MAINNET;
             amount = 0;
             secure = false;
@@ -56,9 +55,9 @@ namespace BitCoin
         PaymentRequest(const PaymentRequest &pCopy)
         {
             format = pCopy.format;
-            protocol = pCopy.protocol;
+            type = pCopy.type;
             network = pCopy.network;
-            address = pCopy.address;
+            pubKeyHash = pCopy.pubKeyHash;
             amount = pCopy.amount;
             secure = pCopy.secure;
             label = pCopy.label;
@@ -68,9 +67,9 @@ namespace BitCoin
         PaymentRequest &operator = (const PaymentRequest &pRight)
         {
             format = pRight.format;
-            protocol = pRight.protocol;
+            type = pRight.type;
             network = pRight.network;
-            address = pRight.address;
+            pubKeyHash = pRight.pubKeyHash;
             amount = pRight.amount;
             secure = pRight.secure;
             label = pRight.label;
@@ -79,24 +78,32 @@ namespace BitCoin
         }
 
         Format format;
-        Protocol protocol;
+        AddressType type;
         Network network;
-        NextCash::Hash address;
+        NextCash::Hash pubKeyHash;
         uint64_t amount;
         bool secure;
         NextCash::String label, message;
 
     };
 
-    // Return Base58 address from hash and type.
-    NextCash::String encodeHashPaymentCode(const NextCash::Hash &pHash,
+    // Return URI Payment code.
+    //   pAmount is in satoshis
+    NextCash::String encodePaymentCode(const NextCash::Hash &pHash,
       PaymentRequest::Format pFormat = PaymentRequest::Format::CASH,
-      BitCoin::Network pNetwork = MAINNET, bool pIncludePrefix = true, bool pIsScriptHash = false);
+      AddressType pType = MAIN_PUB_KEY_HASH, uint64_t pAmount = 0,
+      NextCash::String pLabel = NextCash::String(), NextCash::String pMessage = NextCash::String());
 
     PaymentRequest decodePaymentCode(const char *pText);
 
+    NextCash::String encodeLegacyAddress(const NextCash::Hash &pHash,
+      AddressType pType = MAIN_PUB_KEY_HASH);
+
     // Parse hash and type from Base58 encoded data.
     bool decodeLegacyAddress(const char *pText, NextCash::Hash &pHash, AddressType &pType);
+
+    NextCash::String encodeCashAddress(const NextCash::Hash &pHash,
+      AddressType pType = MAIN_PUB_KEY_HASH);
 
     // Parse hash and type from cash address format.
     bool decodeCashAddress(const char *pText, NextCash::Hash &pHash, AddressType &pType);

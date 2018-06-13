@@ -254,7 +254,7 @@ namespace BitCoin
 
     bool Transaction::addP2PKHOutput(const NextCash::Hash &pPublicKeyHash, uint64_t pAmount)
     {
-        if(pPublicKeyHash.size() != ADDRESS_HASH_SIZE)
+        if(pPublicKeyHash.size() != PUB_KEY_HASH_SIZE)
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
               "Public key hash is not the correct size");

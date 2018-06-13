@@ -22,7 +22,7 @@
 #endif
 
 #define PROTOCOL_VERSION 70015
-#define ADDRESS_HASH_SIZE 20
+#define PUB_KEY_HASH_SIZE 20
 
 
 namespace BitCoin

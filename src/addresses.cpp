@@ -32,17 +32,17 @@ namespace BitCoin
           pOutput.transactionID, pOutput.output);
     }
 
-    bool Addresses::getOutputs(const NextCash::Hash &pAddress, std::vector<FullOutputData> &pOutputs)
+    bool Addresses::getOutputs(const NextCash::Hash &pPubKeyHash, std::vector<FullOutputData> &pOutputs)
     {
         pOutputs.clear();
-        Iterator item = get(pAddress, true);
+        Iterator item = get(pPubKeyHash, true);
 
         if(!item)
             return false;
 
         Iterator counter = item;
         unsigned int count = 0;
-        while(counter && counter.hash() == pAddress)
+        while(counter && counter.hash() == pPubKeyHash)
         {
             if(!(*counter)->markedRemove())
                 ++count;
@@ -53,7 +53,7 @@ namespace BitCoin
         pOutputs.resize(count);
 
         std::vector<FullOutputData>::iterator output = pOutputs.begin();
-        while(item && item.hash() == pAddress)
+        while(item && item.hash() == pPubKeyHash)
         {
             if(!(*item)->markedRemove())
             {
