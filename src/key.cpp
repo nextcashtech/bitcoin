@@ -561,6 +561,10 @@ namespace BitCoin
                             result.type = AddressType::UNKNOWN;
                             return result;
                         }
+
+                        valueStart = false;
+                        value = "";
+                        name = "";
                     }
                     else
                         value += *ptr;
