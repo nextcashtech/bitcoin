@@ -34,6 +34,7 @@ namespace BitCoin
         TEST_SCRIPT_HASH  = 0xc4, // Testnet Script hash
         TEST_PRIVATE_KEY  = 0xef, // Testnet Private key
 
+        BIP0070,
         UNKNOWN
     };
 
@@ -83,7 +84,7 @@ namespace BitCoin
         NextCash::Hash pubKeyHash;
         uint64_t amount;
         bool secure;
-        NextCash::String label, message;
+        NextCash::String label, message, secureURL;
 
     };
 

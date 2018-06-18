@@ -354,6 +354,9 @@ namespace BitCoin
           const Key &pPublicKey, const Signature &pSignature, NextCash::Buffer &pCurrentOutputScript,
           unsigned int pSignatureStartOffset, const Forks &pForks);
 
+        static bool writeP2PKHOutputScript(NextCash::Buffer &pOutputScript,
+          const NextCash::Hash &pPubKeyHash);
+
         static bool test();
 
         // For testing

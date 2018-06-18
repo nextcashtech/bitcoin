@@ -267,6 +267,8 @@ namespace BitCoin
           uint32_t pSequence = Input::SEQUENCE_NONE);
         bool addCoinbaseInput(int pBlockHeight);
 
+        bool addOutput(NextCash::Buffer pOutputScript, uint64_t pAmount);
+
         // P2PKH Pay to Public Key Hash
         bool signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
           Signature::HashType pType, uint32_t pForkID);

@@ -252,6 +252,26 @@ namespace BitCoin
         return true;
     }
 
+    bool Transaction::addOutput(NextCash::Buffer pOutputScript, uint64_t pAmount)
+    {
+        if(pOutputScript.length() == 0)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+              "Empty output script");
+            return false;
+        }
+
+        outputs.emplace_back();
+        Output &newOutput = outputs.back();
+        newOutput.amount = pAmount;
+
+        newOutput.script = pOutputScript;
+        newOutput.script.compact();
+
+        mOutputHash.clear();
+        return true;
+    }
+
     bool Transaction::addP2PKHOutput(const NextCash::Hash &pPublicKeyHash, uint64_t pAmount)
     {
         if(pPublicKeyHash.size() != PUB_KEY_HASH_SIZE)
@@ -265,22 +285,8 @@ namespace BitCoin
         Output &newOutput = outputs.back();
         newOutput.amount = pAmount;
 
-        // Copy the public key from the signature script and push it onto the stack
-        newOutput.script.writeByte(OP_DUP);
-
-        // Pop the public key from the signature script, hash it, and push the hash onto the stack
-        newOutput.script.writeByte(OP_HASH160);
-
-        // Push the provided public key hash onto the stack
-        ScriptInterpreter::writePushDataSize(pPublicKeyHash.size(), &newOutput.script);
-        pPublicKeyHash.write(&newOutput.script);
-
-        // Pop both the hashes from the stack, check that they match, and verify the transaction if they do
-        newOutput.script.writeByte(OP_EQUALVERIFY);
-
-        // Pop the signature from the signature script and verify it against the transaction data
-        newOutput.script.writeByte(OP_CHECKSIG);
-        newOutput.script.compact();
+        if(!ScriptInterpreter::writeP2PKHOutputScript(newOutput.script, pPublicKeyHash))
+            return false;
 
         mOutputHash.clear();
         return true;

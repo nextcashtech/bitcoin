@@ -528,7 +528,6 @@ namespace BitCoin
     PaymentRequest decodePaymentCode(const char *pText)
     {
         PaymentRequest result;
-
         NextCash::String prefix, address, label, message, amount;
         bool parameterStart = false;
         bool valueStart = false;
@@ -553,6 +552,11 @@ namespace BitCoin
                             double bitcoins = std::atof(value.text());
                             // Convert to satoshis for result.amount
                             result.amount = (uint64_t)satoshisFromBitcoins(bitcoins);
+                        }
+                        else if(name == "r")
+                        {
+                            result.secureURL = NextCash::uriDecode(value);
+                            result.type = BIP0070;
                         }
                         else if(name.length() >= 4 && std::memcmp(name.text(), "req-", 4) == 0)
                         {
@@ -599,6 +603,11 @@ namespace BitCoin
             // Convert to satoshis for result.amount
             result.amount = (uint64_t)satoshisFromBitcoins(bitcoins);
         }
+        else if(name == "r")
+        {
+            result.secureURL = NextCash::uriDecode(value);
+            result.type = BIP0070;
+        }
         else if(name.length() >= 4 && std::memcmp(name.text(), "req-", 4) == 0)
         {
             // Unknown required value
@@ -607,11 +616,27 @@ namespace BitCoin
             return result;
         }
 
-        if(decodeLegacyAddress(address, result.pubKeyHash, result.type))
+        if(prefix == "bitcoin")
             result.format = PaymentRequest::Format::LEGACY;
-        else if(decodeCashAddress(address, result.pubKeyHash, result.type))
+        else if(prefix == "bitcoincash")
             result.format = PaymentRequest::Format::CASH;
         else
+            result.format = PaymentRequest::Format::INVALID;
+
+        if(address)
+        {
+            if(decodeLegacyAddress(address, result.pubKeyHash, result.type))
+                result.format = PaymentRequest::Format::LEGACY;
+            else if(decodeCashAddress(address, result.pubKeyHash, result.type))
+                result.format = PaymentRequest::Format::CASH;
+            else if(!result.secureURL)
+            {
+                result.format = PaymentRequest::Format::INVALID;
+                result.type = AddressType::UNKNOWN;
+                return result;
+            }
+        }
+        else if(!result.secureURL)
         {
             result.format = PaymentRequest::Format::INVALID;
             result.type = AddressType::UNKNOWN;
@@ -637,6 +662,8 @@ namespace BitCoin
             break;
         case TEST_PRIVATE_KEY:
             result.network = TESTNET;
+            break;
+        case BIP0070:
             break;
         default:
         case UNKNOWN:

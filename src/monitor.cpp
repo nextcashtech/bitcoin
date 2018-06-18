@@ -1146,6 +1146,37 @@ namespace BitCoin
         return true;
     }
 
+    Transaction *Monitor::findTransactionPaying(NextCash::Buffer pOutputScript, uint64_t pAmount)
+    {
+        mMutex.lock();
+
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
+          mTransactions.begin(); trans != mTransactions.end(); ++trans)
+            for(std::vector<Output>::iterator output = (*trans)->transaction->outputs.begin();
+              output != (*trans)->transaction->outputs.end(); ++output)
+                if(output->amount == pAmount && output->script == pOutputScript)
+                {
+                    Transaction *result = (*trans)->transaction;
+                    mMutex.unlock();
+                    return result;
+                }
+
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
+          mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
+            for(std::vector<Output>::iterator output = (*trans)->transaction->outputs.begin();
+              output != (*trans)->transaction->outputs.end(); ++output)
+                if(output->amount == pAmount && output->script == pOutputScript)
+                {
+                    Transaction *result = (*trans)->transaction;
+                    mMutex.unlock();
+                    return result;
+                }
+
+        mMutex.unlock();
+
+        return NULL;
+    }
+
     bool Monitor::filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID)
     {
         mMutex.lock();

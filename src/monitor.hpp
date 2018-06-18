@@ -68,6 +68,7 @@ namespace BitCoin
         bool getTransactions(std::vector<Key *>::iterator pChainKeyBegin,
           std::vector<Key *>::iterator pChainKeyEnd,
           std::vector<RelatedTransactionData> &pTransactions, bool pIncludePending);
+        Transaction *findTransactionPaying(NextCash::Buffer pOutputScript, uint64_t pAmount);
 
         void clear();
 

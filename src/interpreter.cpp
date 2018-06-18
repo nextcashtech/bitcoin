@@ -344,6 +344,34 @@ namespace BitCoin
         }
     }
 
+    bool ScriptInterpreter::writeP2PKHOutputScript(NextCash::Buffer &pOutputScript,
+      const NextCash::Hash &pPubKeyHash)
+    {
+        pOutputScript.clear();
+
+        if(pPubKeyHash.size() != PUB_KEY_HASH_SIZE)
+            return false;
+
+        // Copy the public key from the signature script and push it onto the stack
+        pOutputScript.writeByte(OP_DUP);
+
+        // Pop the public key from the signature script, hash it, and push the hash onto the stack
+        pOutputScript.writeByte(OP_HASH160);
+
+        // Push the provided public key hash onto the stack
+        ScriptInterpreter::writePushDataSize(pPubKeyHash.size(), &pOutputScript);
+        pPubKeyHash.write(&pOutputScript);
+
+        // Pop both the hashes from the stack, check that they match, and verify the transaction if they do
+        pOutputScript.writeByte(OP_EQUALVERIFY);
+
+        // Pop the signature from the signature script and verify it against the transaction data
+        pOutputScript.writeByte(OP_CHECKSIG);
+
+        pOutputScript.compact();
+        return true;
+    }
+
     NextCash::String ScriptInterpreter::scriptText(NextCash::Buffer &pScript, Forks &pForks)
     {
         NextCash::String result;

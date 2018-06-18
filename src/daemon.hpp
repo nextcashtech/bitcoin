@@ -88,6 +88,8 @@ namespace BitCoin
         //   6 : Amount below dust
         int sendP2PKHPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash, uint64_t pAmount,
           double pFeeRate, bool pSendAll);
+        int sendSpecifiedOutputPayment(unsigned int pKeyOffset, NextCash::Buffer pOutputScript,
+          uint64_t pAmount, double pFeeRate);
 
         bool loadMonitor();
         bool saveMonitor();
