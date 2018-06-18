@@ -51,6 +51,7 @@ namespace BitCoin
             type = AddressType::UNKNOWN;
             network = MAINNET;
             amount = 0;
+            amountSpecified = false;
             secure = false;
         }
         PaymentRequest(const PaymentRequest &pCopy)
@@ -60,6 +61,7 @@ namespace BitCoin
             network = pCopy.network;
             pubKeyHash = pCopy.pubKeyHash;
             amount = pCopy.amount;
+            amountSpecified = pCopy.amountSpecified;
             secure = pCopy.secure;
             label = pCopy.label;
             message = pCopy.message;
@@ -72,6 +74,7 @@ namespace BitCoin
             network = pRight.network;
             pubKeyHash = pRight.pubKeyHash;
             amount = pRight.amount;
+            amountSpecified = pRight.amountSpecified;
             secure = pRight.secure;
             label = pRight.label;
             message = pRight.message;
@@ -83,6 +86,7 @@ namespace BitCoin
         Network network;
         NextCash::Hash pubKeyHash;
         uint64_t amount;
+        bool amountSpecified;
         bool secure;
         NextCash::String label, message, secureURL;
 

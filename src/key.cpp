@@ -552,6 +552,7 @@ namespace BitCoin
                             double bitcoins = std::atof(value.text());
                             // Convert to satoshis for result.amount
                             result.amount = (uint64_t)satoshisFromBitcoins(bitcoins);
+                            result.amountSpecified = true;
                         }
                         else if(name == "r")
                         {
@@ -602,6 +603,7 @@ namespace BitCoin
             double bitcoins = std::atof(value.text());
             // Convert to satoshis for result.amount
             result.amount = (uint64_t)satoshisFromBitcoins(bitcoins);
+            result.amountSpecified = true;
         }
         else if(name == "r")
         {

@@ -809,7 +809,7 @@ namespace BitCoin
     }
 
     int Daemon::sendP2PKHPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash,
-      uint64_t pAmount, double pFeeRate, bool pSendAll)
+      uint64_t pAmount, double pFeeRate, bool pUsePending, bool pSendAll)
     {
         if(pAmount < Transaction::DUST)
             return 6; // Below dust
@@ -825,7 +825,7 @@ namespace BitCoin
         // Get UTXOs from monitor
         std::vector<Outpoint> unspentOutputs;
         if(!mMonitor.getUnspentOutputs(chainKeys->begin(), chainKeys->end(), unspentOutputs,
-          &mChain, true))
+          &mChain, pUsePending))
             return 1;
 
         // Create transaction
@@ -968,7 +968,7 @@ namespace BitCoin
     }
 
     int Daemon::sendSpecifiedOutputPayment(unsigned int pKeyOffset, NextCash::Buffer pOutputScript,
-      uint64_t pAmount, double pFeeRate)
+      uint64_t pAmount, double pFeeRate, bool pUsePending, bool pTransmit)
     {
         if(pAmount < Transaction::DUST)
             return 6; // Below dust
@@ -984,7 +984,7 @@ namespace BitCoin
         // Get UTXOs from monitor
         std::vector<Outpoint> unspentOutputs;
         if(!mMonitor.getUnspentOutputs(chainKeys->begin(), chainKeys->end(), unspentOutputs,
-          &mChain, true))
+          &mChain, pUsePending))
             return 1;
 
         // Create transaction
@@ -1094,15 +1094,18 @@ namespace BitCoin
 
         transaction->print(mChain.forks());
 
-        // Transmit to all currently "ready" nodes.
-        mNodeLock.readLock();
-        for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
-            if((*node)->isReady())
-                (*node)->sendTransaction(transaction);
-        mNodeLock.readUnlock();
+        if(pTransmit)
+        {
+            // Transmit to all currently "ready" nodes.
+            mNodeLock.readLock();
+            for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
+                if((*node)->isReady())
+                    (*node)->sendTransaction(transaction);
+            mNodeLock.readUnlock();
 
-        // Save to transmit to other nodes.
-        mTransactionsToTransmit.push_back(newTransaction);
+            // Save to transmit to other nodes.
+            mTransactionsToTransmit.push_back(newTransaction);
+        }
         return 0;
     }
 
