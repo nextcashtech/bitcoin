@@ -27,13 +27,20 @@ namespace BitCoin
     {
     public:
 
-        Outpoint() : transactionID(32) { index = 0xffffffff; output = NULL; signatureStatus = 0; }
+        Outpoint() : transactionID(32)
+        {
+            index = 0xffffffff;
+            output = NULL;
+            signatureStatus = 0;
+            confirmations = 0xffffffff;
+        }
         Outpoint(const NextCash::Hash &pTransactionID, uint32_t pIndex)
         {
             transactionID = pTransactionID;
             index = pIndex;
             output = NULL;
             signatureStatus = 0;
+            confirmations = 0xffffffff;
         }
         Outpoint(const Outpoint &pCopy) : transactionID(pCopy.transactionID)
         {
@@ -43,6 +50,7 @@ namespace BitCoin
             else
                 output = new Output(*pCopy.output);
             signatureStatus = pCopy.signatureStatus;
+            confirmations = pCopy.confirmations;
         }
         ~Outpoint() { if(output != NULL) delete output; }
         Outpoint &operator = (const Outpoint &pRight)
@@ -56,6 +64,7 @@ namespace BitCoin
             else
                 output = new Output(*pRight.output);
             signatureStatus = pRight.signatureStatus;
+            confirmations = pRight.confirmations;
             return *this;
         }
 
@@ -78,6 +87,8 @@ namespace BitCoin
         static const uint8_t CHECKED  = 0x01;
         static const uint8_t VERIFIED = 0x02;
         uint8_t signatureStatus;
+
+        uint32_t confirmations; // 0xffffffff means not specified
 
     };
 

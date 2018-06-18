@@ -43,7 +43,7 @@ namespace BitCoin
         unsigned int size() const { return mAddressHashes.size(); }
         unsigned int transactionCount() const { return mTransactions.size(); }
         bool getUnspentOutputs(std::vector<Key *>::iterator pChainKeyBegin,
-          std::vector<Key *>::iterator pChainKeyEnd, std::vector<Outpoint> &pOutputs,
+          std::vector<Key *>::iterator pChainKeyEnd, std::vector<Outpoint> &pOutputs, Chain *pChain,
           bool pIncludePending);
 
         class RelatedTransactionData
@@ -117,7 +117,8 @@ namespace BitCoin
         // Add a received transaction if it was confirmed in a merkle block
         bool addTransaction(Chain &pChain, Message::TransactionData *pTransactionData); // Return true if added
 
-        bool isConfirmed(NextCash::Hash &pHash);
+        bool isConfirmed(const NextCash::Hash &pTransactionID);
+        NextCash::Hash confirmBlockHash(const NextCash::Hash &pTransactionID);
 
         void revertBlock(const NextCash::Hash &pBlockHash, unsigned int pBlockHeight);
 

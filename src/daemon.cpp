@@ -824,7 +824,8 @@ namespace BitCoin
 
         // Get UTXOs from monitor
         std::vector<Outpoint> unspentOutputs;
-        if(!mMonitor.getUnspentOutputs(chainKeys->begin(), chainKeys->end(), unspentOutputs, true))
+        if(!mMonitor.getUnspentOutputs(chainKeys->begin(), chainKeys->end(), unspentOutputs,
+          &mChain, true))
             return 1;
 
         // Create transaction
@@ -982,7 +983,8 @@ namespace BitCoin
 
         // Get UTXOs from monitor
         std::vector<Outpoint> unspentOutputs;
-        if(!mMonitor.getUnspentOutputs(chainKeys->begin(), chainKeys->end(), unspentOutputs, true))
+        if(!mMonitor.getUnspentOutputs(chainKeys->begin(), chainKeys->end(), unspentOutputs,
+          &mChain, true))
             return 1;
 
         // Create transaction

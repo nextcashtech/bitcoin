@@ -807,8 +807,13 @@ namespace BitCoin
         return false;
     }
 
+    bool outpointOlder(BitCoin::Outpoint &pLeft, BitCoin::Outpoint &pRight)
+    {
+        return pLeft.confirmations > pRight.confirmations;
+    }
+
     bool Monitor::getUnspentOutputs(std::vector<Key *>::iterator pChainKeyBegin,
-      std::vector<Key *>::iterator pChainKeyEnd, std::vector<Outpoint> &pOutputs,
+      std::vector<Key *>::iterator pChainKeyEnd, std::vector<Outpoint> &pOutputs, Chain *pChain,
       bool pIncludePending)
     {
         NextCash::HashList payAddresses;
@@ -832,6 +837,8 @@ namespace BitCoin
                             pOutputs.emplace_back((*trans)->transaction->hash, *index);
                             pOutputs.back().output =
                               new Output((*trans)->transaction->outputs[*index]);
+                            pOutputs.back().confirmations = (uint32_t)(pChain->height() -
+                              pChain->blockHeight((*trans)->blockHash));
                             break;
                         }
                 }
@@ -869,6 +876,7 @@ namespace BitCoin
                                 pOutputs.emplace_back((*trans)->transaction->hash, *index);
                                 pOutputs.back().output =
                                   new Output((*trans)->transaction->outputs[*index]);
+                                pOutputs.back().confirmations = 0;
                                 break;
                             }
                     }
@@ -891,6 +899,8 @@ namespace BitCoin
         }
 
         mMutex.unlock();
+
+        std::sort(pOutputs.begin(), pOutputs.end(), outpointOlder);
 
         return true;
     }
@@ -1464,11 +1474,25 @@ namespace BitCoin
         return true;
     }
 
-    bool Monitor::isConfirmed(NextCash::Hash &pHash)
+    bool Monitor::isConfirmed(const NextCash::Hash &pTransactionID)
     {
         mMutex.lock();
-        bool result = mTransactions.get(pHash) != mTransactions.end();
+        bool result = mTransactions.get(pTransactionID) != mTransactions.end();
         mMutex.unlock();
+        return result;
+    }
+
+    NextCash::Hash Monitor::confirmBlockHash(const NextCash::Hash &pTransactionID)
+    {
+        NextCash::Hash result;
+
+        mMutex.lock();
+        NextCash::HashContainerList<SPVTransactionData *>::Iterator transaction =
+          mTransactions.get(pTransactionID);
+        if(transaction != mTransactions.end())
+            result = (*transaction)->blockHash;
+        mMutex.unlock();
+
         return result;
     }
 
