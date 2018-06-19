@@ -240,13 +240,15 @@ namespace BitCoin
     {
         if(isRunning())
         {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME, "Already running. Start aborted.");
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Already running. Start aborted.");
             return false;
         }
 
         if(mStopping)
         {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME, "Still stopping. Start aborted.");
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Still stopping. Start aborted.");
             return false;
         }
 
@@ -262,7 +264,8 @@ namespace BitCoin
         previousSigPipeHandler = signal(SIGPIPE, handleSigPipe);
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Starting %s on %s in %s", BITCOIN_USER_AGENT, networkName(), Info::instance().path().text());
+          "Starting %s on %s in %s", BITCOIN_USER_AGENT, networkName(),
+          Info::instance().path().text());
 
 #ifdef SINGLE_THREAD
         if(mInfo.spvMode)
@@ -271,9 +274,11 @@ namespace BitCoin
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in Full/Bloom mode (Single Thread)");
 #else
         if(mInfo.spvMode)
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in SPV mode (Multi Threaded)");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Running in SPV mode (Multi Threaded)");
         else
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in Full/Bloom mode (Multi Threaded)");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Running in Full/Bloom mode (Multi Threaded)");
 #endif
 
 #ifndef SINGLE_THREAD
@@ -281,7 +286,8 @@ namespace BitCoin
         if(mManagerThread == NULL)
         {
             requestStop();
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME, "Failed to create manage thread");
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Failed to create manage thread");
             return false;
         }
 #endif
@@ -293,13 +299,15 @@ namespace BitCoin
     {
         if(!isRunning())
         {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME, "Not running. Stop aborted.");
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Not running. Stop aborted.");
             return;
         }
 
         if(mStopping)
         {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME, "Still stopping. Stop aborted.");
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Still stopping. Stop aborted.");
             return;
         }
 
