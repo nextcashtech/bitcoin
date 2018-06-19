@@ -249,6 +249,20 @@ namespace BitCoin
         void calculateHash();
         void setTime(int32_t pValue) { mTime = pValue; }
 
+        // Signs the inputs and adjusts the output amounts to set the fee
+        //
+        // Parameters
+        //   pInputAmount is total amount in satoshis included in inputs
+        //   pFeeRate is the rate in satoshis/byte at which to set the fee.
+        //   pSendAmount of 0xffffffffffffffffL means send all to last output
+        //   pChangeOutputOffset < 0 means there is no change output and remaining balance (below dust)
+        //     should be added to fee
+        // Returns
+        //   1 if general failure
+        //   5 if signature failure
+        int sign(uint64_t pInputAmount, double pFeeRate, uint64_t pSendAmount,
+          int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, uint32_t pForkID);
+
         bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
           unsigned int pBlockHeight, bool pCoinBase, int32_t pBlockVersion, BlockStats &pBlockStats,
           Forks &pForks, std::vector<unsigned int> &pSpentAges);

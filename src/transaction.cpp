@@ -2162,6 +2162,76 @@ namespace BitCoin
         digest.getResult(&hash);
     }
 
+    int signTransaction(Transaction &pTransaction, Key *pKey, Signature::HashType pHashType,
+                        uint32_t pForkID)
+    {
+        Key *key;
+        ScriptInterpreter::ScriptType scriptType;
+        NextCash::HashList payAddresses;
+        uint32_t inputOffset = 0;
+
+        pTransaction.clearCache();
+
+        for(std::vector<Input>::iterator input = pTransaction.inputs.begin();
+            input != pTransaction.inputs.end(); ++input, ++inputOffset)
+        {
+            // Parse the output for addresses
+            scriptType = ScriptInterpreter::parseOutputScript(input->outpoint.output->script,
+              payAddresses);
+            if(scriptType != ScriptInterpreter::P2PKH || payAddresses.size() != 1)
+            {
+                payAddresses.clear();
+                return 1;
+            }
+
+            // Find private key for public key hash
+            key = pKey->findAddress(payAddresses.front());
+            if(key == NULL)
+                return 1;
+
+            // Sign input with private key
+            if(!pTransaction.signP2PKHInput(*input->outpoint.output, inputOffset, *key,
+              pHashType, pForkID))
+                return 5; // Issue with signing
+        }
+
+        return 0;
+    }
+
+    int Transaction::sign(uint64_t pInputAmount, double pFeeRate, uint64_t pSendAmount,
+      int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, uint32_t pForkID)
+    {
+        uint64_t actualFee = 0, fee = 0;
+        int result = 0;
+        do
+        {
+            if(fee == 0)
+                fee = (uint64_t)((double)size() * pFeeRate);
+            else if(pFeeRate >= 1.0)
+                fee += (uint64_t)pFeeRate;
+            else
+                ++fee;
+
+            if(pSendAmount == 0xffffffffffffffffL) // Send all. Adjust send amount to make fee correct
+                outputs.back().amount = pInputAmount - fee; // Expects only one output
+            else if(pChangeOutputOffset > 0) // Adjust change amount to make fee correct
+                outputs[pChangeOutputOffset].amount = pInputAmount - pSendAmount - fee;
+            // else // Leave all remaining balance in the fee
+
+            // Sign transaction
+            mOutputHash.clear(); // Clear output sig hash because an output has been modified
+            result = signTransaction(*this, pKey, pHashType, pForkID);
+            if(result != 0)
+                return result;
+
+            calculateSize();
+            actualFee = pInputAmount - outputAmount();
+        }
+        while(actualFee < (uint64_t)((double)size() * pFeeRate));
+
+        return result;
+    }
+
     TransactionList::~TransactionList()
     {
         for(std::vector<Transaction *>::iterator item=begin();item!=end();++item)

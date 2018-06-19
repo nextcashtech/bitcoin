@@ -723,42 +723,6 @@ namespace BitCoin
         return true;
     }
 
-    int signTransaction(Transaction &pTransaction, Key *pKey, Signature::HashType pHashType,
-      uint32_t pForkID)
-    {
-        Key *key;
-        ScriptInterpreter::ScriptType scriptType;
-        NextCash::HashList payAddresses;
-        uint32_t inputOffset = 0;
-
-        pTransaction.clearCache();
-
-        for(std::vector<Input>::iterator input = pTransaction.inputs.begin();
-          input != pTransaction.inputs.end(); ++input, ++inputOffset)
-        {
-            // Parse the output for addresses
-            scriptType = ScriptInterpreter::parseOutputScript(input->outpoint.output->script,
-              payAddresses);
-            if(scriptType != ScriptInterpreter::P2PKH || payAddresses.size() != 1)
-            {
-                payAddresses.clear();
-                return 1;
-            }
-
-            // Find private key for public key hash
-            key = pKey->findAddress(payAddresses.front());
-            if(key == NULL)
-                return 1;
-
-            // Sign input with private key
-            if(!pTransaction.signP2PKHInput(*input->outpoint.output, inputOffset, *key,
-              pHashType, pForkID))
-                return 5; // Issue with signing
-        }
-
-        return 0;
-    }
-
     bool checkSignature(Transaction &pTransaction, Monitor &pMonitor,
       std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd,
       BlockStats &pBlockStats, Forks &pForks)
@@ -781,6 +745,8 @@ namespace BitCoin
         tempOutputPool.add(transactions, 0);
         tempOutputPool.commit(transactions, 0);
 
+        pTransaction.clearCache();
+
         if(!pTransaction.process(tempOutputPool, transactions,
           0, false, pBlockStats.version((unsigned int)pBlockStats.height()),
           pBlockStats, pForks, spentAges))
@@ -793,7 +759,7 @@ namespace BitCoin
         return true;
     }
 
-    int estimatedP2PKHSize(int pInputCount, int pOutputCount)
+    int estimatedP2PKHFee(int pInputCount, int pOutputCount, double pFeeRate)
     {
         // P2PKH input size
         //   Previous Transaction ID = 32 bytes
@@ -813,7 +779,7 @@ namespace BitCoin
         //   Script (24 bytes) OP_DUP OP_HASH160 <PUB KEY HASH (20 bytes)> OP_EQUALVERIFY OP_CHECKSIG
         int outputSize = 8 + 25;
 
-        return (inputSize * pInputCount) + (pOutputCount * outputSize);
+        return (int)((double)((inputSize * pInputCount) + (pOutputCount * outputSize)) * pFeeRate);
     }
 
     int Daemon::sendP2PKHPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash,
@@ -843,7 +809,7 @@ namespace BitCoin
 
         for(std::vector<Outpoint>::iterator output = unspentOutputs.begin();
           output != unspentOutputs.end() && (pSendAll || inputAmount <= sendAmount +
-          estimatedP2PKHSize((unsigned int)transaction->inputs.size(), pSendAll ? 1 : 2));
+          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), pSendAll ? 1 : 2, pFeeRate));
           ++output)
         {
             transaction->addInput(output->transactionID, output->index);
@@ -854,7 +820,7 @@ namespace BitCoin
         if(pSendAll)
             sendAmount = inputAmount;
         else if(inputAmount < sendAmount +
-          estimatedP2PKHSize((unsigned int)transaction->inputs.size(), pSendAll ? 1 : 2))
+          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), pSendAll ? 1 : 2, pFeeRate))
         {
             delete transaction;
             return 2; // Insufficient funds
@@ -864,8 +830,9 @@ namespace BitCoin
         transaction->addP2PKHOutput(pPublicKeyHash, sendAmount);
 
         bool sendingChange = !pSendAll && inputAmount - sendAmount -
-          estimatedP2PKHSize((unsigned int)transaction->inputs.size(), 2) >
+          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate) >
           Transaction::DUST * 2;
+        int changeOutputOffset = -1;
         if(sendingChange)
         {
             // Add change output
@@ -880,52 +847,21 @@ namespace BitCoin
 
             transaction->addP2PKHOutput(changeChainKey->getNextUnused()->hash(),
               inputAmount - sendAmount -
-              estimatedP2PKHSize((unsigned int)transaction->inputs.size(), 2));
+              estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate));
+            changeOutputOffset = (int)transaction->outputs.size() - 1;
         }
 
-        // Sign inputs
-        Signature::HashType hashType = static_cast<Signature::HashType>(Signature::ALL |
-          Signature::FORKID);
-        int result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());
+        // Sign inputs and adjust fee
+        if(pSendAll)
+            sendAmount = 0xffffffffffffffffL;
+        Signature::HashType hashType =
+          static_cast<Signature::HashType>(Signature::ALL | Signature::FORKID);
+        int result = transaction->sign(inputAmount, pFeeRate, sendAmount,
+          changeOutputOffset, fullKey, hashType, mChain.forks().forkID());
         if(result != 0)
         {
             delete transaction;
             return result;
-        }
-
-        if(pSendAll)
-        {
-            // Adjust send amount to make fee correct
-            transaction->calculateSize();
-            uint64_t actualFee = (uint64_t)((double)transaction->size() * pFeeRate);
-
-            transaction->outputs.back().amount = inputAmount - actualFee;
-            transaction->clearCache(); // Clear output sig hash because an output has been modified
-
-            // Re-sign transaction
-            result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());
-            if(result != 0)
-            {
-                delete transaction;
-                return result;
-            }
-        }
-        else if(sendingChange)
-        {
-            // Adjust change amount to make fee correct
-            transaction->calculateSize();
-            uint64_t actualFee = (uint64_t)((double)transaction->size() * pFeeRate);
-
-            transaction->outputs.back().amount = inputAmount - sendAmount - actualFee;
-            transaction->clearCache(); // Clear output sig hash because an output has been modified
-
-            // Re-sign transaction
-            result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());
-            if(result != 0)
-            {
-                delete transaction;
-                return result;
-            }
         }
 
         // Finalize transaction
@@ -1002,8 +938,8 @@ namespace BitCoin
 
         for(std::vector<Outpoint>::iterator output = unspentOutputs.begin();
           output != unspentOutputs.end() && (inputAmount <= sendAmount +
-          estimatedP2PKHSize((unsigned int)transaction->inputs.size(), 2));
-            ++output)
+          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate));
+          ++output)
         {
             transaction->addInput(output->transactionID, output->index);
             transaction->inputs.back().outpoint.output = new Output(*output->output);
@@ -1011,7 +947,7 @@ namespace BitCoin
         }
 
         if(inputAmount < sendAmount +
-          estimatedP2PKHSize((unsigned int)transaction->inputs.size(), 2))
+          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate))
         {
             delete transaction;
             return 2; // Insufficient funds
@@ -1021,7 +957,9 @@ namespace BitCoin
         transaction->addOutput(pOutputScript, sendAmount);
 
         bool sendingChange = inputAmount - sendAmount -
-          estimatedP2PKHSize((unsigned int)transaction->inputs.size(), 2) > Transaction::DUST * 2;
+          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate) >
+          Transaction::DUST * 2;
+        int changeOutputOffset = -1;
         if(sendingChange)
         {
             // Add change output
@@ -1036,35 +974,19 @@ namespace BitCoin
 
             transaction->addP2PKHOutput(changeChainKey->getNextUnused()->hash(),
               inputAmount - sendAmount -
-              estimatedP2PKHSize((unsigned int)transaction->inputs.size(), 2));
+              estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate));
+            changeOutputOffset = (int)transaction->outputs.size() - 1;
         }
 
-        // Sign inputs
-        Signature::HashType hashType = static_cast<Signature::HashType>(Signature::ALL |
-                                                                        Signature::FORKID);
-        int result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());
+        // Sign inputs and adjust fee
+        Signature::HashType hashType =
+          static_cast<Signature::HashType>(Signature::ALL | Signature::FORKID);
+        int result = transaction->sign(inputAmount, pFeeRate, sendAmount,
+          changeOutputOffset, fullKey, hashType, mChain.forks().forkID());
         if(result != 0)
         {
             delete transaction;
             return result;
-        }
-
-        if(sendingChange)
-        {
-            // Adjust change amount to make fee correct
-            transaction->calculateSize();
-            uint64_t actualFee = (uint64_t)((double)transaction->size() * pFeeRate);
-
-            transaction->outputs.back().amount = inputAmount - sendAmount - actualFee;
-            transaction->clearCache(); // Clear output sig hash because an output has been modified
-
-            // Re-sign transaction
-            result = signTransaction(*transaction, fullKey, hashType, mChain.forks().forkID());
-            if(result != 0)
-            {
-                delete transaction;
-                return result;
-            }
         }
 
         // Finalize transaction
