@@ -1393,7 +1393,7 @@ namespace BitCoin
         NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
         NextCash::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
         for(NextCash::HashList::iterator hash= transactionHashes.begin();
-            hash != transactionHashes.end(); ++hash)
+          hash != transactionHashes.end(); ++hash)
         {
             transaction = request->transactions.get(*hash);
             if(transaction == request->transactions.end())
@@ -1526,14 +1526,12 @@ namespace BitCoin
                         pTransactionData->transaction = NULL; // Prevent it from being deleted
                         if(refreshTransaction(*transactionIter, true))
                         {
+                            // Request another merkle block since there are now new UTXOs to monitor
+                            //   that could also be in this block.
                             mMutex.unlock();
                             return result;
                         }
                         processNeeded = request->isComplete();
-                        // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
-                          // "Added confirmed transaction to merkle block request : %s", transaction->hash.hex().text());
-
-                        // Note: Bloom filter updated when merkle block is processed
                     }
 
                     mMutex.unlock();
@@ -1564,7 +1562,8 @@ namespace BitCoin
                         if((*pendingTransaction)->amount > 0)
                         {
                             subject = "Bitcoin Cash Receive Pending";
-                            message.writeFormatted("Receive pending for %0.8f bitcoins.\nTransaction : %s",
+                            message.writeFormatted(
+                              "Receive pending for %0.8f bitcoins.\nTransaction : %s",
                               bitcoins((*pendingTransaction)->amount),
                               (*pendingTransaction)->transaction->hash.hex().text());
                             NextCash::Log::addFormatted(NextCash::Log::INFO,
@@ -1576,7 +1575,8 @@ namespace BitCoin
                         else
                         {
                             subject = "Bitcoin Cash Send Pending";
-                            message.writeFormatted("Send pending for %0.8f bitcoins.\nTransaction : %s",
+                            message.writeFormatted(
+                              "Send pending for %0.8f bitcoins.\nTransaction : %s",
                               -bitcoins((*pendingTransaction)->amount),
                               (*pendingTransaction)->transaction->hash.hex().text());
                             NextCash::Log::addFormatted(NextCash::Log::INFO,
