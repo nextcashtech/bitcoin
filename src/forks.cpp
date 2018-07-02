@@ -148,7 +148,8 @@ namespace BitCoin
 
 #ifdef LOW_MEM
         int previousHeight = height();
-        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(filePathName + ".temp", true);
+        NextCash::FileOutputStream *outputFile =
+          new NextCash::FileOutputStream(filePathName + ".temp", true);
         if(!outputFile->isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_FORKS_LOG_NAME,

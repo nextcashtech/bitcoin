@@ -100,11 +100,14 @@ namespace BitCoin
         mDataModified = false;
         mInitialBlockDownloadComplete = false;
 
-        NextCash::String configPath = sPath;
-        configPath.pathAppend("config");
-        NextCash::FileInputStream configFile(configPath);
-        if(configFile.isValid())
-            readSettingsFile(&configFile);
+        if(sPath)
+        {
+            NextCash::String configPath = sPath;
+            configPath.pathAppend("config");
+            NextCash::FileInputStream configFile(configPath);
+            if(configFile.isValid())
+                readSettingsFile(&configFile);
+        }
     }
 
     Info::~Info()

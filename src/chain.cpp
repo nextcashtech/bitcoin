@@ -732,7 +732,8 @@ namespace BitCoin
         return true;
     }
 
-    // Add block header to queue to be requested and downloaded
+    // Full Mode : Add block header to queue to be requested and downloaded
+    // SPV Mode : Add/Verify block header
     bool Chain::addPendingBlock(Block *pBlock)
     {
         mPendingLock.writeLock("Add");
@@ -2687,7 +2688,7 @@ namespace BitCoin
         Block readBlock;
         NextCash::FileInputStream readFile("tests/06128e87be8b1b4dea47a7247d5528d2702c96826c7a648497e773b800000000.pending_block");
         NextCash::removeDirectory("chain_test");
-        Info::instance().setPath("./chain_test");
+        Info::setPath("./chain_test");
         TransactionOutputPool outputs;
         BlockStats blockStats;
         Forks softForks;

@@ -2272,7 +2272,7 @@ namespace BitCoin
                 continue;
 
             for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
-                recent != mRecentIPs.end(); ++recent)
+              recent != mRecentIPs.end(); ++recent)
                 if(*recent == (*peer)->address.ip)
                 {
                     found = true;

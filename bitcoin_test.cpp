@@ -86,7 +86,7 @@ bool merkleTest1()
 {
     NextCash::Log::add(NextCash::Log::INFO, "Test", "------------- Starting Merkle Tree Test 1 -------------");
     BitCoin::setNetwork(BitCoin::MAINNET);
-    BitCoin::Info::instance().setPath("/var/bitcoin/mainnet/");
+    BitCoin::Info::setPath("/var/bitcoin/mainnet/");
 
     /***********************************************************************************************
      * Merkle block (Randomly chosen transaction)
@@ -473,7 +473,7 @@ bool chainTest()
     NextCash::removeDirectory("chain_test");
     NextCash::createDirectory("chain_test");
     BitCoin::setNetwork(BitCoin::MAINNET);
-    BitCoin::Info::instance().setPath("chain_test");
+    BitCoin::Info::setPath("chain_test");
 
     std::vector<NextCash::Hash> branchHashes;
     int height = 0;
