@@ -2006,7 +2006,7 @@ namespace BitCoin
         mLastConnectionActive = getTime();
 
         // Check if IP is on reject list
-        for(std::vector<IPBytes>::iterator ip=mRejectedIPs.begin();ip!=mRejectedIPs.end();++ip)
+        for(std::vector<IPBytes>::iterator ip = mRejectedIPs.begin(); ip != mRejectedIPs.end(); ++ip)
             if(*ip == pConnection->ipv6Bytes())
             {
                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
@@ -2201,6 +2201,20 @@ namespace BitCoin
             if(found)
                 continue;
 
+            for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
+              recent != mRecentIPs.end(); ++recent)
+                if(*recent == (*peer)->address.ip)
+                {
+                    found = true;
+                    break;
+                }
+            if(found)
+                continue;
+
+            mRecentIPs.emplace_back((*peer)->address.ip);
+            while(mRecentIPs.size() > 1000)
+                mRecentIPs.erase(mRecentIPs.begin());
+
             connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
               (*peer)->address.port, 5);
             if(!connection->isOpen())
@@ -2256,6 +2270,20 @@ namespace BitCoin
             mNodeLock.readUnlock();
             if(found)
                 continue;
+
+            for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
+                recent != mRecentIPs.end(); ++recent)
+                if(*recent == (*peer)->address.ip)
+                {
+                    found = true;
+                    break;
+                }
+            if(found)
+                continue;
+
+            mRecentIPs.emplace_back((*peer)->address.ip);
+            while(mRecentIPs.size() > 1000)
+                mRecentIPs.erase(mRecentIPs.begin());
 
             connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
               (*peer)->address.port, 5);

@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <list>
 
 
 namespace BitCoin
@@ -177,6 +178,7 @@ namespace BitCoin
         };
 
         std::vector<IPBytes> mRejectedIPs;
+        std::list<IPBytes> mRecentIPs;
 
         void addRejectedIP(const uint8_t *pIP);
 
