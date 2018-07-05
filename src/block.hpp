@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                           *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -25,23 +25,30 @@ namespace BitCoin
     {
     public:
 
-        Block() : previousHash(32), merkleHash(32) { version = 4; transactionCount = 0; mFees = 0; mSize = 0; }
+        Block() : previousHash(32), merkleHash(32)
+        {
+            version = 4;
+            transactionCount = 0;
+            mFees = 0;
+            mSize = 0;
+        }
         ~Block();
 
         // Verify hash is lower than target difficulty specified by targetBits
         bool hasProofOfWork();
 
-        void write(NextCash::OutputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
-          bool pBlockFile = false);
+        void write(NextCash::OutputStream *pStream, bool pIncludeTransactions,
+          bool pIncludeTransactionCount, bool pBlockFile = false);
 
         // pCalculateHash will calculate the hash of the block data while it reads it
-        bool read(NextCash::InputStream *pStream, bool pIncludeTransactions, bool pIncludeTransactionCount,
-          bool pCalculateHash, bool pBlockFile = false);
+        bool read(NextCash::InputStream *pStream, bool pIncludeTransactions,
+          bool pIncludeTransactionCount, bool pCalculateHash, bool pBlockFile = false);
 
         void clear();
 
         // Print human readable version to log
-        void print(Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::DEBUG, bool pIncludeTransactions = true);
+        void print(Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::DEBUG,
+          bool pIncludeTransactions = true);
 
         // Hash
         NextCash::Hash hash;
@@ -68,8 +75,7 @@ namespace BitCoin
         void calculateHash();
         void calculateMerkleHash(NextCash::Hash &pMerkleHash);
 
-        bool process(TransactionOutputPool &pOutputs, int pBlockHeight, BlockStats &pBlockStats,
-          Forks &pForks);
+        bool process(Chain *pChain, int pBlockHeight);
 
         bool updateOutputs(TransactionOutputPool &pOutputs, int pBlockHeight);
 
@@ -136,7 +142,8 @@ namespace BitCoin
 
     };
 
-    MerkleNode *buildMerkleTree(std::vector<Transaction *> &pBlockTransactions, BloomFilter &pFilter);
+    MerkleNode *buildMerkleTree(std::vector<Transaction *> &pBlockTransactions,
+      BloomFilter &pFilter);
     MerkleNode *buildEmptyMerkleTree(unsigned int pNodeCount);
 
     class BlockList : public std::vector<Block *>
@@ -145,13 +152,13 @@ namespace BitCoin
         BlockList() {}
         ~BlockList()
         {
-            for(iterator block=begin();block!=end();++block)
+            for(iterator block = begin(); block != end(); ++block)
                 delete *block;
         }
 
         void clear()
         {
-            for(iterator block=begin();block!=end();++block)
+            for(iterator block = begin(); block != end(); ++block)
                 delete *block;
             std::vector<Block *>::clear();
         }
@@ -161,6 +168,8 @@ namespace BitCoin
         BlockList(BlockList &pCopy);
         BlockList &operator = (BlockList &pRight);
     };
+
+    class BlockStat;
 
     class BlockFile
     {
@@ -178,15 +187,19 @@ namespace BitCoin
         static bool readBlock(unsigned int pHeight, Block &pBlock);
 
         // Read transaction from block
-        static bool readBlockTransaction(unsigned int pHeight, unsigned int pTransactionOffset, Transaction &pTransaction);
+        static bool readBlockTransaction(unsigned int pHeight, unsigned int pTransactionOffset,
+          Transaction &pTransaction);
 
-        static bool readBlockTransactionOutput(unsigned int pHeight, unsigned int pTransactionOffset,
-          unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput);
+        static bool readBlockTransactionOutput(unsigned int pHeight,
+          unsigned int pTransactionOffset, unsigned int pOutputIndex,
+          NextCash::Hash &pTransactionID, Output &pOutput);
 
         // Get transaction output from appropriate block file
-        static bool readOutput(unsigned int pBlockHeight, OutputReference *pReference, unsigned int pIndex, Output &pOutput);
+        static bool readOutput(unsigned int pBlockHeight, OutputReference *pReference,
+          unsigned int pIndex, Output &pOutput);
 
-        // Create a new block file. BlockFile objects will be invalid if the block file doesn't already exist
+        // Create a new block file. BlockFile objects will be invalid if the block file doesn't
+        //   already exist
         static BlockFile *create(unsigned int pID);
 
         // Remove a block file
@@ -212,13 +225,15 @@ namespace BitCoin
         bool readHeader(unsigned int pOffset, Block &pBlock);
         bool readBlock(unsigned int pOffset, Block &pBlock, bool pIncludeTransactions);
 
-        // Read list of block hashes from this file. If pStartingHash is empty then start with first block
+        // Read list of block hashes from this file. If pStartingHash is empty then start with first
+        //   block
         bool readBlockHashes(NextCash::HashList &pHashes);
 
-        // Append block stats from this file to the list specified
-        bool readStats(BlockStats &pStats, unsigned int pOffset);
+        bool readTargetBits(unsigned int pOffset, uint32_t &pTargetBits);
+        bool readBlockStats(unsigned int pOffset, BlockStat *pBlockStats);
 
-        // Read list of block headers from this file. If pStartingHash is empty then start with first block
+        // Read list of block headers from this file. If pStartingHash is empty then start with
+        //   first block
         bool readBlockHeaders(BlockList &pBlockHeaders, const NextCash::Hash &pStartingHash,
           const NextCash::Hash &pStoppingHash, unsigned int pCount);
 
@@ -229,7 +244,8 @@ namespace BitCoin
         bool readBlock(const NextCash::Hash &pHash, Block &pBlock, bool pIncludeTransactions);
 
         // Read only transaction at specified offset of block
-        bool readTransaction(unsigned int pBlockOffset, unsigned int pTransactionOffset, Transaction &pTransaction);
+        bool readTransaction(unsigned int pBlockOffset, unsigned int pTransactionOffset,
+          Transaction &pTransaction);
 
         // Read transaction output at specified offset in file
         bool readTransactionOutput(unsigned int pFileOffset, Output &pTransactionOutput);

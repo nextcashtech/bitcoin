@@ -12,6 +12,8 @@
 #include "key.hpp"
 #include "interpreter.hpp"
 
+#include <algorithm>
+
 #define BITCOIN_MONITOR_LOG_NAME "Monitor"
 
 // Maximum number of concurrent merkle requests
@@ -30,7 +32,6 @@ namespace BitCoin
         mFilterID = 0;
         mChangeID = 0;
         mFilter.setup(0);
-        mPasses.push_back(PassData());
         mLoaded = false;
     }
 
@@ -109,7 +110,7 @@ namespace BitCoin
 
         // Passes
         pStream->writeUnsignedInt(mPasses.size());
-        for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass)
+        for(std::vector<PassData>::iterator pass = mPasses.begin(); pass != mPasses.end(); ++pass)
             pass->write(pStream);
 
         // Addresses
@@ -454,35 +455,39 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    void Monitor::startNewPass(unsigned int pBlockHeight)
+    void Monitor::startPass(unsigned int pBlockHeight)
     {
+        // Check for existing passes that are close to this block height
         unsigned int passIndex = 0;
+        unsigned int blockHeight = pBlockHeight;
+        bool add = true;
         for(std::vector<PassData>::iterator pass = mPasses.begin(); pass != mPasses.end();
           ++pass, ++passIndex)
-            if(!pass->complete && pass->blockHeight > 0)
+            if(!pass->complete)
             {
-                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                  "Pass %d marked complete at block height %d to start new pass for new addresses",
-                  passIndex, pass->blockHeight);
-                pass->complete = true;
+                if(pass->blockHeight > blockHeight && pass->blockHeight - blockHeight < 20000)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                      "Pass %d marked complete at height %d to start new pass at height %d",
+                      passIndex, pass->blockHeight, blockHeight);
+                    pass->complete = true;
+                }
+                else if(pass->blockHeight < blockHeight && blockHeight - pass->blockHeight < 20000)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                      "Existing pass %d (at height %d) is before and close enough to use for height %d",
+                      passIndex, pass->blockHeight, blockHeight);
+                    add = false;
+                }
             }
 
-        if(mPasses.size() == 0)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-              "Starting first pass %d for %d addresses", mPasses.size() + 1, mAddressHashes.size());
-            mPasses.push_back(PassData(pBlockHeight));
-        }
-        else if(mPasses.back().blockHeight > 0)
+        if(add)
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
               "Starting new pass %d for new addresses", mPasses.size() + 1);
-            mPasses.push_back(PassData(pBlockHeight));
+            mPasses.emplace_back(blockHeight);
+            mPasses.back().addressesIncluded = mAddressHashes.size();
         }
-
-        mPasses.back().addressesIncluded = mAddressHashes.size();
-
-        restartBloomFilter();
     }
 
     void Monitor::restartBloomFilter()
@@ -534,21 +539,41 @@ namespace BitCoin
         }
 
         if(addedCount)
-            startNewPass();
+        {
+            startPass();
+            restartBloomFilter();
+        }
 
         mMutex.unlock();
         return true;
     }
 
-    void Monitor::setKeyStore(KeyStore *pKeyStore, bool pStartNewPass)
+    void Monitor::setKeyStore(KeyStore *pKeyStore, Chain *pChain, bool pStartNewPass)
     {
         mMutex.lock();
         mKeyStore = pKeyStore;
         if(refreshKeyStore())
         {
-            refreshBloomFilter(true);
             if(pStartNewPass)
-                startNewPass();
+                startPass();
+            else
+            {
+                if(pChain->height() > 20000 &&
+                  highestPassHeight(true) < (unsigned int)pChain->height() - 20000)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                      "Starting new pass at block height %d to monitor new blocks",
+                      pChain->height());
+                    mPasses.emplace_back(pChain->height() - 1);
+                    mPasses.back().addressesIncluded = mAddressHashes.size();
+                }
+                else if(mPasses.size() == 0)
+                {
+                    mPasses.emplace_back(0);
+                    mPasses.back().addressesIncluded = mAddressHashes.size();
+                }
+            }
+            restartBloomFilter();
         }
         mMutex.unlock();
     }
@@ -564,24 +589,46 @@ namespace BitCoin
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mTransactions.begin(); trans != mTransactions.end();)
         {
-            refreshTransaction(*trans, false);
-            if((*trans)->payOutputs.size() == 0 && (*trans)->spendInputs.size() == 0)
+            if(mAddressHashes.size() == 0)
+            {
+                delete *trans;
                 trans = mTransactions.erase(trans);
+            }
             else
-                ++trans;
+            {
+                refreshTransaction(*trans, false);
+                if((*trans)->payOutputs.size() == 0 && (*trans)->spendInputs.size() == 0)
+                {
+                    delete *trans;
+                    trans = mTransactions.erase(trans);
+                }
+                else
+                    ++trans;
+            }
         }
 
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mPendingTransactions.begin(); trans != mPendingTransactions.end();)
         {
-            refreshTransaction(*trans, false);
-            if((*trans)->payOutputs.size() == 0 && (*trans)->spendInputs.size() == 0)
+            if(mAddressHashes.size() == 0)
+            {
+                delete *trans;
                 trans = mPendingTransactions.erase(trans);
+            }
             else
-                ++trans;
+            {
+                refreshTransaction(*trans, false);
+                if((*trans)->payOutputs.size() == 0 && (*trans)->spendInputs.size() == 0)
+                    trans = mPendingTransactions.erase(trans);
+                else
+                    ++trans;
+            }
         }
 
-        refreshBloomFilter(true);
+        if(mAddressHashes.size() == 0)
+            mPasses.clear();
+
+        restartBloomFilter();
 
         mMutex.unlock();
     }
@@ -592,11 +639,11 @@ namespace BitCoin
         std::vector<Key *> children;
         std::vector<Key *> *chainKeys;
 
-        for(unsigned int i=0;i<mKeyStore->size();++i)
+        for(unsigned int i = 0; i < mKeyStore->size(); ++i)
         {
             chainKeys = mKeyStore->chainKeys(i);
 
-            if(chainKeys == NULL || chainKeys->size() == 0)
+            if(chainKeys == NULL)
                 continue;
 
             for(std::vector<Key *>::iterator chainKey = chainKeys->begin();
@@ -677,13 +724,28 @@ namespace BitCoin
         bool resultEmpty = true;
 
         mMutex.lock();
-        for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass)
+        for(std::vector<PassData>::iterator pass = mPasses.begin(); pass != mPasses.end(); ++pass)
             if(!pass->complete && (resultEmpty || pass->blockHeight < result))
             {
                 resultEmpty = false;
                 result = pass->blockHeight;
             }
         mMutex.unlock();
+
+        return result;
+    }
+
+    unsigned int Monitor::highestPassHeight(bool pLocked)
+    {
+        unsigned int result = 0;
+
+        if(!pLocked)
+            mMutex.lock();
+        for(std::vector<PassData>::iterator pass = mPasses.begin(); pass != mPasses.end(); ++pass)
+            if(!pass->complete && pass->blockHeight > result)
+                result = pass->blockHeight;
+        if(!pLocked)
+            mMutex.unlock();
 
         return result;
     }
@@ -1154,7 +1216,7 @@ namespace BitCoin
         return true;
     }
 
-    Transaction *Monitor::findTransactionPaying(NextCash::Buffer pOutputScript, uint64_t pAmount)
+    Transaction *Monitor::findTransactionPaying(NextCash::Buffer pOutputScript, int64_t pAmount)
     {
         mMutex.lock();
 
@@ -1275,7 +1337,7 @@ namespace BitCoin
 
         mMutex.lock();
 
-        for(std::vector<PassData>::reverse_iterator pass=mPasses.rbegin();pass!=mPasses.rend();
+        for(std::vector<PassData>::reverse_iterator pass = mPasses.rbegin(); pass != mPasses.rend();
           ++pass)
         {
             if(pass->complete)
@@ -1721,7 +1783,7 @@ namespace BitCoin
           pBlockHeight, pBlockHash.hex().text());
 
         // Update last block height
-        for(std::vector<PassData>::iterator pass=mPasses.begin();pass!=mPasses.end();++pass)
+        for(std::vector<PassData>::iterator pass = mPasses.begin(); pass != mPasses.end(); ++pass)
             if(!pass->complete && pass->blockHeight == pBlockHeight)
                 --(pass->blockHeight);
 
@@ -1745,20 +1807,8 @@ namespace BitCoin
             NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
             NextCash::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
             unsigned int passIndex = mPasses.size();
-
-            if(pChain.isInSync() && pChain.height() > 5000 && mPasses.back().blockHeight <
-              (unsigned int)pChain.height() - 5000)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                  "Starting new pass at block height %d to monitor new blocks", pChain.height());
-                PassData newPass(pChain.height());
-                newPass.addressesIncluded = mAddressHashes.size();
-                mPasses.emplace_back(newPass);
-                ++passIndex;
-            }
-
-            for(std::vector<PassData>::reverse_iterator pass =
-              mPasses.rbegin(); pass != mPasses.rend(); ++pass, --passIndex)
+            for(std::vector<PassData>::reverse_iterator pass = mPasses.rbegin();
+              pass != mPasses.rend(); ++pass, --passIndex)
             {
                 if(pass->complete)
                     continue;
@@ -1945,15 +1995,7 @@ namespace BitCoin
 
                         // Update bloom filter and reset all node bloom filters
                         // Node bloom filters are reset with mFilterID
-                        refreshBloomFilter(true);
-
-                        // Reset all merkle requests so they are only received with updated bloom
-                        //   filters
-                        for(NextCash::HashContainerList<MerkleRequestData *>::Iterator requestToClear =
-                          mMerkleRequests.begin(); requestToClear != mMerkleRequests.end();
-                          ++requestToClear)
-                            clearMerkleRequest(*requestToClear);
-
+                        restartBloomFilter();
                         break;
                     }
                 }

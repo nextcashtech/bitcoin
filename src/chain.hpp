@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                           *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -31,20 +31,58 @@ namespace BitCoin
     class BlockInfo
     {
     public:
-        BlockInfo(const NextCash::Hash &pHash, unsigned int pFileID, int32_t pHeight)
+        BlockInfo(const NextCash::Hash &pHash, unsigned int pFileID, int pBlockHeight)
         {
             hash   = pHash;
             fileID = pFileID;
-            height = pHeight;
+            height = pBlockHeight;
         }
 
         NextCash::Hash hash;
         unsigned int   fileID;
-        int32_t        height;
+        int            height;
 
     private:
         BlockInfo(BlockInfo &pCopy);
         BlockInfo &operator = (BlockInfo &pRight);
+    };
+
+    class BlockStat
+    {
+    public:
+
+        BlockStat() : accumulatedWork(32)
+        {
+            version = 0;
+            time = 0;
+            targetBits = 0;
+        }
+        BlockStat(const BlockStat &pCopy) : accumulatedWork(pCopy.accumulatedWork)
+        {
+            version = pCopy.version;
+            time = pCopy.time;
+            targetBits = pCopy.targetBits;
+        }
+        BlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits) : accumulatedWork(32)
+        {
+            version = pVersion;
+            time = pTime;
+            targetBits = pTargetBits;
+        }
+
+        BlockStat &operator = (const BlockStat &pRight)
+        {
+            version = pRight.version;
+            time = pRight.time;
+            targetBits = pRight.targetBits;
+            accumulatedWork = pRight.accumulatedWork;
+            return *this;
+        }
+
+        int32_t        version;
+        int32_t        time;
+        uint32_t       targetBits;
+        NextCash::Hash accumulatedWork;
     };
 
     class BlockSet : public std::list<BlockInfo *>, public NextCash::Mutex
@@ -53,13 +91,13 @@ namespace BitCoin
         BlockSet() : Mutex("Block Set") {}
         ~BlockSet()
         {
-            for(iterator info=begin();info!=end();++info)
+            for(iterator info = begin(); info != end(); ++info)
                 delete *info;
         }
 
         bool contains(const NextCash::Hash &pHash) const
         {
-            for(const_iterator info=begin();info!=end();++info)
+            for(const_iterator info = begin(); info != end(); ++info)
                 if((*info)->hash == pHash)
                     return true;
             return false;
@@ -67,14 +105,14 @@ namespace BitCoin
 
         void clear()
         {
-            for(iterator info=begin();info!=end();++info)
+            for(iterator info = begin(); info != end(); ++info)
                 delete *info;
             std::list<BlockInfo *>::clear();
         }
 
         bool remove(const NextCash::Hash &pHash)
         {
-            for(iterator info=begin();info!=end();++info)
+            for(iterator info = begin(); info != end(); ++info)
                 if((*info)->hash == pHash)
                 {
                     delete *info;
@@ -84,6 +122,9 @@ namespace BitCoin
 
             return false;
         }
+
+        typedef std::list<BlockInfo *>::iterator iterator;
+        typedef std::list<BlockInfo *>::const_iterator const_iterator;
 
     private:
         BlockSet(BlockSet &pCopy);
@@ -161,7 +202,8 @@ namespace BitCoin
     {
     public:
 
-        Branch(unsigned int pHeight, const NextCash::Hash &pWork) : accumulatedWork(pWork) { height = pHeight + 1; }
+        Branch(int pBlockHeight, const NextCash::Hash &pWork) : accumulatedWork(pWork)
+          { height = pBlockHeight + 1; }
         ~Branch();
 
         void addBlock(Block *pBlock)
@@ -174,7 +216,7 @@ namespace BitCoin
             accumulatedWork += work;
         }
 
-        unsigned int height; // The chain height of the first block in the branch
+        int height; // The chain height of the first block in the branch
         std::list<PendingBlockData *> pendingBlocks;
         NextCash::Hash accumulatedWork;
     };
@@ -191,11 +233,9 @@ namespace BitCoin
         unsigned int pendingChainHeight() const { return mNextBlockHeight - 1 + mPendingBlocks.size(); }
         const NextCash::Hash &lastPendingBlockHash() const { if(!mLastPendingHash.isEmpty()) return mLastPendingHash; return mLastBlockHash; }
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
-        const NextCash::Hash accumulatedWork() { return mBlockStats.accumulatedWork(mBlockStats.height()); }
         const NextCash::Hash &pendingAccumulatedWork() { return mPendingAccumulatedWork; }
 
         TransactionOutputPool &outputs() { return mOutputs; }
-        BlockStats &blockStats() { return mBlockStats; }
         Forks &forks() { return mForks; }
         MemPool &memPool() { return mMemPool; }
         Addresses &addresses() { return mAddresses; }
@@ -256,27 +296,39 @@ namespace BitCoin
         void setAnnouncedAdded() { mAnnouncedAdded = true; }
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
-        bool getBlockHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash, unsigned int pCount);
+        bool getBlockHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash,
+          unsigned int pCount);
         // Retrieve list of block hashes starting at top, going down and skipping around 100 between each.
         bool getReverseBlockHashes(NextCash::HashList &pHashes, unsigned int pCount);
 
         // Retrieve block headers starting at a specific hash. (empty starting hash for first block)
-        bool getBlockHeaders(BlockList &pBlockHeaders, const NextCash::Hash &pStartingHash, const NextCash::Hash &pStoppingHash,
-          unsigned int pCount);
+        bool getBlockHeaders(BlockList &pBlockHeaders, const NextCash::Hash &pStartingHash,
+          const NextCash::Hash &pStoppingHash, unsigned int pCount);
 
         // Get block or hash at specific height
-        bool getBlockHash(unsigned int pHeight, NextCash::Hash &pHash);
-        bool getBlock(unsigned int pHeight, Block &pBlock);
-        bool getHeader(unsigned int pHeight, Block &pBlockHeader);
+        bool getBlockHash(int pBlockHeight, NextCash::Hash &pHash);
+        bool getBlock(int pBlockHeight, Block &pBlock);
+        bool getHeader(int pBlockHeight, Block &pBlockHeader);
 
         // Get the block or height for a specific hash
         int blockHeight(const NextCash::Hash &pHash); // Returns -1 when hash is not found
         bool getBlock(const NextCash::Hash &pHash, Block &pBlock);
         bool getHeader(const NextCash::Hash &pHash, Block &pBlockHeader);
 
+        int32_t version(int pBlockHeight);
+        int32_t time(int pBlockHeight);
+        uint32_t targetBits(int pBlockHeight);
+        NextCash::Hash accumulatedWork(int pBlockHeight);
+
+        // Note : Call after block has been added to stats
+        int32_t getMedianPastTime(int pBlockHeight, unsigned int pMedianCount);
+
+        void getMedianPastTimeAndWork(int pBlockHeight, int32_t &pTime,
+          NextCash::Hash &pAccumulatedWork, unsigned int pMedianCount);
+
         // Load block data from file system
         //   If pList is true then all the block hashes will be output
-        bool load(bool pPreCacheOutputs = true);
+        bool load();
         bool save();
 
         // Process pending headers and blocks
@@ -343,14 +395,14 @@ namespace BitCoin
         bool processBlock(Block *pBlock);
 
         // Revert to a lower height
-        bool revert(int pHeight);
-        bool revertBlockFileHeight(int pHeight);
+        bool revert(int pBlockHeight);
+        bool revertBlockFileHeight(int pBlockHeight);
 
         static const unsigned int INVALID_FILE_ID = 0xffffffff;
         unsigned int blockFileID(const NextCash::Hash &pHash);
 
         NextCash::Hash mLastBlockHash; // Hash of last/top block on chain
-        int32_t mNextBlockHeight; // Number of next block that will be added to the chain
+        int mNextBlockHeight; // Number of next block that will be added to the chain
         BlockFile *mLastBlockFile;
         unsigned int mLastFileID;
 
@@ -363,11 +415,17 @@ namespace BitCoin
         bool writeBlock(Block *pBlock); // Write block to block file
         void addBlockHash(NextCash::Hash &pHash); // Add a verified block hash to the lookup
 
-        // Last BLOCK_STATS_SIZE block's statistics
+        std::list<BlockStat> mBlockStats;
+        int mBlockStatHeight; // Height of block referenced by last item in mBlockStats
+
+        BlockStat *blockStat(unsigned int pBlockHeight);
+        void addBlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits);
+        void revertLastBlockStat();
+        void clearBlockStats();
+        bool saveAccumulatedWork();
+
         Forks mForks;
-        BlockStats mBlockStats;
         MemPool mMemPool;
-        uint64_t mAccumulatedProofOfWork;
 
         std::list<PendingHeaderData *> mPendingHeaders;
         NextCash::HashList mBlocksToAnnounce;

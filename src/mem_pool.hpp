@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                           *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -51,12 +51,21 @@ namespace BitCoin
 
         enum HashStatus { ALREADY_HAVE, NEED, BLACK_LISTED };
         // Add to transaction hashes that need downloaded and verified. Returns hash status. Zero means already added.
-        HashStatus addPending(const NextCash::Hash &pHash, TransactionOutputPool &pOutputs, unsigned int pNodeID);
+        HashStatus addPending(const NextCash::Hash &pHash, TransactionOutputPool &pOutputs,
+          unsigned int pNodeID);
 
         // Add transaction to mem pool. Returns false if it was already in the mem pool or is invalid
-        enum AddStatus { ADDED, NOT_NEEDED, NON_STANDARD, DOUBLE_SPEND, LOW_FEE, UNSEEN_OUTPOINTS, INVALID };
-        AddStatus add(Transaction *pTransaction, TransactionOutputPool &pOutputs, BlockStats &pBlockStats,
-          Forks &pForks, uint64_t pMinFeeRate);
+        enum AddStatus
+        {
+            ADDED,
+            NOT_NEEDED,
+            NON_STANDARD,
+            DOUBLE_SPEND,
+            LOW_FEE,
+            UNSEEN_OUTPOINTS,
+            INVALID
+        };
+        AddStatus add(Transaction *pTransaction, Chain *pChain, uint64_t pMinFeeRate);
 
         // Remove transactions that have been added to a block
         void remove(const std::vector<Transaction *> &pTransactions);
@@ -77,8 +86,7 @@ namespace BitCoin
         void getToAnnounce(NextCash::HashList &pList);
         void getFullList(NextCash::HashList &pList, const BloomFilter &pFilter);
 
-        void checkPendingTransactions(TransactionOutputPool &pOutputs,
-          BlockStats &pBlockStats, Forks &pForks, uint64_t pMinFeeRate);
+        void checkPendingTransactions(Chain *pChain, uint64_t pMinFeeRate);
 
         bool isBlackListed(const NextCash::Hash &pHash);
 
@@ -108,8 +116,7 @@ namespace BitCoin
         Transaction *getInternal(const NextCash::Hash &pHash);
 
         // Verifies that a transaction is valid
-        bool check(Transaction *pTransaction, TransactionOutputPool &pOutputs,
-          BlockStats &pBlockStats, Forks &pForks, uint64_t pMinFeeRate);
+        bool check(Transaction *pTransaction, Chain *pChain, uint64_t pMinFeeRate);
 
         bool outpointExists(Transaction *pTransaction);
 

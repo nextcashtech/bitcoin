@@ -24,143 +24,7 @@
 
 namespace BitCoin
 {
-    class BlockStat
-    {
-    public:
-
-        BlockStat() : accumulatedWork(32) {}
-        BlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits,
-          const NextCash::Hash &pAccumulatedWork) : accumulatedWork(pAccumulatedWork)
-          { version = pVersion; time = pTime; targetBits = pTargetBits; }
-
-        void write(NextCash::OutputStream *pStream) const
-        {
-            pStream->write(this, 12);
-            accumulatedWork.write(pStream);
-        }
-
-        bool read(NextCash::InputStream *pStream)
-        {
-            if(pStream->remaining() < 12)
-                return false;
-
-            pStream->read(this, 12);
-
-            return !accumulatedWork.read(pStream);
-        }
-
-        bool operator < (const BlockStat &pRight) const { return time < pRight.time; }
-
-        static const unsigned int SIZE = 44;
-
-        int32_t        version;
-        int32_t        time;
-        uint32_t       targetBits;
-        NextCash::Hash accumulatedWork;
-    };
-
-#ifdef LOW_MEM
-    class BlockStats
-#else
-    class BlockStats : private std::vector<BlockStat *>
-#endif
-    {
-    public:
-
-#ifdef LOW_MEM
-        BlockStats() : mMutex("BlockStats")
-        {
-            mFileStream = NULL;
-            mCachedOffset = 0;
-            mIsValid = false;
-            mIsModified = false;
-        }
-#else
-        BlockStats() : mMutex("BlockStats") { mIsValid = false; mIsModified = false; }
-#endif
-        ~BlockStats();
-
-#ifdef LOW_MEM
-        int height() const { return (int)(mCachedOffset + mCached.size() - 1); }
-        int cacheSize() const { return mCached.size(); }
-#else
-        int height() const { return (int)size() - 1; }
-#endif
-
-        int32_t version(unsigned int pBlockHeight);
-        int32_t time(unsigned int pBlockHeight, bool pLocked = false);
-        uint32_t targetBits(unsigned int pBlockHeight);
-        const NextCash::Hash accumulatedWork(unsigned int pBlockHeight);
-
-        // Note : Call after block has been added to stats
-        int32_t getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount = 11);
-
-        void getMedianPastTimeAndWork(unsigned int pBlockHeight, int32_t &pTime,
-          NextCash::Hash &pAccumulatedWork, unsigned int pMedianCount = 3);
-
-        void add(int32_t pVersion, int32_t pTime, uint32_t pTargetBits)
-        {
-            NextCash::Hash work(32);
-            NextCash::Hash target(32);
-            target.setDifficulty(pTargetBits);
-            target.getWork(work);
-            work += accumulatedWork((unsigned int)height());
-            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
-              // "Block work at height %d : %s", size(), work.hex().text());
-
-            mMutex.lock();
-            mIsModified = true;
-#ifdef LOW_MEM
-            mCached.push_back(new BlockStat(pVersion, pTime, pTargetBits, work));
-#else
-            push_back(new BlockStat(pVersion, pTime, pTargetBits, work));
-#endif
-            mMutex.unlock();
-        }
-
-        void revert(unsigned int pBlockHeight)
-        {
-            mMutex.lock();
-
-            if(pBlockHeight > 0 && height() <= (int)pBlockHeight)
-            {
-                mMutex.unlock();
-                return;
-            }
-
-            while(height() > (int)pBlockHeight)
-            {
-                mIsModified = true;
-#ifdef LOW_MEM
-                if(mCached.size() > 0)
-                {
-                    delete mCached.back();
-                    mCached.pop_back();
-                }
-                else
-                    --mCachedOffset;
-#else
-                delete back();
-                pop_back();
-#endif
-            }
-
-            mMutex.unlock();
-        }
-
-        bool load(bool pLocked = false);
-        bool save();
-
-    private:
-        bool mIsValid;
-        NextCash::Mutex mMutex;
-        bool mIsModified;
-#ifdef LOW_MEM
-        NextCash::FileInputStream *mFileStream;
-        NextCash::stream_size mCachedOffset;
-        std::vector<BlockStat *> mCached;
-#endif
-    };
+    class Chain;
 
     class SoftFork
     {
@@ -210,7 +74,9 @@ namespace BitCoin
             lockedHeight = NOT_LOCKED;
         }
 
-        void revert(BlockStats &pBlockStats, int pBlockHeight);
+        // Revert last block added to soft fork data.
+        //   pBlockHeight is the height of the block being reverted.
+        void revertLast(Chain *pChain, int pBlockHeight);
 
         // Reset to initial state
         void reset()
@@ -246,14 +112,17 @@ namespace BitCoin
 
         int height() const { return mHeight; }
 
-        // Version 2 BIP0034 Block height as first part of coinbase input script
-        //   Became required on mainnet at block height 227931
-        // Version 3 BIP0066 Strict DER signature formatting
-        //   Became required on mainnet at block height 363725
-        // Version 4 BIP0065 OP_CHECKLOCKTIMEVERIFY
-        //   Became required on mainnet at block height 388381
-        int32_t enabledVersion() const { return mEnabledVersion; }
-        int32_t requiredVersion() const { return mRequiredVersion; }
+        // Version 2 BIP0034 Block height as first part of coinbase input script.
+        //   Became enabled on mainnet at block height 224412.
+        //   Became active/required on mainnet at block height 227930.
+        // Version 3 BIP0066 Strict DER signature formatting.
+        //   Became enabled on mainnet at block height 359752.
+        //   Became active/enforced on mainnet at block height 363724.
+        // Version 4 BIP0065 OP_CHECKLOCKTIMEVERIFY.
+        //   Became enabled on mainnet at block height 387277.
+        //   Became active/enforced on mainnet at block height 388380.
+        int32_t enabledBlockVersion() const { return mEnabledBlockVersion; }
+        int32_t requiredBlockVersion() const { return mRequiredBlockVersion; }
 
         SoftFork::State softForkState(unsigned int pID);
 
@@ -267,42 +136,54 @@ namespace BitCoin
 #endif
         static const unsigned int CASH_START_MAX_BLOCK_SIZE = 8000000;
 
-        bool cashActive() const { return mCashForkBlockHeight != -1 && mHeight >= mCashForkBlockHeight; }
-        int cashForkBlockHeight() const { return mCashForkBlockHeight; }
+        // TODO Change cash forks to be more dynamic, like the soft forks, like a list.
+        bool cashActive() const
+          { return mCashActivationBlockHeight != -1 && mHeight > mCashActivationBlockHeight; }
+        int cashForkBlockHeight() const { return mCashActivationBlockHeight; }
+
+        // New Cash DAA (Nov 13th 2018)
+        static const int32_t CASH_FORK_201711_ACTIVATION_TIME = 1510600000;
+
+        bool cashFork201711IsActive() const
+          { return mCashFork201711BlockHeight != -1 && mHeight > mCashFork201711BlockHeight; }
 
         // 2018 May Hard Fork
-        static const int32_t FORK_201805_ACTIVATION_TIME = 1526400000;
+        static const int32_t CASH_FORK_201805_ACTIVATION_TIME = 1526400000;
         static const unsigned int FORK_201805_MAX_BLOCK_SIZE = 32000000;
 
-        bool fork201805Active() const { return mFork201805BlockHeight != -1 && mHeight >= mFork201805BlockHeight; }
+        bool cashFork201805IsActive() const
+          { return mCashFork201805BlockHeight != -1 && mHeight > mCashFork201805BlockHeight; }
 
         // 2018 Nov Hard Fork
-        static const int32_t FORK_201811_ACTIVATION_TIME = 1542300000;
+        static const int32_t CASH_FORK_201811_ACTIVATION_TIME = 1542300000;
 
-        bool fork201811Active() const { return mFork201811BlockHeight != -1 && mHeight >= mFork201811BlockHeight; }
+        bool cashFork201811IsActive() const
+          { return mCashFork201811BlockHeight != -1 && mHeight > mCashFork201811BlockHeight; }
 
         unsigned int blockMaxSize() const { return mBlockMaxSize; }
 
         unsigned int elementMaxSize() const { return mElementMaxSize; }
 
-        uint32_t forkID() const { return mForkID; }
+        uint32_t cashForkID() const { return mCashForkID; }
 
-        void process(BlockStats &pBlockStats, int pBlockHeight);
+        void process(Chain *pChain, int pBlockHeight);
 
-        void revert(BlockStats &pBlockStats, int pBlockHeight);
+        // Revert last block added to fork data.
+        //   pBlockHeight is the height of the block being reverted.
+        void revertLast(Chain *pChain, int pBlockHeight);
 
         // Reset all soft forks to initial state
         void reset();
 
         // Load from/Save to file system
-        bool load(BlockStats &pBlockStats);
+        bool load(Chain *pChain);
         bool save();
 
         // For testing
         void setFork201805Active()
         {
             mHeight = 1;
-            mFork201805BlockHeight = 0;
+            mCashFork201805BlockHeight = 0;
         }
 
     private:
@@ -313,21 +194,23 @@ namespace BitCoin
 
         std::vector<SoftFork *> mForks;
 
-        int32_t mEnabledVersion;
-        int32_t mRequiredVersion;
+        std::list<int32_t> mBlockVersions;
+        int32_t mEnabledBlockVersion;
+        int32_t mRequiredBlockVersion;
 
         // For revert
-        int mVersionEnabledHeights[3];
-        int mVersionRequiredHeights[3];
+        int mBlockVersionEnabledHeights[3];
+        int mBlockVersionRequiredHeights[3];
 
-        int mCashForkBlockHeight;
-        int mFork201805BlockHeight;
-        int mFork201811BlockHeight;
+        int mCashActivationBlockHeight;
+        int mCashFork201711BlockHeight;
+        int mCashFork201805BlockHeight;
+        int mCashFork201811BlockHeight;
 
         unsigned int mBlockMaxSize;
         unsigned int mElementMaxSize;
 
-        uint32_t mForkID;
+        uint32_t mCashForkID;
 
         unsigned int mThreshHold;
         bool mModified;

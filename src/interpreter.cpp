@@ -591,13 +591,13 @@ namespace BitCoin
                     result += "<OP_MUL disabled>";
                     break;
                 case OP_DIV: //    a b   out    a is divided by b.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                         result += "<OP_DIV>";
                     else
                         result += "<OP_DIV disabled>";
                     break;
                 case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                         result += "<OP_MOD>";
                     else
                         result += "<OP_MOD disabled>";
@@ -708,25 +708,25 @@ namespace BitCoin
 
                     // Splice
                 case OP_CAT: //  x1 x2  out  Concatenates two strings.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                         result += "<OP_CAT>";
                     else
                         result += "<OP_CAT disabled>";
                     break;
                 case OP_SPLIT: // Split byte sequence x at position n
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                         result += "<OP_SPLIT>";
                     else
                         result += "<OP_SUBSTR disabled>";
                     break;
                 case OP_NUM2BIN: // Convert numeric value a into byte sequence of length b
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                         result += "<OP_NUM2BIN>";
                     else
                         result += "<OP_LEFT disabled>";
                     break;
                 case OP_BIN2NUM: // Convert byte sequence x into a numeric value
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                         result += "<OP_BIN2NUM>";
                     else
                         result += "<OP_RIGHT disabled>";
@@ -741,19 +741,19 @@ namespace BitCoin
                     result += "<OP_INVERT disabled>";
                     break;
                 case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                         result += "<OP_AND>";
                     else
                         result += "<OP_AND disabled>";
                     break;
                 case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                         result += "<OP_OR>";
                     else
                         result += "<OP_OR disabled>";
                     break;
                 case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                         result += "<OP_XOR>";
                     else
                         result += "<OP_XOR disabled>";
@@ -939,7 +939,7 @@ namespace BitCoin
         NextCash::stream_size previousOffset = pCurrentOutputScript.readOffset();
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
         if(!pTransaction.getSignatureHash(signatureHash, pInputOffset, pCurrentOutputScript,
-          pOutputAmount, pSignature.hashType(), pForks.forkID()))
+          pOutputAmount, pSignature.hashType(), pForks.cashForkID()))
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to get signature hash : 0x%02x - %s", (int)pSignature.hashType(), pSignature.hex().text());
@@ -1153,7 +1153,7 @@ namespace BitCoin
         unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;
         uint64_t count;
-        bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && pForks.enabledVersion() >= 3;
+        bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && pForks.enabledBlockVersion() >= 3;
 
         while(pScript.remaining())
         {
@@ -1691,7 +1691,7 @@ namespace BitCoin
                 }
                 case OP_CHECKLOCKTIMEVERIFY: // BIP-0065
                 {
-                    if(pBlockVersion < 4 || pForks.enabledVersion() < 4)
+                    if(pBlockVersion < 4 || pForks.enabledBlockVersion() < 4)
                         break;
 
                     if(!ifStackTrue())
@@ -2200,7 +2200,7 @@ namespace BitCoin
                     mValid = false;
                     return false;
                 case OP_DIV: //    a b   out    a is divided by b.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                     {
                         if(!ifStackTrue())
                             break;
@@ -2247,7 +2247,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                     {
                         if(!ifStackTrue())
                             break;
@@ -3122,7 +3122,7 @@ namespace BitCoin
 
                 // Splice
                 case OP_CAT: //  x1 x2  out  Concatenates two strings.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                     {
                         if(!ifStackTrue())
                             break;
@@ -3167,7 +3167,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_SPLIT: //  in x n  out x1 x2  Split byte sequence x at position n
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                     {
                         if(!ifStackTrue())
                             break;
@@ -3244,7 +3244,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_NUM2BIN: // in x1 x2 out  Convert numeric value a into byte sequence of length b
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                     {
                         if(!ifStackTrue())
                             break;
@@ -3321,7 +3321,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_BIN2NUM: // in x out Convert byte sequence x into a numeric value
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                     {
                         if(!ifStackTrue())
                             break;
@@ -3429,7 +3429,7 @@ namespace BitCoin
                     mValid = false;
                     return false;
                 case OP_AND: //  x1 x2  out  Bitwise and between each bit in the inputs.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                     {
                         if(!ifStackTrue())
                             break;
@@ -3476,7 +3476,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_OR: //  x1 x2  out  Bitwise or between each bit in the inputs.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                     {
                         if(!ifStackTrue())
                             break;
@@ -3523,7 +3523,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs. disabled.
-                    if(pForks.fork201805Active())
+                    if(pForks.cashFork201805IsActive())
                     {
                         if(!ifStackTrue())
                             break;

@@ -36,6 +36,7 @@ namespace BitCoin
         bool read(NextCash::InputStream *pStream);
 
         unsigned int height(); // The block height of the lowest "pass"
+        unsigned int highestPassHeight(bool pLocked = false);
         int64_t balance(bool pLocked = false); // Return total balance of all keys
         // Return balance associated with a specific key
         int64_t balance(std::vector<Key *>::iterator pChainKeyBegin,
@@ -68,7 +69,7 @@ namespace BitCoin
         bool getTransactions(std::vector<Key *>::iterator pChainKeyBegin,
           std::vector<Key *>::iterator pChainKeyEnd,
           std::vector<RelatedTransactionData> &pTransactions, bool pIncludePending);
-        Transaction *findTransactionPaying(NextCash::Buffer pOutputScript, uint64_t pAmount);
+        Transaction *findTransactionPaying(NextCash::Buffer pOutputScript, int64_t pAmount);
 
         void clear();
 
@@ -80,7 +81,7 @@ namespace BitCoin
         // Sets up monitoring on a key store.
         // Each key in the key store must be "primed". Meaning there must be some address keys
         //   already generated under the "chain" key according to a known hierarchal structure.
-        void setKeyStore(KeyStore *pKeyStore, bool pStartNewPass);
+        void setKeyStore(KeyStore *pKeyStore, Chain *pChain, bool pStartNewPass);
 
         // Removes all addresses and adds them back from key store, then updates all transactions
         //   and removes any that are no longer relevant.
@@ -90,7 +91,8 @@ namespace BitCoin
         unsigned int setupBloomFilter(BloomFilter &pFilter);
 
         // Get hashes for blocks that need merkle blocks
-        void getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain, NextCash::HashList &pBlockHashes,
+        void getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain,
+          NextCash::HashList &pBlockHashes,
 #ifdef LOW_MEM
           unsigned int pMaxCount = 100);
 #else
@@ -99,9 +101,6 @@ namespace BitCoin
 
         int changeID() const { return mChangeID; }
         void incrementChange() { ++mChangeID; }
-
-        // Start a new "pass" to check new addresses for previous transactions
-        void startNewPass(unsigned int pBlockHeight = 0);
 
         bool filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID);
         bool needsClose(unsigned int pNodeID);
@@ -124,7 +123,8 @@ namespace BitCoin
 
         void process(Chain &pChain);
 
-        //TODO Add expiration of pending transactions when not related to prevent receiving them more than once.
+        //TODO Add expiration of pending transactions when not related to prevent receiving them
+        //   more than once.
         //TODO Add handling of non P2PKH transactions
         //TODO Possibly add caching of spend from linking between related transactions
         //TODO Possibly add caching of which output pays which addresses in related transactions
@@ -249,6 +249,9 @@ namespace BitCoin
             bool read(NextCash::InputStream *pStream);
 
         };
+
+        // Start a new "pass" to check new addresses for previous transactions
+        void startPass(unsigned int pBlockHeight = 0);
 
         // Update address list from key store and add any missing.
         // Return number of new addresses added.

@@ -158,7 +158,10 @@ namespace BitCoin
         requestStop();
         if(mMonitor != NULL)
             mMonitor->release(mID);
-        mChain->releaseBlocksForNode(mID);
+        mBlockRequestMutex.lock();
+        if(mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty())
+            mChain->releaseBlocksForNode(mID);
+        mBlockRequestMutex.unlock();
         mChain->memPool().releaseForNode(mID);
     }
 
@@ -166,8 +169,9 @@ namespace BitCoin
     {
         mBlockRequestMutex.lock();
         mBlocksRequested.clear();
+        if(mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty())
+            mChain->releaseBlocksForNode(mID);
         mBlockRequestMutex.unlock();
-        mChain->releaseBlocksForNode(mID);
     }
 
     void Node::requestStop()
@@ -341,7 +345,8 @@ namespace BitCoin
               "Sending header request for blocks from genesis");
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-              "Sending header request for blocks after : %s", hashes.front().hex().text());
+              "Sending header request for blocks after %d : %s", mChain->height(),
+              hashes.front().hex().text());
         bool success = sendMessage(&getHeadersData);
         if(success)
         {
@@ -388,7 +393,6 @@ namespace BitCoin
             mBlockRequestMutex.lock();
             mBlocksRequested.clear();
             mBlockRequestMutex.unlock();
-            mChain->releaseBlocksForNode(mID);
         }
 
         return success;
@@ -1747,8 +1751,7 @@ namespace BitCoin
                     if(!info.spvMode)
                     {
                         MemPool::AddStatus addStatus =
-                          mChain->memPool().add(transactionData->transaction, mChain->outputs(),
-                          mChain->blockStats(), mChain->forks(), info.minFee);
+                          mChain->memPool().add(transactionData->transaction, mChain, info.minFee);
 
                         switch(addStatus)
                         {

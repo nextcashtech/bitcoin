@@ -39,7 +39,7 @@ namespace BitCoin
         static void runConnections();
         static void runRequests();
         static void runManage();
-        static void runProcesses();
+        static void runProcess();
 
         void run(bool pInDaemonMode = true);
         void manage();

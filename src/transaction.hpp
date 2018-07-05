@@ -263,13 +263,13 @@ namespace BitCoin
         int sign(uint64_t pInputAmount, double pFeeRate, uint64_t pSendAmount,
           int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, uint32_t pForkID);
 
-        bool process(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
-          unsigned int pBlockHeight, bool pCoinBase, int32_t pBlockVersion, BlockStats &pBlockStats,
-          Forks &pForks, std::vector<unsigned int> &pSpentAges);
+        bool process(Chain *pChain, const std::vector<Transaction *> &pBlockTransactions,
+          unsigned int pBlockHeight, bool pCoinBase, int32_t pBlockVersion,
+          std::vector<unsigned int> &pSpentAges);
 
         // Check validity and return status
-        bool check(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions,
-          NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, BlockStats &pBlockStats, Forks &pForks);
+        bool check(Chain *pChain, TransactionList &pMemPoolTransactions,
+          NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion);
 
         // Check that none of the outpoints are spent and return status
         uint8_t checkOutpoints(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions);

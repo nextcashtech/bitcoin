@@ -488,31 +488,36 @@ bool chainTest()
     {
         BitCoin::Chain chain;
         chain.setMaxTargetBits(maxTargetBits); // zero difficulty (all block hashes are valid)
-        chain.load(true);
+        chain.load();
 
         privateKey.generatePrivate(BitCoin::MAINNET);
 
-        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Using coinbase payment address : %s", privateKey.hash().hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test",
+          "Using coinbase payment address : %s", privateKey.hash().hex().text());
 
         // Genesis block time
-        uint32_t time = chain.blockStats().time(0);
+        uint32_t time = chain.time(0);
 
         // Add 2016 blocks
         for(unsigned int i=0;i<2016;++i)
         {
-            if(addBlock(chain, chain.lastPendingBlockHash(), privateKey.hash(), i + 1, time, maxTargetBits, transactionID).isEmpty())
+            if(addBlock(chain, chain.lastPendingBlockHash(), privateKey.hash(), i + 1, time,
+              maxTargetBits, transactionID).isEmpty())
             {
                 NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to add block");
                 return false;
             }
             transactionHashes.push_back(transactionID);
-            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
-            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s",
+              chain.accumulatedWork(chain.height()).hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain pending work : %s",
+              chain.pendingAccumulatedWork().hex().text());
             chain.process();
             time += 605; // a little over 10 minutes to adjust for the 2015 block skew so difficulty doesn't increase
         }
 
-        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain previous last hash before branch : %s",
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test",
+          "Main chain previous last hash before branch : %s",
           chain.lastPendingBlockHash().hex().text());
 
         // Add a branch 5 blocks back
@@ -520,10 +525,14 @@ bool chainTest()
         NextCash::Hash branchHash;
         chain.getBlockHash(branchHeight, branchHash);
         preBranchHash = branchHash;
-        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain hash before branch : %s", branchHash.hex().text());
-        branchHash = addBlock(chain, branchHash, privateKey.hash(), ++branchHeight, time, maxTargetBits, transactionID);
-        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
-        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test",
+          "Main chain hash before branch : %s", branchHash.hex().text());
+        branchHash = addBlock(chain, branchHash, privateKey.hash(), ++branchHeight, time,
+          maxTargetBits, transactionID);
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s",
+          chain.accumulatedWork(chain.height()).hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain pending work : %s",
+          chain.pendingAccumulatedWork().hex().text());
         const BitCoin::Branch *branch;
         for(unsigned int i=0;i<chain.branchCount();++i)
         {
@@ -548,14 +557,17 @@ bool chainTest()
         // Extend the branch
         for(unsigned int i=0;i<20;++i)
         {
-            branchHash = addBlock(chain, branchHash, privateKey.hash(), ++branchHeight, time, maxTargetBits, transactionID);
+            branchHash = addBlock(chain, branchHash, privateKey.hash(), ++branchHeight, time,
+              maxTargetBits, transactionID);
             if(branchHash.isEmpty())
             {
                 NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to add branch block");
                 return false;
             }
-            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s", chain.accumulatedWork().hex().text());
-            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain pending work : %s", chain.pendingAccumulatedWork().hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s",
+              chain.accumulatedWork(chain.height()).hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain pending work : %s",
+              chain.pendingAccumulatedWork().hex().text());
             for(unsigned int i=0;i<chain.branchCount();++i)
             {
                 branch = chain.branchAt(i);
@@ -578,8 +590,10 @@ bool chainTest()
         if(chain.lastBlockHash() != branchHash)
         {
             NextCash::Log::add(NextCash::Log::ERROR, "Test", "Chain last hash doesn't match branch");
-            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Last Hash   : %s", chain.lastBlockHash().hex().text());
-            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Branch Hash : %s", branchHash.hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Last Hash   : %s",
+              chain.lastBlockHash().hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Branch Hash : %s",
+              branchHash.hex().text());
             return false;
         }
 
@@ -592,24 +606,29 @@ bool chainTest()
         chain.addresses().getOutputs(publicKeyHash, coinbaseOutputs);
 
         if(coinbaseOutputs.size() == (unsigned int)chain.height())
-            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed transaction address output count : %d", coinbaseOutputs.size());
+            NextCash::Log::addFormatted(NextCash::Log::INFO, "Test",
+              "Passed transaction address output count : %d", coinbaseOutputs.size());
         else
         {
-            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed transaction address output count : %d != %d",
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test",
+              "Failed transaction address output count : %d != %d",
               coinbaseOutputs.size(), chain.height());
             return false;
         }
 
         unsigned int checkCount = 0;
-        for(fullOutput=coinbaseOutputs.begin();fullOutput!=coinbaseOutputs.end() && checkCount<transactionHashes.size();++fullOutput)
+        for(fullOutput = coinbaseOutputs.begin(); fullOutput != coinbaseOutputs.end() &&
+          checkCount < transactionHashes.size(); ++fullOutput)
             if(transactionHashes.contains(fullOutput->transactionID))
                 ++checkCount;
 
         if(checkCount == transactionHashes.size())
-            NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed transaction address outputs check");
+            NextCash::Log::add(NextCash::Log::INFO, "Test",
+              "Passed transaction address outputs check");
         else
         {
-            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed transaction address output trans ID for block %d : %s",
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test",
+              "Failed transaction address output trans ID for block %d : %s",
               fullOutput->blockHeight, fullOutput->transactionID.hex().text());
             return false;
         }
@@ -624,32 +643,37 @@ bool chainTest()
     BitCoin::Chain chain2;
     chain2.setMaxTargetBits(maxTargetBits); // zero difficulty (all block hashes are valid)
 
-    if(!chain2.load(true))
+    if(!chain2.load())
     {
         NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to load chain2");
         return false;
     }
 
-    NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Reloaded chain last hash : %s", chain2.lastBlockHash().hex().text());
+    NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Reloaded chain last hash : %s",
+      chain2.lastBlockHash().hex().text());
 
     if(chain2.height() != height)
     {
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Reloaded height doesn't match : original %d != reloaded %d",
-          height, chain2.height());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test",
+          "Reloaded height doesn't match : original %d != reloaded %d", height, chain2.height());
         return false;
     }
 
     NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed reloaded chain height");
 
     NextCash::Hash hash;
-    for(std::vector<NextCash::Hash>::reverse_iterator branchHash=branchHashes.rbegin();branchHash!=branchHashes.rend();++branchHash)
+    for(std::vector<NextCash::Hash>::reverse_iterator branchHash = branchHashes.rbegin();
+      branchHash != branchHashes.rend(); ++branchHash)
     {
         chain2.getBlockHash(height, hash);
         if(hash != *branchHash)
         {
-            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Reloaded height %d hash doesn't match", height);
-            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Chain Hash  : %s", hash.hex().text());
-            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Branch Hash : %s", branchHash->hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test",
+              "Reloaded height %d hash doesn't match", height);
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Chain Hash  : %s",
+              hash.hex().text());
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Branch Hash : %s",
+              branchHash->hex().text());
             return false;
         }
         --height;
@@ -660,9 +684,12 @@ bool chainTest()
     chain2.getBlockHash(height, hash);
     if(hash != preBranchHash)
     {
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Reloaded height %d hash doesn't match pre branch hash", height);
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Chain Hash      : %s", hash.hex().text());
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Pre Branch Hash : %s", preBranchHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test",
+          "Reloaded height %d hash doesn't match pre branch hash", height);
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Chain Hash      : %s",
+          hash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Pre Branch Hash : %s",
+          preBranchHash.hex().text());
         return false;
     }
 
@@ -677,16 +704,19 @@ bool chainTest()
     chain2.addresses().getOutputs(privateKey.hash(), coinbaseOutputs);
 
     if(coinbaseOutputs.size() == (unsigned int)chain2.height())
-        NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed transaction address output count after save");
+        NextCash::Log::add(NextCash::Log::INFO, "Test",
+          "Passed transaction address output count after save");
     else
     {
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed transaction address output count after save : %d != %d",
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test",
+          "Failed transaction address output count after save : %d != %d",
           coinbaseOutputs.size(), chain2.height());
         return false;
     }
 
     unsigned int checkCount = 0;
-    for(fullOutput=coinbaseOutputs.begin();fullOutput!=coinbaseOutputs.end() && checkCount<transactionHashes.size();++fullOutput)
+    for(fullOutput = coinbaseOutputs.begin(); fullOutput != coinbaseOutputs.end() &&
+      checkCount < transactionHashes.size(); ++fullOutput)
         if(transactionHashes.contains(fullOutput->transactionID))
             ++checkCount;
 
@@ -694,12 +724,14 @@ bool chainTest()
         NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed transaction address outputs check");
     else
     {
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed transaction address output trans ID after save for block %d : %s",
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test",
+          "Failed transaction address output trans ID after save for block %d : %s",
           fullOutput->blockHeight, fullOutput->transactionID.hex().text());
         return false;
     }
 
-    NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed transaction address outputs check after save");
+    NextCash::Log::add(NextCash::Log::INFO, "Test",
+      "Passed transaction address outputs check after save");
 
     NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed chain test");
     return true;
