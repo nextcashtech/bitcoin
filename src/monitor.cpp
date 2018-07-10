@@ -898,7 +898,7 @@ namespace BitCoin
                             pOutputs.back().output =
                               new Output((*trans)->transaction->outputs[*index]);
                             pOutputs.back().confirmations = (uint32_t)(pChain->height() -
-                              pChain->blockHeight((*trans)->blockHash));
+                              pChain->blockHeight((*trans)->blockHash) + 1);
                             break;
                         }
                 }
