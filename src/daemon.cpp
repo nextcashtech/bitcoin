@@ -62,6 +62,7 @@ namespace BitCoin
         mGoodNodeMax = 5;
         mOutgoingNodeMax = 8;
         mSeedsRandomized = false;
+        mFinishMode = FINISH_ON_REQUEST;
         mFinishTime = 0;
         mKeysSynchronized = true;
 
@@ -2095,7 +2096,7 @@ namespace BitCoin
             seedConnections = 0;
             mNodeLock.readLock();
             for(std::vector<Node *>::iterator node = mNodes.begin();
-              node != mNodes.end() && !mStopRequested; ++node)
+              node != mNodes.end() && !mStopping; ++node)
                 if((*node)->isSeed())
                     ++seedConnections;
             mNodeLock.readUnlock();
@@ -2166,13 +2167,13 @@ namespace BitCoin
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Found %d good peers", peers.size());
         for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
-          !mStopRequested && goodCount < mGoodNodeMax; ++peer)
+          !mStopping && goodCount < mGoodNodeMax; ++peer)
         {
             // Skip nodes already connected
             found = false;
             mNodeLock.readLock();
             for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
-              !mStopRequested; ++node)
+              !mStopping; ++node)
                 if((*node)->address() == (*peer)->address)
                 {
                     found = true;
@@ -2236,13 +2237,13 @@ namespace BitCoin
           "Found %d usable peers", peers.size());
         int32_t startTime = getTime();
         for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
-          !mStopRequested && allCount < mOutgoingNodeMax; ++peer)
+          !mStopping && allCount < mOutgoingNodeMax; ++peer)
         {
             // Skip nodes already connected
             found = false;
             mNodeLock.readLock();
             for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
-              !mStopRequested; ++node)
+              !mStopping; ++node)
                 if((*node)->address() == (*peer)->address)
                 {
                     found = true;
@@ -2300,7 +2301,7 @@ namespace BitCoin
 #endif
         }
 
-        if(newCount == 0)
+        if(!mStopping && newCount == 0)
         {
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Choosing random seed");
