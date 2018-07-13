@@ -164,8 +164,6 @@ int main(int pArgumentCount, char **pArguments)
         }
     }
 
-    //TODO Move new connections to seperate thread
-
     pid_t pid = 0;
 
     if(!noDaemon)

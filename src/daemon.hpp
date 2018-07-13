@@ -47,10 +47,12 @@ namespace BitCoin
         void handleConnections();
         void handleRequests();
 
-        bool load();
+        bool loadWallets();
+        bool loadChain();
         bool start(bool pInDaemonMode);
 
-        bool isLoaded() { return mLoaded; }
+        bool walletsAreLoaded() { return mWalletsLoaded; }
+        bool chainIsLoaded() { return mChainLoaded; }
         bool isRunning() { return mRunning; }
         bool isStopping() { return mStopping; }
 
@@ -100,8 +102,8 @@ namespace BitCoin
         bool saveKeyStore(const uint8_t *pPassword = (const uint8_t *)"",
                           unsigned int pPasswordLength = 0);
 
-        enum Status { INACTIVE, LOADING, FINDING_PEERS, CONNECTING_TO_PEERS, SYNCHRONIZING,
-          SYNCHRONIZED, FINDING_TRANSACTIONS };
+        enum Status { INACTIVE, LOADING_WALLETS, LOADING_CHAIN, FINDING_PEERS, CONNECTING_TO_PEERS,
+          SYNCHRONIZING, SYNCHRONIZED, FINDING_TRANSACTIONS };
         Status status();
 
     protected:
@@ -112,7 +114,8 @@ namespace BitCoin
         Info &mInfo;
 
         void stop();
-        bool mRunning, mStopping, mStopRequested, mLoading, mLoaded, mQueryingSeed, mConnecting;
+        bool mRunning, mStopping, mStopRequested, mLoadingWallets, mWalletsLoaded, mLoadingChain,
+          mChainLoaded, mQueryingSeed, mConnecting;
         bool mKeysSynchronized;
         int mFinishMode;
 

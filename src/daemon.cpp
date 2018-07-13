@@ -31,8 +31,10 @@ namespace BitCoin
         mRunning = false;
         mStopping = false;
         mStopRequested = false;
-        mLoading = false;
-        mLoaded = false;
+        mLoadingWallets = false;
+        mWalletsLoaded = false;
+        mLoadingChain = false;
+        mChainLoaded = false;
         mQueryingSeed = false;
         mConnecting = false;
 #ifndef SINGLE_THREAD
@@ -127,8 +129,11 @@ namespace BitCoin
 
     Daemon::Status Daemon::status()
     {
-        if(mLoading)
-            return LOADING;
+        if(mLoadingWallets)
+            return LOADING_WALLETS;
+
+        if(mLoadingChain)
+            return LOADING_CHAIN;
 
         if(!mRunning)
             return INACTIVE;
@@ -199,42 +204,55 @@ namespace BitCoin
         //NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Pipe signal received.");
     }
 
-    bool Daemon::load()
+    bool Daemon::loadWallets()
     {
-        if(mLoaded || mLoading)
+        if(mWalletsLoaded || mLoadingWallets)
             return true;
 
-        mLoading = true;
+        mLoadingWallets = true;
 
         if(!mInfo.load())
         {
-            mLoading = false;
+            mLoadingWallets = false;
             return false;
         }
 
         if(!loadKeyStore())
         {
-            mLoading = false;
+            mLoadingWallets = false;
             return false;
         }
 
         if(!loadMonitor())
         {
-            mLoading = false;
+            mLoadingWallets = false;
             return false;
         }
 
+        mLoadingWallets = false;
+        mWalletsLoaded = true;
+        return true;
+    }
+
+    bool Daemon::loadChain()
+    {
+        if(mChainLoaded || mLoadingChain)
+            return true;
+
+        mLoadingChain = true;
+
         if(!mChain.load())
         {
-            mLoading = false;
+            mLoadingChain = false;
             return false;
         }
 
         mChain.setMonitor(mMonitor);
 
-        mLoading = false;
-        mLoaded = true;
+        mLoadingChain = false;
+        mChainLoaded = true;
         return true;
+
     }
 
     bool Daemon::start(bool pInDaemonMode)
@@ -1645,7 +1663,10 @@ namespace BitCoin
     {
         try
         {
-            if(!load())
+            if(!loadWallets())
+                requestStop();
+
+            if(!loadChain())
                 requestStop();
         }
         catch(std::bad_alloc pException)
@@ -1664,10 +1685,10 @@ namespace BitCoin
         }
 
         // If another thread started loading first, then wait for it to finish.
-        while(mLoading)
+        while((mLoadingWallets || mLoadingChain) && !mStopping)
             NextCash::Thread::sleep(100);
 
-        if(mStopping || !mLoaded)
+        if(mStopping || !mWalletsLoaded || !mChainLoaded)
             return;
 
 #ifndef SINGLE_THREAD
