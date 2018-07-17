@@ -120,7 +120,7 @@ namespace BitCoin
     {
         mNodeLock.readLock();
         unsigned int result = 0;
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+        for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
             if((*node)->isReady())
                 ++result;
         mNodeLock.readUnlock();
@@ -186,14 +186,16 @@ namespace BitCoin
 
     void Daemon::handleSigTerm(int pValue)
     {
-        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Terminate signal received. Stopping.");
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Terminate signal received. Stopping.");
         if(sSignalInstance != NULL)
             sSignalInstance->requestStop();
     }
 
     void Daemon::handleSigInt(int pValue)
     {
-        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Interrupt signal received. Stopping.");
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Interrupt signal received. Stopping.");
         if(sSignalInstance != NULL)
             sSignalInstance->requestStop();
     }
@@ -201,7 +203,8 @@ namespace BitCoin
     void Daemon::handleSigPipe(int pValue)
     {
         // Happens when writing to a network connection that is closed
-        //NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Pipe signal received.");
+        //NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+        // "Pipe signal received.");
     }
 
     bool Daemon::loadWallets()
@@ -257,7 +260,7 @@ namespace BitCoin
 
     bool Daemon::start(bool pInDaemonMode)
     {
-        if(isRunning())
+        if(mRunning)
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
               "Already running. Start aborted.");
@@ -362,7 +365,7 @@ namespace BitCoin
         if(mNodes.size() > 0)
         {
             NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping nodes");
-            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                 (*node)->requestStop();
         }
         mNodeLock.readUnlock();
@@ -372,7 +375,7 @@ namespace BitCoin
         if(mNodes.size() > 0)
         {
             NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Deleting nodes");
-            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                 delete *node;
             mNodes.clear();
             mOutgoingNodes = 0;
@@ -479,7 +482,7 @@ namespace BitCoin
     void Daemon::collectStatistics()
     {
         mNodeLock.readLock();
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+        for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
             (*node)->collectStatistics(mStatistics);
         mNodeLock.readUnlock();
     }
@@ -507,7 +510,7 @@ namespace BitCoin
         if(!mChain.isInSync())
         {
             mNodeLock.readLock();
-            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
             {
                 blocksRequestedCount += (*node)->blocksRequestedCount();
             }
@@ -1364,7 +1367,7 @@ namespace BitCoin
     {
         mNodeLock.readLock();
         unsigned int count = 0;
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+        for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
             if(!(*node)->isIncoming() && (*node)->isReady())
             {
                 // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
@@ -1628,7 +1631,7 @@ namespace BitCoin
         {
             // Announce to all nodes
             mNodeLock.readLock();
-            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                 (*node)->announceBlock(block);
             mNodeLock.readUnlock();
             delete block;
@@ -1646,7 +1649,7 @@ namespace BitCoin
                 if(transaction != NULL)
                 {
                     // Announce to all nodes
-                    for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+                    for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                         (*node)->announceTransaction(transaction);
                 }
             }
@@ -1867,7 +1870,7 @@ namespace BitCoin
 #ifdef SINGLE_THREAD
             // Process nodes
             mNodeLock.readLock();
-            for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();++node)
+            for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                 (*node)->process();
             mNodeLock.readUnlock();
             if(mStopping)
@@ -2322,7 +2325,7 @@ namespace BitCoin
 #endif
         }
 
-        if(!mStopping && newCount == 0)
+        if(!mStopping && newCount == 0 && peers.size() < 10000)
         {
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Choosing random seed");
