@@ -108,6 +108,9 @@ namespace BitCoin
             if(configFile.isValid())
                 readSettingsFile(&configFile);
         }
+
+        // Initialize random number generator
+        std::srand((unsigned int)std::time(0));
     }
 
     Info::~Info()
