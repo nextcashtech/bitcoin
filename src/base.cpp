@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                           *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -13,6 +13,7 @@
 #include "digest.hpp"
 
 #include <cstring>
+#include <arpa/inet.h>
 
 #define BITCOIN_BASE_LOG_NAME "Base"
 
@@ -133,6 +134,17 @@ namespace BitCoin
         pStream->setInputEndian(previousType);
 
         return true;
+    }
+
+    NextCash::String IPAddress::text() const
+    {
+        char ipv6Text[INET6_ADDRSTRLEN];
+        std::memset(ipv6Text, 0, INET6_ADDRSTRLEN);
+        inet_ntop(AF_INET6, ip, ipv6Text, INET6_ADDRSTRLEN);
+
+        NextCash::String result;
+        result.writeFormatted("%s:%d", ipv6Text, port);
+        return result;
     }
 
     uint32_t multiplyTargetBits(uint32_t pTargetBits, double pFactor, uint32_t pMax)

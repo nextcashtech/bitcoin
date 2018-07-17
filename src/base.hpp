@@ -142,6 +142,8 @@ namespace BitCoin
             port = pPort;
         }
 
+        NextCash::String text() const;
+
         uint8_t ip[INET6_ADDRLEN];
         uint16_t port;
     };

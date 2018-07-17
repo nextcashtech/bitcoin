@@ -98,11 +98,13 @@ namespace BitCoin
         mConnected = true;
         mConnectionMutex.unlock();
         if(mIsIncoming)
-            NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Incoming Connection %s : %d (socket %d)",
-              mConnection->ipv6Address(), mConnection->port(), mSocketID);
+            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+              "Incoming Connection %s : %d (socket %d)", mConnection->ipv6Address(),
+              mConnection->port(), mSocketID);
         else
-            NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Outgoing Connection %s : %d (socket %d)",
-              mConnection->ipv6Address(), mConnection->port(), mSocketID);
+            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+              "Outgoing Connection %s : %d (socket %d)", mConnection->ipv6Address(),
+              mConnection->port(), mSocketID);
 
 #ifndef SINGLE_THREAD
         // Start thread

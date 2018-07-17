@@ -444,21 +444,6 @@ namespace BitCoin
                 return;
             }
         mPeerLock.readUnlock();
-
-        mPeerLock.writeLock("Add");
-
-        // Add new
-        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Adding new peer");
-        Peer *newPeer = new Peer;
-        newPeer->userAgent = pUserAgent;
-        newPeer->rating = 5;
-        newPeer->updateTime();
-        newPeer->address = pAddress;
-        newPeer->services = pServices;
-        mPeers.push_front(newPeer);
-        mPeersModified = true;
-
-        mPeerLock.writeUnlock();
     }
 
     void Info::addPeerSuccess(const IPAddress &pAddress, int pCount)
@@ -503,7 +488,8 @@ namespace BitCoin
         mPeerLock.readUnlock();
 
         // Add new
-        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME, "Adding new peer");
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
+          "Adding new peer %s", pAddress.text().text());
         Peer *newPeer = new Peer;
         newPeer->rating = 0;
         newPeer->updateTime();
