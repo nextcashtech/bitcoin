@@ -1529,7 +1529,7 @@ namespace BitCoin
 
                             if(!info.spvMode)
                             {
-                                switch(mChain->memPool().addPending((*item)->hash, mChain->outputs(), mID))
+                                switch(mChain->memPool().addPending((*item)->hash, mChain, mID))
                                 {
                                     case MemPool::NEED:
                                         transactionList.push_back((*item)->hash);
@@ -1753,7 +1753,7 @@ namespace BitCoin
                     if(!info.spvMode)
                     {
                         MemPool::AddStatus addStatus =
-                          mChain->memPool().add(transactionData->transaction, mChain, info.minFee);
+                          mChain->memPool().add(transactionData->transaction, info.minFee, mChain);
 
                         switch(addStatus)
                         {
