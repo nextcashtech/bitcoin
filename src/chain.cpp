@@ -19,6 +19,8 @@
 #include "daemon.hpp"
 #include "monitor.hpp"
 
+#include <algorithm>
+
 #define BITCOIN_CHAIN_LOG_NAME "Chain"
 #define HISTORY_BRANCH_CHECKING 5000
 #define BLOCK_STATS_CACHE_SIZE 2500
@@ -29,7 +31,7 @@ namespace BitCoin
     NextCash::Hash Chain::sBTCForkBlockHash("00000000000000000019f112ec0a9982926f1258cdcc558dd7c3b7e5dc7fa148");
 
     Chain::Chain() : mInfo(Info::instance()), mPendingLock("Chain Pending"),
-      mProcessMutex("Chain Process"), mPendingAccumulatedWork(32)
+      mPendingAccumulatedWork(32), mProcessMutex("Chain Process")
     {
         mNextBlockHeight = 0;
         mLastFileID = 0;
@@ -704,7 +706,6 @@ namespace BitCoin
             // Calculate up to 5000 again on front.
             NextCash::Hash target(32), blockWork(32), accumulatedWork(32);
             Block header;
-            BlockStat *newBlockStat;
             unsigned int accumulatedWorkHeight =
               (unsigned int)(mBlockStatHeight - mBlockStats.size());
 
@@ -2580,7 +2581,7 @@ namespace BitCoin
                     mBlockStatHeight = accumulatedWorkHeight;
                     fileID = (unsigned int)accumulatedWorkHeight / 100;
                     blockOffset = accumulatedWorkHeight - (fileID * 100);
-                    int first20 = 0;
+                    // int first20 = 0;
                     while(mBlockStats.size() < BLOCK_STATS_CACHE_SIZE)
                     {
                         BlockFile::lock(fileID);
@@ -2608,17 +2609,17 @@ namespace BitCoin
                                 }
                                 newBlockStat->accumulatedWork = accumulatedWork;
 
-                                if(first20 < 20)
-                                {
-                                    NextCash::Log::addFormatted(NextCash::Log::INFO,
-                                      BITCOIN_CHAIN_LOG_NAME, "Accumulated work at height %d : %s",
-                                      accumulatedWorkHeight,
-                                      newBlockStat->accumulatedWork.hex().text());
-                                    NextCash::Log::addFormatted(NextCash::Log::INFO,
-                                      BITCOIN_CHAIN_LOG_NAME, "Time at height %d : %d",
-                                      accumulatedWorkHeight, newBlockStat->time);
-                                    ++first20;
-                                }
+                                // if(first20 < 20)
+                                // {
+                                    // NextCash::Log::addFormatted(NextCash::Log::INFO,
+                                      // BITCOIN_CHAIN_LOG_NAME, "Accumulated work at height %d : %s",
+                                      // accumulatedWorkHeight,
+                                      // newBlockStat->accumulatedWork.hex().text());
+                                    // NextCash::Log::addFormatted(NextCash::Log::INFO,
+                                      // BITCOIN_CHAIN_LOG_NAME, "Time at height %d : %d",
+                                      // accumulatedWorkHeight, newBlockStat->time);
+                                    // ++first20;
+                                // }
 
                                 target.setDifficulty(newBlockStat->targetBits);
                                 target.getWork(blockWork);
