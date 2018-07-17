@@ -1819,7 +1819,7 @@ namespace BitCoin
             }
             else
             {
-                if(mChain.headersNeeded())
+                if(mChain.headersNeeded() || getTime() - mLastHeaderRequestTime > 300)
                     sendHeaderRequest();
                 if(mChain.blocksNeeded())
                     sendRequests();

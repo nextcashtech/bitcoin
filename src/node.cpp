@@ -16,6 +16,7 @@
 
 
 #define PEER_MESSAGE_LIMIT 5000
+#define PEER_TIME_LIMIT 1800
 
 
 namespace BitCoin
@@ -54,7 +55,7 @@ namespace BitCoin
         mMessagesReceived = 0;
         mPingCount = 0;
         mConnectedTime = getTime();
-        mStop = false;
+        mStopRequested = false;
         mStopped = false;
         mIsSeed = pIsSeed;
         mIsGood = pIsGood;
@@ -183,7 +184,7 @@ namespace BitCoin
         if(mThread == NULL)
             return;
 #endif
-        mStop = true;
+        mStopRequested = true;
     }
 
     void Node::collectStatistics(Statistics &pCollection)
@@ -254,7 +255,7 @@ namespace BitCoin
             return;
         }
 
-        if(!mIsIncoming && !mChain->isInSync())
+        if(!mIsIncoming)
         {
             int32_t time = getTime();
 
@@ -741,7 +742,7 @@ namespace BitCoin
 
         NextCash::String name = node->mName;
 
-        if(node->mStop)
+        if(node->mStopRequested)
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, name,
               "Node stopped before thread started");
@@ -749,11 +750,11 @@ namespace BitCoin
             return;
         }
 
-        while(!node->mStop)
+        while(!node->mStopRequested)
         {
             node->process();
 
-            if(node->mStop)
+            if(node->mStopRequested)
                 break;
 
             NextCash::Thread::sleep(100);
@@ -792,7 +793,7 @@ namespace BitCoin
 
     void Node::process()
     {
-        if(!isOpen() || mStop || mStopped)
+        if(!isOpen() || mStopRequested || mStopped)
             return;
 
         if(!mVersionSent)
@@ -806,6 +807,14 @@ namespace BitCoin
         }
 
         int32_t time = getTime();
+
+        if(time - mConnectedTime > PEER_TIME_LIMIT)
+        {
+            NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Reached time limit");
+            close();
+            return;
+        }
+
         if(time - mLastCheckTime > 5)
             check();
 
@@ -974,6 +983,9 @@ namespace BitCoin
 
     bool Node::processMessage()
     {
+        if(mMessagesReceived > PEER_MESSAGE_LIMIT && !mStopRequested)
+            return false;
+
         // Check for a complete message
         Message::Data *message;
         bool dontDeleteMessage = false;
@@ -1251,8 +1263,8 @@ namespace BitCoin
                 IPAddress ip;
 
                 for(std::vector<Message::Address>::iterator address =
-                  addressesData->addresses.begin(); address != addressesData->addresses.end();
-                  ++address)
+                  addressesData->addresses.begin(); address != addressesData->addresses.end() &&
+                  !mStopRequested; ++address)
                 {
                     ip.set(address->ip, address->port);
                     info.addPeer(ip, address->services);
@@ -1330,7 +1342,8 @@ namespace BitCoin
                 inventoryData.inventory.resize(count);
                 unsigned int actualCount = 0;
                 Message::Inventory::iterator item = inventoryData.inventory.begin();
-                for(NextCash::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                for(NextCash::HashList::iterator hash = hashes.begin(); hash != hashes.end();
+                  ++hash)
                 {
                     *item = new Message::InventoryHash(Message::InventoryHash::BLOCK, *hash);
                     ++actualCount;
@@ -1357,7 +1370,7 @@ namespace BitCoin
                 bool fail = false;
 
                 for(Message::Inventory::iterator item = getDataData->inventory.begin();
-                  item != getDataData->inventory.end(); ++item)
+                  item != getDataData->inventory.end() && !mStopRequested; ++item)
                 {
                     switch((*item)->type)
                     {
@@ -1485,7 +1498,7 @@ namespace BitCoin
                     Message::NotFoundData notFound;
 
                     for(Message::Inventory::iterator item = inventoryData->inventory.begin();
-                      item != inventoryData->inventory.end(); ++item)
+                      item != inventoryData->inventory.end() && !mStopRequested; ++item)
                     {
                         switch((*item)->type)
                         {
@@ -1537,11 +1550,11 @@ namespace BitCoin
                                     case MemPool::ALREADY_HAVE:
                                         break;
                                     case MemPool::BLACK_LISTED:
-                                        // sendReject(Message::nameFor(message->type), Message::RejectData::WRONG_CHAIN,
-                                          // "Announced transaction failed verification");
-                                        // NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                                          // "Dropping. Black listed transaction announced : %s", (*item)->hash.hex().text());
-                                        // close();
+                                        sendReject(Message::nameFor(message->type), Message::RejectData::WRONG_CHAIN,
+                                          "Announced transaction failed verification");
+                                        NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                                          "Dropping. Black listed transaction announced : %s", (*item)->hash.hex().text());
+                                        close();
                                         break;
                                 }
                             }
@@ -1601,7 +1614,7 @@ namespace BitCoin
                     mStatistics.headersReceived += headersData->headers.size();
 
                     for(std::vector<Block *>::iterator header = headersData->headers.begin();
-                      header != headersData->headers.end();)
+                      header != headersData->headers.end() && !mStopRequested;)
                     {
                         if(!mLastBlockAnnounced.isEmpty() && mLastBlockAnnounced == (*header)->hash)
                             lastAnnouncedHeaderFound = true;
@@ -1789,8 +1802,14 @@ namespace BitCoin
 
                             case MemPool::INVALID:
                                 sendRejectWithHash(Message::nameFor(message->type),
-                                  Message::RejectData::INVALID, "Invalid",
+                                  Message::RejectData::INVALID, "Invalid transaction",
                                   transactionData->transaction->hash);
+
+                                NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                                  "Dropping. Sent invalid transaction : %s",
+                                  transactionData->transaction->hash.hex().text());
+                                info.addPeerFail(mAddress);
+                                close();
                                 break;
 
                             default:

@@ -170,7 +170,7 @@ namespace BitCoin
         NextCash::Network::Connection *mConnection;
         NextCash::Buffer mReceiveBuffer;
         Statistics mStatistics;
-        bool mStop, mStopped;
+        bool mStopRequested, mStopped;
         bool mIsIncoming, mIsSeed, mIsGood;
         bool mSendBlocksCompact;
         bool mRejected;
