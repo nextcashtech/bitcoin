@@ -21,6 +21,7 @@
 
 #define BITCOIN_CHAIN_LOG_NAME "Chain"
 #define HISTORY_BRANCH_CHECKING 5000
+#define BLOCK_STATS_CACHE_SIZE 2500
 
 
 namespace BitCoin
@@ -689,7 +690,7 @@ namespace BitCoin
         mBlockStats.push_back(newBlockStat);
         ++mBlockStatHeight;
 
-        while(mBlockStats.size() > 5000)
+        while(mBlockStats.size() > BLOCK_STATS_CACHE_SIZE)
             mBlockStats.pop_front();
     }
 
@@ -698,7 +699,7 @@ namespace BitCoin
         if(mBlockStats.size() == 0)
             return;
 
-        if(mBlockStats.size() < 2500 && mBlockStatHeight > 2500)
+        if(mBlockStats.size() < BLOCK_STATS_CACHE_SIZE && mBlockStatHeight > BLOCK_STATS_CACHE_SIZE)
         {
             // Calculate up to 5000 again on front.
             NextCash::Hash target(32), blockWork(32), accumulatedWork(32);
@@ -2572,7 +2573,7 @@ namespace BitCoin
                     }
                 }
 
-                // Calculate previous 5000 block stats
+                // Calculate previous block stats
                 if(success)
                 {
                     BlockStat *newBlockStat;
@@ -2580,7 +2581,7 @@ namespace BitCoin
                     fileID = (unsigned int)accumulatedWorkHeight / 100;
                     blockOffset = accumulatedWorkHeight - (fileID * 100);
                     int first20 = 0;
-                    while(mBlockStats.size() < 5000)
+                    while(mBlockStats.size() < BLOCK_STATS_CACHE_SIZE)
                     {
                         BlockFile::lock(fileID);
                         filePathName = BlockFile::fileName(fileID);
