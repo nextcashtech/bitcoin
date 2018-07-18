@@ -72,28 +72,11 @@ namespace BitCoin
                 return (unsigned int)mVersionData->startBlockHeight;
         }
 
-        bool waitingForRequests()
-        {
-            if(mBlocksRequested.size() > 0)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Waiting for %d blocks",
-                  mBlocksRequested.size());
-                return true;
-            }
-            else if(!mHeaderRequested.isEmpty())
-            {
-                NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                  "Waiting for headers after : %s", mHeaderRequested.hex().text());
-                return true;
-            }
-            else
-                return false;
-        }
+        bool waitingForRequests();
         bool requestHeaders();
         bool requestBlocks(NextCash::HashList &pList);
         bool requestTransactions(NextCash::HashList &pList);
         unsigned int blocksRequestedCount() { return (unsigned int)mBlocksRequested.size(); }
-        void releaseBlockRequests();
 
         const NextCash::Hash &lastHeader() const { return mLastHeader; }
 
@@ -135,7 +118,8 @@ namespace BitCoin
         Message::Interpreter mMessageInterpreter;
 
         // Check if node should be closed
-        void check();
+        //   Returns false if closed.
+        bool check();
 
         bool failedStartBytes();
 
@@ -143,6 +127,9 @@ namespace BitCoin
 
         // Send all initial messages to prepare the node for communication
         void prepare();
+
+        // Release anything (i.e requests) associated with this node
+        void release();
 
         unsigned int mActiveMerkleRequests;
         bool requestMerkleBlock(NextCash::Hash &pHash);
@@ -175,6 +162,7 @@ namespace BitCoin
         bool mSendBlocksCompact;
         bool mRejected;
         bool mWasReady;
+        bool mReleased;
 
         Message::VersionData *mVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;
