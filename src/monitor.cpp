@@ -95,6 +95,35 @@ namespace BitCoin
         transactions.clear();
     }
 
+    bool transGreater(Monitor::SPVTransactionData *pLeft, Monitor::SPVTransactionData *pRight)
+    {
+        return pLeft->blockHeight > pRight->blockHeight;
+    }
+
+    void Monitor::sortTransactions(Chain *pChain)
+    {
+        mMutex.lock();
+
+        std::vector<SPVTransactionData *> transactions;
+        transactions.reserve(mTransactions.size());
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
+          mTransactions.begin(); trans != mTransactions.end(); ++trans)
+        {
+            if((*trans)->blockHeight == -1)
+                (*trans)->blockHeight = pChain->blockHeight((*trans)->blockHash);
+            transactions.push_back(*trans);
+        }
+
+        std::sort(transactions.begin(), transactions.end(), transGreater);
+
+        mTransactions.clear();
+        for(std::vector<SPVTransactionData *>::iterator trans = transactions.begin();
+          trans != transactions.end(); ++trans)
+            mTransactions.insert((*trans)->transaction->hash, *trans);
+
+        mMutex.unlock();
+    }
+
     void Monitor::write(NextCash::OutputStream *pStream)
     {
         mMutex.lock();
@@ -106,7 +135,7 @@ namespace BitCoin
         }
 
         // Version
-        pStream->writeUnsignedInt(1);
+        pStream->writeUnsignedInt(2);
 
         // Passes
         pStream->writeUnsignedInt(mPasses.size());
@@ -134,7 +163,8 @@ namespace BitCoin
 
         mMutex.lock();
 
-        if(pStream->readUnsignedInt() != 1)
+        unsigned int version = pStream->readUnsignedInt();
+        if(version != 1 && version != 2)
         {
             mMutex.unlock();
             return false; // Wrong version
@@ -176,7 +206,7 @@ namespace BitCoin
         for(unsigned int i=0;i<transactionCount;++i)
         {
             newSPVTransaction = new SPVTransactionData();
-            if(!newSPVTransaction->read(pStream))
+            if(!newSPVTransaction->read(pStream, version))
             {
                 delete newSPVTransaction;
                 mMutex.unlock();
@@ -200,6 +230,9 @@ namespace BitCoin
 
     void Monitor::SPVTransactionData::write(NextCash::OutputStream *pStream)
     {
+        // Block height
+        pStream->writeInt(blockHeight);
+
         // Block hash
         blockHash.write(pStream);
 
@@ -222,8 +255,13 @@ namespace BitCoin
             pStream->writeUnsignedInt(*spend);
     }
 
-    bool Monitor::SPVTransactionData::read(NextCash::InputStream *pStream)
+    bool Monitor::SPVTransactionData::read(NextCash::InputStream *pStream, unsigned int pVersion)
     {
+        if(pVersion > 1)
+            blockHeight = pStream->readInt();
+        else
+            blockHeight = -1;
+
         // Block hash
         if(!blockHash.read(pStream, 32))
             return false;
@@ -1061,6 +1099,7 @@ namespace BitCoin
             {
                 pTransaction.transaction = *(*trans)->transaction;
                 pTransaction.blockHash = (*trans)->blockHash;
+                pTransaction.blockHeight = (*trans)->blockHeight;
                 pTransaction.nodesVerified = 0xffffffff;
                 updateRelatedTransactionData(pTransaction, pChainKeyBegin, pChainKeyEnd);
                 mMutex.unlock();
@@ -1073,6 +1112,7 @@ namespace BitCoin
             {
                 pTransaction.transaction = *(*trans)->transaction;
                 pTransaction.blockHash = (*trans)->blockHash;
+                pTransaction.blockHeight = (*trans)->blockHeight;
                 pTransaction.nodesVerified = (unsigned int)(*trans)->nodes.size();
                 updateRelatedTransactionData(pTransaction, pChainKeyBegin, pChainKeyEnd);
                 mMutex.unlock();
@@ -1118,6 +1158,7 @@ namespace BitCoin
                                 newTransaction = &pTransactions.back();
                                 newTransaction->transaction = *(*trans)->transaction;
                                 newTransaction->blockHash = (*trans)->blockHash;
+                                newTransaction->blockHeight = (*trans)->blockHeight;
                                 newTransaction->nodesVerified = 0xffffffff;
                                 updateRelatedTransactionData(*newTransaction, pChainKeyBegin,
                                   pChainKeyEnd);
@@ -1142,6 +1183,7 @@ namespace BitCoin
                                 newTransaction = &pTransactions.back();
                                 newTransaction->transaction = *(*trans)->transaction;
                                 newTransaction->blockHash = (*trans)->blockHash;
+                                newTransaction->blockHeight = (*trans)->blockHeight;
                                 newTransaction->nodesVerified = 0xffffffff;
                                 updateRelatedTransactionData(*newTransaction, pChainKeyBegin,
                                   pChainKeyEnd);
@@ -1176,6 +1218,7 @@ namespace BitCoin
                                     newTransaction = &pTransactions.back();
                                     newTransaction->transaction = *(*trans)->transaction;
                                     newTransaction->blockHash = (*trans)->blockHash;
+                                    newTransaction->blockHeight = (*trans)->blockHeight;
                                     newTransaction->nodesVerified = (int)(*trans)->nodes.size();
                                     updateRelatedTransactionData(*newTransaction, pChainKeyBegin,
                                       pChainKeyEnd);
@@ -1200,6 +1243,7 @@ namespace BitCoin
                                     newTransaction = &pTransactions.back();
                                     newTransaction->transaction = *(*trans)->transaction;
                                     newTransaction->blockHash = (*trans)->blockHash;
+                                    newTransaction->blockHeight = (*trans)->blockHeight;
                                     newTransaction->nodesVerified = (int)(*trans)->nodes.size();
                                     updateRelatedTransactionData(*newTransaction, pChainKeyBegin,
                                       pChainKeyEnd);
@@ -1419,10 +1463,10 @@ namespace BitCoin
             return false; // Not a requested block, so it probably isn't in the chain
         }
 
-        // Check if it is already complete
+        // Check if it is already complete.
         // Check if node id matches. It must match to ensure this is based on the latest bloom
         //   filter.
-        //   For Bloom filter updates based on finding new UTXOs.
+        // For Bloom filter updates based on finding new UTXOs.
         MerkleRequestData *request = *requestIter;
         if(request->isComplete() ||
           request->node != pNodeID || // Received from wrong/old node
@@ -1482,11 +1526,13 @@ namespace BitCoin
                           hash->hex().text());
                         newSPVTransaction = new SPVTransactionData(**confirmedTransaction);
                         newSPVTransaction->blockHash = pData->block->hash;
+                        newSPVTransaction->blockHeight = pChain.blockHeight(pData->block->hash);
                         request->transactions.insert(*hash, newSPVTransaction);
                     }
                     else // Create empty transaction
                     {
-                        newSPVTransaction = new SPVTransactionData(pData->block->hash);
+                        newSPVTransaction = new SPVTransactionData(pData->block->hash,
+                          pChain.blockHeight(pData->block->hash));
                         request->transactions.insert(*hash, newSPVTransaction);
                     }
                 }

@@ -622,6 +622,7 @@ namespace BitCoin
               "Monitor file failed to open");
             return false;
         }
+        mMonitor.sortTransactions(&mChain);
         mMonitor.write(&file);
         file.close();
 

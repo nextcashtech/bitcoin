@@ -53,6 +53,7 @@ namespace BitCoin
 
             Transaction transaction;
             NextCash::Hash blockHash;
+            int blockHeight;
             unsigned int nodesVerified;
 
             NextCash::HashList inputAddresses;
@@ -70,6 +71,7 @@ namespace BitCoin
           std::vector<Key *>::iterator pChainKeyEnd,
           std::vector<RelatedTransactionData> &pTransactions, bool pIncludePending);
         Transaction *findTransactionPaying(NextCash::Buffer pOutputScript, int64_t pAmount);
+        void sortTransactions(Chain *pChain);
 
         void clear();
 
@@ -135,6 +137,7 @@ namespace BitCoin
 
             SPVTransactionData()
             {
+                blockHeight = -1;
                 transaction = NULL;
                 amount = 0;
                 announceTime = getTime();
@@ -143,6 +146,7 @@ namespace BitCoin
               payOutputs(pCopy.payOutputs), spendInputs(pCopy.spendInputs), nodes(pCopy.nodes)
             {
                 blockHash = pCopy.blockHash;
+                blockHeight = pCopy.blockHeight;
                 if(pCopy.transaction == NULL)
                     transaction = NULL;
                 else
@@ -152,16 +156,19 @@ namespace BitCoin
                 amount = pCopy.amount;
                 announceTime = pCopy.announceTime;
             }
-            SPVTransactionData(const NextCash::Hash &pBlockHash)
+            SPVTransactionData(const NextCash::Hash &pBlockHash, int pBlockHeight)
             {
                 blockHash = pBlockHash;
+                blockHeight = pBlockHeight;
                 transaction = NULL;
                 amount = 0;
                 announceTime = getTime();
             }
-            SPVTransactionData(const NextCash::Hash &pBlockHash, Transaction *pTransaction)
+            SPVTransactionData(const NextCash::Hash &pBlockHash, int pBlockHeight,
+              Transaction *pTransaction)
             {
                 blockHash = pBlockHash;
+                blockHeight = pBlockHeight;
                 transaction = pTransaction;
                 amount = 0;
                 announceTime = getTime();
@@ -169,7 +176,7 @@ namespace BitCoin
             ~SPVTransactionData() { if(transaction != NULL) delete transaction; }
 
             void write(NextCash::OutputStream *pStream);
-            bool read(NextCash::InputStream *pStream);
+            bool read(NextCash::InputStream *pStream, unsigned int pVersion);
 
             bool addNode(unsigned int pNodeID)
             {
@@ -181,6 +188,7 @@ namespace BitCoin
             }
 
             NextCash::Hash blockHash; // Hash of block containing transaction
+            int blockHeight;
             Transaction *transaction;
             int64_t amount;
             std::vector<unsigned int> payOutputs, spendInputs;
