@@ -62,6 +62,7 @@ namespace BitCoin
         mSendBlocksCompact = false;
         mRejected = false;
         mWasReady = false;
+        mReleased = false;
 #ifndef SINGLE_THREAD
         mThread = NULL;
 #endif
@@ -125,6 +126,7 @@ namespace BitCoin
               mMessageInterpreter.pendingBlockHash.hex().text());
 
         requestStop();
+        release();
 #ifndef SINGLE_THREAD
         if(mThread != NULL)
             delete mThread;
@@ -152,6 +154,23 @@ namespace BitCoin
         return (double)mBlockDownloadSize / (double)mBlockDownloadTime;
     }
 
+    void Node::release()
+    {
+        if(mReleased)
+            return;
+
+        if(mMonitor != NULL)
+            mMonitor->release(mID);
+        mBlockRequestMutex.lock();
+        if(mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty())
+            mChain->releaseBlocksForNode(mID);
+        mBlocksRequested.clear();
+        mHeaderRequested.clear();
+        mBlockRequestMutex.unlock();
+        mChain->memPool().releaseForNode(mID);
+        mReleased = true;
+    }
+
     void Node::close()
     {
         mConnectionMutex.lock();
@@ -159,32 +178,16 @@ namespace BitCoin
             mConnection->close();
         mConnectionMutex.unlock();
         requestStop();
-        if(mMonitor != NULL)
-            mMonitor->release(mID);
-        mBlockRequestMutex.lock();
-        if(mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty())
-            mChain->releaseBlocksForNode(mID);
-        mBlockRequestMutex.unlock();
-        mChain->memPool().releaseForNode(mID);
-    }
-
-    void Node::releaseBlockRequests()
-    {
-        mBlockRequestMutex.lock();
-        mBlocksRequested.clear();
-        if(mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty())
-            mChain->releaseBlocksForNode(mID);
-        mBlockRequestMutex.unlock();
     }
 
     void Node::requestStop()
     {
-        releaseBlockRequests();
 #ifndef SINGLE_THREAD
         if(mThread == NULL)
             return;
 #endif
         mStopRequested = true;
+        release();
     }
 
     void Node::collectStatistics(Statistics &pCollection)
@@ -233,32 +236,33 @@ namespace BitCoin
         }
     }
 
-    void Node::check()
+    bool Node::check()
     {
-        if(!isOpen())
-            return;
+        int32_t time = getTime();
+        mLastCheckTime = time;
 
-        if(mIsSeed && getTime() - mConnectedTime > 120)
+        if(!isOpen())
+            return false;
+
+        if(mIsSeed && time - mConnectedTime > 120)
         {
             NextCash::Log::add(NextCash::Log::INFO, mName,
               "Dropping. Seed connected for too long.");
             close();
-            return;
+            return false;
         }
 
-        if(mPingRoundTripTime == -1 && getTime() - mConnectedTime > mPingCutoff)
+        if(mPingRoundTripTime == -1 && time - mConnectedTime > mPingCutoff)
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
               "Dropping. Not ready within %d seconds of connection.", mPingCutoff);
             Info::instance().addPeerFail(mAddress, 5);
             close();
-            return;
+            return false;
         }
 
         if(!mIsIncoming)
         {
-            int32_t time = getTime();
-
             if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 30 &&
               time - mBlockReceiveTime > 30)
             {
@@ -269,7 +273,7 @@ namespace BitCoin
                       "Dropping. No block for 30 seconds");
                     Info::instance().addPeerFail(mAddress);
                     close();
-                    return;
+                    return false;
                 }
 
                 // Haven't received more of the block in the last 30 seconds
@@ -279,7 +283,7 @@ namespace BitCoin
                       "Dropping. No update on block for 30 seconds");
                     Info::instance().addPeerFail(mAddress);
                     close();
-                    return;
+                    return false;
                 }
             }
 
@@ -288,7 +292,7 @@ namespace BitCoin
                 NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Not providing headers");
                 Info::instance().addPeerFail(mAddress);
                 close();
-                return;
+                return false;
             }
 
             if(mLastReceiveTime != 0 && time - mLastReceiveTime > 1200)
@@ -296,9 +300,11 @@ namespace BitCoin
                 NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Not responding");
                 Info::instance().addPeerFail(mAddress);
                 close();
-                return;
+                return false;
             }
         }
+
+        return true;
     }
 
     bool Node::sendMessage(Message::Data *pData)
@@ -323,9 +329,27 @@ namespace BitCoin
         return success;
     }
 
+    bool Node::waitingForRequests()
+    {
+        if(mBlocksRequested.size() > 0)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Waiting for %d blocks",
+              mBlocksRequested.size());
+            return true;
+        }
+        else if(!mHeaderRequested.isEmpty())
+        {
+            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+              "Waiting for headers after : %s", mHeaderRequested.hex().text());
+            return true;
+        }
+        else
+            return false;
+    }
+
     bool Node::requestHeaders()
     {
-        if(!isOpen() || !isReady() || mIsIncoming || waitingForRequests())
+        if(mStopRequested || !isOpen() || !isReady() || mIsIncoming || waitingForRequests())
             return false;
 
         if(!mLastHeaderRequested.isEmpty() &&
@@ -345,10 +369,10 @@ namespace BitCoin
 
         if(hashes.size() == 0)
             NextCash::Log::add(NextCash::Log::VERBOSE, mName,
-              "Sending header request for blocks from genesis");
+              "Sending request for block headers from genesis");
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-              "Sending header request for blocks after %d : %s", mChain->height(),
+              "Sending request for block headers after %d : %s", mChain->height(),
               hashes.front().hex().text());
         bool success = sendMessage(&getHeadersData);
         if(success)
@@ -362,12 +386,12 @@ namespace BitCoin
 
     bool Node::requestBlocks(NextCash::HashList &pList)
     {
-        if(pList.size() == 0 || !isOpen() || mIsIncoming || mIsSeed)
+        if(pList.size() == 0 || mStopRequested || !isOpen() || mIsIncoming || mIsSeed)
             return false;
 
         // Put block hashes into block request message
         Message::GetDataData getDataData;
-        for(NextCash::HashList::iterator hash=pList.begin();hash!=pList.end();++hash)
+        for(NextCash::HashList::iterator hash = pList.begin(); hash != pList.end(); ++hash)
             getDataData.inventory
               .push_back(new Message::InventoryHash(Message::InventoryHash::BLOCK, *hash));
 
@@ -376,7 +400,7 @@ namespace BitCoin
         {
             mBlockRequestMutex.lock();
             mBlocksRequested.clear();
-            for(NextCash::HashList::iterator hash=pList.begin();hash!=pList.end();++hash)
+            for(NextCash::HashList::iterator hash = pList.begin(); hash != pList.end(); ++hash)
                 mBlocksRequested.push_back(*hash);
             mBlockRequestTime = getTime();
             mBlockRequestMutex.unlock();
@@ -807,7 +831,6 @@ namespace BitCoin
         }
 
         int32_t time = getTime();
-
         if(time - mConnectedTime > PEER_TIME_LIMIT)
         {
             NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Reached time limit");
@@ -815,8 +838,8 @@ namespace BitCoin
             return;
         }
 
-        if(time - mLastCheckTime > 5)
-            check();
+        if(time - mLastCheckTime > 5 && !check())
+            return; // Closed
 
         mConnectionMutex.lock();
         mReceiveBuffer.compact();
@@ -874,7 +897,11 @@ namespace BitCoin
         // }
 
         if(previousBufferOffset != mReceiveBuffer.remaining())
-            while(processMessage());
+        {
+            // Prevent looping here too long when getting lots of messages.
+            unsigned int messageCount = 0;
+            while(processMessage() && ++messageCount < 20);
+        }
 
         Info &info = Info::instance();
 
