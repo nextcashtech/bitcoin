@@ -2327,11 +2327,7 @@ namespace BitCoin
         }
 
         if(!mStopping && newCount == 0 && peers.size() < 10000)
-        {
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Choosing random seed");
             querySeed(getRandomSeed());
-        }
 
         mConnecting = false;
         return newCount;
