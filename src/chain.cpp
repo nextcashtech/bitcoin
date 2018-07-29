@@ -2353,7 +2353,7 @@ namespace BitCoin
         while(true)
         {
             filePathName = BlockFile::fileName(fileID);
-            if (!NextCash::fileExists(filePathName))
+            if(!NextCash::fileExists(filePathName))
                 break;
             ++fileID;
         }
@@ -2634,7 +2634,7 @@ namespace BitCoin
 
                             delete blockFile;
                             BlockFile::unlock(fileID);
-                            if(mBlockStats.size() == 5000 || accumulatedWorkHeight == 0)
+                            if(!success || mBlockStats.size() == 5000 || accumulatedWorkHeight == 0)
                                 break;
                             --fileID;
                             blockOffset = BlockFile::MAX_BLOCKS - 1;
