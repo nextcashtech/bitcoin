@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                           *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -52,11 +52,14 @@ namespace BitCoin
         ~MemPool();
 
         enum HashStatus { ALREADY_HAVE, NEED, BLACK_LISTED };
-        // Add to transaction hashes that need downloaded and verified. Returns hash status. Zero means already added.
+        // Add to transaction hashes that need downloaded and verified. Returns hash status. Zero
+        //   means already added.
         HashStatus addPending(const NextCash::Hash &pHash, Chain *pChain, unsigned int pNodeID);
 
-        // Add transaction to mem pool. Returns false if it was already in the mem pool or is invalid
-        enum AddStatus { ADDED, NOT_NEEDED, NON_STANDARD, DOUBLE_SPEND, LOW_FEE, UNSEEN_OUTPOINTS, INVALID };
+        // Add transaction to mem pool. Returns false if it was already in the mem pool or is
+        //   invalid
+        enum AddStatus { ADDED, NOT_NEEDED, NON_STANDARD, DOUBLE_SPEND, LOW_FEE, UNSEEN_OUTPOINTS,
+          INVALID };
         AddStatus add(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain);
 
         // Remove transactions that have been added to a block
@@ -80,8 +83,6 @@ namespace BitCoin
 
         void checkPendingTransactions(Chain *pChain, uint64_t pMinFeeRate);
 
-        bool isBlackListed(const NextCash::Hash &pHash);
-
         NextCash::stream_size size() const { return mSize; }
         unsigned int count() const { return mTransactions.size(); }
         unsigned int pendingCount() const { return mPendingTransactions.size(); }
@@ -101,7 +102,6 @@ namespace BitCoin
         void expire();
 
         void addBlacklisted(const NextCash::Hash &pHash);
-        bool isBlackListedInternal(const NextCash::Hash &pHash);
 
         HashStatus addPendingInternal(const NextCash::Hash &pHash, unsigned int pNodeID);
 

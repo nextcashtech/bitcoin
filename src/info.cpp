@@ -359,6 +359,8 @@ namespace BitCoin
             newPeer = new Peer();
             if(newPeer->read(&file))
                 mPeers.push_back(newPeer);
+            else
+                break;
         }
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
