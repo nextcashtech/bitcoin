@@ -85,10 +85,10 @@ namespace BitCoin
         NextCash::Hash accumulatedWork;
     };
 
-    class BlockSet : public std::list<BlockInfo *>, public NextCash::Mutex
+    class BlockSet : public std::list<BlockInfo *>, public NextCash::MutexWithConstantName
     {
     public:
-        BlockSet() : Mutex("Block Set") {}
+        BlockSet() : NextCash::MutexWithConstantName("Block Set") {}
         ~BlockSet()
         {
             for(iterator info = begin(); info != end(); ++info)
@@ -292,7 +292,11 @@ namespace BitCoin
         void releaseBlocksForNode(unsigned int pNodeID);
 
         // Add block/header to queue to be processed and added to top of chain
-        bool addPendingBlock(Block *pBlock);
+        //   Returns:
+        //     -1 Invalid block
+        //     0  Block added
+        //     1  Valid block not added (i.e. already have)
+        int addPendingBlock(Block *pBlock);
         void setAnnouncedAdded() { mAnnouncedAdded = true; }
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)

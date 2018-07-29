@@ -763,7 +763,7 @@ namespace BitCoin
             }
             else
             {
-                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
                   "Block target bits don't match chain's current target bits : chain %08x != block %08x",
                   mTargetBits, pBlock->targetBits);
                 mTargetBits = previousTargetBits;
@@ -778,7 +778,7 @@ namespace BitCoin
 
     // Full Mode : Add block header to queue to be requested and downloaded
     // SPV Mode : Add/Verify block header
-    bool Chain::addPendingBlock(Block *pBlock)
+    int Chain::addPendingBlock(Block *pBlock)
     {
         mPendingLock.writeLock("Add");
 
@@ -801,7 +801,7 @@ namespace BitCoin
             mPendingLock.writeUnlock();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
               "Rejecting black listed block hash : %s", pBlock->hash.hex().text());
-            return false;
+            return -1;
         }
         else if(Forks::CASH_ACTIVATION_TIME == 1501590000)
         {
@@ -813,7 +813,7 @@ namespace BitCoin
                 mPendingLock.writeUnlock();
                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
                   "Rejecting BTC fork block header : %s", pBlock->hash.hex().text());
-                return false;
+                return -1;
             }
         }
 
@@ -822,7 +822,7 @@ namespace BitCoin
             mPendingLock.writeUnlock();
             NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
               "Header already in chain : %s", pBlock->hash.hex().text());
-            return false;
+            return 1;
         }
 
         // This just checks that the proof of work meets the target bits in the header.
@@ -837,7 +837,7 @@ namespace BitCoin
               "Target                   : %s", target.hex().text());
             addBlackListedBlock(pBlock->hash);
             mPendingLock.writeUnlock();
-            return false;
+            return -1;
         }
 
         bool added = false;
@@ -856,7 +856,7 @@ namespace BitCoin
                 {
                     addBlackListedBlock(pBlock->hash);
                     mPendingLock.writeUnlock();
-                    return false;
+                    return -1;
                 }
 
                 // Add header to chain
@@ -899,7 +899,7 @@ namespace BitCoin
                       mNextBlockHeight, pBlock->hash.hex().text());
                     revert(mNextBlockHeight);
                     mPendingLock.writeUnlock();
-                    return false;
+                    return 1;
                 }
             }
             else
@@ -1060,7 +1060,7 @@ namespace BitCoin
             else
                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
                   "Unknown header : %s", pBlock->hash.hex().text());
-            return false;
+            return 1;
         }
 
         // Block was in pendingHeaders which is populated by announce hashes
@@ -1076,7 +1076,10 @@ namespace BitCoin
         if(branchesUpdated)
             checkBranches();
 
-        return added || filled;
+        if(added || filled)
+            return 0;
+        else
+            return 1;
     }
 
     bool Chain::savePending()

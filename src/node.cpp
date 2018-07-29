@@ -1625,6 +1625,7 @@ namespace BitCoin
                     bool lastAnnouncedHeaderFound = mLastBlockAnnounced.isEmpty() ||
                       mChain->headerAvailable(mLastBlockAnnounced);
                     bool unsolicited = mHeaderRequested.isEmpty();
+                    int status, badHeadersCount = 0;
 
                     if(headersData->headers.size() == 0)
                         mLastHeader = mHeaderRequested;
@@ -1646,7 +1647,8 @@ namespace BitCoin
                         if(!mLastBlockAnnounced.isEmpty() && mLastBlockAnnounced == (*header)->hash)
                             lastAnnouncedHeaderFound = true;
 
-                        if(mChain->addPendingBlock(*header))
+                        status = mChain->addPendingBlock(*header);
+                        if(status == 0)
                         {
                             // Memory will be deleted by block chain after it is processed so
                             //   remove it from this list
@@ -1660,7 +1662,11 @@ namespace BitCoin
                                 mChain->setAnnouncedAdded();
                         }
                         else
+                        {
+                            if(status == -1)
+                                ++badHeadersCount;
                             ++header;
+                        }
                     }
 
                     if(blockList.size() > 0)
@@ -1686,7 +1692,7 @@ namespace BitCoin
                             if(info.spvMode && addedCount > 1000)
                                 requestHeaders();
                         }
-                        else if(headersData->headers.size() >= 500)
+                        else if(badHeadersCount >= 500)
                         {
                             if(!mIsIncoming)
                             {
@@ -1762,7 +1768,7 @@ namespace BitCoin
                             close();
                         }
 
-                        if(mChain->addPendingBlock(((Message::BlockData *)message)->block))
+                        if(mChain->addPendingBlock(((Message::BlockData *)message)->block) == 0)
                         {
                             // Memory has been handed off
                             ((Message::BlockData *)message)->block = NULL;
