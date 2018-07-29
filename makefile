@@ -1,12 +1,13 @@
 
 COMPILER=g++
-COMPILE_FLAGS=-I./include -I../nextcash/include -I../secp256k1/include -std=c++11 -Wall
+COMPILE_FLAGS=-I./include -I../nextcash/include -I../bitcoin-abc/src/secp256k1/include -pthread -std=c++11 -Wall
 # To disable Bitcoin Cash add this to the end if COMPILE_FLAGS : -DDISABLE_CASH
 # To Turn profiler on add this to the end of the previous line -DPROFILER_ON
-LIBRARY_PATHS=-L../nextcash -L../secp256k1/.libs
-LIBRARIES=-lnextcash -lsecp256k1
-DEBUG_LIBRARIES=-lnextcash.debug -lsecp256k1
-# secp256k1 lib Downloaded source from github, ran ./configure, found in .libs directory
+LIBRARY_PATHS=-L../nextcash
+LIBRARIES=-lnextcash
+DEBUG_LIBRARIES=-lnextcash.debug
+# Library secp256k1 is from https://github.com/Bitcoin-ABC/bitcoin-abc
+#   Clone repository next to this one and build it.
 LINK_FLAGS=-pthread
 HEADER_FILES=$(wildcard src/*.hpp)
 SOURCE_FILES=$(wildcard src/*.cpp)
@@ -73,7 +74,7 @@ release: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} main.cpp
 	@echo "\t\033[0;33mBUILDING RELEASE ${OUTPUT}\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	${COMPILER} -c -o ${OBJECT_DIRECTORY}/main.o main.cpp ${COMPILE_FLAGS}
-	${COMPILER} ${OBJECTS} ${OBJECT_DIRECTORY}/main.o ${LIBRARY_PATHS} ${LIBRARIES} -o ${OUTPUT} ${LINK_FLAGS}
+	${COMPILER} ${OBJECTS} ${OBJECT_DIRECTORY}/main.o ../bitcoin-abc/src/secp256k1/src/.libs/libsecp256k1_la-secp256k1.o ${LIBRARY_PATHS} ${LIBRARIES} -o ${OUTPUT} ${LINK_FLAGS}
 	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
 debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} main.cpp
@@ -81,7 +82,7 @@ debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} main.cpp
 	@echo "\t\033[0;33mBUILDING DEBUG ${OUTPUT}\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	${COMPILER} -c -ggdb -o ${OBJECT_DIRECTORY}/main.o.debug main.cpp ${COMPILE_FLAGS}
-	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/main.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o ${OUTPUT}.debug ${LINK_FLAGS}
+	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/main.o.debug ../bitcoin-abc/src/secp256k1/src/.libs/libsecp256k1_la-secp256k1.o ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o ${OUTPUT}.debug ${LINK_FLAGS}
 	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
 test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} bitcoin_test.cpp
@@ -89,7 +90,7 @@ test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} bitcoin_test.cpp
 	@echo "\t\033[0;33mBUILDING TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	${COMPILER} -c -o ${OBJECT_DIRECTORY}/test.o bitcoin_test.cpp ${COMPILE_FLAGS}
-	${COMPILER} ${OBJECTS} ${OBJECT_DIRECTORY}/test.o ${LIBRARY_PATHS} ${LIBRARIES} -o test ${LINK_FLAGS}
+	${COMPILER} ${OBJECTS} ${OBJECT_DIRECTORY}/test.o ../bitcoin-abc/src/secp256k1/src/.libs/libsecp256k1_la-secp256k1.o ${LIBRARY_PATHS} ${LIBRARIES} -o test ${LINK_FLAGS}
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mTESTING\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
@@ -103,7 +104,7 @@ test.debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} bitcoin_
 	@echo "\t\033[0;33mBUILDING DEBUG TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	${COMPILER} -c -ggdb -o ${OBJECT_DIRECTORY}/test.o.debug bitcoin_test.cpp ${COMPILE_FLAGS}
-	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/test.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o test.debug ${LINK_FLAGS}
+	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/test.o.debug ../bitcoin-abc/src/secp256k1/src/.libs/libsecp256k1_la-secp256k1.o ${LIBRARY_PATHS} ${LIBRARIES} -o test.debug ${LINK_FLAGS}
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 
 clean:
