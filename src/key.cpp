@@ -108,27 +108,29 @@ namespace BitCoin
     {
         NextCash::String result;
 
-        switch(pType)
-        {
-            default:
-            case MAIN_PUB_KEY_HASH: // Mainnet Public key hash
-            case MAIN_SCRIPT_HASH: // Mainnet Script hash
-            case MAIN_PRIVATE_KEY: // Mainnet Private key
-                result = "bitcoincash";
-                break;
-            case TEST_PUB_KEY_HASH: // Testnet Public key hash
-            case TEST_SCRIPT_HASH: // Testnet Script hash
-            case TEST_PRIVATE_KEY: // Testnet Private key
-                result = "bchtest";
-                break;
-        }
-
         switch(pFormat)
         {
         case PaymentRequest::Format::LEGACY:
+            result = "bitcoin:";
             result += encodeLegacyAddress(pHash, pType);
             break;
         case PaymentRequest::Format::CASH:
+
+            switch(pType)
+            {
+                default:
+                case MAIN_PUB_KEY_HASH: // Mainnet Public key hash
+                case MAIN_SCRIPT_HASH: // Mainnet Script hash
+                case MAIN_PRIVATE_KEY: // Mainnet Private key
+                    result = "bitcoincash:";
+                    break;
+                case TEST_PUB_KEY_HASH: // Testnet Public key hash
+                case TEST_SCRIPT_HASH: // Testnet Script hash
+                case TEST_PRIVATE_KEY: // Testnet Private key
+                    result = "bchtest:";
+                    break;
+            }
+
             result += encodeCashAddress(pHash, pType);
             break;
         default:
@@ -695,6 +697,8 @@ namespace BitCoin
     {
         uint8_t input[pLength + 2];
         unsigned int totalLength = pLength - 1;
+
+        std::memset(mData, 0, 64);
 
         pStream->read(input, totalLength);
         mHashType = static_cast<Signature::HashType>(pStream->readByte());
@@ -1702,7 +1706,15 @@ namespace BitCoin
     bool Key::verify(const Signature &pSignature, const NextCash::Hash &pHash) const
     {
         if(isPrivate())
-            return mPublicKey->verify(pSignature, pHash);
+        {
+            if(mPublicKey == NULL)
+            {
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Invalid key");
+                return false;
+            }
+            else
+                return mPublicKey->verify(pSignature, pHash);
+        }
 
         secp256k1_context *thisContext = context(SECP256K1_CONTEXT_VERIFY);
 
@@ -4039,11 +4051,11 @@ namespace BitCoin
         {
             const char *receivingAddresses[5] =
             {
-                "1Jvfk1qMhnZ6i6eWSSkgihwacaTjwABBsr",
-                "1JinwuSo1JoUPnxQs3hM4sisyJeNZo3Zvv",
-                "1LYZtXwzSHhhFoDyJccjpMWLVZpzgkaZsV",
-                "1JK5MMpiTYv8wSZgPZ5oyYZgyVQP6h8prQ",
-                "1K2eD9iWqBunMBGWcJBZUSQQmNYHRpk5Ne"
+                "bitcoin:1Jvfk1qMhnZ6i6eWSSkgihwacaTjwABBsr",
+                "bitcoin:1JinwuSo1JoUPnxQs3hM4sisyJeNZo3Zvv",
+                "bitcoin:1LYZtXwzSHhhFoDyJccjpMWLVZpzgkaZsV",
+                "bitcoin:1JK5MMpiTYv8wSZgPZ5oyYZgyVQP6h8prQ",
+                "bitcoin:1K2eD9iWqBunMBGWcJBZUSQQmNYHRpk5Ne"
             };
 
             for(unsigned int i=0;i<5 && walletSuccess;++i)
@@ -4108,11 +4120,11 @@ namespace BitCoin
 
             const char *changeAddresses[5] =
             {
-                "1N89DzxGHj9gfg2uA53QYKuoNX4hhvYwrZ",
-                "16xur1hethAuELqR2t5LDAUeUdvUqjgqxW",
-                "1BXQQWVzUC6GtutPPvEKnLdXKsFLcGGB9u",
-                "1JTxMVtTVJPR1L1WLpH7W3he46Mjatrbk8",
-                "1NZbMv8qneXKkexBnjm5BpHMC5teG9BgpS"
+                "bitcoin:1N89DzxGHj9gfg2uA53QYKuoNX4hhvYwrZ",
+                "bitcoin:16xur1hethAuELqR2t5LDAUeUdvUqjgqxW",
+                "bitcoin:1BXQQWVzUC6GtutPPvEKnLdXKsFLcGGB9u",
+                "bitcoin:1JTxMVtTVJPR1L1WLpH7W3he46Mjatrbk8",
+                "bitcoin:1NZbMv8qneXKkexBnjm5BpHMC5teG9BgpS"
             };
 
             for(unsigned int i=0;i<5 && walletSuccess;++i)
@@ -4471,11 +4483,11 @@ namespace BitCoin
 
         const char *receivingAddresses[5] =
         {
-            "1Jvfk1qMhnZ6i6eWSSkgihwacaTjwABBsr",
-            "1JinwuSo1JoUPnxQs3hM4sisyJeNZo3Zvv",
-            "1LYZtXwzSHhhFoDyJccjpMWLVZpzgkaZsV",
-            "1JK5MMpiTYv8wSZgPZ5oyYZgyVQP6h8prQ",
-            "1K2eD9iWqBunMBGWcJBZUSQQmNYHRpk5Ne"
+            "bitcoin:1Jvfk1qMhnZ6i6eWSSkgihwacaTjwABBsr",
+            "bitcoin:1JinwuSo1JoUPnxQs3hM4sisyJeNZo3Zvv",
+            "bitcoin:1LYZtXwzSHhhFoDyJccjpMWLVZpzgkaZsV",
+            "bitcoin:1JK5MMpiTYv8wSZgPZ5oyYZgyVQP6h8prQ",
+            "bitcoin:1K2eD9iWqBunMBGWcJBZUSQQmNYHRpk5Ne"
         };
 
         for(unsigned int i=0;i<5 && readWriteSuccess;++i)
