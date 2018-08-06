@@ -336,9 +336,12 @@ namespace BitCoin
           transaction != pTransactions.end(); ++transaction)
             remove((*transaction)->hash);
         if((mTransactions.size() + mPendingTransactions.size()) == previousCount)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Mem pool not reduced. %d trans, %d KiB",
-              mTransactions.size() + mPendingTransactions.size(), mSize / 1024);
+        {
+            if(Info::instance().initialBlockDownloadIsComplete())
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                  "Mem pool not reduced. %d trans, %d KiB",
+                  mTransactions.size() + mPendingTransactions.size(), mSize / 1024);
+        }
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Mem pool reduced by %d trans, %d KiB, %d%% to %d trans, %d KiB",
