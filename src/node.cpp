@@ -28,8 +28,6 @@ namespace BitCoin
       mConnectionMutex("Node Connection"), mBlockRequestMutex("Node Block Request"),
       mAnnounceMutex("Node Announce")
     {
-        Info &info = Info::instance();
-
         mIsIncoming = pIncoming;
         mConnected = false;
         mPrepared = false;
@@ -38,7 +36,8 @@ namespace BitCoin
         mVersionAcknowledgeSent = false;
         mSendHeaders = false;
         mMinimumFeeRate = 0;
-        mVersionData = NULL;
+        mSentVersionData = NULL;
+        mReceivedVersionData = NULL;
         mHeaderRequestTime = 0;
         mBlockRequestTime = 0;
         mBlockReceiveTime = 0;
@@ -55,6 +54,7 @@ namespace BitCoin
         mMessagesReceived = 0;
         mPingCount = 0;
         mConnectedTime = getTime();
+        mStarted = false;
         mStopRequested = false;
         mStopped = false;
         mIsSeed = pIsSeed;
@@ -94,7 +94,7 @@ namespace BitCoin
             mConnectionMutex.unlock();
             mStopped = true;
             if(!mIsSeed && !mIsIncoming)
-                info.addPeerFail(mAddress);
+                Info::instance().addPeerFail(mAddress);
             return;
         }
         mConnected = true;
@@ -117,6 +117,10 @@ namespace BitCoin
 
     Node::~Node()
     {
+        int timeout = 25;
+        while(!mStarted && --timeout)
+            NextCash::Thread::sleep(200); // Wait for thread initialize before destroying
+
         if(mConnected)
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName, "Disconnecting (socket %d)", mSocketID);
         if(!mMessageInterpreter.pendingBlockHash.isEmpty())
@@ -135,8 +139,10 @@ namespace BitCoin
         if(mConnection != NULL)
             delete mConnection;
         mConnectionMutex.unlock();
-        if(mVersionData != NULL)
-            delete mVersionData;
+        if(mSentVersionData != NULL)
+            delete mSentVersionData;
+        if(mReceivedVersionData != NULL)
+            delete mReceivedVersionData;
     }
 
     bool Node::isOpen()
@@ -217,8 +223,11 @@ namespace BitCoin
 
             if(!mIsIncoming && !mIsSeed)
             {
-                Message::Data memPoolMessage(Message::MEM_POOL);
-                sendMessage(&memPoolMessage);
+                if(mSentVersionData != NULL && (mSentVersionData->relay || mBloomFilterID != 0))
+                {
+                    Message::Data memPoolMessage(Message::MEM_POOL);
+                    sendMessage(&memPoolMessage);
+                }
 
                 Message::Data sendHeadersMessage(Message::SEND_HEADERS);
                 sendMessage(&sendHeadersMessage);
@@ -228,9 +237,9 @@ namespace BitCoin
                 requestPeers();
             requestHeaders();
 
-            if(mVersionData != NULL && !mIsIncoming && !mIsSeed)
-                info.updatePeer(mAddress, mVersionData->userAgent,
-                  mVersionData->transmittingServices);
+            if(mReceivedVersionData != NULL && !mIsIncoming && !mIsSeed)
+                info.updatePeer(mAddress, mReceivedVersionData->userAgent,
+                  mReceivedVersionData->transmittingServices);
 
             mPrepared = true;
         }
@@ -543,7 +552,7 @@ namespace BitCoin
 
     bool Node::announceBlock(Block *pBlock)
     {
-        if(!isOpen() || mVersionData == NULL)
+        if(!isOpen() || mReceivedVersionData == NULL)
             return false;
 
         mAnnounceMutex.lock();
@@ -555,7 +564,7 @@ namespace BitCoin
         }
         mAnnounceMutex.unlock();
 
-        // if(mVersionData->transmittingServices & Message::VersionData::XTHIN_NODE_BIT)
+        // if(mReceivedVersionData->transmittingServices & Message::VersionData::XTHIN_NODE_BIT)
 
         //TODO if(mSendBlocksCompact)
         // {
@@ -593,12 +602,12 @@ namespace BitCoin
 
     bool Node::announceTransaction(Transaction *pTransaction)
     {
-        if(!isOpen() || mVersionData == NULL)
+        if(!isOpen() || mReceivedVersionData == NULL)
             return false;
 
         bool filterContains = mFilter.contains(*pTransaction);
 
-        if(!mVersionData->relay && !filterContains)
+        if(!mReceivedVersionData->relay && !filterContains)
             return false;
 
         if(filterContains)
@@ -667,12 +676,12 @@ namespace BitCoin
 
     bool Node::sendTransaction(Transaction *pTransaction)
     {
-        if(!isOpen() || mVersionData == NULL || mSentTransactions.contains(pTransaction->hash))
+        if(!isOpen() || mReceivedVersionData == NULL || mSentTransactions.contains(pTransaction->hash))
             return false;
 
         bool filterContains = mFilter.contains(*pTransaction);
 
-        if(!mVersionData->relay && !filterContains)
+        if(!mReceivedVersionData->relay && !filterContains)
             return false;
 
         Message::TransactionData transactionData;
@@ -699,10 +708,12 @@ namespace BitCoin
             return false;
 
         Info &info = Info::instance();
-        Message::VersionData versionMessage(mConnection->ipv6Bytes(), mConnection->port(),
+        if(mSentVersionData != NULL)
+            delete mSentVersionData;
+        mSentVersionData = new Message::VersionData(mConnection->ipv6Bytes(), mConnection->port(),
           mServices, info.ip, info.port, info.spvMode, mChain->height(),
-          (!mIsIncoming && !mIsSeed));
-        bool success = sendMessage(&versionMessage);
+          (!mIsIncoming && !mIsSeed && info.initialBlockDownloadIsComplete()));
+        bool success = sendMessage(mSentVersionData);
         mVersionSent = true;
         return success;
     }
@@ -763,6 +774,7 @@ namespace BitCoin
               "Thread parameter is null. Stopping");
             return;
         }
+        node->mStarted = true;
 
         NextCash::String name = node->mName;
 
@@ -900,7 +912,7 @@ namespace BitCoin
         {
             // Prevent looping here too long when getting lots of messages.
             unsigned int messageCount = 0;
-            while(processMessage() && ++messageCount < 20);
+            while(++messageCount < 20 && processMessage());
         }
 
         Info &info = Info::instance();
@@ -972,7 +984,7 @@ namespace BitCoin
             }
         }
 
-        if(mVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
+        if(mReceivedVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
            mPingRoundTripTime == -1 && mPingCutoff != -1 &&
            time - mLastPingTime > mPingCutoff)
         {
@@ -1016,6 +1028,7 @@ namespace BitCoin
         // Check for a complete message
         Message::Data *message;
         bool dontDeleteMessage = false;
+        bool success = true;
         int32_t time = getTime();
         Info &info = Info::instance();
 
@@ -1083,43 +1096,43 @@ namespace BitCoin
         {
             case Message::VERSION:
             {
-                if(mVersionData != NULL)
+                if(mReceivedVersionData != NULL)
                 {
                     sendReject(Message::nameFor(message->type), Message::RejectData::DUPLICATE,
                       "More than one version message");
                     break;
                 }
 
-                mVersionData = (Message::VersionData *)message;
+                mReceivedVersionData = (Message::VersionData *)message;
                 dontDeleteMessage = true;
 
                 NextCash::String timeText;
-                timeText.writeFormattedTime(mVersionData->time);
+                timeText.writeFormattedTime(mReceivedVersionData->time);
                 NextCash::String versionText;
                 versionText.writeFormatted("Version : %s (%d), %d blocks",
-                  mVersionData->userAgent.text(), mVersionData->version,
-                  mVersionData->startBlockHeight);
-                if(mVersionData->relay)
+                  mReceivedVersionData->userAgent.text(), mReceivedVersionData->version,
+                  mReceivedVersionData->startBlockHeight);
+                if(mReceivedVersionData->relay)
                     versionText += ", relay";
-                if(mVersionData->transmittingServices & Message::VersionData::FULL_NODE_BIT)
+                if(mReceivedVersionData->transmittingServices & Message::VersionData::FULL_NODE_BIT)
                     versionText += ", full";
-                if(mVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT)
+                if(mReceivedVersionData->transmittingServices & Message::VersionData::CASH_NODE_BIT)
                     versionText += ", cash";
-                if(mVersionData->transmittingServices & Message::VersionData::BLOOM_NODE_BIT)
+                if(mReceivedVersionData->transmittingServices & Message::VersionData::BLOOM_NODE_BIT)
                     versionText += ", bloom";
-                if(mVersionData->transmittingServices & Message::VersionData::GETUTXO_NODE_BIT)
+                if(mReceivedVersionData->transmittingServices & Message::VersionData::GETUTXO_NODE_BIT)
                     versionText += ", get utxo";
-                if(mVersionData->transmittingServices & Message::VersionData::WITNESS_NODE_BIT)
+                if(mReceivedVersionData->transmittingServices & Message::VersionData::WITNESS_NODE_BIT)
                     versionText += ", witness";
-                if(mVersionData->transmittingServices & Message::VersionData::XTHIN_NODE_BIT)
+                if(mReceivedVersionData->transmittingServices & Message::VersionData::XTHIN_NODE_BIT)
                     versionText += ", xthin";
                 versionText += ", time ";
                 versionText += timeText;
                 NextCash::Log::add(NextCash::Log::INFO, mName, versionText);
 
-                std::memcpy(mAddress.ip, mVersionData->transmittingIPv6, 16);
-                mAddress.port = mVersionData->transmittingPort;
-                mMessageInterpreter.version = mVersionData->version;
+                std::memcpy(mAddress.ip, mReceivedVersionData->transmittingIPv6, 16);
+                mAddress.port = mReceivedVersionData->transmittingPort;
+                mMessageInterpreter.version = mReceivedVersionData->version;
 
                 if(!mAddress.isValid() || mAddress.port == 0)
                 {
@@ -1128,7 +1141,7 @@ namespace BitCoin
                 }
 
                 // Require full node bit for outgoing nodes
-                if(!mIsIncoming && !mIsSeed && !(mVersionData->transmittingServices &
+                if(!mIsIncoming && !mIsSeed && !(mReceivedVersionData->transmittingServices &
                   Message::VersionData::FULL_NODE_BIT))
                 {
                     sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
@@ -1137,16 +1150,18 @@ namespace BitCoin
                       "Dropping. Missing full node bit");
                     info.addPeerFail(mAddress);
                     close();
+                    success = false;
                 }
                 else if(!mIsIncoming && !mIsSeed && !mChain->isInSync() &&
-                  (mVersionData->startBlockHeight < 0 ||
-                  mVersionData->startBlockHeight < mChain->height()))
+                  (mReceivedVersionData->startBlockHeight < 0 ||
+                  mReceivedVersionData->startBlockHeight < mChain->height()))
                 {
                     NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Low block height");
                     info.addPeerFail(mAddress);
                     close();
+                    success = false;
                 }
-                else if(info.spvMode && !mIsSeed && !(mVersionData->transmittingServices &
+                else if(info.spvMode && !mIsSeed && !(mReceivedVersionData->transmittingServices &
                   Message::VersionData::BLOOM_NODE_BIT))
                 {
                     mRejected = true;
@@ -1156,6 +1171,7 @@ namespace BitCoin
                       "Dropping. Missing bloom node bit");
                     info.addPeerFail(mAddress);
                     close();
+                    success = false;
                 }
                 else
                 {
@@ -1173,7 +1189,7 @@ namespace BitCoin
             }
             case Message::VERACK:
                 mVersionAcknowledged = true;
-                if(mVersionData != NULL && !mIsSeed)
+                if(mReceivedVersionData != NULL && !mIsSeed)
                     prepare();
                 break;
             case Message::PING:
@@ -1186,6 +1202,7 @@ namespace BitCoin
                 {
                     NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Reached ping limit");
                     close();
+                    success = false;
                 }
                 break;
             }
@@ -1196,6 +1213,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::INFO, mName,
                       "Dropping. Pong nonce doesn't match sent Ping");
                     close();
+                    success = false;
                 }
                 else
                 {
@@ -1211,6 +1229,7 @@ namespace BitCoin
                                   "Dropping. Ping time %ds not within cutoff of %ds",
                                   mPingRoundTripTime, mPingCutoff);
                                 close();
+                                success = false;
                             }
                             else
                                 prepare();
@@ -1388,7 +1407,7 @@ namespace BitCoin
             case Message::GET_DATA:
             {
                 // Don't respond to data requests before receiving the version message
-                if(mVersionData == NULL)
+                if(mReceivedVersionData == NULL)
                     break;
 
                 Message::GetDataData *getDataData = (Message::GetDataData *)message;
@@ -1407,11 +1426,11 @@ namespace BitCoin
 
                         if(height == -1)
                             notFoundData.inventory.push_back(new Message::InventoryHash(**item));
-                        else if(height < mVersionData->startBlockHeight - 1000)
+                        else if(height < mReceivedVersionData->startBlockHeight - 1000)
                         {
                             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                               "Not sending block. Block height %d below node's start block height %d : %s",
-                              height, mVersionData->startBlockHeight, (*item)->hash.hex().text());
+                              height, mReceivedVersionData->startBlockHeight, (*item)->hash.hex().text());
                         }
                         else if(mChain->getBlock((*item)->hash, block))
                         {
@@ -1469,7 +1488,7 @@ namespace BitCoin
             case Message::GET_HEADERS:
             {
                 // Don't respond to header requests before receiving the version message
-                if(mVersionData == NULL)
+                if(mReceivedVersionData == NULL)
                     break;
 
                 Message::GetHeadersData *getHeadersData = (Message::GetHeadersData *)message;
@@ -1484,11 +1503,11 @@ namespace BitCoin
                     height = mChain->blockHeight(*hash);
                     if(height != -1)
                     {
-                        if(height > 5000 && height < mVersionData->startBlockHeight - 5000)
+                        if(height > 5000 && height < mReceivedVersionData->startBlockHeight - 5000)
                         {
                             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                               "Not sending headers. Header height %d below node's start block height %d : %s",
-                              height, mVersionData->startBlockHeight, hash->hex().text());
+                              height, mReceivedVersionData->startBlockHeight, hash->hex().text());
                             break;
                         }
                         else if(mChain->getBlockHeaders(sendHeadersData.headers, *hash,
@@ -1555,6 +1574,7 @@ namespace BitCoin
                                       "Dropping. Black listed block announced : %s",
                                       (*item)->hash.hex().text());
                                     close();
+                                    success = false;
                                     break;
                                 case Chain::ALREADY_HAVE:
                                     break;
@@ -1582,6 +1602,7 @@ namespace BitCoin
                                         NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                                           "Dropping. Black listed transaction announced : %s", (*item)->hash.hex().text());
                                         close();
+                                        success = false;
                                         break;
                                 }
                             }
@@ -1679,9 +1700,10 @@ namespace BitCoin
                           mLastBlockAnnounced.hex().text());
                         info.addPeerFail(mAddress, 5);
                         close();
+                        success = false;
                     }
 
-                    if(!mIsSeed && mVersionData != NULL)
+                    if(!mIsSeed && mReceivedVersionData != NULL)
                     {
                         if(addedCount > 0)
                         {
@@ -1701,6 +1723,7 @@ namespace BitCoin
                                   ((Message::HeadersData *)message)->headers.size());
                                 info.addPeerFail(mAddress, 5);
                                 close();
+                                success = false;
                             }
                         }
                     }
@@ -1717,6 +1740,7 @@ namespace BitCoin
                       ((Message::HeadersData *)message)->headers.size());
                     info.addPeerFail(mAddress, 5);
                     close();
+                    success = false;
                 }
                 break;
             case Message::BLOCK:
@@ -1729,6 +1753,7 @@ namespace BitCoin
                           ((Message::BlockData *)message)->block->hash.hex().text());
                         info.addPeerFail(mAddress, 5);
                         close();
+                        success = false;
                     }
                     else
                     {
@@ -1766,13 +1791,14 @@ namespace BitCoin
                               time - mMessageInterpreter.pendingBlockStartTime);
                             info.addPeerFail(mAddress, 5);
                             close();
+                            success = false;
                         }
 
                         if(mChain->addPendingBlock(((Message::BlockData *)message)->block) == 0)
                         {
                             // Memory has been handed off
                             ((Message::BlockData *)message)->block = NULL;
-                            if(!mIsSeed && mVersionData != NULL)
+                            if(!mIsSeed && mReceivedVersionData != NULL)
                                 info.addPeerSuccess(mAddress, 1);
                         }
                     }
@@ -1784,10 +1810,21 @@ namespace BitCoin
                       ((Message::BlockData *)message)->block->hash.hex().text());
                     info.addPeerFail(mAddress, 5);
                     close();
+                    success = false;
                 }
                 break;
             case Message::TRANSACTION:
             {
+                if(mBloomFilterID == 0 && (mSentVersionData == NULL || mSentVersionData->relay == 0x00))
+                {
+                    NextCash::Log::add(NextCash::Log::INFO, mName,
+                      "Dropping. Received transaction when relay is off and no bloom filter was sent");
+                    info.addPeerFail(mAddress);
+                    close();
+                    success = false;
+                    break;
+                }
+
                 // Verify and add to mem pool
                 Message::TransactionData *transactionData = (Message::TransactionData *)message;
                 if(transactionData->transaction != NULL)
@@ -1843,6 +1880,7 @@ namespace BitCoin
                                   transactionData->transaction->hash.hex().text());
                                 info.addPeerFail(mAddress);
                                 close();
+                                success = false;
                                 break;
 
                             default:
@@ -1897,6 +1935,7 @@ namespace BitCoin
                       "Dropping. Invalid Merkle Block : %s",
                       ((Message::MerkleBlockData *)message)->block->hash.hex().text());
                     close();
+                    success = false;
                 }
                 break;
             case Message::NOT_FOUND:
@@ -1927,6 +1966,7 @@ namespace BitCoin
                             NextCash::Log::add(NextCash::Log::INFO, mName,
                               "Dropping. Blocks not found");
                             close();
+                            success = false;
                         }
                         break;
                     }
@@ -1939,6 +1979,7 @@ namespace BitCoin
                           "Dropping. Merkle block hash returned not found : %s",
                           (*item)->hash.hex().text());
                         close();
+                        success = false;
                         break;
                     case Message::InventoryHash::COMPACT_BLOCK:
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
@@ -2005,6 +2046,6 @@ namespace BitCoin
         if(!dontDeleteMessage)
             delete message;
 
-        return true;
+        return success;
     }
 }

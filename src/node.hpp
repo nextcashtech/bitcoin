@@ -66,10 +66,10 @@ namespace BitCoin
 
         unsigned int blockHeight()
         {
-            if(mVersionData == NULL)
+            if(mReceivedVersionData == NULL)
                 return 0;
             else
-                return (unsigned int)mVersionData->startBlockHeight;
+                return (unsigned int)mReceivedVersionData->startBlockHeight;
         }
 
         bool waitingForRequests();
@@ -157,14 +157,14 @@ namespace BitCoin
         NextCash::Network::Connection *mConnection;
         NextCash::Buffer mReceiveBuffer;
         Statistics mStatistics;
-        bool mStopRequested, mStopped;
+        bool mStarted, mStopRequested, mStopped;
         bool mIsIncoming, mIsSeed, mIsGood;
         bool mSendBlocksCompact;
         bool mRejected;
         bool mWasReady;
         bool mReleased;
 
-        Message::VersionData *mVersionData;
+        Message::VersionData *mSentVersionData, *mReceivedVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;
         int32_t mLastReceiveTime;
         int32_t mLastCheckTime;
