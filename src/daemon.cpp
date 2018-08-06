@@ -68,7 +68,8 @@ namespace BitCoin
         mFinishTime = 0;
         mKeysSynchronized = true;
 
-        NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME, "Creating daemon object");
+        NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
+          "Creating daemon object");
     }
 
     Daemon::~Daemon()
@@ -91,7 +92,7 @@ namespace BitCoin
     {
         // Check if transactions have confirmed
         for(std::vector<Transaction *>::iterator trans = mTransactionsToTransmit.begin();
-            trans != mTransactionsToTransmit.end();)
+          trans != mTransactionsToTransmit.end();)
         {
             if(mMonitor.isConfirmed((*trans)->hash))
             {
@@ -287,7 +288,7 @@ namespace BitCoin
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Starting %s on %s in %s", BITCOIN_USER_AGENT, networkName(),
-          Info::instance().path().text());
+          mInfo.path().text());
 
 #ifdef SINGLE_THREAD
         if(mInfo.spvMode)
@@ -376,7 +377,10 @@ namespace BitCoin
         {
             NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Deleting nodes");
             for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
+            {
+                (*node)->collectStatistics(mStatistics);
                 delete *node;
+            }
             mNodes.clear();
             mOutgoingNodes = 0;
             mIncomingNodes = 0;
@@ -491,16 +495,16 @@ namespace BitCoin
     {
         collectStatistics();
 
-        NextCash::String filePathName = Info::instance().path();
+        NextCash::String filePathName = mInfo.path();
         filePathName.pathAppend("statistics");
-        NextCash::FileOutputStream file(filePathName, false, true);
-        if(!file.isValid())
+        NextCash::FileOutputStream statisticsFile(filePathName, false, true);
+        if(!statisticsFile.isValid())
         {
             // Clear anyway so it doesn't try to save every manager loop
             mStatistics.clear();
             return;
         }
-        mStatistics.write(&file);
+        mStatistics.write(&statisticsFile);
         mStatistics.clear();
     }
 
@@ -548,6 +552,9 @@ namespace BitCoin
               "Outputs : %d trans (%d KiB cached)", mChain.outputs().size(),
               mChain.outputs().cacheDataSize() / 1024);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Addresses : %d addrs (%d KiB cached)", mChain.addresses().size(),
+              mChain.addresses().cacheDataSize() / 1024);
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Mem Pool : %d/%d trans/pending (%d KiB)", mChain.memPool().count(),
               mChain.memPool().pendingCount(), mChain.memPool().size() / 1024);
 
@@ -578,7 +585,7 @@ namespace BitCoin
 
     bool Daemon::loadMonitor()
     {
-        NextCash::String filePathName = Info::instance().path();
+        NextCash::String filePathName = mInfo.path();
         filePathName.pathAppend("monitor");
         NextCash::FileInputStream file(filePathName);
         if(file.isValid())
@@ -601,7 +608,7 @@ namespace BitCoin
               "Monitor file not found to load");
         }
 
-        // filePathName = Info::instance().path();
+        // filePathName = mInfo.path();
         // filePathName.pathAppend("address_text");
         // NextCash::FileInputStream textFile(filePathName);
         // if(textFile.isValid() && !mMonitor.loadAddresses(&textFile))
@@ -613,7 +620,7 @@ namespace BitCoin
 
     bool Daemon::saveMonitor()
     {
-        NextCash::String tempFilePathName = Info::instance().path();
+        NextCash::String tempFilePathName = mInfo.path();
         tempFilePathName.pathAppend("monitor.temp");
         NextCash::FileOutputStream file(tempFilePathName, true);
         if(!file.isValid())
@@ -626,7 +633,7 @@ namespace BitCoin
         mMonitor.write(&file);
         file.close();
 
-        NextCash::String realFilePathName = Info::instance().path();
+        NextCash::String realFilePathName = mInfo.path();
         realFilePathName.pathAppend("monitor");
         NextCash::renameFile(tempFilePathName, realFilePathName);
 
@@ -638,7 +645,7 @@ namespace BitCoin
 
     bool Daemon::loadKeyStore(const uint8_t *pPassword, unsigned int pPasswordLength)
     {
-        NextCash::String filePathName = Info::instance().path();
+        NextCash::String filePathName = mInfo.path();
         filePathName.pathAppend("keystore");
         NextCash::FileInputStream publicFile(filePathName);
         if(publicFile.isValid())
@@ -663,14 +670,14 @@ namespace BitCoin
         mKeysSynchronized = mKeyStore.allAreSynchronized();
 
 #ifndef ANDROID
-        filePathName = Info::instance().path();
+        filePathName = mInfo.path();
         filePathName.pathAppend("key_text");
         NextCash::FileInputStream textFile(filePathName);
 
         if(!textFile.isValid())
             return true;
 
-        filePathName = Info::instance().path();
+        filePathName = mInfo.path();
         filePathName.pathAppend(".private_keystore");
         NextCash::FileInputStream privateFile(filePathName);
         if(privateFile.isValid())
@@ -709,7 +716,7 @@ namespace BitCoin
 
     bool Daemon::saveKeyStore(const uint8_t *pPassword, unsigned int pPasswordLength)
     {
-        NextCash::String tempFilePathName = Info::instance().path();
+        NextCash::String tempFilePathName = mInfo.path();
         tempFilePathName.pathAppend("keystore.temp");
         NextCash::FileOutputStream publicFile(tempFilePathName, true);
         if(!publicFile.isValid())
@@ -721,21 +728,21 @@ namespace BitCoin
         mKeyStore.write(&publicFile);
         publicFile.close();
 
-        NextCash::String realFilePathName = Info::instance().path();
+        NextCash::String realFilePathName = mInfo.path();
         realFilePathName.pathAppend("keystore");
         NextCash::renameFile(tempFilePathName, realFilePathName);
 
 #ifndef ANDROID
         if(mKeyStore.isPrivateLoaded())
         {
-            tempFilePathName = Info::instance().path();
+            tempFilePathName = mInfo.path();
             tempFilePathName.pathAppend(".private_keystore.temp");
             NextCash::FileOutputStream privateFile(tempFilePathName, true);
             mKeyStore.writePrivate(&privateFile, pPassword, pPasswordLength);
 
             privateFile.close();
 
-            NextCash::String realFilePathName = Info::instance().path();
+            NextCash::String realFilePathName = mInfo.path();
             realFilePathName.pathAppend(".private_keystore");
             NextCash::renameFile(tempFilePathName, realFilePathName);
         }
@@ -1807,7 +1814,7 @@ namespace BitCoin
                 // Wait 30 seconds so hopefully a bunch of nodes are ready to request at the same
                 //   time to improve staggering
                 time = getTime();
-                if(time - lastRequestCheckTime > 30 ||
+                if(mChain.blocksNeeded() || time - lastRequestCheckTime > 30 ||
                   (mChain.pendingBlockCount() == 0 && time - lastRequestCheckTime > 10))
                 {
                     lastRequestCheckTime = time;
@@ -2462,7 +2469,7 @@ namespace BitCoin
         {
             if(mNodeListener == NULL)
             {
-                if(mIncomingNodes < mMaxIncoming)
+                if(mIncomingNodes < mMaxIncoming && mChain.isInSync())
                 {
                     mNodeListener = new NextCash::Network::Listener(AF_INET6, networkPort(), 5, 1);
                     if(mNodeListener->isValid())
