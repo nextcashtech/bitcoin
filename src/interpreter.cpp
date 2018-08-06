@@ -1604,12 +1604,8 @@ namespace BitCoin
                         publicKeys[i] = new Key();
                         top()->setReadOffset(0);
                         if(!publicKeys[i]->readPublic(top()))
-                        {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               "Invalid public key for OP_CHECKMULTISIG");
-                            mValid = false;
-                            return false;
-                        }
                         pop();
                     }
 
@@ -1630,12 +1626,8 @@ namespace BitCoin
                         top()->setReadOffset(0);
                         if(!signatures[i].read(top(), (unsigned int)top()->length(),
                           strictECDSA_DER_Sigs))
-                        {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               "Invalid signature for OP_CHECKMULTISIG");
-                            mValid = false;
-                            return false;
-                        }
                         pop();
                     }
 
@@ -1665,7 +1657,7 @@ namespace BitCoin
                         }
                     }
 
-                    // Destroy public keys and signatures
+                    // Destroy public keys
                     for(unsigned int i=0;i<publicKeyCount;i++)
                         delete publicKeys[i];
 
