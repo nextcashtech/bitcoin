@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017 NextCash, LLC                                           *
+ * Copyright 2017-2018 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -29,7 +29,8 @@ namespace BitCoin
     public:
 
         FullOutputData() {}
-        FullOutputData(unsigned int pBlockHeight, const NextCash::Hash &pTransactionID, unsigned int pIndex, Output &pOutput)
+        FullOutputData(unsigned int pBlockHeight, const NextCash::Hash &pTransactionID,
+          unsigned int pIndex, Output &pOutput)
         {
             blockHeight = pBlockHeight;
             transactionID = pTransactionID;
@@ -52,7 +53,8 @@ namespace BitCoin
         static const unsigned int SIZE = 12;
 
         AddressOutputReference() {}
-        AddressOutputReference(uint32_t pBlockHeight, uint32_t pTransactionOffset, uint32_t pOutputIndex)
+        AddressOutputReference(uint32_t pBlockHeight, uint32_t pTransactionOffset,
+          uint32_t pOutputIndex)
         {
             blockHeight = pBlockHeight;
             transactionOffset = pTransactionOffset;
@@ -120,13 +122,13 @@ namespace BitCoin
 
     /* Data set of address hashes and the transaction outputs associated with them
      */
-    class Addresses : public NextCash::HashDataSet<AddressOutputReference, 20, 1024, 1024>
+    class Addresses : public NextCash::HashDataSet<AddressOutputReference, 20, 0x400, 0x400>
     {
     public:
 
         unsigned int subSetOffset(const NextCash::Hash &pLookupValue)
         {
-            return pLookupValue.lookup16() >> 6;
+            return pLookupValue.lookup16() & 0x3ff;
         }
 
         Addresses() { mNextBlockHeight = 0; mMaxCacheSize = Info::instance().addressesThreshold; }

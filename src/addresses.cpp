@@ -89,10 +89,12 @@ namespace BitCoin
         unsigned int transactionOffset = 0, outputOffset;
         NextCash::HashData *newAddress;
         bool success = true;
-        for(std::vector<Transaction *>::iterator trans=pBlockTransactions.begin();trans!=pBlockTransactions.end();++trans,++transactionOffset)
+        for(std::vector<Transaction *>::iterator trans = pBlockTransactions.begin();
+          trans != pBlockTransactions.end(); ++trans, ++transactionOffset)
         {
             outputOffset = 0;
-            for(std::vector<Output>::iterator output=(*trans)->outputs.begin();output!=(*trans)->outputs.end();++output,++outputOffset)
+            for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
+              output != (*trans)->outputs.end(); ++output, ++outputOffset)
             {
                 switch(ScriptInterpreter::parseOutputScript(output->script, hashes))
                 {
@@ -100,9 +102,11 @@ namespace BitCoin
                     case ScriptInterpreter::P2PK:
                     case ScriptInterpreter::P2SH:
                     case ScriptInterpreter::MULTI_SIG:
-                        for(NextCash::HashList::iterator hash=hashes.begin();hash!=hashes.end();++hash)
+                        for(NextCash::HashList::iterator hash = hashes.begin();
+                          hash != hashes.end(); ++hash)
                         {
-                            newAddress = new AddressOutputReference(pBlockHeight, transactionOffset, outputOffset);
+                            newAddress = new AddressOutputReference(pBlockHeight,
+                              transactionOffset, outputOffset);
                             if(!insert(*hash, newAddress))
                             {
                                 delete newAddress;

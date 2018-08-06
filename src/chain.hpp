@@ -68,6 +68,23 @@ namespace BitCoin
             version = pVersion;
             time = pTime;
             targetBits = pTargetBits;
+
+            NextCash::Hash target(32);
+            target.setDifficulty(pTargetBits);
+            target.getWork(accumulatedWork);
+        }
+        BlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits,
+          NextCash::Hash &pPreviousAccumulatedWork) : accumulatedWork(32)
+        {
+            version = pVersion;
+            time = pTime;
+            targetBits = pTargetBits;
+
+            NextCash::Hash target(32);
+            target.setDifficulty(pTargetBits);
+            target.getWork(accumulatedWork);
+
+            accumulatedWork += pPreviousAccumulatedWork;
         }
 
         BlockStat &operator = (const BlockStat &pRight)
@@ -345,7 +362,7 @@ namespace BitCoin
         std::vector<unsigned int> blackListedNodeIDs();
 
         // Set flag to stop processing
-        void requestStop() { mStop = true; }
+        void requestStop() { mStopRequested = true; }
 
         // For testing only
         void setMaxTargetBits(uint32_t pMaxTargetBits) { mMaxTargetBits = pMaxTargetBits; }
@@ -392,7 +409,7 @@ namespace BitCoin
 
         // Verify and process block then add it to the chain
         NextCash::Mutex mProcessMutex;
-        bool mStop;
+        bool mStopRequested;
         bool mIsInSync;
         bool mAnnouncedAdded;
 

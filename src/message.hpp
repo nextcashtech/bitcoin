@@ -181,7 +181,7 @@ namespace BitCoin
             uint64_t nonce;
             NextCash::String userAgent;
             int32_t startBlockHeight;
-            uint8_t relay; // Announce new transactions/blocks
+            uint8_t relay; // Relay all transactions (without bloom filter)
         };
 
         class PingData : public Data

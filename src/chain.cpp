@@ -41,7 +41,7 @@ namespace BitCoin
         mTargetBits = 0;
         mLastBlockFile = NULL;
         mLastFullPendingOffset = 0;
-        mStop = false;
+        mStopRequested = false;
         mIsInSync = false;
         mAnnouncedAdded = false;
         mAnnounceBlock = NULL;
@@ -677,19 +677,11 @@ namespace BitCoin
 
     void Chain::addBlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits)
     {
-        BlockStat newBlockStat(pVersion, pTime, pTargetBits);
-        NextCash::Hash target(32);
-        target.setDifficulty(newBlockStat.targetBits);
-        target.getWork(newBlockStat.accumulatedWork);
         if(mBlockStats.size() == 0)
-        {
-            NextCash::Hash zero(32);
-            zero.zeroize();
-            newBlockStat.accumulatedWork += zero;
-        }
+            mBlockStats.emplace_back(pVersion, pTime, pTargetBits);
         else
-            newBlockStat.accumulatedWork += mBlockStats.back().accumulatedWork;
-        mBlockStats.push_back(newBlockStat);
+            mBlockStats.emplace_back(pVersion, pTime, pTargetBits,
+              mBlockStats.back().accumulatedWork);
         ++mBlockStatHeight;
 
         while(mBlockStats.size() > BLOCK_STATS_CACHE_SIZE)
@@ -1558,7 +1550,7 @@ namespace BitCoin
 #ifdef PROFILER_ON
         NextCash::Profiler outputsProfiler("Chain Process");
 #endif
-        if(mStop)
+        if(mStopRequested)
             return;
 
         mPendingLock.readLock();
@@ -1613,7 +1605,8 @@ namespace BitCoin
 
             if(!mIsInSync && mAnnouncedAdded && getTime() - nextPending->block->time < 600)
             {
-                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Chain is in sync");
+                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  "Chain is in sync");
                 mIsInSync = true;
                 mInfo.setInitialBlockDownloadComplete();
             }
@@ -1651,40 +1644,31 @@ namespace BitCoin
             }
             BlockFile::unlock(mLastFileID);
 
-            // if(nextPending->block->size() > 1000000)
-            // {
-                // // Stop daemon
-                // NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                  // "Stopping daemon because this is currently unrecoverable");
-                // Daemon::instance().requestStop();
-                // mStop = true;
-            // }
-            // else
-            // {
-                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Clearing all pending blocks/headers");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Clearing all pending blocks/headers");
 
-                // Clear pending blocks since they assumed this block was good
-                mPendingLock.writeLock("Clear Pending");
-                mBlackListedNodeIDs.push_back(nextPending->requestingNode);
-                // Add hash to blacklist. So it isn't downloaded again.
-                addBlackListedBlock(nextPending->block->hash);
-                for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
-                  pending != mPendingBlocks.end(); ++pending)
-                    delete *pending;
-                mPendingBlocks.clear();
-                mLastPendingHash.clear();
-                mLastFullPendingOffset = 0;
-                mPendingSize = 0;
-                mPendingBlockCount = 0;
-                mPendingLock.writeUnlock();
-                mPendingAccumulatedWork = accumulatedWork(height());
-            // }
+            // Clear pending blocks since they assumed this block was good
+            mPendingLock.writeLock("Clear Pending");
+            mBlackListedNodeIDs.push_back(nextPending->requestingNode);
+            // Add hash to blacklist. So it isn't downloaded again.
+            addBlackListedBlock(nextPending->block->hash);
+            for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
+              pending != mPendingBlocks.end(); ++pending)
+                delete *pending;
+            mPendingBlocks.clear();
+            mLastPendingHash.clear();
+            mLastFullPendingOffset = 0;
+            mPendingSize = 0;
+            mPendingBlockCount = 0;
+            mPendingLock.writeUnlock();
+            mPendingAccumulatedWork = accumulatedWork(height());
 
             checkBranches(); // Possibly switch to a branch that is valid
         }
     }
 
-    bool Chain::getBlockHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash, unsigned int pCount)
+    bool Chain::getBlockHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash,
+      unsigned int pCount)
     {
         int hashHeight;
 #ifdef LOW_MEM
@@ -1742,8 +1726,8 @@ namespace BitCoin
         return true;
     }
 
-    bool Chain::getBlockHeaders(BlockList &pBlockHeaders, const NextCash::Hash &pStartingHash, const NextCash::Hash &pStoppingHash,
-      unsigned int pCount)
+    bool Chain::getBlockHeaders(BlockList &pBlockHeaders, const NextCash::Hash &pStartingHash,
+      const NextCash::Hash &pStoppingHash, unsigned int pCount)
     {
         BlockFile *blockFile;
         NextCash::Hash hash = pStartingHash;
@@ -1766,7 +1750,8 @@ namespace BitCoin
 
             previousCount = pBlockHeaders.size();
 
-            if(!blockFile->isValid() || !blockFile->readBlockHeaders(pBlockHeaders, hash, pStoppingHash, pCount))
+            if(!blockFile->isValid() || !blockFile->readBlockHeaders(pBlockHeaders, hash,
+              pStoppingHash, pCount))
             {
                 if(blockFile != mLastBlockFile)
                     delete blockFile;
@@ -1779,9 +1764,9 @@ namespace BitCoin
             BlockFile::unlock(fileID);
 
             found = true;
-            if(previousCount == pBlockHeaders.size() || // No more headers added from this block file
-              (pBlockHeaders.size() > 0 && pBlockHeaders.back()->hash == pStoppingHash)) // Stop hash found
-                break;
+            if(previousCount == pBlockHeaders.size() || // No more headers added from this file
+              (pBlockHeaders.size() > 0 && pBlockHeaders.back()->hash == pStoppingHash))
+                break; // Stop hash found
 
             hash.clear();
             if(++fileID > mLastFileID)
@@ -2099,7 +2084,7 @@ namespace BitCoin
         Forks emptyForks;
         int32_t lastPurgeTime = getTime();
 
-        while(currentHeight <= height() && !mStop)
+        while(currentHeight <= height() && !mStopRequested)
         {
             BlockFile::lock(fileID);
             blockFile = new BlockFile(fileID);
@@ -2209,7 +2194,7 @@ namespace BitCoin
         NextCash::Profiler profiler("Chain Update Addresses", false);
 #endif
 
-        while(currentHeight <= height() && !mStop)
+        while(currentHeight <= height() && !mStopRequested)
         {
             BlockFile::lock(fileID);
             blockFile = new BlockFile(fileID);
@@ -2222,7 +2207,7 @@ namespace BitCoin
                 return false;
             }
 
-            while(currentHeight <= height() && offset < BlockFile::MAX_BLOCKS)
+            while(currentHeight <= height() && offset < BlockFile::MAX_BLOCKS && !mStopRequested)
             {
 #ifdef PROFILER_ON
                 profiler.start();
@@ -2350,7 +2335,7 @@ namespace BitCoin
         unsigned int fileID;
 
         mProcessMutex.lock();
-        mStop = false;
+        mStopRequested = false;
 
         fileID = 0;
         while(true)
@@ -2670,7 +2655,7 @@ namespace BitCoin
             }
         }
 
-        if(mStop)
+        if(mStopRequested)
         {
             mProcessMutex.unlock();
             return false;
@@ -2703,7 +2688,7 @@ namespace BitCoin
                         lastReport = getTime();
                     }
 
-                    if(mStop)
+                    if(mStopRequested)
                         break;
 
                     mForks.process(this, i);
@@ -2715,27 +2700,36 @@ namespace BitCoin
 
         mProcessMutex.unlock();
 
-        if(mStop || !success)
+        if(mStopRequested || !success)
             return false;
 
         Info &info = Info::instance();
 
         if(!info.spvMode)
         {
-            // Load transaction addresses
-            success = success && mAddresses.load(info.path(), 0); // 10485760); // 10 MiB
+            try
+            {
+                // Load transaction addresses
+                success = success && mAddresses.load(info.path(), 0); // 10485760); // 10 MiB
 
-            // Update transaction addresses if they aren't up to current chain block height
-            success = success && updateAddresses();
+                // Update transaction addresses if they aren't up to current chain block height
+                success = success && updateAddresses();
 
-            if(mStop || !success)
-                return false;
+                if(mStopRequested || !success)
+                    return false;
 
-            // Load transaction outputs
-            success = success && mOutputs.load(info.path(), info.outputsThreshold);
+                // Load transaction outputs
+                success = success && mOutputs.load(info.path(), info.outputsThreshold);
 
-            // Update transaction outputs if they aren't up to current chain block height
-            success = success && updateOutputs();
+                // Update transaction outputs if they aren't up to current chain block height
+                success = success && updateOutputs();
+            }
+            catch(std::bad_alloc &pBadAlloc)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+                  "Failed to load. Bad allocation : %s", pBadAlloc.what());
+                success = false;
+            }
         }
 
         if(success)
@@ -2784,7 +2778,7 @@ namespace BitCoin
         bool useTestMinDifficulty;
         NextCash::String filePathName;
 
-        for(unsigned int fileID=0;!mStop;fileID++)
+        for(unsigned int fileID=0;!mStopRequested;fileID++)
         {
             filePathName = BlockFile::fileName(fileID);
             if(!NextCash::fileExists(filePathName))

@@ -533,7 +533,10 @@ namespace BitCoin
 
             // Status
             startBlockHeight = pStartBlockHeight;
-            relay = !pSPVNode && pRelay;
+            if(!pSPVNode && pRelay)
+                relay = 0x01; // Relay transactions
+            else
+                relay = 0x00; // Don't relay transactions until a bloom filter is sent
         }
 
         void VersionData::write(NextCash::OutputStream *pStream)
