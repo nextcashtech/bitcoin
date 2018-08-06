@@ -201,12 +201,14 @@ int main(int pArgumentCount, char **pArguments)
 #ifdef PROFILER_ON
     NextCash::Profiler profiler("Main"); // Attempt to trigger destroy of profiler instance after daemon instance
 #endif
-    BitCoin::Daemon daemon;
+    BitCoin::Daemon *daemon = new BitCoin::Daemon();
 
-    daemon.run(!noDaemon);
+    daemon->run(!noDaemon);
 
     if(!noDaemon)
         NextCash::removeFile(pidFilePath.text());
+
+    delete daemon;
 
     return 0;
 }
