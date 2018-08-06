@@ -176,11 +176,11 @@ namespace BitCoin
         }
         else if(std::strcmp(name, "ip") == 0)
         {
-            uint8_t *newIP = NextCash::Network::parseIPv6(value);
+            uint8_t *newIP = NextCash::Network::parseIP(value);
             if(newIP != NULL)
             {
                 std::memcpy(ip, newIP, INET6_ADDRLEN);
-                delete newIP;
+                delete[] newIP;
             }
         }
         else if(std::strcmp(name, "port") == 0)
