@@ -272,13 +272,16 @@ namespace BitCoin
           NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion);
 
         // Check that none of the outpoints are spent and return status
-        uint8_t checkOutpoints(TransactionOutputPool &pOutputs, TransactionList &pMemPoolTransactions);
+        uint8_t checkOutpoints(TransactionOutputPool &pOutputs,
+          TransactionList &pMemPoolTransactions);
 
-        bool updateOutputs(TransactionOutputPool &pOutputs, const std::vector<Transaction *> &pBlockTransactions,
-          uint64_t pBlockHeight, std::vector<unsigned int> &pSpentAges);
+        bool updateOutputs(TransactionOutputPool &pOutputs,
+          const std::vector<Transaction *> &pBlockTransactions, uint64_t pBlockHeight,
+          std::vector<unsigned int> &pSpentAges);
 
-        bool getSignatureHash(NextCash::Hash &pHash, unsigned int pInputOffset, NextCash::Buffer &pOutputScript,
-          int64_t pOutputAmount, Signature::HashType pHashType, uint32_t pForkID);
+        void getSignatureHash(NextCash::Hash &pHash, unsigned int pInputOffset,
+          NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType,
+          uint32_t pForkID);
 
         /***********************************************************************************************
          * Transaction building

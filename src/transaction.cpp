@@ -110,7 +110,7 @@ namespace BitCoin
           hash.hex().text());
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Version   : %d",
           version);
-        if(lockTime > LOCKTIME_THRESHOLD)
+        if(lockTime >= LOCKTIME_THRESHOLD)
         {
             NextCash::String lockTimeText;
             lockTimeText.writeFormattedTime(lockTime);
@@ -225,13 +225,8 @@ namespace BitCoin
         Input &thisInput = inputs[pInputOffset];
         NextCash::Hash signatureHash;
         pOutput.script.setReadOffset(0);
-        if(!getSignatureHash(signatureHash, pInputOffset, pOutput.script, pOutput.amount,
-          pHashType, pForkID))
-        {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
-              "Failed to sign P2PKH Input : Failed to get signature hash");
-            return false;
-        }
+        getSignatureHash(signatureHash, pInputOffset, pOutput.script, pOutput.amount, pHashType,
+          pForkID);
 
         // Sign Hash
         Signature signature;
@@ -358,9 +353,8 @@ namespace BitCoin
         // Get signature hash
         NextCash::Hash signatureHash;
         pOutput.script.setReadOffset(0);
-        if(!getSignatureHash(signatureHash, pInputOffset, pOutput.script, pOutput.amount,
-          pHashType, pForkID))
-            return false;
+        getSignatureHash(signatureHash, pInputOffset, pOutput.script, pOutput.amount, pHashType,
+          pForkID);
 
         // Sign Hash
         Signature signature;
@@ -651,13 +645,8 @@ namespace BitCoin
                         // Create new signature
                         // Get signature hash
                         pOutput.script.setReadOffset(0);
-                        if(!getSignatureHash(signatureHash, pInputOffset, pOutput.script,
-                          pOutput.amount, pHashType, pForks.cashForkID()))
-                        {
-                            success = false;
-                            signatureVerified = true; // To avoid signature verfied message below
-                            break;
-                        }
+                        getSignatureHash(signatureHash, pInputOffset, pOutput.script,
+                          pOutput.amount, pHashType, pForks.cashForkID());
 
                         // Sign Hash
                         if(!pPrivateKey.sign(signatureHash, *signature))
@@ -1430,7 +1419,7 @@ namespace BitCoin
 
         if(!pCoinBase && sequenceFound)
         {
-            if(lockTime > LOCKTIME_THRESHOLD)
+            if(lockTime >= LOCKTIME_THRESHOLD)
             {
                 // Lock time is a timestamp
                 if(pChain->forks().softForkState(SoftFork::BIP0113) == SoftFork::ACTIVE)
@@ -1932,7 +1921,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::getSignatureHash(NextCash::Hash &pHash, unsigned int pInputOffset,
+    void Transaction::getSignatureHash(NextCash::Hash &pHash, unsigned int pInputOffset,
       NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType,
       uint32_t pForkID)
     {
@@ -1945,7 +1934,6 @@ namespace BitCoin
         {
             digest.getResult(&pHash); // Get digest result
             pOutputScript.setReadOffset(previousReadOffset);
-            return true;
         }
         else
         {
@@ -1954,7 +1942,6 @@ namespace BitCoin
             if(!(pHashType & Signature::FORKID))
                 pHash.setByte(0, 1);
             pOutputScript.setReadOffset(previousReadOffset);
-            return false;
         }
     }
 

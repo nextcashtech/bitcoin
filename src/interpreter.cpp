@@ -938,13 +938,8 @@ namespace BitCoin
         NextCash::Hash signatureHash(32);
         NextCash::stream_size previousOffset = pCurrentOutputScript.readOffset();
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
-        if(!pTransaction.getSignatureHash(signatureHash, pInputOffset, pCurrentOutputScript,
-          pOutputAmount, pSignature.hashType(), pForks.cashForkID()))
-        {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Failed to get signature hash : 0x%02x - %s", (int)pSignature.hashType(),
-              pSignature.hex().text());
-        }
+        pTransaction.getSignatureHash(signatureHash, pInputOffset, pCurrentOutputScript,
+          pOutputAmount, pSignature.hashType(), pForks.cashForkID());
 
         pCurrentOutputScript.setReadOffset(previousOffset);
         if(pPublicKey.verify(pSignature, signatureHash))
@@ -952,7 +947,8 @@ namespace BitCoin
         else
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Signature check failed : 0x%02x - %s", (int)pSignature.hashType(), pSignature.hex().text());
+              "Signature check failed : 0x%02x - %s", (int)pSignature.hashType(),
+              pSignature.hex().text());
             return false;
         }
     }
