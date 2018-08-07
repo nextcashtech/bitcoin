@@ -312,8 +312,7 @@ namespace BitCoin
             privateKey.readPrivate(&keyData);
             if(!privateKey.sign(validHash, returnSignature))
             {
-                NextCash::Log::add(NextCash::Log::VERBOSE, mName,
-                  "Failed to sign return value");
+                NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Failed to sign return value");
                 requestStop();
                 return;
             }
