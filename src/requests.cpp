@@ -366,6 +366,10 @@ namespace BitCoin
                 sendData.writeByte(-1);
             else
                 sendData.writeByte(0);
+            if(Info::instance().initialBlockDownloadIsComplete())
+                sendData.writeByte(-1);
+            else
+                sendData.writeByte(0);
             sendData.writeUnsignedInt(mChain->memPool().count());
             sendData.writeUnsignedInt(mChain->memPool().size());
 
