@@ -942,9 +942,8 @@ namespace BitCoin
           pOutputAmount, pSignature.hashType(), pForks.cashForkID()))
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Failed to get signature hash : 0x%02x - %s", (int)pSignature.hashType(), pSignature.hex().text());
-            pCurrentOutputScript.setReadOffset(previousOffset);
-            return false;
+              "Failed to get signature hash : 0x%02x - %s", (int)pSignature.hashType(),
+              pSignature.hex().text());
         }
 
         pCurrentOutputScript.setReadOffset(previousOffset);

@@ -1896,9 +1896,9 @@ namespace BitCoin
                 writeCompactInteger(pStream, pInputOffset + 1);
 
                 // Outputs
-                std::vector<Output>::iterator output=outputs.begin();
-                for(offset=0;offset<pInputOffset+1;offset++)
-                    if(output!=outputs.end())
+                std::vector<Output>::iterator output = outputs.begin();
+                for(offset = 0; offset < pInputOffset + 1; offset++)
+                    if(output != outputs.end())
                     {
                         if(offset == pInputOffset)
                             output->write(pStream);
@@ -1914,7 +1914,7 @@ namespace BitCoin
                     {
                         NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Failed to write transaction signature data. Invalid number of outputs %d/%d",
-                          pInputOffset+1, outputs.size());
+                          pInputOffset + 1, outputs.size());
                         return false;
                     }
 
@@ -1949,10 +1949,10 @@ namespace BitCoin
         }
         else
         {
-            if(pHashType & Signature::FORKID)
-                pHash.zeroize();
-            else
-                pHash.setByte(0, 1); // Use signature hash of 1 (probably sig hash single with not enough outputs)
+            // Use signature hash of 0 or 1 (probably sig hash single with not enough outputs)
+            pHash.zeroize();
+            if(!(pHashType & Signature::FORKID))
+                pHash.setByte(0, 1);
             pOutputScript.setReadOffset(previousReadOffset);
             return false;
         }
