@@ -2191,146 +2191,228 @@ namespace BitCoin
         if(mInfo.spvMode)
             servicesMask |= Message::VersionData::BLOOM_NODE_BIT;
 
-        // Try peers with good ratings first
-        mInfo.getRandomizedPeers(peers, 20, servicesMask);
-        if(peers.size() < 50)
-            mInfo.getRandomizedPeers(peers, 5, servicesMask);
         NextCash::Network::Connection *connection;
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-          "Found %d good peers", peers.size());
-        for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
-          !mStopping && goodCount < mGoodNodeMax; ++peer)
+
+        if(!mStopping && goodCount < mGoodNodeMax)
         {
-            // Skip nodes already connected
-            found = false;
-            mNodeLock.readLock();
-            for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
-              !mStopping; ++node)
-                if((*node)->address() == (*peer)->address)
-                {
-                    found = true;
-                    break;
-                }
-            mNodeLock.readUnlock();
-            if(found)
-                continue;
-
-            for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
-              recent != mRecentIPs.end(); ++recent)
-                if(*recent == (*peer)->address.ip)
-                {
-                    found = true;
-                    break;
-                }
-            if(found)
-                continue;
-
-            mRecentIPs.emplace_back((*peer)->address.ip);
-            while(mRecentIPs.size() > 100)
-                mRecentIPs.erase(mRecentIPs.begin());
-
-            connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
-              (*peer)->address.port, 5);
-            if(!connection->isOpen())
+            // Try peers with good ratings first
+            mInfo.getRandomizedPeers(peers, 20, servicesMask);
+            if(peers.size() < 50)
+                mInfo.getRandomizedPeers(peers, 5, servicesMask);
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Found %d good peers", peers.size());
+            for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
+              !mStopping && goodCount < mGoodNodeMax; ++peer)
             {
-                mInfo.addPeerFail((*peer)->address);
-                delete connection;
-            }
-            else if(addNode(connection, false, false, true, (*peer)->services))
-            {
-                ++goodCount;
-                ++allCount;
-                ++newCount;
-#ifdef SINGLE_THREAD
-                break;
-#endif
-            }
-
-            if(mStopping)
-                break;
-
-#ifdef SINGLE_THREAD
-            if(getTime() - lastNodeProcess > 5)
-            {
-                // Process nodes so they don't wait a long time
+                // Skip nodes already connected
+                found = false;
                 mNodeLock.readLock();
                 for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
-                  !mStopRequested; ++node)
-                    (*node)->process();
+                  !mStopping; ++node)
+                    if((*node)->address() == (*peer)->address)
+                    {
+                        found = true;
+                        break;
+                    }
                 mNodeLock.readUnlock();
-                lastNodeProcess = getTime();
-            }
+                if(found)
+                    continue;
+
+                for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
+                  recent != mRecentIPs.end(); ++recent)
+                    if(*recent == (*peer)->address.ip)
+                    {
+                        found = true;
+                        break;
+                    }
+                if(found)
+                    continue;
+
+                mRecentIPs.emplace_back((*peer)->address.ip);
+                while(mRecentIPs.size() > 100)
+                    mRecentIPs.erase(mRecentIPs.begin());
+
+                connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
+                  (*peer)->address.port, 5);
+                if(!connection->isOpen())
+                {
+                    mInfo.addPeerFail((*peer)->address, 1, 1);
+                    delete connection;
+                }
+                else if(addNode(connection, false, false, true, (*peer)->services))
+                {
+                    ++goodCount;
+                    ++allCount;
+                    ++newCount;
+#ifdef SINGLE_THREAD
+                    break;
 #endif
+                }
+
+                if(mStopping)
+                    break;
+
+#ifdef SINGLE_THREAD
+                if(getTime() - lastNodeProcess > 5)
+                {
+                    // Process nodes so they don't wait a long time
+                    mNodeLock.readLock();
+                    for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+                      !mStopRequested; ++node)
+                        (*node)->process();
+                    mNodeLock.readUnlock();
+                    lastNodeProcess = getTime();
+                }
+#endif
+            }
         }
 
-        peers.clear();
-        mInfo.getRandomizedPeers(peers, -4, servicesMask);
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-          "Found %d usable peers", peers.size());
-        int32_t startTime = getTime();
-        for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
-          !mStopping && allCount < mOutgoingNodeMax; ++peer)
+        if(!mStopping && allCount < mOutgoingNodeMax - 2)
         {
-            // Skip nodes already connected
-            found = false;
-            mNodeLock.readLock();
-            for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
-              !mStopping; ++node)
-                if((*node)->address() == (*peer)->address)
-                {
-                    found = true;
-                    break;
-                }
-            mNodeLock.readUnlock();
-            if(found)
-                continue;
-
-            for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
-              recent != mRecentIPs.end(); ++recent)
-                if(*recent == (*peer)->address.ip)
-                {
-                    found = true;
-                    break;
-                }
-            if(found)
-                continue;
-
-            mRecentIPs.emplace_back((*peer)->address.ip);
-            while(mRecentIPs.size() > 100)
-                mRecentIPs.erase(mRecentIPs.begin());
-
-            connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
-              (*peer)->address.port, 5);
-            if(!connection->isOpen())
+            // Try peers with okay ratings
+            peers.clear();
+            mInfo.getRandomizedPeers(peers, 1, servicesMask);
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Found %d okay peers", peers.size());
+            int32_t startTime = getTime();
+            for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
+              !mStopping && allCount < mOutgoingNodeMax - 3; ++peer)
             {
-                mInfo.addPeerFail((*peer)->address);
-                delete connection;
-            }
-            else if(addNode(connection, false, false, false, 0))
-            {
-                ++allCount;
-                ++newCount;
-#ifdef SINGLE_THREAD
-                break;
-#endif
-            }
-
-            // Max 30 seconds connecting to usable peers
-            if(mStopping || getTime() - startTime > 30)
-                break;
-
-#ifdef SINGLE_THREAD
-            if(getTime() - lastNodeProcess > 5)
-            {
-                // Process nodes so they don't wait a long time
+                // Skip nodes already connected
+                found = false;
                 mNodeLock.readLock();
                 for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
-                  !mStopRequested; ++node)
-                    (*node)->process();
+                  !mStopping; ++node)
+                    if((*node)->address() == (*peer)->address)
+                    {
+                        found = true;
+                        break;
+                    }
                 mNodeLock.readUnlock();
-                lastNodeProcess = getTime();
-            }
+                if(found)
+                    continue;
+
+                for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
+                  recent != mRecentIPs.end(); ++recent)
+                    if(*recent == (*peer)->address.ip)
+                    {
+                        found = true;
+                        break;
+                    }
+                if(found)
+                    continue;
+
+                mRecentIPs.emplace_back((*peer)->address.ip);
+                while(mRecentIPs.size() > 100)
+                    mRecentIPs.erase(mRecentIPs.begin());
+
+                connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
+                  (*peer)->address.port, 5);
+                if(!connection->isOpen())
+                {
+                    mInfo.addPeerFail((*peer)->address, 1, 1);
+                    delete connection;
+                }
+                else if(addNode(connection, false, false, false, 0))
+                {
+                    ++allCount;
+                    ++newCount;
+#ifdef SINGLE_THREAD
+                    break;
 #endif
+                }
+
+                // Max 30 seconds connecting to usable peers
+                if(mStopping || getTime() - startTime > 30)
+                    break;
+
+#ifdef SINGLE_THREAD
+                if(getTime() - lastNodeProcess > 5)
+                {
+                    // Process nodes so they don't wait a long time
+                    mNodeLock.readLock();
+                    for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+                      !mStopRequested; ++node)
+                        (*node)->process();
+                    mNodeLock.readUnlock();
+                    lastNodeProcess = getTime();
+                }
+#endif
+            }
+        }
+
+        if(!mStopping && allCount < mOutgoingNodeMax)
+        {
+            // Try peers with no ratings
+            peers.clear();
+            mInfo.getRandomizedPeers(peers, -4, servicesMask);
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Found %d usable peers", peers.size());
+            int32_t startTime = getTime();
+            for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
+              !mStopping && allCount < mOutgoingNodeMax; ++peer)
+            {
+                // Skip nodes already connected
+                found = false;
+                mNodeLock.readLock();
+                for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+                  !mStopping; ++node)
+                    if((*node)->address() == (*peer)->address)
+                    {
+                        found = true;
+                        break;
+                    }
+                mNodeLock.readUnlock();
+                if(found)
+                    continue;
+
+                for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
+                  recent != mRecentIPs.end(); ++recent)
+                    if(*recent == (*peer)->address.ip)
+                    {
+                        found = true;
+                        break;
+                    }
+                if(found)
+                    continue;
+
+                mRecentIPs.emplace_back((*peer)->address.ip);
+                while(mRecentIPs.size() > 100)
+                    mRecentIPs.erase(mRecentIPs.begin());
+
+                connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
+                  (*peer)->address.port, 5);
+                if(!connection->isOpen())
+                {
+                    mInfo.addPeerFail((*peer)->address, 1, 1);
+                    delete connection;
+                }
+                else if(addNode(connection, false, false, false, 0))
+                {
+                    ++allCount;
+                    ++newCount;
+#ifdef SINGLE_THREAD
+                    break;
+#endif
+                }
+
+                // Max 30 seconds connecting to usable peers
+                if(mStopping || getTime() - startTime > 30)
+                    break;
+
+#ifdef SINGLE_THREAD
+                if(getTime() - lastNodeProcess > 5)
+                {
+                    // Process nodes so they don't wait a long time
+                    mNodeLock.readLock();
+                    for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+                      !mStopRequested; ++node)
+                        (*node)->process();
+                    mNodeLock.readUnlock();
+                    lastNodeProcess = getTime();
+                }
+#endif
+            }
         }
 
         if(!mStopping && newCount == 0 && peers.size() < 10000)

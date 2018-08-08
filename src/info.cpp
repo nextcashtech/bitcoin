@@ -389,7 +389,7 @@ namespace BitCoin
         std::random_shuffle(pPeers.begin(), pPeers.end());
     }
 
-    void Info::addPeerFail(const IPAddress &pAddress, int pCount)
+    void Info::addPeerFail(const IPAddress &pAddress, int pCount, int pMinimum)
     {
         if(!pAddress.isValid())
             return;
@@ -404,7 +404,12 @@ namespace BitCoin
             if((*peer)->address.matches(pAddress))
             {
                 // Update
-                (*peer)->rating -= pCount;
+                if((*peer)->rating > pMinimum)
+                {
+                    (*peer)->rating -= pCount;
+                    if((*peer)->rating < pMinimum)
+                        (*peer)->rating = pMinimum;
+                }
                 (*peer)->updateTime();
                 // if((*peer)->rating < 0)
                     // remove = true;

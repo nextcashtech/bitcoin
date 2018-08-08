@@ -94,7 +94,7 @@ namespace BitCoin
             mConnectionMutex.unlock();
             mStopped = true;
             if(!mIsSeed && !mIsIncoming)
-                Info::instance().addPeerFail(mAddress);
+                Info::instance().addPeerFail(mAddress, 1, 1);
             return;
         }
         mConnected = true;

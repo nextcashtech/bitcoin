@@ -69,7 +69,7 @@ namespace BitCoin
         bool addPeer(const IPAddress &pAddress, uint64_t pServices);
         void updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices);
         void addPeerSuccess(const IPAddress &pAddress, int pCount = 1);
-        void addPeerFail(const IPAddress &pAddress, int pCount = 1);
+        void addPeerFail(const IPAddress &pAddress, int pCount = 1, int pMinimum = -500);
 
         bool initialBlockDownloadIsComplete() { return mInitialBlockDownloadComplete; }
         void setInitialBlockDownloadComplete()
