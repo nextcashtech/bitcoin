@@ -49,8 +49,10 @@ namespace BitCoin
         if(sContext == NULL)
         {
             // Create context
+            NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              "Creating initial context");
             sContext = secp256k1_context_create(pFlags);
-            //sContext = secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
+            // sContext = secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
             sContextFlags = pFlags;
             if(pFlags & SECP256K1_FLAGS_BIT_CONTEXT_SIGN)
                 randomizeContext(sContext);
@@ -59,10 +61,12 @@ namespace BitCoin
         else if((sContextFlags & pFlags) != pFlags)
         {
             // Recreate context with new flags
+            NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              "Recreating context");
             secp256k1_context_destroy(sContext);
-            sContext = secp256k1_context_create(pFlags);
-            sContextFlags = pFlags;
-            if(pFlags & SECP256K1_FLAGS_BIT_CONTEXT_SIGN)
+            sContextFlags |= pFlags;
+            sContext = secp256k1_context_create(sContextFlags);
+            if(sContextFlags & SECP256K1_FLAGS_BIT_CONTEXT_SIGN)
                 randomizeContext(sContext);
         }
         sMutex.unlock();
