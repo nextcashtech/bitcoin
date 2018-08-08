@@ -451,6 +451,7 @@ namespace BitCoin
             int count = mReceiveBuffer.readByte(); // Number of blocks to include
             Block block;
             unsigned int resultCount = 0, inputCount, outputCount;
+            uint64_t amountSent;
 
             if(height < 0)
                 height = mChain->height();
@@ -474,13 +475,19 @@ namespace BitCoin
 
                 inputCount = 0;
                 outputCount = 0;
-                for(std::vector<Transaction *>::iterator trans=block.transactions.begin();trans!=block.transactions.end();++trans)
+                amountSent = 0;
+                for(std::vector<Transaction *>::iterator trans = block.transactions.begin();
+                  trans != block.transactions.end(); ++trans)
                 {
                     inputCount += (*trans)->inputs.size();
                     outputCount += (*trans)->outputs.size();
+                    for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
+                      output != (*trans)->outputs.end(); ++output)
+                        amountSent += output->amount;
                 }
                 sendData.writeUnsignedInt(inputCount); // Input Count
                 sendData.writeUnsignedInt(outputCount); // Output Count
+                sendData.writeUnsignedLong(amountSent); // Amount Sent
 
                 ++resultCount;
             }
@@ -499,11 +506,11 @@ namespace BitCoin
             // Return statistics
             int height = mReceiveBuffer.readInt(); // Start height
             unsigned int hours = mReceiveBuffer.readUnsignedInt(); // Number of hours back in time to include
-            uint32_t stopTime = getTime() - (hours * 3600);
+            uint32_t stopTime = 0;
             unsigned int blockCount = 0, totalTransactionCount = 0, totalInputCount = 0, totalOutputCount = 0;
             unsigned int inputCount, outputCount;
-            uint64_t totalBlockSize = 0, totalFees = 0, fee;
-            std::vector<uint64_t> blockSizes, fees;
+            uint64_t totalBlockSize = 0, totalFees = 0, fee, totalAmountSent = 0, amountSent;
+            std::vector<uint64_t> blockSizes, fees, amountsSent;
             std::vector<unsigned int> transactionCounts, inputCounts, outputCounts;
             Block block;
 
@@ -533,16 +540,22 @@ namespace BitCoin
                         break;
                     }
 
-                    if(block.time < stopTime)
+                    if(stopTime == 0)
+                        stopTime = block.time - (hours * 3600);
+                    else if(block.time < stopTime)
                         break;
 
                     // Count inputs and outputs
                     inputCount = 0;
                     outputCount = 0;
+                    amountSent = 0;
                     for(std::vector<Transaction *>::iterator trans=block.transactions.begin();trans!=block.transactions.end();++trans)
                     {
                         inputCount += (*trans)->inputs.size();
                         outputCount += (*trans)->outputs.size();
+                        for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
+                          output != (*trans)->outputs.end(); ++output)
+                            amountSent += output->amount;
                     }
 
                     totalBlockSize += block.size();
@@ -557,6 +570,9 @@ namespace BitCoin
                     totalOutputCount += outputCount;
                     outputCounts.push_back(outputCount);
 
+                    totalAmountSent += amountSent;
+                    amountsSent.push_back(amountSent);
+
                     fee = block.actualCoinbaseAmount() - coinBaseAmount(currentHeight + 1);
                     totalFees += fee;
                     fees.push_back(fee);
@@ -570,6 +586,7 @@ namespace BitCoin
             unsigned int medianInputCount = 0;
             unsigned int medianOutputCount = 0;
             uint64_t medianFees = 0;
+            uint64_t medianAmountSent = 0;
 
             if(blockCount > 1)
             {
@@ -585,6 +602,9 @@ namespace BitCoin
                 std::sort(outputCounts.begin(), outputCounts.end());
                 medianOutputCount = outputCounts[outputCounts.size()/2];
 
+                std::sort(amountsSent.begin(), amountsSent.end());
+                medianAmountSent = amountsSent[amountsSent.size()/2];
+
                 std::sort(fees.begin(), fees.end());
                 medianFees = fees[fees.size()/2];
             }
@@ -594,6 +614,7 @@ namespace BitCoin
                 medianTransactionCount = totalTransactionCount;
                 medianInputCount = totalInputCount;
                 medianOutputCount = totalOutputCount;
+                medianAmountSent = totalAmountSent;
                 medianFees = totalFees;
             }
 
@@ -611,6 +632,9 @@ namespace BitCoin
 
             sendData.writeUnsignedInt(totalOutputCount); // Total Output Count
             sendData.writeUnsignedInt(medianOutputCount); // Median Output Count
+
+            sendData.writeUnsignedLong(totalAmountSent); // Total Amount Sent
+            sendData.writeUnsignedLong(medianAmountSent); // Median Amount Sent
 
             sendData.writeUnsignedLong(totalFees); // Total Fees
             sendData.writeUnsignedLong(medianFees); // Median Fees
