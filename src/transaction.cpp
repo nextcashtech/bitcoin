@@ -104,7 +104,7 @@ namespace BitCoin
         mOutputHash.clear();
     }
 
-    void Transaction::print(Forks &pForks, NextCash::Log::Level pLevel)
+    void Transaction::print(const Forks &pForks, NextCash::Log::Level pLevel)
     {
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "Hash      : %s",
           hash.hex().text());
@@ -142,7 +142,7 @@ namespace BitCoin
         }
     }
 
-    void Input::print(Forks &pForks, NextCash::Log::Level pLevel)
+    void Input::print(const Forks &pForks, NextCash::Log::Level pLevel)
     {
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME, "  Outpoint Trans : %s",
           outpoint.transactionID.hex().text());
@@ -187,8 +187,8 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::signP2PKHInput(Output &pOutput, unsigned int pInputOffset,
-      const Key &pPrivateKey, Signature::HashType pHashType, uint32_t pForkID)
+    bool Transaction::signP2PKHInput(const Forks &pForks, Output &pOutput,
+      unsigned int pInputOffset, const Key &pPrivateKey, Signature::HashType pHashType)
     {
         if(pPrivateKey.publicKey() == NULL)
         {
@@ -225,8 +225,8 @@ namespace BitCoin
         Input &thisInput = inputs[pInputOffset];
         NextCash::Hash signatureHash;
         pOutput.script.setReadOffset(0);
-        getSignatureHash(signatureHash, pInputOffset, pOutput.script, pOutput.amount, pHashType,
-          pForkID);
+        getSignatureHash(pForks, signatureHash, pInputOffset, pOutput.script, pOutput.amount,
+          pHashType);
 
         // Sign Hash
         Signature signature;
@@ -288,9 +288,9 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::signP2PKInput(Output &pOutput, unsigned int pInputOffset,
-      const Key &pPrivateKey, const Key &pPublicKey, Signature::HashType pHashType,
-      uint32_t pForkID)
+    bool Transaction::signP2PKInput(const Forks &pForks, Output &pOutput,
+      unsigned int pInputOffset, const Key &pPrivateKey, const Key &pPublicKey,
+      Signature::HashType pHashType)
     {
         NextCash::HashList outputHashes;
         pOutput.script.setReadOffset(0);
@@ -353,8 +353,8 @@ namespace BitCoin
         // Get signature hash
         NextCash::Hash signatureHash;
         pOutput.script.setReadOffset(0);
-        getSignatureHash(signatureHash, pInputOffset, pOutput.script, pOutput.amount, pHashType,
-          pForkID);
+        getSignatureHash(pForks, signatureHash, pInputOffset, pOutput.script, pOutput.amount,
+          pHashType);
 
         // Sign Hash
         Signature signature;
@@ -645,8 +645,8 @@ namespace BitCoin
                         // Create new signature
                         // Get signature hash
                         pOutput.script.setReadOffset(0);
-                        getSignatureHash(signatureHash, pInputOffset, pOutput.script,
-                          pOutput.amount, pHashType, pForks.cashForkID());
+                        getSignatureHash(pForks, signatureHash, pInputOffset, pOutput.script,
+                          pOutput.amount, pHashType);
 
                         // Sign Hash
                         if(!pPrivateKey.sign(signatureHash, *signature))
@@ -1673,15 +1673,16 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::writeSignatureData(NextCash::OutputStream *pStream, unsigned int pInputOffset,
-      NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType, uint32_t pForkID)
+    bool Transaction::writeSignatureData(const Forks &pForks, NextCash::OutputStream *pStream,
+      unsigned int pInputOffset, NextCash::Buffer &pOutputScript, int64_t pOutputAmount,
+      Signature::HashType pHashType)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Transaction Sign Data");
 #endif
         Signature::HashType hashType = pHashType;
         // Extract FORKID (0x40) flag from hash type
-        bool containsForkID = hashType & Signature::FORKID;
+        bool containsForkID = pForks.cashActive() && hashType & Signature::FORKID;
         if(containsForkID)
             hashType = static_cast<Signature::HashType >(hashType ^ Signature::FORKID);
         // Extract ANYONECANPAY (0x80) flag from hash type
@@ -1796,7 +1797,7 @@ namespace BitCoin
             pStream->writeUnsignedInt(lockTime);
 
             // Sig Hash Type
-            pStream->writeUnsignedInt((pForkID << 8) | pHashType);
+            pStream->writeUnsignedInt((pForks.cashForkID() << 8) | pHashType);
         }
         else
         {
@@ -1921,16 +1922,16 @@ namespace BitCoin
         return true;
     }
 
-    void Transaction::getSignatureHash(NextCash::Hash &pHash, unsigned int pInputOffset,
-      NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType,
-      uint32_t pForkID)
+    void Transaction::getSignatureHash(const Forks &pForks, NextCash::Hash &pHash,
+      unsigned int pInputOffset, NextCash::Buffer &pOutputScript, int64_t pOutputAmount,
+      Signature::HashType pHashType)
     {
         // Write appropriate data to a digest
         NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
         NextCash::stream_size previousReadOffset = pOutputScript.readOffset();
         digest.setOutputEndian(NextCash::Endian::LITTLE);
-        if(writeSignatureData(&digest, pInputOffset, pOutputScript, pOutputAmount, pHashType,
-          pForkID))
+        if(writeSignatureData(pForks, &digest, pInputOffset, pOutputScript, pOutputAmount,
+          pHashType))
         {
             digest.getResult(&pHash); // Get digest result
             pOutputScript.setReadOffset(previousReadOffset);
@@ -2150,7 +2151,7 @@ namespace BitCoin
     }
 
     int signTransaction(Transaction &pTransaction, Key *pKey, Signature::HashType pHashType,
-                        uint32_t pForkID)
+      const Forks &pForks)
     {
         Key *key;
         ScriptInterpreter::ScriptType scriptType;
@@ -2177,8 +2178,8 @@ namespace BitCoin
                 return 1;
 
             // Sign input with private key
-            if(!pTransaction.signP2PKHInput(*input->outpoint.output, inputOffset, *key,
-              pHashType, pForkID))
+            if(!pTransaction.signP2PKHInput(pForks, *input->outpoint.output, inputOffset, *key,
+              pHashType))
                 return 5; // Issue with signing
         }
 
@@ -2186,7 +2187,7 @@ namespace BitCoin
     }
 
     int Transaction::sign(uint64_t pInputAmount, double pFeeRate, uint64_t pSendAmount,
-      int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, uint32_t pForkID)
+      int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, const Forks &pForks)
     {
         uint64_t actualFee = 0, fee = 0;
         int result = 0;
@@ -2207,7 +2208,7 @@ namespace BitCoin
 
             // Sign transaction
             mOutputHash.clear(); // Clear output sig hash because an output has been modified
-            result = signTransaction(*this, pKey, pHashType, pForkID);
+            result = signTransaction(*this, pKey, pHashType, pForks);
             if(result != 0)
                 return result;
 
@@ -2455,8 +2456,7 @@ namespace BitCoin
         transaction.addP2PKHOutput(privateKey2.hash(), 50000);
 
         // Sign the input
-        transaction.signP2PKHInput(spendable.outputs[0], 0, privateKey1, Signature::ALL,
-          forks.cashForkID());
+        transaction.signP2PKHInput(forks, spendable.outputs[0], 0, privateKey1, Signature::ALL);
 
         NextCash::Buffer inputScript;
         transaction.inputs[0].script.setReadOffset(0);
@@ -2536,8 +2536,8 @@ namespace BitCoin
         transaction.addP2PKHOutput(privateKey2.hash(), 50000);
 
         // Sign the input
-        if(!transaction.signP2PKHInput(spendable.outputs[0], 0, privateKey2, Signature::ALL,
-          forks.cashForkID()))
+        if(!transaction.signP2PKHInput(forks, spendable.outputs[0], 0, privateKey2,
+          Signature::ALL))
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME, "Passed P2PKH sign with wrong public key");
         else
         {
@@ -2607,8 +2607,8 @@ namespace BitCoin
         transaction.addP2PKHOutput(privateKey2.hash(), 50000);
 
         // Sign the input with the wrong output
-        if(transaction.signP2PKHInput(spendable3.outputs[0], 0, privateKey3, Signature::ALL,
-          forks.cashForkID()))
+        if(transaction.signP2PKHInput(forks, spendable3.outputs[0], 0, privateKey3,
+          Signature::ALL))
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_TRANSACTION_LOG_NAME,
               "Passed P2PKH sign with wrong private key");
         else

@@ -127,9 +127,10 @@ namespace BitCoin
         bool sequenceDisabled() const { return SEQUENCE_DISABLE & sequence; }
 
         // Print human readable version to log
-        void print(Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
+        void print(const Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
 
-        bool writeSignatureData(NextCash::OutputStream *pStream, NextCash::Buffer *pSubScript, bool pZeroSequence);
+        bool writeSignatureData(NextCash::OutputStream *pStream, NextCash::Buffer *pSubScript,
+          bool pZeroSequence);
 
         Outpoint outpoint;
         NextCash::Buffer script;
@@ -198,7 +199,7 @@ namespace BitCoin
         void clearCache();
 
         // Print human readable version to log
-        void print(Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
+        void print(const Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
 
         // Hash
         NextCash::Hash hash;
@@ -261,7 +262,7 @@ namespace BitCoin
         //   1 if general failure
         //   5 if signature failure
         int sign(uint64_t pInputAmount, double pFeeRate, uint64_t pSendAmount,
-          int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, uint32_t pForkID);
+          int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, const Forks &pForks);
 
         bool process(Chain *pChain, const std::vector<Transaction *> &pBlockTransactions,
           unsigned int pBlockHeight, bool pCoinBase, int32_t pBlockVersion,
@@ -279,9 +280,9 @@ namespace BitCoin
           const std::vector<Transaction *> &pBlockTransactions, uint64_t pBlockHeight,
           std::vector<unsigned int> &pSpentAges);
 
-        void getSignatureHash(NextCash::Hash &pHash, unsigned int pInputOffset,
-          NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType,
-          uint32_t pForkID);
+        void getSignatureHash(const Forks &pForks, NextCash::Hash &pHash,
+          unsigned int pInputOffset, NextCash::Buffer &pOutputScript, int64_t pOutputAmount,
+          Signature::HashType pHashType);
 
         /***********************************************************************************************
          * Transaction building
@@ -298,13 +299,13 @@ namespace BitCoin
         bool addOutput(NextCash::Buffer pOutputScript, uint64_t pAmount);
 
         // P2PKH Pay to Public Key Hash
-        bool signP2PKHInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
-          Signature::HashType pType, uint32_t pForkID);
+        bool signP2PKHInput(const Forks &pForks, Output &pOutput, unsigned int pInputOffset,
+          const Key &pPrivateKey, Signature::HashType pType);
         bool addP2PKHOutput(const NextCash::Hash &pPublicKeyHash, uint64_t pAmount);
 
         // P2PK Pay to Public Key (not as secure as P2PKH)
-        bool signP2PKInput(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
-          const Key &pPublicKey, Signature::HashType pType, uint32_t pForkID);
+        bool signP2PKInput(const Forks &pForks, Output &pOutput, unsigned int pInputOffset,
+          const Key &pPrivateKey, const Key &pPublicKey, Signature::HashType pType);
         bool addP2PKOutput(const Key &pPublicKey, uint64_t pAmount);
 
         // P2SH Pay to Script Hash
@@ -312,9 +313,9 @@ namespace BitCoin
         bool addP2SHOutput(const NextCash::Hash &pScriptHash, uint64_t pAmount);
 
         // MultiSig
-        bool addMultiSigInputSignature(Output &pOutput, unsigned int pInputOffset, const Key &pPrivateKey,
-          const Key &pPublicKey, Signature::HashType pHashType, const Forks &pForks, bool &pSignatureAdded,
-          bool &pTransactionComplete);
+        bool addMultiSigInputSignature(Output &pOutput, unsigned int pInputOffset,
+          const Key &pPrivateKey, const Key &pPublicKey, Signature::HashType pHashType,
+          const Forks &pForks, bool &pSignatureAdded, bool &pTransactionComplete);
         bool addMultiSigOutput(unsigned int pRequiredSignatureCount, std::vector<Key *> pPublicKeys,
           uint64_t pAmount);
 
@@ -333,9 +334,9 @@ namespace BitCoin
 
         NextCash::Hash mOutpointHash, mSequenceHash, mOutputHash;
 
-        bool writeSignatureData(NextCash::OutputStream *pStream, unsigned int pInputOffset,
-          NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType,
-          uint32_t pForkID);
+        bool writeSignatureData(const Forks &pForks, NextCash::OutputStream *pStream,
+          unsigned int pInputOffset, NextCash::Buffer &pOutputScript, int64_t pOutputAmount,
+          Signature::HashType pHashType);
 
     };
 }

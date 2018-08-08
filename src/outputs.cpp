@@ -73,7 +73,7 @@ namespace BitCoin
         return true;
     }
 
-    void Output::print(Forks &pForks, NextCash::Log::Level pLevel)
+    void Output::print(const Forks &pForks, NextCash::Log::Level pLevel)
     {
         NextCash::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "Output");
         NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Amount : %.08f", bitcoins(amount));

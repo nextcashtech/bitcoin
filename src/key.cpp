@@ -695,6 +695,12 @@ namespace BitCoin
     bool Signature::read(NextCash::InputStream *pStream, unsigned int pLength,
       bool pStrictECDSA_DER_Sigs)
     {
+        if(pLength < 2)
+        {
+            clear();
+            return false;
+        }
+
         uint8_t input[pLength + 2];
         unsigned int totalLength = pLength - 1;
 
@@ -719,6 +725,7 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                   "Invalid compound header byte in signature (%d bytes) : %s", totalLength,
                   hex.text());
+                clear();
                 return false;
             }
 
@@ -741,6 +748,7 @@ namespace BitCoin
                     hex.writeHex(input, totalLength);
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                       "Invalid total length byte in signature (%d bytes) : %s", totalLength, hex.text());
+                    clear();
                     return false;
                 }
             }
@@ -754,6 +762,7 @@ namespace BitCoin
                 hex.writeHex(input, totalLength);
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                   "Invalid R integer header byte in signature (%d bytes) : %s", totalLength, hex.text());
+                clear();
                 return false;
             }
 
@@ -765,6 +774,7 @@ namespace BitCoin
                 hex.writeHex(input, totalLength);
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                   "R integer length byte too high in signature (%d bytes) : %s", totalLength, hex.text());
+                clear();
                 return false;
             }
 
@@ -814,6 +824,7 @@ namespace BitCoin
                 hex.writeHex(input, totalLength);
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                   "Invalid S integer header byte in signature (%d bytes) : %s", totalLength, hex.text());
+                clear();
                 return false;
             }
 
@@ -825,6 +836,7 @@ namespace BitCoin
                 hex.writeHex(input, totalLength);
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
                   "S integer length byte too high in signature (%d bytes) : %s", totalLength, hex.text());
+                clear();
                 return false;
             }
 
@@ -879,6 +891,7 @@ namespace BitCoin
             else
             {
                 NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to parse compact signature (64 bytes)");
+                clear();
                 return false;
             }
         }
@@ -887,6 +900,7 @@ namespace BitCoin
         hex.writeHex(input, totalLength);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
           "Failed to parse signature (%d bytes) : %s", totalLength, hex.text());
+        clear();
         return false;
     }
 

@@ -139,6 +139,12 @@ namespace BitCoin
         void set(void *pData) { std::memcpy(mData, pData, 64); }
         NextCash::String hex() const;
 
+        void clear()
+        {
+            std::memset(mData, 0, 64);
+            mHashType = INVALID;
+        }
+
         void write(NextCash::OutputStream *pStream, bool pScriptFormat) const;
         bool read(NextCash::InputStream *pStream, unsigned int pLength, bool pECDSA_DER_SigsOnly = false);
 

@@ -372,7 +372,7 @@ namespace BitCoin
         return true;
     }
 
-    NextCash::String ScriptInterpreter::scriptText(NextCash::Buffer &pScript, Forks &pForks)
+    NextCash::String ScriptInterpreter::scriptText(NextCash::Buffer &pScript, const Forks &pForks)
     {
         NextCash::String result;
 
@@ -821,7 +821,7 @@ namespace BitCoin
         return result;
     }
 
-    void ScriptInterpreter::printScript(NextCash::Buffer &pScript, Forks &pForks, NextCash::Log::Level pLevel)
+    void ScriptInterpreter::printScript(NextCash::Buffer &pScript, const Forks &pForks, NextCash::Log::Level pLevel)
     {
         NextCash::String text = scriptText(pScript, pForks);
         NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, text);
@@ -927,19 +927,19 @@ namespace BitCoin
               "Signature hash type missing required fork ID flag : %02x", pSignature.hashType());
             return false;
         }
-        else if(!pForks.cashActive() && pSignature.hashType() & Signature::FORKID)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Signature hash type has disabled fork ID flag : %02x", pSignature.hashType());
-            return false;
-        }
+        // else if(!pForks.cashActive() && pSignature.hashType() & Signature::FORKID)
+        // {
+            // NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              // "Signature hash type has disabled fork ID flag : %02x", pSignature.hashType());
+            // return false;
+        // }
 
         // Get signature hash
         NextCash::Hash signatureHash(32);
         NextCash::stream_size previousOffset = pCurrentOutputScript.readOffset();
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
-        pTransaction.getSignatureHash(signatureHash, pInputOffset, pCurrentOutputScript,
-          pOutputAmount, pSignature.hashType(), pForks.cashForkID());
+        pTransaction.getSignatureHash(pForks, signatureHash, pInputOffset, pCurrentOutputScript,
+          pOutputAmount, pSignature.hashType());
 
         pCurrentOutputScript.setReadOffset(previousOffset);
         if(pPublicKey.verify(pSignature, signatureHash))
@@ -1509,6 +1509,8 @@ namespace BitCoin
                         return false;
                     }
 
+                    bool failed = false;
+
                     // Pop the public key
                     Key publicKey;
                     top()->setReadOffset(0);
@@ -1516,8 +1518,7 @@ namespace BitCoin
                     {
                         NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Invalid public key for OP_CHECKSIG");
-                        mValid = false;
-                        return false;
+                        failed = true;
                     }
                     pop();
 
@@ -1528,14 +1529,13 @@ namespace BitCoin
                     {
                         NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Invalid signature for OP_CHECKSIG");
-                        mValid = false;
-                        return false;
+                        failed = true;
                     }
                     pop();
 
                     // Check the signature with the public key
-                    if(checkSignature(*mTransaction, mInputOffset, mOutputAmount, publicKey,
-                      signature, pScript, sigStartOffset, pForks))
+                    if(!failed && checkSignature(*mTransaction, mInputOffset, mOutputAmount,
+                      publicKey, signature, pScript, sigStartOffset, pForks))
                     {
                         if(opCode == OP_CHECKSIG)
                             push()->writeByte(1); // Push true onto the stack

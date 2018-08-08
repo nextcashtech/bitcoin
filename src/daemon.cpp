@@ -880,7 +880,7 @@ namespace BitCoin
         Signature::HashType hashType =
           static_cast<Signature::HashType>(Signature::ALL | Signature::FORKID);
         int result = transaction->sign(inputAmount, pFeeRate, sendAmount,
-          changeOutputOffset, fullKey, hashType, mChain.forks().cashForkID());
+          changeOutputOffset, fullKey, hashType, mChain.forks());
         if(result != 0)
         {
             delete transaction;
@@ -1005,7 +1005,7 @@ namespace BitCoin
         Signature::HashType hashType =
           static_cast<Signature::HashType>(Signature::ALL | Signature::FORKID);
         int result = transaction->sign(inputAmount, pFeeRate, sendAmount,
-          changeOutputOffset, fullKey, hashType, mChain.forks().cashForkID());
+          changeOutputOffset, fullKey, hashType, mChain.forks());
         if(result != 0)
         {
             delete transaction;
