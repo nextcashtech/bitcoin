@@ -43,6 +43,7 @@ namespace BitCoin
         mLastFullPendingOffset = 0;
         mStopRequested = false;
         mIsInSync = false;
+        mWasInSync = false;
         mAnnouncedAdded = false;
         mAnnounceBlock = NULL;
         mMonitor = NULL;
@@ -874,8 +875,7 @@ namespace BitCoin
                         {
                             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                               "Chain is in sync");
-                            mIsInSync = true;
-                            mInfo.setInitialBlockDownloadComplete();
+                            setInSync();
                         }
                     }
 
@@ -1607,8 +1607,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   "Chain is in sync");
-                mIsInSync = true;
-                mInfo.setInitialBlockDownloadComplete();
+                setInSync();
             }
 
             mPendingSize -= nextPending->block->size();

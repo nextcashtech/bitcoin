@@ -268,12 +268,15 @@ namespace BitCoin
 
         // Chain is up to date with most chains
         bool isInSync() { return mIsInSync; }
-        void setInSync() { mIsInSync = true; mInfo.setInitialBlockDownloadComplete(); }
+        void setInSync()
+          { mIsInSync = true; mWasInSync = true; mInfo.setInitialBlockDownloadComplete(); }
         void clearInSync() { mIsInSync = false; }
+        bool wasInSync() { return mWasInSync; }
         Block *blockToAnnounce();
 
         // Check if a block is already in the chain
-        bool blockInChain(const NextCash::Hash &pHash) const { return mBlockLookup[pHash.lookup16()].contains(pHash); }
+        bool blockInChain(const NextCash::Hash &pHash) const
+          { return mBlockLookup[pHash.lookup16()].contains(pHash); }
         // Check if a header has been downloaded
         bool headerAvailable(const NextCash::Hash &pHash);
 
@@ -410,7 +413,7 @@ namespace BitCoin
         // Verify and process block then add it to the chain
         NextCash::Mutex mProcessMutex;
         bool mStopRequested;
-        bool mIsInSync;
+        bool mIsInSync, mWasInSync;
         bool mAnnouncedAdded;
 
         bool processBlock(Block *pBlock);
