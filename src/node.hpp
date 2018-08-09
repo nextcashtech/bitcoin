@@ -113,8 +113,6 @@ namespace BitCoin
 
     private:
 
-        int mSocketID;
-
         Message::Interpreter mMessageInterpreter;
 
         // Check if node should be closed

@@ -66,7 +66,6 @@ namespace BitCoin
 #ifndef SINGLE_THREAD
         mThread = NULL;
 #endif
-        mSocketID = -1;
         mServices = pServices;
         if(!pIncoming && !pIsSeed)
             mMonitor = &pMonitor;
@@ -86,12 +85,12 @@ namespace BitCoin
         // Verify connection
         mConnectionMutex.lock();
         mConnection = pConnection;
-        mSocketID = pConnection->socket();
         if(!mIsIncoming)
             mAddress = *mConnection;
         if(!mConnection->isOpen())
         {
             mConnectionMutex.unlock();
+            mStopRequested = true;
             mStopped = true;
             if(!mIsSeed && !mIsIncoming)
                 Info::instance().addPeerFail(mAddress, 1, 1);
@@ -101,12 +100,12 @@ namespace BitCoin
         mConnectionMutex.unlock();
         if(mIsIncoming)
             NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-              "Incoming Connection %s : %d (socket %d)", mConnection->ipv6Address(),
-              mConnection->port(), mSocketID);
+              "Incoming Connection %s : %d", mConnection->ipv6Address(),
+              mConnection->port());
         else
             NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-              "Outgoing Connection %s : %d (socket %d)", mConnection->ipv6Address(),
-              mConnection->port(), mSocketID);
+              "Outgoing Connection %s : %d", mConnection->ipv6Address(),
+              mConnection->port());
 
 #ifndef SINGLE_THREAD
         // Start thread
@@ -117,24 +116,27 @@ namespace BitCoin
 
     Node::~Node()
     {
+        // Wait for thread initialize
         int timeout = 25;
         while(!mStarted && --timeout)
-            NextCash::Thread::sleep(200); // Wait for thread initialize before destroying
+            NextCash::Thread::sleep(200);
 
         if(mConnected)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName, "Disconnecting (socket %d)", mSocketID);
+            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Disconnecting");
+
+        requestStop();
+#ifndef SINGLE_THREAD
+        if(mThread != NULL)
+            delete mThread;
+#endif
+
         if(!mMessageInterpreter.pendingBlockHash.isEmpty())
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
               "Dropped block in progress %d KiB (%d secs) : %s", mReceiveBuffer.length() / 1024,
               mMessageInterpreter.pendingBlockUpdateTime - mMessageInterpreter.pendingBlockStartTime,
               mMessageInterpreter.pendingBlockHash.hex().text());
 
-        requestStop();
         release();
-#ifndef SINGLE_THREAD
-        if(mThread != NULL)
-            delete mThread;
-#endif
         mConnectionMutex.lock();
         if(mConnection != NULL)
             delete mConnection;
@@ -378,10 +380,10 @@ namespace BitCoin
 
         if(hashes.size() == 0)
             NextCash::Log::add(NextCash::Log::VERBOSE, mName,
-              "Sending request for block headers from genesis");
+              "Sending request for headers from genesis");
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-              "Sending request for block headers after %d : %s", mChain->height(),
+              "Sending request for headers after %d : %s", mChain->height(),
               hashes.front().hex().text());
         bool success = sendMessage(&getHeadersData);
         if(success)
@@ -829,7 +831,7 @@ namespace BitCoin
 
     void Node::process()
     {
-        if(!isOpen() || mStopRequested || mStopped)
+        if(!isOpen() || mStopRequested)
             return;
 
         if(!mVersionSent)
