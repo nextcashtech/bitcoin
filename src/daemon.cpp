@@ -1533,8 +1533,8 @@ namespace BitCoin
         {
             if((*node)->blockDownloadBytesPerSecond() != 0.0 && speedStandardDeviation > 0.01)
                 score = ((*node)->blockDownloadBytesPerSecond() - averageSpeed) / speedStandardDeviation;
-            else
-                score = 0.0;
+            else // If no speed available, assume slightly below average.
+                score = (averageSpeed * -0.1) / speedStandardDeviation;
             if(pingStandardDeviation > 0.01)
                 score += ((averagePing - (*node)->pingTime()) / pingStandardDeviation) / 2.0;
             scores.push_back(score);
