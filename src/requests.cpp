@@ -21,7 +21,8 @@ namespace BitCoin
 {
     unsigned int RequestChannel::mNextID = 256;
 
-    RequestChannel::RequestChannel(NextCash::Network::Connection *pConnection, Chain *pChain) : mID(mNextID++), mConnectionMutex("Request Connection")
+    RequestChannel::RequestChannel(NextCash::Network::Connection *pConnection, Chain *pChain) :
+      mID(mNextID++), mConnectionMutex("Request Connection")
     {
         mThread = NULL;
         mConnection = NULL;

@@ -36,7 +36,7 @@ namespace BitCoin
     }
 
     Info *Info::sInstance = NULL;
-    NextCash::Mutex Info::sMutex("Info");
+    NextCash::MutexWithConstantName Info::sMutex("Info");
     NextCash::String Info::sPath;
 
     void Info::setPath(const char *pPath)

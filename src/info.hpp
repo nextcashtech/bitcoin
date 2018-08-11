@@ -107,7 +107,7 @@ namespace BitCoin
 
         static NextCash::String sPath;
         static Info *sInstance;
-        static NextCash::Mutex sMutex;
+        static NextCash::MutexWithConstantName sMutex;
 
     private:
         Info(const Info &pCopy);

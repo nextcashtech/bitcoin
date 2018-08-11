@@ -742,9 +742,9 @@ namespace BitCoin
         }
     }
 
-    NextCash::Mutex BlockFile::mBlockFileMutex("Block File");
-    std::vector<unsigned int> BlockFile::mLockedBlockFileIDs;
-    NextCash::String BlockFile::mBlockFilePath;
+    NextCash::MutexWithConstantName BlockFile::sBlockFileMutex("Block File");
+    std::vector<unsigned int> BlockFile::sLockedBlockFileIDs;
+    NextCash::String BlockFile::sBlockFilePath;
 
     BlockFile::BlockFile(unsigned int pID, bool pValidate)
     {
@@ -1574,8 +1574,8 @@ namespace BitCoin
         while(true)
         {
             found = false;
-            mBlockFileMutex.lock();
-            for(std::vector<unsigned int>::iterator i=mLockedBlockFileIDs.begin();i!=mLockedBlockFileIDs.end();++i)
+            sBlockFileMutex.lock();
+            for(std::vector<unsigned int>::iterator i=sLockedBlockFileIDs.begin();i!=sLockedBlockFileIDs.end();++i)
                 if(*i == pFileID)
                 {
                     found = true;
@@ -1583,40 +1583,40 @@ namespace BitCoin
                 }
             if(!found)
             {
-                mLockedBlockFileIDs.push_back(pFileID);
-                mBlockFileMutex.unlock();
+                sLockedBlockFileIDs.push_back(pFileID);
+                sBlockFileMutex.unlock();
                 return;
             }
-            mBlockFileMutex.unlock();
+            sBlockFileMutex.unlock();
             NextCash::Thread::sleep(100);
         }
     }
 
     void BlockFile::unlock(unsigned int pFileID)
     {
-        mBlockFileMutex.lock();
-        for(std::vector<unsigned int>::iterator i=mLockedBlockFileIDs.begin();i!=mLockedBlockFileIDs.end();++i)
+        sBlockFileMutex.lock();
+        for(std::vector<unsigned int>::iterator i=sLockedBlockFileIDs.begin();i!=sLockedBlockFileIDs.end();++i)
             if(*i == pFileID)
             {
-                mLockedBlockFileIDs.erase(i);
+                sLockedBlockFileIDs.erase(i);
                 break;
             }
-        mBlockFileMutex.unlock();
+        sBlockFileMutex.unlock();
     }
 
     const NextCash::String &BlockFile::path()
     {
-        if(!mBlockFilePath)
+        if(!sBlockFilePath)
         {
             // Build path
             Info &info = Info::instance();
-            mBlockFilePath = info.path();
+            sBlockFilePath = info.path();
             if(info.spvMode)
-                mBlockFilePath.pathAppend("headers");
+                sBlockFilePath.pathAppend("headers");
             else
-                mBlockFilePath.pathAppend("blocks");
+                sBlockFilePath.pathAppend("blocks");
         }
-        return mBlockFilePath;
+        return sBlockFilePath;
     }
 
     NextCash::String BlockFile::fileName(unsigned int pID)

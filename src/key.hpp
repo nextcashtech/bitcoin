@@ -369,7 +369,7 @@ namespace BitCoin
         static void destroyContext();
         static secp256k1_context *sContext;
         static unsigned int sContextFlags;
-        static NextCash::Mutex sMutex;
+        static NextCash::MutexWithConstantName sMutex;
         static const uint32_t sVersionValues[4];
 
         static bool test();
@@ -388,7 +388,7 @@ namespace BitCoin
         uint8_t mFingerPrint[4];
 
         Key *mPublicKey;
-        NextCash::Mutex mChildLock;
+        NextCash::MutexWithConstantName mChildLock;
         std::vector<Key *> mChildren;
 
         NextCash::Hash mHash;

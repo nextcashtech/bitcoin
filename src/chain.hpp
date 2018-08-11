@@ -411,7 +411,7 @@ namespace BitCoin
         Monitor *mMonitor;
 
         // Verify and process block then add it to the chain
-        NextCash::Mutex mProcessMutex;
+        NextCash::MutexWithConstantName mProcessMutex;
         bool mStopRequested;
         bool mIsInSync, mWasInSync;
         bool mAnnouncedAdded;

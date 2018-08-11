@@ -279,7 +279,7 @@ namespace BitCoin
         void restartBloomFilter();
         void clearMerkleRequest(MerkleRequestData *pData);
 
-        NextCash::Mutex mMutex;
+        NextCash::MutexWithConstantName mMutex;
         KeyStore *mKeyStore;
         NextCash::HashList mAddressHashes;
         unsigned int mFilterID;

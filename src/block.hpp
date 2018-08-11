@@ -286,9 +286,9 @@ namespace BitCoin
         unsigned int mCount;
         NextCash::Hash mLastHash;
 
-        static NextCash::Mutex mBlockFileMutex;
-        static std::vector<unsigned int> mLockedBlockFileIDs;
-        static NextCash::String mBlockFilePath;
+        static NextCash::MutexWithConstantName sBlockFileMutex;
+        static std::vector<unsigned int> sLockedBlockFileIDs;
+        static NextCash::String sBlockFilePath;
 
         BlockFile(BlockFile &pCopy);
         BlockFile &operator = (BlockFile &pRight);

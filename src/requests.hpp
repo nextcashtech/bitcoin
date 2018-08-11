@@ -38,7 +38,7 @@ namespace BitCoin
         unsigned int mID;
         NextCash::String mName;
         NextCash::Thread *mThread;
-        NextCash::Mutex mConnectionMutex;
+        NextCash::MutexWithConstantName mConnectionMutex;
         NextCash::Network::Connection *mConnection;
         NextCash::Buffer mReceiveBuffer;
         bool mStop, mStopped, mAuthenticated;

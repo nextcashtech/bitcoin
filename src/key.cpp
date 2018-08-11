@@ -24,7 +24,7 @@ namespace BitCoin
 {
     secp256k1_context *Key::sContext = NULL;
     unsigned int Key::sContextFlags = 0;
-    NextCash::Mutex Key::sMutex("SECP256K1");
+    NextCash::MutexWithConstantName Key::sMutex("SECP256K1");
 
     void randomizeContext(secp256k1_context *pContext)
     {

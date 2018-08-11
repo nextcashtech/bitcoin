@@ -215,7 +215,7 @@ namespace BitCoin
         unsigned int mThreshHold;
         bool mModified;
 
-        NextCash::Mutex mMutex;
+        NextCash::MutexWithConstantName mMutex;
 
     };
 }
