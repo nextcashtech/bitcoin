@@ -167,11 +167,11 @@ namespace BitCoin
         if(mReleased)
             return;
 
+        NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Releasing");
         if(mMonitor != NULL)
             mMonitor->release(mID);
         mBlockRequestMutex.lock();
-        if(mBlocksRequested.size() > 0 || !mHeaderRequested.isEmpty())
-            mChain->releaseBlocksForNode(mID);
+        mChain->releaseBlocksForNode(mID);
         mBlocksRequested.clear();
         mHeaderRequested.clear();
         mBlockRequestMutex.unlock();

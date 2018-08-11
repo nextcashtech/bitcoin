@@ -1236,6 +1236,8 @@ namespace BitCoin
           pending != mPendingBlocks.end(); ++pending)
             if(!(*pending)->isFull() && (*pending)->requestingNode == pNodeID)
             {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                  "Releasing block : %s", (*pending)->block->hash.hex().text());
                 (*pending)->requestingNode = 0;
                 (*pending)->requestedTime = 0;
             }
