@@ -62,6 +62,12 @@ namespace BitCoin
         // Number of peers that an unconfirmed transaction must be announced from before it has zero confirm trust.
         unsigned int spvMemPoolCountRequired;
 
+        // The block header hash of the highest pre-approved block. During IBD all blocks below
+        //   this will not be fully validated. They will just be processed to update UTXOs and
+        //   the address database.
+        NextCash::Hash approvedHash;
+
+        // Email address to send notifications to.
         NextCash::String notifyEmail;
 
         // Return list of peers in random order

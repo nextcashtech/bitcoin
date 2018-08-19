@@ -217,47 +217,48 @@ namespace BitCoin
             {
                 if(strcmp(command, "block") == 0 && pInput->remaining() > 80)
                 {
-                    Block block;
-                    block.read(pInput, false, false, true);
-
-                    if(pendingBlockHash.isEmpty())
+                    Header header;
+                    if(header.read(pInput, true, true))
                     {
-                        // Starting new block
-                        pendingBlockStartTime = getTime();
-                        pendingBlockLastReportTime = pendingBlockStartTime;
-                        pendingBlockHash = block.hash;
-                        lastPendingBlockSize = pInput->remaining();
-                        pendingBlockUpdateTime = pendingBlockStartTime;
-                    }
-                    else if(pendingBlockHash == block.hash)
-                    {
-                        if(pInput->remaining() != lastPendingBlockSize)
+                        if(pendingBlockHash.isEmpty())
                         {
+                            // Starting new block
+                            pendingBlockStartTime = getTime();
+                            pendingBlockLastReportTime = pendingBlockStartTime;
+                            pendingBlockHash = header.hash;
                             lastPendingBlockSize = pInput->remaining();
-                            pendingBlockUpdateTime = getTime();
+                            pendingBlockUpdateTime = pendingBlockStartTime;
                         }
-
-                        // Continuing block
-                        if(getTime() - pendingBlockLastReportTime >= 30)
+                        else if(pendingBlockHash == header.hash)
                         {
-                            pendingBlockLastReportTime = getTime();
-                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, pName,
-                              "Block downloading %d / %d (%ds) : %s", pInput->remaining(), payloadSize,
-                              pendingBlockUpdateTime - pendingBlockStartTime, block.hash.hex().text());
-                        }
-                    }
-                    else
-                    {
-                        // New block started without finishing last block
-                        NextCash::Log::addFormatted(NextCash::Log::ERROR, pName,
-                          "Failed block download : %s", pendingBlockHash.hex().text());
+                            if(pInput->remaining() != lastPendingBlockSize)
+                            {
+                                lastPendingBlockSize = pInput->remaining();
+                                pendingBlockUpdateTime = getTime();
+                            }
 
-                        // Starting new block
-                        pendingBlockStartTime = getTime();
-                        pendingBlockLastReportTime = pendingBlockStartTime;
-                        pendingBlockHash = block.hash;
-                        lastPendingBlockSize = pInput->remaining();
-                        pendingBlockUpdateTime = pendingBlockStartTime;
+                            // Continuing block
+                            if(getTime() - pendingBlockLastReportTime >= 30)
+                            {
+                                pendingBlockLastReportTime = getTime();
+                                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, pName,
+                                  "Block downloading %d / %d (%ds) : %s", pInput->remaining(), payloadSize,
+                                  pendingBlockUpdateTime - pendingBlockStartTime, header.hash.hex().text());
+                            }
+                        }
+                        else
+                        {
+                            // New block started without finishing last block
+                            NextCash::Log::addFormatted(NextCash::Log::ERROR, pName,
+                              "Failed block download : %s", pendingBlockHash.hex().text());
+
+                            // Starting new block
+                            pendingBlockStartTime = getTime();
+                            pendingBlockLastReportTime = pendingBlockStartTime;
+                            pendingBlockHash = header.hash;
+                            lastPendingBlockSize = pInput->remaining();
+                            pendingBlockUpdateTime = pendingBlockStartTime;
+                        }
                     }
                 }
                 // else
@@ -394,7 +395,7 @@ namespace BitCoin
             if(result != NULL && result->type == BLOCK)
             {
                 // Block downloaded completely before first parsing of incoming data
-                if(pendingBlockHash != ((BlockData *)result)->block->hash)
+                if(pendingBlockHash != ((BlockData *)result)->block->header.hash)
                     pendingBlockStartTime = getTime();
                 pendingBlockUpdateTime = 0;
                 pendingBlockHash.clear();
@@ -863,16 +864,15 @@ namespace BitCoin
             // Version
             pStream->writeUnsignedInt(version);
 
-            // Block Headers Count
-            if(blockHeaderHashes.size() > 0)
-                writeCompactInteger(pStream, blockHeaderHashes.size());
-            else
-                writeCompactInteger(pStream, 0);
+            // Hash Count
+            writeCompactInteger(pStream, blockHeaderHashes.size());
 
-            // Block Header Hashes
-            for(unsigned int i=0;i<blockHeaderHashes.size();i++)
-                blockHeaderHashes[i].write(pStream);
+            // Hashes
+            for(std::vector<NextCash::Hash>::iterator hash = blockHeaderHashes.begin();
+              hash != blockHeaderHashes.end(); ++hash)
+                hash->write(pStream);
 
+            // Stop hash
             stopHeaderHash.write(pStream);
         }
 
@@ -886,18 +886,19 @@ namespace BitCoin
             // Version
             version = pStream->readUnsignedInt();
 
-            // Block Headers Count
+            // Hash Count
             uint64_t count = readCompactInteger(pStream);
             if(pStream->readOffset() + (count * 32) > startReadOffset + pSize)
                 return false;
 
-            // Block Header Hashes
+            // Hashes
             blockHeaderHashes.resize(count);
-            for(unsigned int i=0;i<blockHeaderHashes.size();i++)
-                if(!blockHeaderHashes[i].read(pStream, 32))
+            for(std::vector<NextCash::Hash>::iterator hash = blockHeaderHashes.begin();
+              hash != blockHeaderHashes.end(); ++hash)
+                if(!hash->read(pStream, 32))
                     return false;
 
-            // Stop header hash
+            // Stop hash
             return stopHeaderHash.read(pStream, 32);
         }
 
@@ -906,16 +907,15 @@ namespace BitCoin
             // Version
             pStream->writeUnsignedInt(version);
 
-            // Block Headers Count
-            if(blockHeaderHashes.size() > 0)
-                writeCompactInteger(pStream, blockHeaderHashes.size());
-            else
-                writeCompactInteger(pStream, 0);
+            // Hash Count
+            writeCompactInteger(pStream, blockHeaderHashes.size());
 
-            // Block Header Hashes
-            for(unsigned int i=0;i<blockHeaderHashes.size();i++)
-                blockHeaderHashes[i].write(pStream);
+            // Hashes
+            for(std::vector<NextCash::Hash>::iterator hash = blockHeaderHashes.begin();
+              hash != blockHeaderHashes.end(); ++hash)
+                hash->write(pStream);
 
+            // Stop hash
             stopHeaderHash.write(pStream);
         }
 
@@ -936,8 +936,9 @@ namespace BitCoin
 
             // Block Header Hashes
             blockHeaderHashes.resize(count);
-            for(unsigned int i=0;i<blockHeaderHashes.size();i++)
-                if(!blockHeaderHashes[i].read(pStream, 32))
+            for(std::vector<NextCash::Hash>::iterator hash = blockHeaderHashes.begin();
+              hash != blockHeaderHashes.end(); ++hash)
+                if(!hash->read(pStream, 32))
                     return false;
 
             // Stop header hash
@@ -950,8 +951,8 @@ namespace BitCoin
             writeCompactInteger(pStream, headers.size());
 
             // Headers
-            for(uint64_t i=0;i<headers.size();i++)
-                headers[i]->write(pStream, false, true);
+            for(HeaderList::iterator header = headers.begin(); header != headers.end(); ++header)
+                header->write(pStream, true);
         }
 
         bool HeadersData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
@@ -967,15 +968,16 @@ namespace BitCoin
                 return false;
 
             // Headers
-            headers.resize(count);
-            for(uint64_t i=0;i<count;i++)
-                headers[i] = NULL;
-
-            for(uint64_t i=0;i<count;i++)
+            Header header;
+            headers.reserve(count);
+            for(unsigned int i = 0; i < count; ++i)
             {
-                headers[i] = new Block();
-                if(!headers[i]->read(pStream, false, true, true))
+                headers.emplace_back();
+                if(!headers.back().read(pStream, true, true))
+                {
+                    headers.pop_back();
                     return false;
+                }
             }
 
             return true;
@@ -1040,10 +1042,9 @@ namespace BitCoin
         MerkleBlockData::MerkleBlockData(Block *pBlock, BloomFilter &pFilter, std::vector<Transaction *> &pIncludedTransactions) :
           Data(MERKLE_BLOCK)
         {
-            block = pBlock;
-            blockNeedsDelete = false;
+            header = pBlock->header;
 
-            MerkleNode *merkleRoot = buildMerkleTree(block->transactions, pFilter);
+            MerkleNode *merkleRoot = buildMerkleTree(pBlock->transactions, pFilter);
 
             unsigned int nextBitOffset = 0;
             unsigned char nextByte = 0;
@@ -1059,10 +1060,10 @@ namespace BitCoin
         void MerkleBlockData::write(NextCash::OutputStream *pStream)
         {
             // Block Header
-            block->write(pStream, false, false);
+            header.write(pStream, false);
 
             // Transaction Count
-            pStream->writeUnsignedInt(block->transactionCount);
+            pStream->writeUnsignedInt(header.transactionCount);
 
             // Hash Count
             writeCompactInteger(pStream, hashes.size());
@@ -1083,21 +1084,15 @@ namespace BitCoin
         {
             NextCash::stream_size startReadOffset = pStream->readOffset();
 
-            if(blockNeedsDelete && block != NULL)
-                delete block;
-
-            block = new Block();
-            blockNeedsDelete = true;
-
             // Block Header
-            if(!block->read(pStream, false, false, true))
+            if(!header.read(pStream, false, true))
                 return false;
 
             if(pStream->readOffset() + 4 > startReadOffset + pSize)
                 return false;
 
             // Transaction Count
-            block->transactionCount = pStream->readUnsignedInt();
+            header.transactionCount = pStream->readUnsignedInt();
 
             if(pStream->readOffset() + 1 > startReadOffset + pSize)
                 return false;
@@ -1211,7 +1206,7 @@ namespace BitCoin
 
         bool MerkleBlockData::validate(NextCash::HashList &pIncludedTransactionHashes)
         {
-            if(block == NULL || block->transactionCount == 0)
+            if(header.transactionCount == 0)
             {
                 NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "Merkle Block has zero transaction count");
@@ -1220,7 +1215,7 @@ namespace BitCoin
 
             flags.setReadOffset(0);
 
-            MerkleNode *merkleRoot = buildEmptyMerkleTree(block->transactionCount);
+            MerkleNode *merkleRoot = buildEmptyMerkleTree(header.transactionCount);
             unsigned int bitOffset = 8, hashesOffset = 0;
             unsigned char byte = 0;
 
@@ -1247,7 +1242,7 @@ namespace BitCoin
             }
 
             // Verify merkle tree root hash from block header
-            if(merkleRoot->hash != block->merkleHash)
+            if(merkleRoot->hash != header.merkleHash)
             {
                 NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "Merkle Block root hash doesn't match");
@@ -1315,7 +1310,7 @@ namespace BitCoin
             bool found;
 
             // SHA256 of block header and nonce
-            block->write(&digest, false, false);
+            block->header.write(&digest, false);
             digest.writeUnsignedLong(nonce);
             digest.getResult(&sha256);
 
@@ -1394,7 +1389,7 @@ namespace BitCoin
                 return;
 
             // Block header without transaction count
-            block->write(pStream, false, true);
+            block->header.write(pStream, false);
 
             // A nonce for use in short transaction ID calculations
             pStream->writeUnsignedLong(nonce);
@@ -1429,7 +1424,7 @@ namespace BitCoin
                 return false;
 
             // Block header without transaction count
-            if(!block->read(pStream, false, false, true))
+            if(!block->header.read(pStream, false, true))
                 return false;
 
             // A nonce for use in short transaction ID calculations
@@ -1996,22 +1991,22 @@ namespace BitCoin
                 BlockData *receivedBlockData = (BlockData *)messageReceiveData;
                 bool blockDataMatches = true;
 
-                if(blockData.block->version != receivedBlockData->block->version)
+                if(blockData.block->header.version != receivedBlockData->block->header.version)
                     blockDataMatches = false;
 
-                if(blockData.block->previousHash != receivedBlockData->block->previousHash)
+                if(blockData.block->header.previousHash != receivedBlockData->block->header.previousHash)
                     blockDataMatches = false;
 
-                if(blockData.block->merkleHash != receivedBlockData->block->merkleHash)
+                if(blockData.block->header.merkleHash != receivedBlockData->block->header.merkleHash)
                     blockDataMatches = false;
 
-                if(blockData.block->time != receivedBlockData->block->time)
+                if(blockData.block->header.time != receivedBlockData->block->header.time)
                     blockDataMatches = false;
 
-                if(blockData.block->targetBits != receivedBlockData->block->targetBits)
+                if(blockData.block->header.targetBits != receivedBlockData->block->header.targetBits)
                     blockDataMatches = false;
 
-                if(blockData.block->nonce != receivedBlockData->block->nonce)
+                if(blockData.block->header.nonce != receivedBlockData->block->header.nonce)
                     blockDataMatches = false;
 
                 if(blockData.block->transactions.size() != receivedBlockData->block->transactions.size())

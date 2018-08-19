@@ -368,13 +368,13 @@ namespace BitCoin
             void write(NextCash::OutputStream *pStream)
             {
                 if(block != NULL)
-                    block->write(pStream, true, true);
+                    block->write(pStream);
             }
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
             {
                 if(block == NULL)
                     block = new Block();
-                return block->read(pStream, true, true, true);
+                return block->read(pStream);
             }
 
             Block *block;
@@ -426,7 +426,7 @@ namespace BitCoin
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
-            BlockList headers;
+            HeaderList headers;
 
         };
 
@@ -449,9 +449,8 @@ namespace BitCoin
         {
         public:
 
-            MerkleBlockData() : Data(MERKLE_BLOCK) { block = NULL; blockNeedsDelete = false; }
+            MerkleBlockData() : Data(MERKLE_BLOCK) { }
             MerkleBlockData(Block *pBlock, BloomFilter &pFilter, std::vector<Transaction *> &pIncludedTransactions);
-            ~MerkleBlockData() { if(blockNeedsDelete && block != NULL) delete block; }
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
@@ -461,8 +460,7 @@ namespace BitCoin
             //   proof of work chain.
             bool validate(NextCash::HashList &pIncludedTransactionHashes);
 
-            Block *block;
-            bool blockNeedsDelete;
+            Header header;
             NextCash::HashList hashes;
             NextCash::Buffer flags;
 

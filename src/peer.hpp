@@ -19,6 +19,8 @@ namespace BitCoin
     {
     public:
 
+        static constexpr const char *START_STRING = "NCPR";
+
         Peer() { rating = 0; }
         Peer(const Peer &pCopy)
         {

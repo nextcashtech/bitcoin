@@ -110,7 +110,7 @@ namespace BitCoin
           mTransactions.begin(); trans != mTransactions.end(); ++trans)
         {
             if((*trans)->blockHeight == -1)
-                (*trans)->blockHeight = pChain->blockHeight((*trans)->blockHash);
+                (*trans)->blockHeight = pChain->hashHeight((*trans)->blockHash);
             transactions.push_back(*trans);
         }
 
@@ -596,13 +596,13 @@ namespace BitCoin
                 startPass();
             else
             {
-                if(pChain->height() > 20000 &&
-                  highestPassHeight(true) < (unsigned int)pChain->height() - 20000)
+                if(pChain->headerHeight() > 20000 &&
+                  highestPassHeight(true) < (unsigned int)pChain->headerHeight() - 20000)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Starting new pass at block height %d to monitor new blocks",
-                      pChain->height());
-                    mPasses.emplace_back(pChain->height() - 1);
+                      pChain->headerHeight());
+                    mPasses.emplace_back(pChain->headerHeight() - 1);
                     mPasses.back().addressesIncluded = mAddressHashes.size();
                 }
                 else if(mPasses.size() == 0)
@@ -935,8 +935,8 @@ namespace BitCoin
                             pOutputs.emplace_back((*trans)->transaction->hash, *index);
                             pOutputs.back().output =
                               new Output((*trans)->transaction->outputs[*index]);
-                            pOutputs.back().confirmations = (uint32_t)(pChain->height() -
-                              pChain->blockHeight((*trans)->blockHash) + 1);
+                            pOutputs.back().confirmations = (uint32_t)(pChain->headerHeight() -
+                              pChain->hashHeight((*trans)->blockHash) + 1);
                             break;
                         }
                 }
@@ -1392,7 +1392,7 @@ namespace BitCoin
             while(pBlockHashes.size() < pMaxCount)
             {
                 // Get next block hash
-                if(!pChain.getBlockHash(++blockHeight, nextBlockHash))
+                if(!pChain.getHash(++blockHeight, nextBlockHash))
                     break;
 
                 // Check if there is a merkle request for this block hash and if it needs more
@@ -1451,12 +1451,12 @@ namespace BitCoin
     }
 
     bool Monitor::addMerkleBlock(Chain &pChain, Message::MerkleBlockData *pData,
-                                 unsigned int pNodeID)
+      unsigned int pNodeID)
     {
         mMutex.lock();
 
         NextCash::HashContainerList<MerkleRequestData *>::Iterator requestIter =
-          mMerkleRequests.get(pData->block->hash);
+          mMerkleRequests.get(pData->header.hash);
         if(requestIter == mMerkleRequests.end())
         {
             mMutex.unlock();
@@ -1489,7 +1489,7 @@ namespace BitCoin
           // "Received merkle block from node [%d] with %d transaction hashes : %s", pNodeID,
           // transactionHashes.size(), pData->block->hash.hex().text());
 
-        request->totalTransactions = pData->block->transactionCount;
+        request->totalTransactions = pData->header.transactionCount;
 
         // Update transactions because if more than one merkle block are received from different
         //   nodes, then they might have different bloom filters and different false positive
@@ -1512,7 +1512,7 @@ namespace BitCoin
                       "Transaction pulled from pending into merkle request : %s",
                       hash->hex().text());
                     request->transactions.insert(*hash, *pendingTransaction);
-                    (*pendingTransaction)->blockHash = pData->block->hash;
+                    (*pendingTransaction)->blockHash = pData->header.hash;
                     mPendingTransactions.erase(pendingTransaction);
                 }
                 else
@@ -1525,14 +1525,14 @@ namespace BitCoin
                           "Transaction found in confirmed for merkle request : %s",
                           hash->hex().text());
                         newSPVTransaction = new SPVTransactionData(**confirmedTransaction);
-                        newSPVTransaction->blockHash = pData->block->hash;
-                        newSPVTransaction->blockHeight = pChain.blockHeight(pData->block->hash);
+                        newSPVTransaction->blockHash = pData->header.hash;
+                        newSPVTransaction->blockHeight = pChain.hashHeight(pData->header.hash);
                         request->transactions.insert(*hash, newSPVTransaction);
                     }
                     else // Create empty transaction
                     {
-                        newSPVTransaction = new SPVTransactionData(pData->block->hash,
-                          pChain.blockHeight(pData->block->hash));
+                        newSPVTransaction = new SPVTransactionData(pData->header.hash,
+                          pChain.hashHeight(pData->header.hash));
                         request->transactions.insert(*hash, newSPVTransaction);
                     }
                 }
@@ -1564,7 +1564,7 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
               "Repeated merkle block from node [%d] with %d transaction (%d sec ago) : %s", pNodeID,
               request->transactions.size(), getTime() - request->receiveTime,
-              pData->block->hash.hex().text());
+              pData->header.hash.hex().text());
 
         request->receiveTime = getTime();
 
@@ -1859,7 +1859,8 @@ namespace BitCoin
                 if(pass->complete)
                     continue;
 
-                if(pass->blockHeight == (unsigned int)pChain.height() && passIndex < mPasses.size())
+                if(pass->blockHeight == (unsigned int)pChain.headerHeight() &&
+                  passIndex < mPasses.size())
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Pass %d completed at block height %d", passIndex, pass->blockHeight);
@@ -1870,7 +1871,7 @@ namespace BitCoin
                 while(true)
                 {
                     // Check if the next block has enough merkle confirms
-                    if(!pChain.getBlockHash(pass->blockHeight + 1, nextBlockHash))
+                    if(!pChain.getHash(pass->blockHeight + 1, nextBlockHash))
                         break;
 
                     request = mMerkleRequests.get(nextBlockHash);

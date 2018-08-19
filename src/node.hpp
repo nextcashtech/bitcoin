@@ -54,10 +54,6 @@ namespace BitCoin
         bool isReady() const { return mPingRoundTripTime != -1; }
         int32_t pingTime() const { return mPingRoundTripTime; }
         void setPingCutoff(uint32_t pPingCutoff) { mPingCutoff = pPingCutoff; }
-        unsigned int blocksDownloadedCount() const { return mBlockDownloadCount; }
-        unsigned int blocksDownloadedSize() const { return mBlockDownloadSize; }
-        unsigned int blocksDownloadedTime() const { return mBlockDownloadTime; }
-        double blockDownloadBytesPerSecond() const;
 
         // Time that the node connected
         int32_t connectedTime() { return mConnectedTime; }
@@ -72,15 +68,22 @@ namespace BitCoin
                 return (unsigned int)mReceivedVersionData->startBlockHeight;
         }
 
-        bool waitingForRequests();
+        // Header requests
         bool requestHeaders();
-        bool requestBlocks(NextCash::HashList &pList);
-        bool requestTransactions(NextCash::HashList &pList);
-        unsigned int blocksRequestedCount() { return (unsigned int)mBlocksRequested.size(); }
+        bool waitingForHeaderRequests();
+        const NextCash::Hash &lastHeaderHash() const { return mLastHeaderHash; }
 
-        const NextCash::Hash &lastHeader() const { return mLastHeader; }
+        // Block requests
+        bool requestBlocks(NextCash::HashList &pList);
+        bool waitingForBlockRequests();
+        unsigned int blocksRequestedCount() { return (unsigned int)mBlocksRequested.size(); }
+        unsigned int blocksDownloadedCount() const { return mBlockDownloadCount; }
+        unsigned int blocksDownloadedSize() const { return mBlockDownloadSize; }
+        unsigned int blocksDownloadedTime() const { return mBlockDownloadTime; }
+        double blockDownloadBytesPerSecond() const;
 
         bool hasTransaction(const NextCash::Hash &pHash);
+        bool requestTransactions(NextCash::HashList &pList);
 
         bool requestPeers();
 
@@ -182,7 +185,7 @@ namespace BitCoin
         unsigned int mBlockDownloadSize;
         unsigned int mBlockDownloadTime;
 
-        NextCash::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested, mLastHeader;
+        NextCash::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested, mLastHeaderHash;
         int32_t mHeaderRequestTime;
 
         NextCash::Mutex mBlockRequestMutex;

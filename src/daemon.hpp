@@ -138,7 +138,7 @@ namespace BitCoin
         int32_t mLastCleanTime;
         int32_t mFinishTime;
 
-        NextCash::Hash mLastBlockHash;
+        NextCash::Hash mLastHeaderHash;
         NextCash::Network::Listener *mNodeListener;
         NextCash::Network::Listener *mRequestsListener = NULL;
 

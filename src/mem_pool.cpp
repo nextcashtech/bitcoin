@@ -156,7 +156,8 @@ namespace BitCoin
     {
         NextCash::HashList outpointsNeeded;
         if(!pTransaction->check(pChain, mTransactions, outpointsNeeded,
-          pChain->forks().requiredBlockVersion()))
+          pChain->forks().requiredBlockVersion(pChain->forks().height()),
+          pChain->forks().height()))
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Failed to check transaction. (%d bytes) : %s", pTransaction->size(),

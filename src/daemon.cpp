@@ -14,6 +14,7 @@
 #include "log.hpp"
 #include "network.hpp"
 #include "info.hpp"
+#include "header.hpp"
 #include "block.hpp"
 #include "chain.hpp"
 #include "interpreter.hpp"
@@ -147,8 +148,8 @@ namespace BitCoin
 
         if(mChain.isInSync())
         {
-            int monitorHeight = mMonitor.height();
-            if(monitorHeight > 0 && monitorHeight < mChain.height())
+            unsigned int monitorHeight = mMonitor.height();
+            if(monitorHeight > 0 && monitorHeight < mChain.headerHeight())
                 return FINDING_TRANSACTIONS;
             else
                 return SYNCHRONIZED;
@@ -447,6 +448,8 @@ namespace BitCoin
         saveKeyStore();
         mChain.save();
         mChain.clearInSync();
+        Header::clean();
+        Block::clean();
         mInfo.save();
 
 #ifdef PROFILER_ON
@@ -525,9 +528,10 @@ namespace BitCoin
 
         NextCash::String timeText;
 
-        timeText.writeFormattedTime(mChain.time(mChain.height()));
+        timeText.writeFormattedTime(mChain.time(mChain.headerHeight()));
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Block Chain : %d blocks (last %s)", mChain.height(), timeText.text());
+          "Block Chain : %d/%d blocks/headers (last %s)", mChain.blockHeight(),
+          mChain.headerHeight(), timeText.text());
 
         const Branch *branch;
         for(unsigned int i=0;i<mChain.branchCount();++i)
@@ -537,10 +541,11 @@ namespace BitCoin
                 break;
 
             if(branch->pendingBlocks.size() > 0)
-                timeText.writeFormattedTime(branch->pendingBlocks.back()->block->time);
+                timeText.writeFormattedTime(branch->pendingBlocks.back()->block->header.time);
 
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Block Chain Branch %d : %d blocks (last %s)", i + 1, branch->height + branch->pendingBlocks.size() - 1, timeText.text());
+              "Block Chain Branch %d : %d blocks (last %s)", i + 1,
+              branch->height + branch->pendingBlocks.size() - 1, timeText.text());
         }
 
         if(mInfo.spvMode)
@@ -772,7 +777,8 @@ namespace BitCoin
         TransactionList tempMemPool;
         NextCash::HashList outpoints;
         if(!pTransaction.check(pChain, tempMemPool, outpoints,
-          pChain->forks().requiredBlockVersion()))
+          pChain->forks().requiredBlockVersion(pChain->forks().height()),
+          pChain->forks().height()))
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
               "Failed to process transaction");
@@ -1152,19 +1158,12 @@ namespace BitCoin
     void Daemon::sendRequests()
     {
         if(mInfo.spvMode)
-        {
-            sendHeaderRequest();
             return;
-        }
-
-        unsigned int pendingCount = mChain.pendingCount();
-
-        if(!mChain.isInSync() && pendingCount < mInfo.pendingBlocksThreshold * 8)
-            sendHeaderRequest();
 
         unsigned int pendingBlockCount = mChain.pendingBlockCount();
         unsigned int pendingSize = mChain.pendingSize();
-        bool reduceOnly = pendingSize >= mInfo.pendingSizeThreshold || pendingBlockCount >= mInfo.pendingBlocksThreshold;
+        bool reduceOnly = pendingSize >= mInfo.pendingSizeThreshold ||
+          pendingBlockCount >= mInfo.pendingBlocksThreshold;
         unsigned int blocksRequestedCount = 0;
 
         mNodeLock.readLock();
@@ -1172,10 +1171,10 @@ namespace BitCoin
         std::vector<Node *> requestNodes;
         sortOutgoingNodesBySpeed(nodes);
 
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+        for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
         {
             blocksRequestedCount += (*node)->blocksRequestedCount();
-            if((*node)->isReady() && !(*node)->waitingForRequests())
+            if((*node)->isReady() && !(*node)->waitingForBlockRequests())
                 requestNodes.push_back(*node);
         }
 
@@ -1195,7 +1194,8 @@ namespace BitCoin
             blocksToRequestCount = requestNodes.size();
         else
         {
-            blocksToRequestCount = mInfo.pendingBlocksThreshold - pendingBlockCount - blocksRequestedCount;
+            blocksToRequestCount = mInfo.pendingBlocksThreshold - pendingBlockCount -
+              blocksRequestedCount;
             if(blocksToRequestCount > (int)requestNodes.size() * MAX_BLOCK_REQUEST)
                 blocksToRequestCount = (int)requestNodes.size() * MAX_BLOCK_REQUEST;
         }
@@ -1225,7 +1225,8 @@ namespace BitCoin
         unsigned int i;
 
         // Assign nodes
-        for(std::vector<Node *>::iterator node=requestNodes.begin();node!=requestNodes.end();++node)
+        for(std::vector<Node *>::iterator node = requestNodes.begin(); node != requestNodes.end();
+          ++node)
         {
             nodeRequest->node = *node;
             ++nodeRequest;
@@ -1233,7 +1234,8 @@ namespace BitCoin
 
         // Stagger out block requests
         unsigned int requestNodeOffset = 0;
-        for(NextCash::HashList::iterator hash=blocksToRequest.begin();hash!=blocksToRequest.end();++hash)
+        for(NextCash::HashList::iterator hash = blocksToRequest.begin();
+          hash != blocksToRequest.end(); ++hash)
         {
             nodeRequests[requestNodeOffset].list.push_back(*hash);
             if(++requestNodeOffset >= requestNodes.size())
@@ -1242,7 +1244,7 @@ namespace BitCoin
 
         // Send requests to nodes
         nodeRequest = nodeRequests;
-        for(i=0;i<requestNodes.size();++i)
+        for(i = 0;i < requestNodes.size(); ++i)
         {
             nodeRequest->node->requestBlocks(nodeRequest->list);
             ++nodeRequest;
@@ -1255,7 +1257,7 @@ namespace BitCoin
     void randomizeOutgoing(std::vector<Node *> &pNodeList)
     {
         for(std::vector<Node *>::iterator node=pNodeList.begin();node!=pNodeList.end();)
-            if((*node)->isIncoming() || !(*node)->isReady() || (*node)->waitingForRequests())
+            if((*node)->isIncoming() || !(*node)->isReady())
                 node = pNodeList.erase(node);
             else
                 ++node;
@@ -1349,24 +1351,25 @@ namespace BitCoin
             return;
         }
 
-        // Check for node with empty last header
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if((*node)->lastHeader().isEmpty() && (*node)->isReady() && (*node)->requestHeaders())
+        // Check for node with empty last header. They haven't given headers yet.
+        for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+            if((*node)->isReady() && (*node)->lastHeaderHash().isEmpty() &&
+              (*node)->requestHeaders())
             {
                 sent = true;
                 mLastHeaderRequestTime = getTime();
-                break;
+                mNodeLock.readUnlock();
+                return;
             }
 
         if(!sent)
-        {
-            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+            for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
                 if((*node)->requestHeaders())
                 {
                     mLastHeaderRequestTime = getTime();
-                    break;
+                    mNodeLock.readUnlock();
+                    return;
                 }
-        }
 
         mNodeLock.readUnlock();
     }
@@ -1379,17 +1382,18 @@ namespace BitCoin
             if(!(*node)->isIncoming() && (*node)->isReady())
             {
                 // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  // "Node [%d] last header : %s", (*node)->id(), (*node)->lastHeader().hex().text());
-                if((*node)->lastHeader() == mChain.lastBlockHash())
+                  // "Node [%d] last header : %s", (*node)->id(),
+                  // (*node)->lastHeaderHash().hex().text());
+                if((*node)->lastHeaderHash() == mChain.lastHeaderHash())
                     ++count;
             }
         mNodeLock.readUnlock();
 
-        if(count >= 4)
+        if(count >= 4 && (mInfo.spvMode || mChain.blockHeight() == mChain.headerHeight()))
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
               "Chain is in sync. %d nodes have matching latest header : %s", count,
-              mChain.lastBlockHash().hex().text());
+              mChain.lastHeaderHash().hex().text());
             mChain.setInSync();
         }
         // else
@@ -1759,7 +1763,7 @@ namespace BitCoin
         {
             time = getTime();
             if(!mKeysSynchronized && mChain.isInSync() &&
-              (int)mMonitor.height() == mChain.height())
+              mMonitor.height() == mChain.headerHeight())
             {
                 mKeysSynchronized = true;
                 mKeyStore.setAllSynchronized();
@@ -1767,7 +1771,7 @@ namespace BitCoin
             }
 
             if(mFinishMode == FINISH_ON_SYNC && mChain.isInSync() &&
-              (mKeyStore.size() == 0 || (int)mMonitor.height() == mChain.height()) &&
+              (mKeyStore.size() == 0 || mMonitor.height() == mChain.headerHeight()) &&
               (mFinishTime == 0 || mFinishTime <= time))
             {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
@@ -1811,9 +1815,9 @@ namespace BitCoin
 
             if(!mChain.isInSync())
             {
-                // Wait 30 seconds so hopefully a bunch of nodes are ready to request at the same
-                //   time to improve staggering
                 time = getTime();
+                if(mChain.headersNeeded() || time - mLastHeaderRequestTime > 30)
+                    sendHeaderRequest();
                 if(mChain.blocksNeeded() || time - lastRequestCheckTime > 30 ||
                   (mChain.pendingBlockCount() == 0 && time - lastRequestCheckTime > 10))
                 {
@@ -1827,7 +1831,7 @@ namespace BitCoin
             }
             else
             {
-                if(mChain.headersNeeded() || getTime() - mLastHeaderRequestTime > 300)
+                if(mChain.headersNeeded() || getTime() - mLastHeaderRequestTime > 120)
                     sendHeaderRequest();
                 if(mChain.blocksNeeded())
                     sendRequests();
@@ -1945,11 +1949,11 @@ namespace BitCoin
 
         if(mInfo.spvMode)
         {
-            if(mLastBlockHash != mChain.lastBlockHash() || getTime() - mLastMonitorProcess > 2)
+            if(mLastHeaderHash != mChain.lastHeaderHash() || getTime() - mLastMonitorProcess > 2)
             {
                 mMonitor.process(mChain);
                 mLastMonitorProcess = getTime();
-                mLastBlockHash = mChain.lastBlockHash();
+                mLastHeaderHash = mChain.lastHeaderHash();
             }
 
             if(mStopping)
@@ -1980,8 +1984,10 @@ namespace BitCoin
             if((getTime() - mLastOutputsPurgeTime > 30 && mChain.outputs().needsPurge()) ||
               getTime() - mLastOutputsPurgeTime > 3600)
             {
+                mChain.startSaving();
                 if(!mChain.outputs().save())
                     requestStop();
+                mChain.endSaving();
                 mLastOutputsPurgeTime = getTime();
             }
 
@@ -1991,8 +1997,10 @@ namespace BitCoin
             if((getTime() - mLastAddressPurgeTime > 30 && mChain.addresses().needsPurge()) ||
               getTime() - mLastAddressPurgeTime > 3600)
             {
+                mChain.startSaving();
                 if(!mChain.addresses().save())
                     requestStop();
+                mChain.endSaving();
                 mLastAddressPurgeTime = getTime();
             }
 

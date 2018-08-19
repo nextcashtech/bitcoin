@@ -1,0 +1,1139 @@
+/**************************************************************************
+ * Copyright 2017-2018 NextCash, LLC                                      *
+ * Contributors :                                                         *
+ *   Curtis Ellis <curtis@nextcash.tech>                                  *
+ * Distributed under the MIT software license, see the accompanying       *
+ * file license.txt or http://www.opensource.org/licenses/mit-license.php *
+ **************************************************************************/
+#include "header.hpp"
+
+#ifdef PROFILER_ON
+#include "profiler.hpp"
+#endif
+
+#include "log.hpp"
+#include "endian.hpp"
+#include "thread.hpp"
+#include "digest.hpp"
+#include "interpreter.hpp"
+#include "info.hpp"
+#include "chain.hpp"
+
+#define BITCOIN_HEADER_LOG_NAME "Header"
+
+
+namespace BitCoin
+{
+    bool Header::hasProofOfWork()
+    {
+        NextCash::Hash target;
+        target.setDifficulty(targetBits);
+        return hash <= target;
+    }
+
+    void Header::calculateHash()
+    {
+        // Write into digest
+        NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
+        write(&digest, false);
+
+        // Get SHA256_SHA256 of block data
+        digest.getResult(&hash);
+    }
+
+    void Header::write(NextCash::OutputStream *pStream, bool pIncludeTransactionCount) const
+    {
+        // Version
+        pStream->writeInt(version);
+
+        // Hash of previous block
+        previousHash.write(pStream);
+
+        // Merkle Root Hash
+        merkleHash.write(pStream);
+
+        // Time
+        pStream->writeInt(time);
+
+        // Encoded version of target threshold
+        pStream->writeUnsignedInt(targetBits);
+
+        // Nonce
+        pStream->writeUnsignedInt(nonce);
+
+        if(pIncludeTransactionCount)
+            writeCompactInteger(pStream, 0);
+    }
+
+    bool Header::read(NextCash::InputStream *pStream, bool pIncludeTransactionCount,
+      bool pCalculateHash)
+    {
+        // Create hash
+        NextCash::Digest *digest = NULL;
+        if(pCalculateHash)
+        {
+            digest = new NextCash::Digest(NextCash::Digest::SHA256_SHA256);
+            digest->setOutputEndian(NextCash::Endian::LITTLE);
+        }
+        hash.clear();
+
+        if(pStream->remaining() < 80)
+        {
+            if(digest != NULL)
+                delete digest;
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+              "Header read failed : stream too short");
+            return false;
+        }
+
+        // Version
+        version = (int32_t)pStream->readInt();
+        if(pCalculateHash)
+            digest->writeUnsignedInt((unsigned int)version);
+
+        // Hash of previous block
+        if(!previousHash.read(pStream))
+        {
+            if(digest != NULL)
+                delete digest;
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+              "Header read failed : read previous hash failed");
+            return false;
+        }
+        if(pCalculateHash)
+            previousHash.write(digest);
+
+        // Merkle Root Hash
+        if(!merkleHash.read(pStream))
+        {
+            if(digest != NULL)
+                delete digest;
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+              "Header read failed : read merkle hash failed");
+            return false;
+        }
+        if(pCalculateHash)
+            merkleHash.write(digest);
+
+        // Time
+        time = pStream->readInt();
+        if(pCalculateHash)
+            digest->writeInt(time);
+
+        // Encoded version of target threshold
+        targetBits = pStream->readUnsignedInt();
+        if(pCalculateHash)
+            digest->writeUnsignedInt(targetBits);
+
+        // Nonce
+        nonce = pStream->readUnsignedInt();
+        if(pCalculateHash)
+            digest->writeUnsignedInt(nonce);
+
+        if(pCalculateHash)
+            digest->getResult(&hash);
+
+        if(digest != NULL)
+        {
+            delete digest;
+            digest = NULL;
+        }
+
+        if(pIncludeTransactionCount)
+            transactionCount = readCompactInteger(pStream);
+        else
+            transactionCount = 0;
+
+        return true;
+    }
+
+    void Header::clear()
+    {
+        hash.clear();
+        version = 0;
+        previousHash.zeroize();
+        merkleHash.zeroize();
+        time = 0;
+        targetBits = 0;
+        nonce = 0;
+        transactionCount = 0;
+    }
+
+    void Header::print(NextCash::Log::Level pLevel)
+    {
+        NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "Hash          : %s",
+          hash.hex().text());
+        NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "Version       : 0x%08x",
+          version);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "Previous Hash : %s",
+          previousHash.hex().text());
+        NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "MerkleHash    : %s",
+          merkleHash.hex().text());
+        NextCash::String timeText;
+        timeText.writeFormattedTime(time);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "Time          : %s (%d)",
+          timeText.text(), time);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "Bits          : 0x%08x",
+          targetBits);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "Nonce         : 0x%08x",
+          nonce);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "%d Transactions",
+          transactionCount);
+    }
+
+    class HeaderFile
+    {
+    public:
+
+        static const unsigned int MAX_COUNT = 1000; // Maximum count of headers in one file.
+
+        static unsigned int fileID(unsigned int pHeight) { return pHeight / MAX_COUNT; }
+        static unsigned int fileOffset(unsigned int pHeight) { return pHeight - (fileID(pHeight) * MAX_COUNT); }
+        static NextCash::String filePathName(unsigned int pID);
+
+        static const unsigned int CACHE_COUNT = 5;
+        static NextCash::MutexWithConstantName sCacheLock;
+        static HeaderFile *sCache[CACHE_COUNT];
+
+        // Return locked header file.
+        static HeaderFile *get(unsigned int pFileID, bool pCreate = false);
+
+        static bool exists(unsigned int pFileID);
+
+        // Moves cached header file to the front of the list
+        static void moveToFront(unsigned int pOffset);
+
+        static void save();
+
+        // Cleans up cached data.
+        static void clean();
+
+        // Remove a header file.
+        static bool remove(unsigned int pID);
+
+        unsigned int id() const { return mID; }
+        bool isValid() const { return mValid; }
+        unsigned int itemCount();
+        NextCash::Hash lastHash();
+
+        void lock() { mMutex.lock(); }
+        void unlock() { mMutex.unlock(); }
+
+        bool validate(); // Validate CRC of file
+
+        // Add a header to the file.
+        bool writeHeader(const Header &pHeader);
+
+        // Remove blocks from file above a specific offset in the file.
+        bool removeHeadersAbove(unsigned int pOffset);
+
+        // Read header at specified offset in file. Return false if the offset is too high.
+        bool readHeader(unsigned int pOffset, Header &pHeader);
+
+        // Read list of header headers from this file.
+        bool readHeaders(unsigned int pOffset, unsigned int pCount, HeaderList &pHeaders);
+
+        // Read hash at specified offset in file. Return false if the offset is too high.
+        bool readHash(unsigned int pOffset, NextCash::Hash &pHash);
+
+        bool readHashes(unsigned int pOffset, unsigned int pCount, NextCash::HashList &pHashes);
+        bool readTargetBits(unsigned int pOffset, unsigned int pCount,
+          std::vector<uint32_t> &pTargetBits);
+        bool readBlockStatsReverse(unsigned int pOffset, unsigned int pCount,
+          std::list<BlockStat> &pBlockStats);
+
+    private:
+
+        HeaderFile(unsigned int pID, bool pCreate);
+        ~HeaderFile() { updateCRC(); if(mInputFile != NULL) delete mInputFile; }
+
+        /* File format
+         *   Start string
+         *   CRC32 of data after CRC in file
+         *   MAX_COUNT x Headers (32 byte block hash, 4 byte offset into file of block data)
+         */
+        static const unsigned int CRC_OFFSET = 8; // After start string
+        static const unsigned int DATA_START_OFFSET = 12; // After CRC
+        // 32 byte hash, 80 byte header, 4 byte transaction count
+        static const unsigned int ITEM_SIZE = 116;
+        static constexpr const char *START_STRING = "NCHDRS01";
+
+        static NextCash::String sFilePath;
+
+        // Open and validate a file stream for reading
+        bool openFile(bool pCreate = false);
+
+        void updateCRC();
+
+        unsigned int mID;
+        NextCash::MutexWithConstantName mMutex;
+        NextCash::FileInputStream *mInputFile;
+        NextCash::String mFilePathName;
+        bool mValid;
+        bool mModified;
+
+        HeaderFile(HeaderFile &pCopy);
+        HeaderFile &operator = (HeaderFile &pRight);
+
+    };
+
+    NextCash::String HeaderFile::sFilePath;
+    NextCash::MutexWithConstantName HeaderFile::sCacheLock("HeaderFileCache");
+    HeaderFile *HeaderFile::sCache[CACHE_COUNT] = { NULL, NULL, NULL, NULL, NULL };
+
+    void HeaderFile::moveToFront(unsigned int pOffset)
+    {
+        static HeaderFile *swap[CACHE_COUNT] = { NULL, NULL, NULL, NULL, NULL };
+
+        if(pOffset == 0)
+            return;
+
+        unsigned int next = 0;
+        swap[next++] = sCache[pOffset];
+        for(unsigned int j = 0; j < CACHE_COUNT; ++j)
+            if(j != pOffset)
+                swap[next++] = sCache[j];
+
+        // Swap back
+        for(unsigned int j = 0; j < CACHE_COUNT; ++j)
+            sCache[j] = swap[j];
+    }
+
+    bool HeaderFile::exists(unsigned int pFileID)
+    {
+        return NextCash::fileExists(HeaderFile::filePathName(pFileID));
+    }
+
+    HeaderFile *HeaderFile::get(unsigned int pFileID, bool pCreate)
+    {
+        sCacheLock.lock();
+
+        // Check if the file is already open
+        for(unsigned int i = 0; i < CACHE_COUNT; ++i)
+            if(sCache[i] != NULL && sCache[i]->mID == pFileID)
+            {
+                HeaderFile *result = sCache[i];
+                result->lock();
+                moveToFront(i);
+                sCacheLock.unlock();
+                return result;
+            }
+
+        // Open file
+        HeaderFile *result = new HeaderFile(pFileID, pCreate);
+        if(!result->isValid())
+        {
+            delete result;
+            sCacheLock.unlock();
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x failed to open.", pFileID);
+            return NULL;
+        }
+
+        result->lock();
+
+        for(unsigned int i = 0; i < CACHE_COUNT; ++i)
+            if(sCache[i] == NULL)
+            {
+                sCache[i] = result;
+                moveToFront(i);
+                sCacheLock.unlock();
+                return result;
+            }
+
+        // Replace the last file
+        delete sCache[CACHE_COUNT - 1];
+        sCache[CACHE_COUNT - 1] = result;
+        moveToFront(CACHE_COUNT-1);
+        sCacheLock.unlock();
+        return result;
+    }
+
+    void HeaderFile::save()
+    {
+        sCacheLock.lock();
+        for(int i = CACHE_COUNT-1; i >= 0; --i)
+            if(sCache[i] != NULL)
+                sCache[i]->updateCRC();
+        sCacheLock.unlock();
+
+        sFilePath.clear();
+    }
+
+    void Header::save()
+    {
+        HeaderFile::save();
+    }
+
+    void HeaderFile::clean()
+    {
+        sCacheLock.lock();
+        for(int i = CACHE_COUNT-1; i >= 0; --i)
+            if(sCache[i] != NULL)
+            {
+                delete sCache[i];
+                sCache[i] = NULL;
+            }
+        sCacheLock.unlock();
+
+        sFilePath.clear();
+    }
+
+    void Header::clean()
+    {
+        HeaderFile::clean();
+    }
+
+    NextCash::String HeaderFile::filePathName(unsigned int pID)
+    {
+        if(!sFilePath)
+        {
+            // Build path
+            sFilePath = Info::instance().path();
+            sFilePath.pathAppend("headers");
+            NextCash::createDirectory(sFilePath);
+        }
+
+        // Build path
+        NextCash::String result;
+        result.writeFormatted("%s%s%08x", sFilePath.text(), NextCash::PATH_SEPARATOR, pID);
+        return result;
+    }
+
+    HeaderFile::HeaderFile(unsigned int pID, bool pCreate) : mMutex("HeaderFile")
+    {
+        mValid = true;
+        mFilePathName = filePathName(pID);
+        mInputFile = NULL;
+        mID = pID;
+        mModified = false;
+
+        if(!openFile(pCreate))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_HEADER_LOG_NAME,
+              "Failed to open header file : %s", mFilePathName.text());
+            mValid = false;
+            return;
+        }
+
+        // Read start string
+        NextCash::String startString = mInputFile->readString(8);
+
+        // Check start string
+        if(startString != START_STRING)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x missing start string", mID);
+            mValid = false;
+            return;
+        }
+    }
+
+    bool HeaderFile::openFile(bool pCreate)
+    {
+        if(mInputFile != NULL && mInputFile->isValid())
+            return true;
+
+        if(mInputFile != NULL)
+            delete mInputFile;
+
+        mInputFile = new NextCash::FileInputStream(mFilePathName);
+        mInputFile->setInputEndian(NextCash::Endian::LITTLE);
+        mInputFile->setReadOffset(0);
+
+        if(mInputFile->isValid())
+            return true;
+        else if(!pCreate)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x not found.", mID);
+            return false;
+        }
+
+        // Create new file
+        delete mInputFile;
+        mInputFile = NULL;
+
+        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(mFilePathName,
+          true);
+        outputFile->setOutputEndian(NextCash::Endian::LITTLE);
+
+        if(!outputFile->isValid())
+        {
+            delete outputFile;
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x failed to open.", mID);
+            return false;
+        }
+
+        // Write start string
+        outputFile->writeString(START_STRING);
+
+        // Write empty CRC
+        outputFile->writeUnsignedInt(0);
+
+        // Get CRC (for empty data)
+        NextCash::Digest digest(NextCash::Digest::CRC32);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
+        NextCash::Buffer crcBuffer;
+        crcBuffer.setEndian(NextCash::Endian::LITTLE);
+        digest.getResult(&crcBuffer);
+        unsigned int crc = crcBuffer.readUnsignedInt();
+
+        // Write CRC
+        outputFile->setWriteOffset(CRC_OFFSET);
+        outputFile->writeUnsignedInt(crc);
+
+        // Close file
+        delete outputFile;
+
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+          "Header file %08x created with CRC : %08x", mID, crc);
+
+        // Re-open file
+        mInputFile = new NextCash::FileInputStream(mFilePathName);
+        mInputFile->setInputEndian(NextCash::Endian::LITTLE);
+        mInputFile->setReadOffset(0);
+
+        return mInputFile->isValid();
+    }
+
+    void HeaderFile::updateCRC()
+    {
+        if(!mModified || !mValid)
+            return;
+
+#ifdef PROFILER_ON
+        NextCash::Profiler profiler("Header Update CRC", false);
+        profiler.start();
+#endif
+        if(!openFile())
+        {
+            mValid = false;
+            return;
+        }
+
+        // Calculate new CRC
+        NextCash::Digest digest(NextCash::Digest::CRC32);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
+
+        // Read file into digest
+        mInputFile->setReadOffset(DATA_START_OFFSET);
+        digest.writeStream(mInputFile, mInputFile->remaining());
+
+        // Close input file
+        delete mInputFile;
+        mInputFile = NULL;
+
+        // Get CRC result
+        NextCash::Buffer crcBuffer;
+        crcBuffer.setEndian(NextCash::Endian::LITTLE);
+        digest.getResult(&crcBuffer);
+        uint32_t crc = crcBuffer.readUnsignedInt();
+
+        // Open output file
+        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(mFilePathName);
+
+        // Write CRC to file
+        outputFile->setOutputEndian(NextCash::Endian::LITTLE);
+        outputFile->setWriteOffset(CRC_OFFSET);
+        outputFile->writeUnsignedInt(crc);
+
+        // Close output file
+        delete outputFile;
+        mModified = false;
+
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+          "Header file %08x CRC updated : %08x", mID, crc);
+    }
+
+    bool HeaderFile::validate()
+    {
+        // Read CRC
+        mInputFile->setReadOffset(CRC_OFFSET);
+        uint32_t crc = mInputFile->readUnsignedInt();
+
+        // Calculate CRC
+        NextCash::Digest digest(NextCash::Digest::CRC32);
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
+        digest.writeStream(mInputFile, mInputFile->remaining());
+
+        // Get Calculated CRC
+        NextCash::Buffer crcBuffer;
+        crcBuffer.setEndian(NextCash::Endian::LITTLE);
+        digest.getResult(&crcBuffer);
+        uint32_t calculatedCRC = crcBuffer.readUnsignedInt();
+
+        // Check CRC
+        if(crc != calculatedCRC)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x has invalid CRC : %08x != %08x", mID, crc, calculatedCRC);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool HeaderFile::remove(unsigned int pID)
+    {
+        if(NextCash::removeFile(filePathName(pID)))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_HEADER_LOG_NAME,
+              "Removed header file %08x", pID);
+            return true;
+        }
+
+        return false;
+    }
+
+    unsigned int HeaderFile::itemCount()
+    {
+        if(!openFile())
+        {
+            mValid = false;
+            return 0;
+        }
+        return (mInputFile->length() - DATA_START_OFFSET) / ITEM_SIZE;
+    }
+
+    NextCash::Hash HeaderFile::lastHash()
+    {
+        NextCash::Hash result(32);
+        if(!openFile())
+        {
+            mValid = false;
+            return result;
+        }
+        mInputFile->setReadOffset(DATA_START_OFFSET + ((itemCount() - 1) * ITEM_SIZE));
+        result.read(mInputFile);
+        return result;
+    }
+
+    bool HeaderFile::writeHeader(const Header &pHeader)
+    {
+#ifdef PROFILER_ON
+        NextCash::Profiler profiler("Header Add");
+#endif
+        if(pHeader.hash.size() != 32)
+            return false;
+
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        unsigned int count = itemCount();
+
+        if(count == MAX_COUNT)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x is already full", mID);
+            return false;
+        }
+
+        if(mInputFile != NULL)
+            delete mInputFile;
+        mInputFile = NULL;
+
+        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(mFilePathName, false, true);
+        outputFile->setOutputEndian(NextCash::Endian::LITTLE);
+        if(!outputFile->isValid())
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x output file failed to open", mID);
+            delete outputFile;
+            return false;
+        }
+
+        // Write header data at end of file
+        pHeader.hash.write(outputFile);
+        pHeader.write(outputFile, false);
+        outputFile->writeUnsignedInt(pHeader.transactionCount);
+        delete outputFile;
+
+        mModified = true;
+        return true;
+    }
+
+    bool HeaderFile::removeHeadersAbove(unsigned int pOffset)
+    {
+#ifdef PROFILER_ON
+        NextCash::Profiler profiler("Header Remove Above");
+#endif
+        if(pOffset + 1 == MAX_COUNT - 1)
+            return false;
+
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        NextCash::stream_size newFileSize = DATA_START_OFFSET + ((pOffset + 1) * ITEM_SIZE);
+
+        if(newFileSize > mInputFile->length())
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x offset not above %d", mID, pOffset);
+            return false;
+        }
+
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+          "Header file %08x reverting to count of %d", mID, pOffset);
+
+        NextCash::String swapFilePathName = mFilePathName + ".swap";
+        NextCash::FileOutputStream *swapFile = new NextCash::FileOutputStream(swapFilePathName,
+          true);
+
+        if(!swapFile->isValid())
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x swap output file failed to open", mID);
+            delete swapFile;
+            return false;
+        }
+
+        mInputFile->setReadOffset(0);
+        swapFile->writeStream(mInputFile, newFileSize);
+        delete mInputFile;
+        mInputFile = NULL;
+        delete swapFile;
+
+        mModified = true;
+
+        if(!NextCash::renameFile(swapFilePathName, mFilePathName))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x failed to rename swap file", mID);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool HeaderFile::readHashes(unsigned int pOffset, unsigned int pCount, NextCash::HashList &pHashes)
+    {
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE)) ||
+          mInputFile->remaining() < ITEM_SIZE)
+            return false;
+
+        NextCash::Hash hash(32);
+        unsigned int count = itemCount();
+        unsigned int added = 0;
+        for(unsigned int i = pOffset; i < count && added < pCount; ++i, ++added)
+        {
+            if(!hash.read(mInputFile))
+                return false;
+
+            pHashes.push_back(hash);
+
+            if(!mInputFile->skip(ITEM_SIZE - 32))
+                return false;
+        }
+
+        return true;
+    }
+
+    bool HeaderFile::readTargetBits(unsigned int pOffset, unsigned int pCount,
+      std::vector<uint32_t> &pTargetBits)
+    {
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + 104) ||
+          mInputFile->remaining() < ITEM_SIZE - 104)
+            return false;
+
+        unsigned int count = itemCount();
+        unsigned int added = 0;
+        for(unsigned int i = pOffset; i < count && added < pCount; ++i, ++added)
+        {
+            pTargetBits.push_back(mInputFile->readUnsignedInt());
+            if(!mInputFile->skip(ITEM_SIZE - 4))
+                return false;
+
+            if(mInputFile->remaining() < 4)
+                return false;
+        }
+
+        return true;
+    }
+
+    bool HeaderFile::readBlockStatsReverse(unsigned int pOffset, unsigned int pCount,
+      std::list<BlockStat> &pBlockStats)
+    {
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + 32) ||
+          mInputFile->remaining() < ITEM_SIZE - 32)
+            return false;
+
+        // 12 bytes read + 64 skipped, plus 32 hash gets to begining of this item. 12 + 32
+        // Then backup a full item. + ITEM_SIZE
+        // Then skip over hash of previous item. - 32
+        NextCash::stream_size backupOffset = 12 + 64 + ITEM_SIZE;
+        uint32_t version, time, targetBits;
+        unsigned int added = 0;
+        for(unsigned int i = pOffset; added < pCount; --i, ++added)
+        {
+            version = mInputFile->readUnsignedInt();
+            mInputFile->skip(64); // Skip previous and merkle hashes
+            time = mInputFile->readUnsignedInt();
+            targetBits = mInputFile->readUnsignedInt();
+            pBlockStats.emplace_front(version, time, targetBits);
+
+            if(i == 0)
+                break;
+
+            // Go to previous header.
+            if(!mInputFile->setReadOffset(mInputFile->readOffset() - backupOffset))
+                return false;
+        }
+
+        return true;
+    }
+
+    bool HeaderFile::readHeaders(unsigned int pOffset, unsigned int pCount, HeaderList &pHeaders)
+    {
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + 32) ||
+          mInputFile->remaining() < ITEM_SIZE - 32)
+            return false;
+
+        unsigned int count = itemCount();
+        unsigned int added = 0;
+        for(unsigned int i = pOffset; i < count && added < pCount; ++i, ++added)
+        {
+            pHeaders.emplace_back();
+            if(!pHeaders.back().read(mInputFile, false, true))
+            {
+                pHeaders.pop_back();
+                return false;
+            }
+
+
+            if(!mInputFile->skip(ITEM_SIZE - 36))
+                return false;
+        }
+
+        return true;
+    }
+
+    bool HeaderFile::readHeader(unsigned int pOffset, Header &pHeader)
+    {
+        pHeader.clear();
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + 32) ||
+          mInputFile->remaining() < 80)
+            return false;
+
+        if(!pHeader.read(mInputFile, false, true))
+            return false;
+
+        pHeader.transactionCount = mInputFile->readUnsignedInt();
+        return true;
+    }
+
+    bool Header::getHeader(unsigned int pHeight, Header &pHeader)
+    {
+        HeaderFile *file = HeaderFile::get(HeaderFile::fileID(pHeight));
+        if(file == NULL)
+            return false;
+
+        bool success = file->readHeader(HeaderFile::fileOffset(pHeight), pHeader);
+        file->unlock();
+        return success;
+    }
+
+    bool Header::getHeaders(unsigned int pStartHeight, unsigned int pCount, HeaderList &pHeaders)
+    {
+        pHeaders.clear();
+
+        int fileID = HeaderFile::fileID(pStartHeight);
+
+        HeaderFile *file = HeaderFile::get(fileID);
+        if(file == NULL)
+            return !HeaderFile::exists(fileID);
+
+        unsigned int offset = HeaderFile::fileOffset(pStartHeight);
+        while(pHeaders.size() < pCount)
+        {
+            if(!file->readHeaders(offset, pCount - pHeaders.size(), pHeaders))
+            {
+                file->unlock();
+                return false;
+            }
+
+            file->unlock();
+            offset = 0;
+            ++fileID;
+            file = HeaderFile::get(fileID);
+            if(file == NULL)
+                return !HeaderFile::exists(fileID);
+        }
+
+        return true;
+    }
+
+    bool HeaderFile::readHash(unsigned int pOffset, NextCash::Hash &pHash)
+    {
+        pHash.clear();
+        if(!openFile())
+        {
+            mValid = false;
+            return false;
+        }
+
+        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE)) ||
+          mInputFile->remaining() < ITEM_SIZE)
+            return false;
+
+        return pHash.read(mInputFile, 32);
+    }
+
+    bool Header::getHash(unsigned int pHeight, NextCash::Hash &pHash)
+    {
+        int fileID = HeaderFile::fileID(pHeight);
+
+        HeaderFile *file = HeaderFile::get(fileID);
+        if(file == NULL)
+            return false;
+
+        bool success = file->readHash(HeaderFile::fileOffset(pHeight), pHash);
+        file->unlock();
+        return success;
+    }
+
+    bool Header::getHashes(unsigned int pStartHeight, unsigned int pCount,
+      NextCash::HashList &pList)
+    {
+        pList.clear();
+
+        int fileID = HeaderFile::fileID(pStartHeight);
+
+        HeaderFile *file = HeaderFile::get(fileID);
+        if(file == NULL)
+            return !HeaderFile::exists(fileID);
+
+        unsigned int offset = HeaderFile::fileOffset(pStartHeight);
+        while(pList.size() < pCount)
+        {
+            if(!file->readHashes(offset, pCount - pList.size(), pList))
+            {
+                file->unlock();
+                return false;
+            }
+
+            file->unlock();
+            offset = 0;
+            ++fileID;
+            file = HeaderFile::get(fileID);
+            if(file == NULL)
+                return !HeaderFile::exists(fileID);
+        }
+
+        file->unlock();
+        return true;
+    }
+
+    bool Header::getTargetBits(unsigned int pStartHeight, unsigned int pCount,
+      std::vector<uint32_t> &pTargetBits)
+    {
+        pTargetBits.clear();
+
+        int fileID = HeaderFile::fileID(pStartHeight);
+
+        HeaderFile *file = HeaderFile::get(fileID);
+        if(file == NULL)
+            return !HeaderFile::exists(fileID);
+
+        unsigned int offset = HeaderFile::fileOffset(pStartHeight);
+        while(pTargetBits.size() < pCount)
+        {
+            if(!file->readTargetBits(offset, pCount - pTargetBits.size(), pTargetBits))
+            {
+                file->unlock();
+                return false;
+            }
+
+            file->unlock();
+            offset = 0;
+            ++fileID;
+            file = HeaderFile::get(fileID);
+            if(file == NULL)
+                return !HeaderFile::exists(fileID);
+        }
+
+        return true;
+    }
+
+    bool Header::getBlockStatsReverse(unsigned int pStartHeight, unsigned int pCount,
+      std::list<BlockStat> &pBlockStats)
+    {
+        pBlockStats.clear();
+
+        int fileID = HeaderFile::fileID(pStartHeight);
+        unsigned int offset = HeaderFile::fileOffset(pStartHeight);
+
+        // if(offset == 0)
+        // {
+            // if(fileID == 0)
+                // return true;
+            // --fileID;
+            // offset = HeaderFile::MAX_COUNT;
+        // }
+
+        HeaderFile *file = HeaderFile::get(fileID);
+        if(file == NULL)
+            return !HeaderFile::exists(fileID);
+
+        while(pBlockStats.size() < pCount)
+        {
+            if(!file->readBlockStatsReverse(offset, pCount - pBlockStats.size(), pBlockStats))
+            {
+                file->unlock();
+                return false;
+            }
+
+            file->unlock();
+            offset = HeaderFile::MAX_COUNT - 1;
+            --fileID;
+            if(fileID == 0)
+                break;
+            file = HeaderFile::get(fileID);
+            if(file == NULL)
+                return !HeaderFile::exists(fileID);
+        }
+
+        file->unlock();
+        return true;
+
+    }
+
+    bool Header::add(unsigned int pHeight, const Header &pHeader)
+    {
+        HeaderFile *file = HeaderFile::get(HeaderFile::fileID(pHeight), true);
+        if(file == NULL)
+            return false;
+
+        if(pHeight != 0)
+        {
+            if(file->itemCount() == 0)
+            {
+                // First header in file. Verify last hash of previous file.
+                HeaderFile *previousFile = HeaderFile::get(HeaderFile::fileID(pHeight) - 1);
+                if(previousFile == NULL)
+                {
+                    file->unlock();
+                    return false;
+                }
+
+                if(previousFile->lastHash() != pHeader.previousHash)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+                      "Header file %08x add header failed : Invalid previous file last hash : %s",
+                      file->id(), previousFile->lastHash().hex().text());
+                    file->unlock();
+                    previousFile->unlock();
+                    return false;
+                }
+
+                previousFile->unlock();
+            }
+            else if(file->lastHash() != pHeader.previousHash)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+                  "Header file %08x add header failed : Invalid previous hash : %s", file->id(),
+                  file->lastHash().hex().text());
+                file->unlock();
+                return false;
+            }
+        }
+
+        bool success = file->writeHeader(pHeader);
+        file->unlock();
+        return success;
+    }
+
+    bool Header::revertToHeight(unsigned int pHeight)
+    {
+        unsigned int fileID = HeaderFile::fileID(pHeight);
+        unsigned int fileOffset = HeaderFile::fileOffset(pHeight);
+
+        // Truncate latest file
+        if(fileOffset != HeaderFile::MAX_COUNT - 1)
+        {
+            HeaderFile *file = HeaderFile::get(fileID, true);
+            if(file == NULL)
+                return false;
+
+            file->removeHeadersAbove(fileOffset);
+            file->unlock();
+            ++fileID;
+        }
+
+        // Remove any files after that
+        while(true)
+        {
+            if(!HeaderFile::remove(fileID))
+                return !HeaderFile::exists(fileID);
+
+            ++fileID;
+        }
+
+        return true;
+    }
+
+    unsigned int Header::totalCount()
+    {
+        unsigned int result = 0;
+        unsigned int fileID = 0;
+        while(HeaderFile::exists(fileID))
+        {
+            result += HeaderFile::MAX_COUNT;
+            ++fileID;
+        }
+
+        if(fileID > 0)
+        {
+            // Adjust for last file not being full.
+            --fileID;
+            result -= HeaderFile::MAX_COUNT;
+
+            HeaderFile *file = HeaderFile::get(fileID);
+            if(file != NULL)
+            {
+                result += file->itemCount();
+                file->unlock();
+            }
+        }
+
+        return result;
+    }
+}

@@ -56,6 +56,12 @@ namespace BitCoin
         return true;
     }
 
+    bool SoftFork::isActive(unsigned int pBlockHeight)
+    {
+        return lockedHeight != NOT_LOCKED &&
+          pBlockHeight >= (unsigned int)lockedHeight + RETARGET_PERIOD;
+    }
+
     const char *SoftFork::stateName()
     {
         switch(state)
@@ -114,7 +120,7 @@ namespace BitCoin
         return result;
     }
 
-    void SoftFork::revertLast(Chain *pChain, int pBlockHeight)
+    void SoftFork::revertLast(Chain *pChain, unsigned int pBlockHeight)
     {
         switch(state)
         {
@@ -191,22 +197,20 @@ namespace BitCoin
 
     Forks::Forks() : mMutex("Forks")
     {
-        mHeight = -1;
-        mEnabledBlockVersion = 1;
-        mRequiredBlockVersion = 1;
+        mHeight = 0;
         mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         mElementMaxSize = 520;
-        mCashActivationBlockHeight = -1;
-        mCashFork201711BlockHeight = -1;
-        mCashFork201805BlockHeight = -1;
-        mCashFork201811BlockHeight = -1;
+        mCashActivationBlockHeight = 0;
+        mCashFork201711BlockHeight = 0;
+        mCashFork201805BlockHeight = 0;
+        mCashFork201811BlockHeight = 0;
         mCashForkID = 0;
         mModified = false;
 
         for(unsigned int i = 0; i < 3; i++)
         {
-            mBlockVersionEnabledHeights[i] = -1;
-            mBlockVersionRequiredHeights[i] = -1;
+            mBlockVersionEnabledHeights[i] = 0;
+            mBlockVersionRequiredHeights[i] = 0;
         }
 
         switch(network())
@@ -239,16 +243,16 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    SoftFork::State Forks::softForkState(unsigned int pID)
+    bool Forks::softForkIsActive(unsigned int pBlockHeight, unsigned int pID)
     {
-        SoftFork::State result = SoftFork::UNDEFINED;
+        bool result = false;
         mMutex.lock();
 
         for(std::vector<SoftFork *>::const_iterator softFork = mForks.begin();
           softFork != mForks.end(); ++softFork)
             if((*softFork)->id == pID)
             {
-                result = (*softFork)->state;
+                result = (*softFork)->isActive(pBlockHeight);
                 break;
             }
 
@@ -256,24 +260,19 @@ namespace BitCoin
         return result;
     }
 
-    void Forks::process(Chain *pChain, int pBlockHeight)
+    void Forks::process(Chain *pChain, unsigned int pBlockHeight)
     {
         mMutex.lock();
 
 #ifdef PROFILER_ON
         NextCash::Profiler outputsProfiler("Forks Process");
 #endif
-        if(pBlockHeight < 0)
-        {
-            mMutex.unlock();
-            return;
-        }
 
-        if(mRequiredBlockVersion < 4)
+        if(mBlockVersionRequiredHeights[2] != 0)
         {
-            int totalCount = 1000;
-            int activateCount = 750;
-            int requireCount = 950;
+            unsigned int totalCount = 1000;
+            unsigned int activateCount = 750;
+            unsigned int requireCount = 950;
 
             if(network() == TESTNET)
             {
@@ -283,20 +282,21 @@ namespace BitCoin
             }
 
             // Update versions
-            if(mBlockVersions.size() < totalCount && mBlockVersions.size() < pBlockHeight)
+            if(mBlockVersions.size() < totalCount &&
+              mBlockVersions.size() < pBlockHeight)
             {
                 mBlockVersions.clear();
-                for(int height = pBlockHeight; mBlockVersions.size() < totalCount && height >= 0;
-                  --height)
+                for(unsigned int height = pBlockHeight; mBlockVersions.size() < totalCount &&
+                  height >= 0; --height)
                     mBlockVersions.push_front(pChain->version(height));
             }
             mBlockVersions.push_back(pChain->version(pBlockHeight));
             while(mBlockVersions.size() > totalCount)
                 mBlockVersions.pop_front();
 
-            int version4OrHigherCount = 0;
-            int version3OrHigherCount = 0;
-            int version2OrHigherCount = 0;
+            unsigned int version4OrHigherCount = 0;
+            unsigned int version3OrHigherCount = 0;
+            unsigned int version2OrHigherCount = 0;
             for(std::list<int32_t>::iterator version = mBlockVersions.begin();
               version != mBlockVersions.end(); ++version)
                 switch(*version)
@@ -316,82 +316,73 @@ namespace BitCoin
             // BIP-0065
             if(version4OrHigherCount >= requireCount)
             {
-                if(mRequiredBlockVersion < 4)
+                if(mBlockVersionRequiredHeights[2] == 0)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                       "Version 4 blocks now required (height %d)", pBlockHeight);
                     mBlockVersionRequiredHeights[2] = pBlockHeight;
-                    mRequiredBlockVersion = 4;
                     mModified = true;
                     mBlockVersions.clear();
                 }
-                if(mEnabledBlockVersion < 4)
+                if(mBlockVersionEnabledHeights[2] == 0)
                 {
                     mBlockVersionEnabledHeights[2] = pBlockHeight;
-                    mEnabledBlockVersion = 4;
                     mModified = true;
                 }
             }
-            else if(mEnabledBlockVersion < 4 && version4OrHigherCount >= activateCount)
+            else if(mBlockVersionEnabledHeights[2] == 0 && version4OrHigherCount >= activateCount)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                   "Version 4 blocks now enabled (height %d)", pBlockHeight);
                 mBlockVersionEnabledHeights[2] = pBlockHeight;
-                mEnabledBlockVersion = 4;
                 mModified = true;
             }
 
             // BIP-0066
             if(version3OrHigherCount >= requireCount)
             {
-                if(mRequiredBlockVersion < 3)
+                if(mBlockVersionRequiredHeights[1] == 0)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                       "Version 3 blocks now required (height %d)", pBlockHeight);
                     mBlockVersionRequiredHeights[1] = pBlockHeight;
-                    mRequiredBlockVersion = 3;
                     mModified = true;
                 }
-                if(mEnabledBlockVersion < 3)
+                if(mBlockVersionEnabledHeights[1] == 0)
                 {
                     mBlockVersionEnabledHeights[1] = pBlockHeight;
-                    mEnabledBlockVersion = 3;
                     mModified = true;
                 }
             }
-            else if(mEnabledBlockVersion < 3 && version3OrHigherCount >= activateCount)
+            else if(mBlockVersionEnabledHeights[1] == 0 && version3OrHigherCount >= activateCount)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                   "Version 3 blocks now enabled (height %d)", pBlockHeight);
                 mBlockVersionEnabledHeights[1] = pBlockHeight;
-                mEnabledBlockVersion = 3;
                 mModified = true;
             }
 
             // BIP-0034
             if(version2OrHigherCount >= requireCount)
             {
-                if(mRequiredBlockVersion < 2)
+                if(mBlockVersionRequiredHeights[0] == 0)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                       "Version 2 blocks now required (height %d)", pBlockHeight);
                     mBlockVersionRequiredHeights[0] = pBlockHeight;
-                    mRequiredBlockVersion = 2;
                     mModified = true;
                 }
-                if(mEnabledBlockVersion < 2)
+                if(mBlockVersionEnabledHeights[0] == 0)
                 {
                     mBlockVersionEnabledHeights[0] = pBlockHeight;
-                    mEnabledBlockVersion = 2;
                     mModified = true;
                 }
             }
-            else if(mEnabledBlockVersion < 2 && version2OrHigherCount >= activateCount)
+            else if(mBlockVersionEnabledHeights[0] == 0 && version2OrHigherCount >= activateCount)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                   "Version 2 blocks now enabled (height %d)", pBlockHeight);
                 mBlockVersionEnabledHeights[0] = pBlockHeight;
-                mEnabledBlockVersion = 2;
                 mModified = true;
             }
         }
@@ -399,7 +390,7 @@ namespace BitCoin
         mHeight = pBlockHeight;
         mModified = true;
 
-        if(mRequiredBlockVersion >= 4 && pBlockHeight != 0 && pBlockHeight % RETARGET_PERIOD == 0)
+        if(mBlockVersionRequiredHeights[2] != 0 && pBlockHeight != 0 && pBlockHeight % RETARGET_PERIOD == 0)
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
               "Updating for block height %d", pBlockHeight);
@@ -443,7 +434,7 @@ namespace BitCoin
 
                         unsigned int support = 0;
                         int offset = 0;
-                        for(int height = pBlockHeight; height >= 0 && offset < RETARGET_PERIOD;
+                        for(unsigned int height = pBlockHeight; height >= 0 && offset < RETARGET_PERIOD;
                           --height, ++offset)
                         {
                             version = pChain->version(height);
@@ -491,7 +482,7 @@ namespace BitCoin
                 unknownSupport[i] = 0;
 
             unsigned int offset = 0;
-            for(int height = pBlockHeight; height >= 0 && offset < RETARGET_PERIOD;
+            for(unsigned int height = pBlockHeight; height >= 0 && offset < RETARGET_PERIOD;
               --height, ++offset)
             {
                 version = pChain->version(height);
@@ -516,7 +507,7 @@ namespace BitCoin
 
         if(CASH_ACTIVATION_TIME != 0)
         {
-            if(mCashActivationBlockHeight == -1)
+            if(mCashActivationBlockHeight == 0)
             {
                 if(pChain->time(pBlockHeight) > CASH_ACTIVATION_TIME &&
                   pChain->getMedianPastTime(pBlockHeight, 11) >= CASH_ACTIVATION_TIME)
@@ -527,7 +518,7 @@ namespace BitCoin
                     mBlockMaxSize = CASH_START_MAX_BLOCK_SIZE;
                 }
             }
-            else if(mCashFork201711BlockHeight == -1)
+            else if(mCashFork201711BlockHeight == 0)
             {
                 if(pChain->time(pBlockHeight) > CASH_FORK_201711_ACTIVATION_TIME &&
                    pChain->getMedianPastTime(pBlockHeight, 11) >= CASH_FORK_201711_ACTIVATION_TIME)
@@ -537,7 +528,7 @@ namespace BitCoin
                     mCashFork201711BlockHeight = pBlockHeight;
                 }
             }
-            else if(mCashFork201805BlockHeight == -1)
+            else if(mCashFork201805BlockHeight == 0)
             {
                 if(pChain->time(pBlockHeight) > CASH_FORK_201805_ACTIVATION_TIME &&
                    pChain->getMedianPastTime(pBlockHeight, 11) >= CASH_FORK_201805_ACTIVATION_TIME)
@@ -548,7 +539,7 @@ namespace BitCoin
                     mBlockMaxSize = FORK_201805_MAX_BLOCK_SIZE;
                 }
             }
-            else if(mCashFork201811BlockHeight == -1)
+            else if(mCashFork201811BlockHeight == 0)
             {
                 if(pChain->time(pBlockHeight) > CASH_FORK_201811_ACTIVATION_TIME &&
                    pChain->getMedianPastTime(pBlockHeight, 11) >= CASH_FORK_201811_ACTIVATION_TIME)
@@ -564,7 +555,7 @@ namespace BitCoin
         mMutex.unlock();
     }
 
-    void Forks::revertLast(Chain *pChain, int pBlockHeight)
+    void Forks::revertLast(Chain *pChain, unsigned int pBlockHeight)
     {
         mMutex.lock();
 
@@ -573,51 +564,33 @@ namespace BitCoin
         // Back out any version enabled/required heights below new block height
         for(unsigned int i = 0; i < 3; ++i)
         {
-            if(mBlockVersionRequiredHeights[i] != -1 && mBlockVersionRequiredHeights[i] >= pBlockHeight)
-                mBlockVersionRequiredHeights[i] = -1;
-            if(mBlockVersionEnabledHeights[i] != -1 && mBlockVersionEnabledHeights[i] >= pBlockHeight)
-                mBlockVersionEnabledHeights[i] = -1;
+            if(mBlockVersionRequiredHeights[i] != 0 && mBlockVersionRequiredHeights[i] >= pBlockHeight)
+                mBlockVersionRequiredHeights[i] = 0;
+            if(mBlockVersionEnabledHeights[i] != 0 && mBlockVersionEnabledHeights[i] >= pBlockHeight)
+                mBlockVersionEnabledHeights[i] = 0;
         }
 
-        if(mBlockVersionRequiredHeights[2] != -1)
-            mRequiredBlockVersion = 4;
-        else if(mBlockVersionRequiredHeights[1] != -1)
-            mRequiredBlockVersion = 3;
-        else if(mBlockVersionRequiredHeights[0] != -1)
-            mRequiredBlockVersion = 2;
-        else
-            mRequiredBlockVersion = 1;
-
-        if(mBlockVersionEnabledHeights[2] != -1)
-            mEnabledBlockVersion = 4;
-        else if(mBlockVersionEnabledHeights[1] != -1)
-            mEnabledBlockVersion = 3;
-        else if(mBlockVersionEnabledHeights[0] != -1)
-            mEnabledBlockVersion = 2;
-        else
-            mEnabledBlockVersion = 1;
-
-        if(mCashActivationBlockHeight != -1 && pBlockHeight <= mCashActivationBlockHeight)
+        if(mCashActivationBlockHeight != 0 && pBlockHeight <= mCashActivationBlockHeight)
         {
             // Undo cash fork
-            mCashActivationBlockHeight = -1;
+            mCashActivationBlockHeight = 0;
             mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         }
 
-        if(mCashFork201711BlockHeight != -1 && pBlockHeight <= mCashFork201711BlockHeight)
-            mCashFork201711BlockHeight = -1; // Undo Nov 2017 fork
+        if(mCashFork201711BlockHeight != 0 && pBlockHeight <= mCashFork201711BlockHeight)
+            mCashFork201711BlockHeight = 0; // Undo Nov 2017 fork
 
-        if(mCashFork201805BlockHeight != -1 && pBlockHeight <= mCashFork201805BlockHeight)
+        if(mCashFork201805BlockHeight != 0 && pBlockHeight <= mCashFork201805BlockHeight)
         {
             // Undo May 2018 fork
-            mCashFork201805BlockHeight = -1;
+            mCashFork201805BlockHeight = 0;
             mBlockMaxSize = CASH_START_MAX_BLOCK_SIZE;
         }
 
-        if(mCashFork201811BlockHeight != -1 && pBlockHeight <= mCashFork201811BlockHeight)
+        if(mCashFork201811BlockHeight != 0 && pBlockHeight <= mCashFork201811BlockHeight)
         {
             // Undo Nov 2018 fork
-            mCashFork201811BlockHeight = -1;
+            mCashFork201811BlockHeight = 0;
             mBlockMaxSize = FORK_201805_MAX_BLOCK_SIZE;
             mCashForkID = 0;
         }
@@ -636,17 +609,15 @@ namespace BitCoin
         mMutex.lock();
 
         mBlockVersions.clear();
-        mEnabledBlockVersion = 0;
-        mRequiredBlockVersion = 0;
-        for(unsigned int i=0;i<3;i++)
+        for(unsigned int i = 0; i < 3; i++)
         {
-            mBlockVersionEnabledHeights[i] = -1;
-            mBlockVersionRequiredHeights[i] = -1;
+            mBlockVersionEnabledHeights[i] = 0;
+            mBlockVersionRequiredHeights[i] = 0;
         }
-        mCashActivationBlockHeight = -1;
-        mCashFork201711BlockHeight = -1;
-        mCashFork201805BlockHeight = -1;
-        mCashFork201811BlockHeight = -1;
+        mCashActivationBlockHeight = 0;
+        mCashFork201711BlockHeight = 0;
+        mCashFork201805BlockHeight = 0;
+        mCashFork201811BlockHeight = 0;
         mCashForkID = 0;
         mBlockMaxSize = HARD_MAX_BLOCK_SIZE;
         for(std::vector<SoftFork *>::iterator softFork = mForks.begin(); softFork != mForks.end();
@@ -725,26 +696,24 @@ namespace BitCoin
         for(unsigned int i = 0; i < 3; ++i)
             mBlockVersionRequiredHeights[i] = file.readInt();
 
-        if(mBlockVersionRequiredHeights[2] != -1 && mHeight >= mBlockVersionRequiredHeights[2])
-            mRequiredBlockVersion = 4;
-        else if(mBlockVersionRequiredHeights[1] != -1 && mHeight >= mBlockVersionRequiredHeights[1])
-            mRequiredBlockVersion = 3;
-        else if(mBlockVersionRequiredHeights[0] != -1 && mHeight >= mBlockVersionRequiredHeights[0])
-            mRequiredBlockVersion = 2;
-        else
-            mRequiredBlockVersion = 1;
+        unsigned int requiredBlockVersion = 1;
+        if(mBlockVersionRequiredHeights[2] != 0)
+            requiredBlockVersion = 4;
+        else if(mBlockVersionRequiredHeights[1] != 0)
+            requiredBlockVersion = 3;
+        else if(mBlockVersionRequiredHeights[0] != 0)
+            requiredBlockVersion = 2;
 
-        if(mBlockVersionEnabledHeights[2] != -1 && mHeight >= mBlockVersionEnabledHeights[2])
-            mEnabledBlockVersion = 4;
-        else if(mBlockVersionEnabledHeights[1] != -1 && mHeight >= mBlockVersionEnabledHeights[1])
-            mEnabledBlockVersion = 3;
-        else if(mBlockVersionEnabledHeights[0] != -1 && mHeight >= mBlockVersionEnabledHeights[0])
-            mEnabledBlockVersion = 2;
-        else
-            mEnabledBlockVersion = 1;
+        unsigned int enabledBlockVersion = 1;
+        if(mBlockVersionEnabledHeights[2] != 0)
+            enabledBlockVersion = 4;
+        else if(mBlockVersionEnabledHeights[1] != 0)
+            enabledBlockVersion = 3;
+        else if(mBlockVersionEnabledHeights[0] != 0)
+            enabledBlockVersion = 2;
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-          "Block versions %d/%d enabled/required", mEnabledBlockVersion, mRequiredBlockVersion);
+          "Block versions %d/%d enabled/required", enabledBlockVersion, requiredBlockVersion);
 
         if(version == 1)
         {
@@ -753,44 +722,44 @@ namespace BitCoin
             mBlockMaxSize = file.readUnsignedInt();
             mCashForkID = file.readUnsignedInt();
 
-            if(mCashActivationBlockHeight != -1)
+            if(mCashActivationBlockHeight != 0)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                   "Cash fork active since block height %d, max block size %d",
                   mCashActivationBlockHeight, CASH_START_MAX_BLOCK_SIZE);
 
                 // Determine Cash fork heights
-                for(int i = mCashActivationBlockHeight; i <= mHeight; ++i)
+                for(unsigned int height = mCashActivationBlockHeight; height <= mHeight; ++height)
                 {
-                    if(mCashFork201711BlockHeight == -1)
+                    if(mCashFork201711BlockHeight == 0)
                     {
-                        if(pChain->time(i) > CASH_FORK_201711_ACTIVATION_TIME &&
-                          pChain->getMedianPastTime(i, 11) > CASH_FORK_201711_ACTIVATION_TIME)
+                        if(pChain->time(height) > CASH_FORK_201711_ACTIVATION_TIME &&
+                          pChain->getMedianPastTime(height, 11) > CASH_FORK_201711_ACTIVATION_TIME)
                         {
-                            mCashFork201711BlockHeight = i;
+                            mCashFork201711BlockHeight = height;
                             NextCash::Log::addFormatted(NextCash::Log::INFO,
                               BITCOIN_FORKS_LOG_NAME,
                               "Cash DAA active since block height %d", mCashFork201711BlockHeight);
                         }
                     }
-                    else if(mCashFork201805BlockHeight == -1)
+                    else if(mCashFork201805BlockHeight == 0)
                     {
-                        if(pChain->time(i) > CASH_FORK_201805_ACTIVATION_TIME &&
-                          pChain->getMedianPastTime(i, 11) > CASH_FORK_201805_ACTIVATION_TIME)
+                        if(pChain->time(height) > CASH_FORK_201805_ACTIVATION_TIME &&
+                          pChain->getMedianPastTime(height, 11) > CASH_FORK_201805_ACTIVATION_TIME)
                         {
-                            mCashFork201805BlockHeight = i;
+                            mCashFork201805BlockHeight = height;
                             NextCash::Log::addFormatted(NextCash::Log::INFO,
                               BITCOIN_FORKS_LOG_NAME,
                               "2018 May fork active since block height %d, max block size %d",
                               mCashFork201805BlockHeight, FORK_201805_MAX_BLOCK_SIZE);
                         }
                     }
-                    else if(mCashFork201811BlockHeight == -1)
+                    else if(mCashFork201811BlockHeight == 0)
                     {
-                        if(pChain->time(i) > CASH_FORK_201811_ACTIVATION_TIME &&
-                          pChain->getMedianPastTime(i, 11) > CASH_FORK_201811_ACTIVATION_TIME)
+                        if(pChain->time(height) > CASH_FORK_201811_ACTIVATION_TIME &&
+                          pChain->getMedianPastTime(height, 11) > CASH_FORK_201811_ACTIVATION_TIME)
                         {
-                            mCashFork201811BlockHeight = i;
+                            mCashFork201811BlockHeight = height;
                             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                               "2018 Nov fork active since block height %d",
                               mCashFork201811BlockHeight);
@@ -890,5 +859,33 @@ namespace BitCoin
         mModified = false;
         mMutex.unlock();
         return true;
+    }
+
+    int32_t Forks::enabledBlockVersion(unsigned int pBlockHeight) const
+    {
+        // Block version 1 is enabled by default
+        // Height at offset 0 represents version 2
+        // Height at offset 1 represents version 3
+        // Height at offset 2 represents version 4
+        for(int i = 2; i >= 0; --i)
+            if(mBlockVersionEnabledHeights[i] != 0 &&
+              (unsigned int)mBlockVersionEnabledHeights[i] > pBlockHeight)
+                return i + 2;
+
+        return 1;
+    }
+
+    int32_t Forks::requiredBlockVersion(unsigned int pBlockHeight) const
+    {
+        // Block version 1 is enabled by default
+        // Height at offset 0 represents version 2
+        // Height at offset 1 represents version 3
+        // Height at offset 2 represents version 4
+        for(int i = 2; i >= 0; --i)
+            if(mBlockVersionRequiredHeights[i] != 0 &&
+              (unsigned int)mBlockVersionRequiredHeights[i] > pBlockHeight)
+                return i + 2;
+
+        return 1;
     }
 }

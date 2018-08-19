@@ -225,8 +225,8 @@ namespace BitCoin
         Input &thisInput = inputs[pInputOffset];
         NextCash::Hash signatureHash;
         pOutput.script.setReadOffset(0);
-        getSignatureHash(pForks, signatureHash, pInputOffset, pOutput.script, pOutput.amount,
-          pHashType);
+        getSignatureHash(pForks, pForks.height(), signatureHash, pInputOffset,
+          pOutput.script, pOutput.amount, pHashType);
 
         // Sign Hash
         Signature signature;
@@ -353,8 +353,8 @@ namespace BitCoin
         // Get signature hash
         NextCash::Hash signatureHash;
         pOutput.script.setReadOffset(0);
-        getSignatureHash(pForks, signatureHash, pInputOffset, pOutput.script, pOutput.amount,
-          pHashType);
+        getSignatureHash(pForks, pForks.height(), signatureHash, pInputOffset, pOutput.script,
+          pOutput.amount, pHashType);
 
         // Sign Hash
         Signature signature;
@@ -580,7 +580,8 @@ namespace BitCoin
               (data.length() >= 9 && data.length() <= 73)) // Valid size for signature
             {
                 signature = new Signature();
-                if(!signature->read(&data, data.length(), pForks.enabledBlockVersion() >= 3))
+                if(!signature->read(&data, data.length(),
+                  pForks.enabledBlockVersion(pForks.height()) >= 3))
                 {
                     delete signature;
                     signature = NULL;
@@ -620,7 +621,7 @@ namespace BitCoin
                 {
                     if(signatureIter != signatures.end() &&
                       ScriptInterpreter::checkSignature(*this, pInputOffset, pOutput.amount,
-                        **publicKeyIter, **signatureIter, pOutput.script, 0, pForks))
+                        **publicKeyIter, **signatureIter, pOutput.script, 0, pForks, pForks.height()))
                     {
                         if(**publicKeyIter == pPublicKey)
                         {
@@ -645,8 +646,8 @@ namespace BitCoin
                         // Create new signature
                         // Get signature hash
                         pOutput.script.setReadOffset(0);
-                        getSignatureHash(pForks, signatureHash, pInputOffset, pOutput.script,
-                          pOutput.amount, pHashType);
+                        getSignatureHash(pForks, pForks.height(), signatureHash, pInputOffset,
+                          pOutput.script, pOutput.amount, pHashType);
 
                         // Sign Hash
                         if(!pPrivateKey.sign(signatureHash, *signature))
@@ -853,8 +854,8 @@ namespace BitCoin
             {
                 if(input->outpoint.output == NULL)
                     input->outpoint.output = new Output();
-                if(!BlockFile::readOutput(reference->blockHeight, outputReference,
-                  input->outpoint.index, *input->outpoint.output))
+                if(!Block::getOutput(reference->blockHeight, *outputReference,
+                  *input->outpoint.output))
                 {
                     //TODO This should be a system failure, not an invalid transaction
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
@@ -881,7 +882,7 @@ namespace BitCoin
     }
 
     bool Transaction::check(Chain *pChain, TransactionList &pMemPoolTransactions,
-      NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion)
+      NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, unsigned int pBlockHeight)
     {
         pOutpointsNeeded.clear();
         mStatus = IS_VALID | IS_STANDARD | WAS_CHECKED;
@@ -992,7 +993,7 @@ namespace BitCoin
         }
 
         if(!(mStatus & IS_STANDARD))
-            return true; // Only standard transactions currently supported so don't check signatures
+            return true; // Only standard currently supported so don't check signatures
 
         // Find outpoints and check signatures
         ScriptInterpreter interpreter;
@@ -1008,7 +1009,8 @@ namespace BitCoin
                 input->outpoint.signatureStatus = 0;
 
                 // Find unspent transaction for input
-                reference = pChain->outputs().find(input->outpoint.transactionID, input->outpoint.index);
+                reference = pChain->outputs().find(input->outpoint.transactionID,
+                  input->outpoint.index);
                 if(reference != NULL)
                     outputReference = reference->outputAt(input->outpoint.index);
                 if(outputReference != NULL && outputReference->spentBlockHeight != 0)
@@ -1038,7 +1040,8 @@ namespace BitCoin
 
                         if(input->outpoint.output == NULL)
                             input->outpoint.output = new Output();
-                        *input->outpoint.output = outpointTransaction->outputs[input->outpoint.index];
+                        *input->outpoint.output =
+                          outpointTransaction->outputs[input->outpoint.index];
                     }
                     else
                     {
@@ -1054,8 +1057,8 @@ namespace BitCoin
                 {
                     if(input->outpoint.output == NULL)
                         input->outpoint.output = new Output();
-                    if(!BlockFile::readOutput(reference->blockHeight, outputReference,
-                      input->outpoint.index, *input->outpoint.output))
+                    if(!Block::getOutput(reference->blockHeight, *outputReference,
+                      *input->outpoint.output))
                     {
                         delete input->outpoint.output;
                         input->outpoint.output = NULL;
@@ -1077,7 +1080,7 @@ namespace BitCoin
 
             // Process signature script
             input->script.setReadOffset(0);
-            if(!interpreter.process(input->script, pBlockVersion, pChain->forks()))
+            if(!interpreter.process(input->script, pBlockVersion, pChain->forks(), pBlockHeight))
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d signature script is invalid : trans %s", index, hash.hex().text());
@@ -1089,7 +1092,7 @@ namespace BitCoin
             // Check outpoint script
             input->outpoint.output->script.setReadOffset(0);
             if(!interpreter.process(input->outpoint.output->script, pBlockVersion,
-              pChain->forks()) || !interpreter.isValid())
+              pChain->forks(), pBlockHeight) || !interpreter.isValid())
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d outpoint script is not valid : trans %s", index, hash.hex().text());
@@ -1196,7 +1199,7 @@ namespace BitCoin
                 }
 
                 // BIP-0034
-                if(pBlockVersion >= 2 && pChain->forks().enabledBlockVersion() >= 2)
+                if(pBlockVersion >= 2 && pChain->forks().enabledBlockVersion(pBlockHeight) >= 2)
                 {
                     // Read block height
                     int64_t blockHeight = 0;
@@ -1270,7 +1273,7 @@ namespace BitCoin
                         return false;
                     }
                 }
-                else if(!BlockFile::readOutput(reference->blockHeight, outputReference, input->outpoint.index, output))
+                else if(!Block::getOutput(reference->blockHeight, *outputReference, output))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction failed to read : index %d trans %s", index,
@@ -1284,7 +1287,7 @@ namespace BitCoin
 #endif
                 // BIP-0068 Relative time lock sequence
                 if(version >= 2 && !input->sequenceDisabled() &&
-                  pChain->forks().softForkState(SoftFork::BIP0068) == SoftFork::ACTIVE)
+                  pChain->forks().softForkIsActive(pBlockHeight, SoftFork::BIP0068))
                 {
                     // Sequence is an encoded relative time lock
                     int32_t lock = input->sequence & Input::SEQUENCE_LOCKTIME_MASK;
@@ -1343,7 +1346,8 @@ namespace BitCoin
                 //input->script.setReadOffset(0);
                 //ScriptInterpreter::printScript(input->script, NextCash::Log::DEBUG);
                 input->script.setReadOffset(0);
-                if(!interpreter.process(input->script, pBlockVersion, pChain->forks()))
+                if(!interpreter.process(input->script, pBlockVersion, pChain->forks(),
+                  pBlockHeight))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d signature script failed : ", index);
@@ -1360,7 +1364,8 @@ namespace BitCoin
                 //output.script.setReadOffset(0);
                 //ScriptInterpreter::printScript(output.script, NextCash::Log::DEBUG);
                 output.script.setReadOffset(0);
-                if(!interpreter.process(output.script, pBlockVersion, pChain->forks()))
+                if(!interpreter.process(output.script, pBlockVersion, pChain->forks(),
+                  pBlockHeight))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING,
                       BITCOIN_TRANSACTION_LOG_NAME,
@@ -1422,7 +1427,7 @@ namespace BitCoin
             if(lockTime >= LOCKTIME_THRESHOLD)
             {
                 // Lock time is a timestamp
-                if(pChain->forks().softForkState(SoftFork::BIP0113) == SoftFork::ACTIVE)
+                if(pChain->forks().softForkIsActive(pBlockHeight, SoftFork::BIP0113))
                 {
                     if((int32_t)lockTime > pChain->getMedianPastTime(pBlockHeight, 11))
                     {
@@ -1441,7 +1446,8 @@ namespace BitCoin
                 else
                 {
                     // Add 600 to fake having a "peer time offset" for older blocks
-                    //   Block 357903 transaction 98 has a lock time about 3 minutes after the block time
+                    //   Block 357903 transaction 98 has a lock time about 3 minutes after the
+                    //   block time.
                     if((int32_t)lockTime > pChain->time(pBlockHeight) + 600)
                     {
                         NextCash::String lockTimeText, blockTimeText;
@@ -1461,7 +1467,8 @@ namespace BitCoin
                 // Lock time is a block height
                 if(lockTime > pBlockHeight)
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                      BITCOIN_TRANSACTION_LOG_NAME,
                       "Lock time block height is not valid. Lock height %d > block height %d",
                       lockTime, pBlockHeight);
                     print(pChain->forks(), NextCash::Log::VERBOSE);
@@ -1673,16 +1680,16 @@ namespace BitCoin
         return true;
     }
 
-    bool Transaction::writeSignatureData(const Forks &pForks, NextCash::OutputStream *pStream,
-      unsigned int pInputOffset, NextCash::Buffer &pOutputScript, int64_t pOutputAmount,
-      Signature::HashType pHashType)
+    bool Transaction::writeSignatureData(const Forks &pForks, unsigned int pBlockHeight,
+      NextCash::OutputStream *pStream, unsigned int pInputOffset, NextCash::Buffer &pOutputScript,
+      int64_t pOutputAmount, Signature::HashType pHashType)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Transaction Sign Data");
 #endif
         Signature::HashType hashType = pHashType;
         // Extract FORKID (0x40) flag from hash type
-        bool containsForkID = pForks.cashActive() && hashType & Signature::FORKID;
+        bool containsForkID = pForks.cashActive(pBlockHeight) && hashType & Signature::FORKID;
         if(containsForkID)
             hashType = static_cast<Signature::HashType >(hashType ^ Signature::FORKID);
         // Extract ANYONECANPAY (0x80) flag from hash type
@@ -1797,7 +1804,7 @@ namespace BitCoin
             pStream->writeUnsignedInt(lockTime);
 
             // Sig Hash Type
-            pStream->writeUnsignedInt((pForks.cashForkID() << 8) | pHashType);
+            pStream->writeUnsignedInt((pForks.cashForkID(pBlockHeight) << 8) | pHashType);
         }
         else
         {
@@ -1922,16 +1929,16 @@ namespace BitCoin
         return true;
     }
 
-    void Transaction::getSignatureHash(const Forks &pForks, NextCash::Hash &pHash,
-      unsigned int pInputOffset, NextCash::Buffer &pOutputScript, int64_t pOutputAmount,
-      Signature::HashType pHashType)
+    void Transaction::getSignatureHash(const Forks &pForks, unsigned int pBlockHeight,
+      NextCash::Hash &pHash, unsigned int pInputOffset, NextCash::Buffer &pOutputScript,
+      int64_t pOutputAmount, Signature::HashType pHashType)
     {
         // Write appropriate data to a digest
         NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
         NextCash::stream_size previousReadOffset = pOutputScript.readOffset();
         digest.setOutputEndian(NextCash::Endian::LITTLE);
-        if(writeSignatureData(pForks, &digest, pInputOffset, pOutputScript, pOutputAmount,
-          pHashType))
+        if(writeSignatureData(pForks, pBlockHeight, &digest, pInputOffset, pOutputScript,
+          pOutputAmount, pHashType))
         {
             digest.getResult(&pHash); // Get digest result
             pOutputScript.setReadOffset(previousReadOffset);
@@ -2498,7 +2505,7 @@ namespace BitCoin
         //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0].script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0].sequence, spendable.outputs[0].amount);
-        if(!interpreter.process(transaction.inputs[0].script, 4, forks))
+        if(!interpreter.process(transaction.inputs[0].script, 4, forks, 0))
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             success = false;
@@ -2506,7 +2513,7 @@ namespace BitCoin
         else
         {
             spendable.outputs[0].script.setReadOffset(0);
-            if(!interpreter.process(spendable.outputs[0].script, 4, forks))
+            if(!interpreter.process(spendable.outputs[0].script, 4, forks, 0))
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 success = false;
@@ -2569,7 +2576,7 @@ namespace BitCoin
         // transaction.inputs[0]->script.setReadOffset(0);
         // interpreter.setTransaction(&transaction);
         // interpreter.setInputSequence(transaction.inputs[0]->sequence);
-        // if(!interpreter.process(transaction.inputs[0]->script, 4, forks))
+        // if(!interpreter.process(transaction.inputs[0]->script, 4, forks, 0))
         // {
             // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process signature script");
             // success = false;
@@ -2577,7 +2584,7 @@ namespace BitCoin
         // else
         // {
             // spendable.outputs[0]->script.setReadOffset(0);
-            // if(!interpreter.process(spendable.outputs[0]->script, 4, forks))
+            // if(!interpreter.process(spendable.outputs[0]->script, 4, forks, 0))
             // {
                 // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process UTXO script");
                 // success = false;
@@ -2624,7 +2631,7 @@ namespace BitCoin
         //  "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0].script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0].sequence, spendable.outputs[0].amount);
-        if(!interpreter.process(transaction.inputs[0].script, 4, forks))
+        if(!interpreter.process(transaction.inputs[0].script, 4, forks, 0))
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
               "Failed to process signature script");
@@ -2633,7 +2640,7 @@ namespace BitCoin
         else
         {
             spendable.outputs[0].script.setReadOffset(0);
-            if(!interpreter.process(spendable.outputs[0].script, 4, forks))
+            if(!interpreter.process(spendable.outputs[0].script, 4, forks, 0))
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
                   "Failed to process UTXO script");
@@ -2720,7 +2727,7 @@ namespace BitCoin
         transaction.inputs[0].script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0].sequence,
           spendable.outputs[0].amount);
-        if(!interpreter.process(transaction.inputs[0].script, 4, forks))
+        if(!interpreter.process(transaction.inputs[0].script, 4, forks, 0))
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
               "Failed to process signature script");
@@ -2729,7 +2736,7 @@ namespace BitCoin
         else
         {
             spendable.outputs[0].script.setReadOffset(0);
-            if(!interpreter.process(spendable.outputs[0].script, 4, forks))
+            if(!interpreter.process(spendable.outputs[0].script, 4, forks, 0))
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME,
                   "Failed to process UTXO script");
@@ -2818,7 +2825,7 @@ namespace BitCoin
         //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0].script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0].sequence, spendable.outputs[0].amount);
-        if(!interpreter.process(transaction.inputs[0].script, 4, forks))
+        if(!interpreter.process(transaction.inputs[0].script, 4, forks, 0))
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 1 of 2 input script");
             success = false;
@@ -2826,7 +2833,7 @@ namespace BitCoin
         else
         {
             spendable.outputs[0].script.setReadOffset(0);
-            if(!interpreter.process(spendable.outputs[0].script, 4, forks))
+            if(!interpreter.process(spendable.outputs[0].script, 4, forks, 0))
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 1 of 2 output script");
                 success = false;
@@ -2958,7 +2965,7 @@ namespace BitCoin
         //NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Transaction ID : %s", transaction.hash.hex().text());
         transaction.inputs[0].script.setReadOffset(0);
         interpreter.initialize(&transaction, 0, transaction.inputs[0].sequence, spendable.outputs[0].amount);
-        if(!interpreter.process(transaction.inputs[0].script, 4, forks))
+        if(!interpreter.process(transaction.inputs[0].script, 4, forks, 0))
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 2 of 3 input script");
             success = false;
@@ -2966,7 +2973,7 @@ namespace BitCoin
         else
         {
             spendable.outputs[0].script.setReadOffset(0);
-            if(!interpreter.process(spendable.outputs[0].script, 4, forks))
+            if(!interpreter.process(spendable.outputs[0].script, 4, forks, 0))
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_TRANSACTION_LOG_NAME, "Failed to process MULTISIG 2 of 3 output script");
                 success = false;

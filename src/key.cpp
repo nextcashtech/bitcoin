@@ -2092,7 +2092,6 @@ namespace BitCoin
         NextCash::String word;
         bool found;
         unsigned int value;
-        unsigned int highMask = 0x01 << 11;
 
         // Loop through languages
         for(unsigned int languageIndex = 0; languageIndex < Mnemonic::LANGUAGE_COUNT;

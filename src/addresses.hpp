@@ -29,6 +29,12 @@ namespace BitCoin
     public:
 
         FullOutputData() {}
+        FullOutputData(const FullOutputData &pCopy) : transactionID(pCopy.transactionID),
+          output(pCopy.output)
+        {
+            blockHeight = pCopy.blockHeight;
+            index = pCopy.index;
+        }
         FullOutputData(unsigned int pBlockHeight, const NextCash::Hash &pTransactionID,
           unsigned int pIndex, Output &pOutput)
         {
@@ -36,6 +42,15 @@ namespace BitCoin
             transactionID = pTransactionID;
             index = pIndex;
             output = pOutput;
+        }
+
+        FullOutputData &operator = (const FullOutputData &pRight)
+        {
+            blockHeight = pRight.blockHeight;
+            transactionID = pRight.transactionID;
+            index = pRight.index;
+            output = pRight.output;
+            return *this;
         }
 
         void print();
@@ -134,7 +149,13 @@ namespace BitCoin
         Addresses() { mNextBlockHeight = 0; mMaxCacheSize = Info::instance().addressesThreshold; }
         ~Addresses() {}
 
-        int height() { return mNextBlockHeight - 1; }
+        unsigned int height()
+        {
+            if(mNextBlockHeight == 0)
+                return 0;
+            else
+                return mNextBlockHeight - 1;
+        }
 
         bool add(std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
         bool remove(std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);

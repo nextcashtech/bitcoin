@@ -15,7 +15,7 @@ namespace BitCoin
     void Peer::write(NextCash::OutputStream *pStream) const
     {
         // Validation Header
-        pStream->writeString("AMPR");
+        pStream->writeString(START_STRING);
 
         // User Agent Bytes
         writeCompactInteger(pStream, userAgent.length());
@@ -38,7 +38,7 @@ namespace BitCoin
 
     bool Peer::read(NextCash::InputStream *pStream)
     {
-        static const char *match = "AMPR";
+        static const char *match = START_STRING;
         bool matchFound = false;
         unsigned int matchOffset = 0;
 

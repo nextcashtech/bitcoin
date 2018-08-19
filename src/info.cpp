@@ -70,9 +70,8 @@ namespace BitCoin
 
     Info::Info() : mPeerLock("Peer")
     {
-        std::memset(ip, 0, INET6_ADDRLEN);
-
         // Unknown IP Address
+        std::memset(ip, 0, INET6_ADDRLEN);
         ip[10] = 255;
         ip[11] = 255;
         ip[12] = 127;
@@ -80,7 +79,7 @@ namespace BitCoin
         ip[14] = 0;
         ip[15] = 1;
 
-        port = 8333;
+        port = 8333; // Default port
 #ifdef ANDROID
         spvMode = true;
 #else
@@ -97,6 +96,9 @@ namespace BitCoin
         merkleBlockCountRequired = 4;
         spvMemPoolCountRequired = 4;
 
+        // Block height 540,288 (Jul 23, 2018 7:17:35 PM)
+        approvedHash.setHex("000000000000000000cbcd34ba48ce30891af1e5b224de1a1a7eca8af24b05a6");
+
         mDataModified = false;
         mInitialBlockDownloadComplete = false;
 
@@ -109,7 +111,7 @@ namespace BitCoin
                 readSettingsFile(&configFile);
         }
 
-        // Initialize random number generator
+        // Initialize random number generator for peer randomization.
         std::srand((unsigned int)std::time(0));
     }
 
@@ -195,6 +197,12 @@ namespace BitCoin
             memPoolThreshold = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "address_threshold") == 0)
             addressesThreshold = std::strtol(value, NULL, 0);
+        else if(std::strcmp(name, "approved_hash") == 0)
+        {
+            approvedHash.setHex(value);
+            if(approvedHash.size() != 32)
+                approvedHash.clear();
+        }
         else if(std::strcmp(name, "notify_email") == 0)
             notifyEmail = value;
 

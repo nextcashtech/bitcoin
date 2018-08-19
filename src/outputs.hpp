@@ -258,7 +258,13 @@ namespace BitCoin
         bool revert(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
 
         // Height of last block
-        int height() const { return mNextBlockHeight - 1; }
+        unsigned int height() const
+        {
+            if(mNextBlockHeight == 0)
+                return 0;
+            else
+                return mNextBlockHeight - 1;
+        }
         unsigned int transactionCount() const;
 
         bool needsPurge() { return cacheDataSize() > (NextCash::stream_size)((double)targetCacheDataSize() * 1.5); }
@@ -274,8 +280,7 @@ namespace BitCoin
         TransactionOutputPool(const TransactionOutputPool &pCopy);
         const TransactionOutputPool &operator = (const TransactionOutputPool &pRight);
 
-        unsigned int mNextBlockHeight;
-        unsigned int mSavedBlockHeight;
+        unsigned int mNextBlockHeight, mSavedBlockHeight;
 
         std::vector<TransactionReference *> mToCommit;
         NextCash::HashList mToCommitHashes;

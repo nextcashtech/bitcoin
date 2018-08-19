@@ -270,7 +270,7 @@ namespace BitCoin
 
         // Check validity and return status
         bool check(Chain *pChain, TransactionList &pMemPoolTransactions,
-          NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion);
+          NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, unsigned int pBlockHeight);
 
         // Check that none of the outpoints are spent and return status
         uint8_t checkOutpoints(TransactionOutputPool &pOutputs,
@@ -280,9 +280,9 @@ namespace BitCoin
           const std::vector<Transaction *> &pBlockTransactions, uint64_t pBlockHeight,
           std::vector<unsigned int> &pSpentAges);
 
-        void getSignatureHash(const Forks &pForks, NextCash::Hash &pHash,
-          unsigned int pInputOffset, NextCash::Buffer &pOutputScript, int64_t pOutputAmount,
-          Signature::HashType pHashType);
+        void getSignatureHash(const Forks &pForks, unsigned int pBlockHeight,
+          NextCash::Hash &pHash, unsigned int pInputOffset, NextCash::Buffer &pOutputScript,
+          int64_t pOutputAmount, Signature::HashType pHashType);
 
         /***********************************************************************************************
          * Transaction building
@@ -300,12 +300,12 @@ namespace BitCoin
 
         // P2PKH Pay to Public Key Hash
         bool signP2PKHInput(const Forks &pForks, Output &pOutput, unsigned int pInputOffset,
-          const Key &pPrivateKey, Signature::HashType pType);
+          const Key &pPrivateKey, Signature::HashType pHashType);
         bool addP2PKHOutput(const NextCash::Hash &pPublicKeyHash, uint64_t pAmount);
 
         // P2PK Pay to Public Key (not as secure as P2PKH)
         bool signP2PKInput(const Forks &pForks, Output &pOutput, unsigned int pInputOffset,
-          const Key &pPrivateKey, const Key &pPublicKey, Signature::HashType pType);
+          const Key &pPrivateKey, const Key &pPublicKey, Signature::HashType pHashType);
         bool addP2PKOutput(const Key &pPublicKey, uint64_t pAmount);
 
         // P2SH Pay to Script Hash
@@ -334,9 +334,9 @@ namespace BitCoin
 
         NextCash::Hash mOutpointHash, mSequenceHash, mOutputHash;
 
-        bool writeSignatureData(const Forks &pForks, NextCash::OutputStream *pStream,
-          unsigned int pInputOffset, NextCash::Buffer &pOutputScript, int64_t pOutputAmount,
-          Signature::HashType pHashType);
+        bool writeSignatureData(const Forks &pForks, unsigned int pBlockHeight,
+          NextCash::OutputStream *pStream, unsigned int pInputOffset,
+          NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType);
 
     };
 }

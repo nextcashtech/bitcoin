@@ -372,7 +372,8 @@ namespace BitCoin
         return true;
     }
 
-    NextCash::String ScriptInterpreter::scriptText(NextCash::Buffer &pScript, const Forks &pForks)
+    NextCash::String ScriptInterpreter::scriptText(NextCash::Buffer &pScript, const Forks &pForks,
+      unsigned int pBlockHeight)
     {
         NextCash::String result;
 
@@ -591,13 +592,13 @@ namespace BitCoin
                     result += "<OP_MUL disabled>";
                     break;
                 case OP_DIV: //    a b   out    a is divided by b.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                         result += "<OP_DIV>";
                     else
                         result += "<OP_DIV disabled>";
                     break;
                 case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                         result += "<OP_MOD>";
                     else
                         result += "<OP_MOD disabled>";
@@ -708,25 +709,25 @@ namespace BitCoin
 
                     // Splice
                 case OP_CAT: //  x1 x2  out  Concatenates two strings.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                         result += "<OP_CAT>";
                     else
                         result += "<OP_CAT disabled>";
                     break;
                 case OP_SPLIT: // Split byte sequence x at position n
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                         result += "<OP_SPLIT>";
                     else
                         result += "<OP_SUBSTR disabled>";
                     break;
                 case OP_NUM2BIN: // Convert numeric value a into byte sequence of length b
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                         result += "<OP_NUM2BIN>";
                     else
                         result += "<OP_LEFT disabled>";
                     break;
                 case OP_BIN2NUM: // Convert byte sequence x into a numeric value
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                         result += "<OP_BIN2NUM>";
                     else
                         result += "<OP_RIGHT disabled>";
@@ -741,19 +742,19 @@ namespace BitCoin
                     result += "<OP_INVERT disabled>";
                     break;
                 case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                         result += "<OP_AND>";
                     else
                         result += "<OP_AND disabled>";
                     break;
                 case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                         result += "<OP_OR>";
                     else
                         result += "<OP_OR disabled>";
                     break;
                 case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                         result += "<OP_XOR>";
                     else
                         result += "<OP_XOR disabled>";
@@ -821,9 +822,10 @@ namespace BitCoin
         return result;
     }
 
-    void ScriptInterpreter::printScript(NextCash::Buffer &pScript, const Forks &pForks, NextCash::Log::Level pLevel)
+    void ScriptInterpreter::printScript(NextCash::Buffer &pScript, const Forks &pForks,
+      unsigned int pBlockHeight, NextCash::Log::Level pLevel)
     {
-        NextCash::String text = scriptText(pScript, pForks);
+        NextCash::String text = scriptText(pScript, pForks, pBlockHeight);
         NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, text);
     }
 
@@ -919,9 +921,10 @@ namespace BitCoin
 
     bool ScriptInterpreter::checkSignature(Transaction &pTransaction, unsigned int pInputOffset,
       int64_t pOutputAmount, const Key &pPublicKey, const Signature &pSignature,
-      NextCash::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset, const Forks &pForks)
+      NextCash::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset,
+      const Forks &pForks, unsigned int pBlockHeight)
     {
-        if(pForks.cashActive() && !(pSignature.hashType() & Signature::FORKID))
+        if(pForks.cashActive(pBlockHeight) && !(pSignature.hashType() & Signature::FORKID))
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               "Signature hash type missing required fork ID flag : %02x", pSignature.hashType());
@@ -938,8 +941,8 @@ namespace BitCoin
         NextCash::Hash signatureHash(32);
         NextCash::stream_size previousOffset = pCurrentOutputScript.readOffset();
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
-        pTransaction.getSignatureHash(pForks, signatureHash, pInputOffset, pCurrentOutputScript,
-          pOutputAmount, pSignature.hashType());
+        pTransaction.getSignatureHash(pForks, pBlockHeight, signatureHash, pInputOffset,
+          pCurrentOutputScript, pOutputAmount, pSignature.hashType());
 
         pCurrentOutputScript.setReadOffset(previousOffset);
         if(pPublicKey.verify(pSignature, signatureHash))
@@ -1140,7 +1143,8 @@ namespace BitCoin
         //  pBuffer->readHexString(pBuffer->length()).text());
     }
 
-    bool ScriptInterpreter::process(NextCash::Buffer &pScript, int32_t pBlockVersion, Forks &pForks)
+    bool ScriptInterpreter::process(NextCash::Buffer &pScript, int32_t pBlockVersion, Forks &pForks,
+      unsigned int pBlockHeight)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Interpreter Process");
@@ -1148,7 +1152,6 @@ namespace BitCoin
         unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;
         uint64_t count;
-        bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && pForks.enabledBlockVersion() >= 3;
 
         while(pScript.remaining())
         {
@@ -1523,6 +1526,8 @@ namespace BitCoin
                     pop();
 
                     // Pop the signature
+                    bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && // TODO Move into only cases where used
+                      pForks.enabledBlockVersion(pBlockHeight) >= 3;
                     Signature signature;
                     top()->setReadOffset(0);
                     if(!signature.read(top(), (unsigned int)top()->length(), strictECDSA_DER_Sigs))
@@ -1535,7 +1540,7 @@ namespace BitCoin
 
                     // Check the signature with the public key
                     if(!failed && checkSignature(*mTransaction, mInputOffset, mOutputAmount,
-                      publicKey, signature, pScript, sigStartOffset, pForks))
+                      publicKey, signature, pScript, sigStartOffset, pForks, pBlockHeight))
                     {
                         if(opCode == OP_CHECKSIG)
                             push()->writeByte(1); // Push true onto the stack
@@ -1615,6 +1620,8 @@ namespace BitCoin
                     }
 
                     // Pop signatures
+                    bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && // TODO Move into only cases where used
+                      pForks.enabledBlockVersion(pBlockHeight) >= 3;
                     Signature signatures[signatureCount];
                     for(unsigned int i=0;i<signatureCount;i++)
                     {
@@ -1629,7 +1636,8 @@ namespace BitCoin
                     // Pop extra item because of bug
                     pop();
 
-                    // Check the signatures with the public keys to make sure all the signatures are valid
+                    // Check the signatures with the public keys to make sure all the signatures
+                    //  are valid
                     unsigned int publicKeyOffset = 0;
                     bool signatureVerified;
                     bool failed = false;
@@ -1638,8 +1646,8 @@ namespace BitCoin
                         signatureVerified = false;
                         while(publicKeyOffset < publicKeyCount)
                             if(checkSignature(*mTransaction, mInputOffset, mOutputAmount,
-                              *publicKeys[publicKeyOffset++], signatures[i], pScript, sigStartOffset,
-                              pForks))
+                              *publicKeys[publicKeyOffset++], signatures[i], pScript,
+                              sigStartOffset, pForks, pBlockHeight))
                             {
                                 signatureVerified = true;
                                 break;
@@ -1678,7 +1686,7 @@ namespace BitCoin
                 }
                 case OP_CHECKLOCKTIMEVERIFY: // BIP-0065
                 {
-                    if(pBlockVersion < 4 || pForks.enabledBlockVersion() < 4)
+                    if(pBlockVersion < 4 || pForks.enabledBlockVersion(pBlockHeight) < 4)
                         break;
 
                     if(!ifStackTrue())
@@ -1750,7 +1758,7 @@ namespace BitCoin
                 }
                 case OP_CHECKSEQUENCEVERIFY: // BIP-0112
                 {
-                    if(pForks.softForkState(SoftFork::BIP0112) != SoftFork::ACTIVE)
+                    if(!pForks.softForkIsActive(pBlockHeight, SoftFork::BIP0112))
                         break;
 
                     if(!ifStackTrue())
@@ -2187,7 +2195,7 @@ namespace BitCoin
                     mValid = false;
                     return false;
                 case OP_DIV: //    a b   out    a is divided by b.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
                         if(!ifStackTrue())
                             break;
@@ -2234,7 +2242,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
                         if(!ifStackTrue())
                             break;
@@ -3109,7 +3117,7 @@ namespace BitCoin
 
                 // Splice
                 case OP_CAT: //  x1 x2  out  Concatenates two strings.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
                         if(!ifStackTrue())
                             break;
@@ -3126,7 +3134,7 @@ namespace BitCoin
                         pop(false);
                         NextCash::Buffer *one = top();
 
-                        if(one->length() + two->length() > pForks.elementMaxSize())
+                        if(one->length() + two->length() > pForks.elementMaxSize(pBlockHeight))
                         {
                             // Put two back one stack since it hasn't been deleted yet.
                             push(two);
@@ -3154,7 +3162,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_SPLIT: //  in x n  out x1 x2  Split byte sequence x at position n
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
                         if(!ifStackTrue())
                             break;
@@ -3187,7 +3195,7 @@ namespace BitCoin
                         // Get x from stack
                         NextCash::Buffer *x = top();
 
-                        if(x->length() > pForks.elementMaxSize())
+                        if(x->length() > pForks.elementMaxSize(pBlockHeight))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               "Stack element too large for OP_SPLIT");
@@ -3231,7 +3239,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_NUM2BIN: // in x1 x2 out  Convert numeric value a into byte sequence of length b
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
                         if(!ifStackTrue())
                             break;
@@ -3268,7 +3276,7 @@ namespace BitCoin
                             return false;
                         }
 
-                        if(length > pForks.elementMaxSize())
+                        if(length > pForks.elementMaxSize(pBlockHeight))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               "Length element more than max element size for OP_NUM2BIN");
@@ -3308,7 +3316,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_BIN2NUM: // in x out Convert byte sequence x into a numeric value
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
                         if(!ifStackTrue())
                             break;
@@ -3325,7 +3333,7 @@ namespace BitCoin
                         int offset = 0;
                         NextCash::Buffer *x = top();
 
-                        if(x->length() > pForks.elementMaxSize())
+                        if(x->length() > pForks.elementMaxSize(pBlockHeight))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                               "Value element longer than max element size for OP_BIN2NUM");
@@ -3416,7 +3424,7 @@ namespace BitCoin
                     mValid = false;
                     return false;
                 case OP_AND: //  x1 x2  out  Bitwise and between each bit in the inputs.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
                         if(!ifStackTrue())
                             break;
@@ -3463,7 +3471,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_OR: //  x1 x2  out  Bitwise or between each bit in the inputs.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
                         if(!ifStackTrue())
                             break;
@@ -3510,7 +3518,7 @@ namespace BitCoin
                     }
                     break;
                 case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs. disabled.
-                    if(pForks.cashFork201805IsActive())
+                    if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
                         if(!ifStackTrue())
                             break;
@@ -3885,14 +3893,14 @@ namespace BitCoin
         NextCash::Buffer testScript;
         ScriptInterpreter interpreter;
 
-        forks.setFork201805Active();
+        forks.setFork201805Active(1);
 
         interpreter.clear();
         testScript.clear();
 
         // Add element of max size
-        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(), &testScript);
-        for(unsigned int i=0;i<forks.elementMaxSize();++i)
+        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(0), &testScript);
+        for(unsigned int i=0;i<forks.elementMaxSize(0);++i)
             testScript.writeByte(0);
 
         // Add element with size of 1
@@ -3902,7 +3910,7 @@ namespace BitCoin
         // Add OP_CAT
         testScript.writeByte(OP_CAT);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed OP_CAT max element size");
@@ -3916,19 +3924,19 @@ namespace BitCoin
         testScript.clear();
 
         // Add element of half max size
-        ScriptInterpreter::writePushDataSize(forks.elementMaxSize() / 2, &testScript);
-        for(unsigned int i=0;i<forks.elementMaxSize() / 2;++i)
+        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(0) / 2, &testScript);
+        for(unsigned int i=0;i<forks.elementMaxSize(0) / 2;++i)
             testScript.writeByte(0);
 
         // Add element of half max size + 1
-        ScriptInterpreter::writePushDataSize((forks.elementMaxSize() / 2) + 1, &testScript);
-        for(unsigned int i=0;i<(forks.elementMaxSize() / 2) + 1;++i)
+        ScriptInterpreter::writePushDataSize((forks.elementMaxSize(0) / 2) + 1, &testScript);
+        for(unsigned int i=0;i<(forks.elementMaxSize(0) / 2) + 1;++i)
             testScript.writeByte(0);
 
         // Add OP_CAT
         testScript.writeByte(OP_CAT);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed OP_CAT combined max element size + 1");
@@ -3952,7 +3960,8 @@ namespace BitCoin
         testScript.writeByte(OP_0);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_CAT two empties");
         else
@@ -3977,7 +3986,8 @@ namespace BitCoin
         testScript.writeByte(OP_5);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_CAT one empty");
         else
@@ -4006,7 +4016,8 @@ namespace BitCoin
         testScript.writeByte(6);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_CAT 4 and 6");
         else
@@ -4033,7 +4044,8 @@ namespace BitCoin
         testScript.writeByte(7);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_CAT 5 and 7");
         else
@@ -4059,7 +4071,7 @@ namespace BitCoin
         // Add OP_SPLIT
         testScript.writeByte(OP_SPLIT);
 
-        if(!interpreter.process(testScript, 4, forks))
+        if(!interpreter.process(testScript, 4, forks, 2))
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_SPLIT empty at zero");
@@ -4095,7 +4107,7 @@ namespace BitCoin
         // Add OP_SPLIT
         testScript.writeByte(OP_SPLIT);
 
-        if(!interpreter.process(testScript, 4, forks))
+        if(!interpreter.process(testScript, 4, forks, 2))
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_SPLIT non-empty at zero");
@@ -4107,7 +4119,8 @@ namespace BitCoin
             NextCash::Buffer *first = interpreter.testElement(0);
             NextCash::Buffer *second = interpreter.testElement(1);
 
-            if(first != NULL && first->length() == 1 && first->readByte() == 5 && second != NULL && second->length() == 0)
+            if(first != NULL && first->length() == 1 && first->readByte() == 5 &&
+              second != NULL && second->length() == 0)
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
                   "Passed OP_SPLIT non-empty at zero");
             else
@@ -4131,7 +4144,7 @@ namespace BitCoin
         // Add OP_SPLIT
         testScript.writeByte(OP_SPLIT);
 
-        if(!interpreter.process(testScript, 4, forks))
+        if(!interpreter.process(testScript, 4, forks, 2))
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_SPLIT non-empty at end");
@@ -4167,7 +4180,7 @@ namespace BitCoin
         // Add OP_SPLIT
         testScript.writeByte(OP_SPLIT);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_SPLIT non-empty past end");
@@ -4195,7 +4208,7 @@ namespace BitCoin
         // Add OP_SPLIT
         testScript.writeByte(OP_SPLIT);
 
-        if(!interpreter.process(testScript, 4, forks))
+        if(!interpreter.process(testScript, 4, forks, 2))
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_SPLIT middle");
@@ -4247,7 +4260,7 @@ namespace BitCoin
         // Add OP_AND
         testScript.writeByte(OP_AND);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_AND non-matching lengths");
@@ -4282,7 +4295,7 @@ namespace BitCoin
         // Add OP_EQUAL
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() && interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_AND value check");
         else
@@ -4310,7 +4323,7 @@ namespace BitCoin
         // Add OP_OR
         testScript.writeByte(OP_OR);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_OR non-matching lengths");
@@ -4345,7 +4358,8 @@ namespace BitCoin
         // Add OP_EQUAL
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_OR value check");
         else
@@ -4373,7 +4387,7 @@ namespace BitCoin
         // Add OP_XOR
         testScript.writeByte(OP_XOR);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_XOR non-matching lengths");
@@ -4408,7 +4422,8 @@ namespace BitCoin
         // Add OP_EQUAL
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_XOR value check");
         else
@@ -4441,7 +4456,7 @@ namespace BitCoin
         // Add OP_DIV
         testScript.writeByte(OP_DIV);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_DIV first non-numeric");
@@ -4461,7 +4476,7 @@ namespace BitCoin
         // Add OP_DIV
         testScript.writeByte(OP_DIV);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_DIV divide by zero");
@@ -4484,7 +4499,8 @@ namespace BitCoin
         testScript.writeByte(OP_2);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_DIV value check");
         else
@@ -4507,7 +4523,8 @@ namespace BitCoin
         ScriptInterpreter::writeArithmeticInteger(testScript, -2);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_DIV negative value check");
         else
@@ -4540,7 +4557,7 @@ namespace BitCoin
         // Add OP_MOD
         testScript.writeByte(OP_MOD);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_MOD first non-numeric");
@@ -4560,7 +4577,7 @@ namespace BitCoin
         // Add OP_MOD
         testScript.writeByte(OP_MOD);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_MOD divide by zero");
@@ -4583,7 +4600,8 @@ namespace BitCoin
         testScript.writeByte(OP_1);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_MOD value check");
         else
@@ -4606,7 +4624,8 @@ namespace BitCoin
         ScriptInterpreter::writeArithmeticInteger(testScript, -1);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_MOD negative value check");
         else
@@ -4639,7 +4658,7 @@ namespace BitCoin
         // Add OP_NUM2BIN
         testScript.writeByte(OP_NUM2BIN);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_NUM2BIN first non-numeric");
@@ -4669,7 +4688,7 @@ namespace BitCoin
         // Add OP_NUM2BIN
         testScript.writeByte(OP_NUM2BIN);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_NUM2BIN second non-numeric");
@@ -4689,7 +4708,7 @@ namespace BitCoin
         // Add OP_NUM2BIN
         testScript.writeByte(OP_NUM2BIN);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_NUM2BIN sequence too small");
@@ -4704,12 +4723,12 @@ namespace BitCoin
         testScript.clear();
 
         ScriptInterpreter::writeArithmeticInteger(testScript, 1);
-        ScriptInterpreter::writeArithmeticInteger(testScript, forks.elementMaxSize() + 1);
+        ScriptInterpreter::writeArithmeticInteger(testScript, forks.elementMaxSize(0) + 1);
 
         // Add OP_NUM2BIN
         testScript.writeByte(OP_NUM2BIN);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_NUM2BIN sequence too long");
@@ -4737,7 +4756,8 @@ namespace BitCoin
 
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_NUM2BIN value check");
         else
@@ -4765,7 +4785,8 @@ namespace BitCoin
 
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_NUM2BIN negative value check");
         else
@@ -4796,7 +4817,7 @@ namespace BitCoin
         // Add OP_BIN2NUM
         testScript.writeByte(OP_BIN2NUM);
 
-        if(interpreter.process(testScript, 4, forks) || interpreter.isValid())
+        if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
               "Failed to process OP_BIN2NUM sequence too large");
@@ -4827,7 +4848,8 @@ namespace BitCoin
         testScript.writeByte(OP_0);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_BIN2NUM zeroes");
         else
@@ -4858,7 +4880,8 @@ namespace BitCoin
         testScript.writeByte(OP_2);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_BIN2NUM long two");
         else
@@ -4872,9 +4895,9 @@ namespace BitCoin
         interpreter.clear();
         testScript.clear();
 
-        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(), &testScript);
+        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(0), &testScript);
         testScript.writeByte(0x02);
-        for(unsigned int i=0;i<forks.elementMaxSize()-1;++i)
+        for(unsigned int i=0;i<forks.elementMaxSize(0)-1;++i)
             testScript.writeByte(0x00);
 
         // Add OP_BIN2NUM
@@ -4883,7 +4906,8 @@ namespace BitCoin
         testScript.writeByte(OP_2);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_BIN2NUM max length two");
         else
@@ -4914,7 +4938,8 @@ namespace BitCoin
         ScriptInterpreter::writeArithmeticInteger(testScript, -2);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_BIN2NUM long negative two");
         else
@@ -4928,9 +4953,9 @@ namespace BitCoin
         interpreter.clear();
         testScript.clear();
 
-        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(), &testScript);
+        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(0), &testScript);
         testScript.writeByte(0x02);
-        for(unsigned int i=0;i<forks.elementMaxSize()-2;++i)
+        for(unsigned int i=0;i<forks.elementMaxSize(0)-2;++i)
             testScript.writeByte(0x00);
         testScript.writeByte(0x80);
 
@@ -4940,7 +4965,8 @@ namespace BitCoin
         ScriptInterpreter::writeArithmeticInteger(testScript, -2);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_BIN2NUM max length negative two");
         else
@@ -4964,7 +4990,8 @@ namespace BitCoin
         ScriptInterpreter::writeArithmeticInteger(testScript, 0);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_BIN2NUM negative zero");
         else
@@ -4978,8 +5005,8 @@ namespace BitCoin
         interpreter.clear();
         testScript.clear();
 
-        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(), &testScript);
-        for(unsigned int i=0;i<forks.elementMaxSize()-1;++i)
+        ScriptInterpreter::writePushDataSize(forks.elementMaxSize(0), &testScript);
+        for(unsigned int i=0;i<forks.elementMaxSize(0)-1;++i)
             testScript.writeByte(0x00);
         testScript.writeByte(0x80);
 
@@ -4989,7 +5016,8 @@ namespace BitCoin
         ScriptInterpreter::writeArithmeticInteger(testScript, 0);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_BIN2NUM max length negative zero");
         else
@@ -5015,7 +5043,8 @@ namespace BitCoin
         ScriptInterpreter::writeArithmeticInteger(testScript, -1236);
         testScript.writeByte(OP_EQUAL);
 
-        if(interpreter.process(testScript, 4, forks) && interpreter.isValid() && interpreter.isVerified())
+        if(interpreter.process(testScript, 4, forks, 2) && interpreter.isValid() &&
+          interpreter.isVerified())
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
               "Passed OP_BIN2NUM negative 1236");
         else

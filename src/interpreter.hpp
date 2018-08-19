@@ -213,7 +213,8 @@ namespace BitCoin
         }
         ~ScriptInterpreter() { clear(); }
 
-        void initialize(Transaction *pTransaction, unsigned int pOffset, uint32_t pSequence, int64_t pOutputAmount)
+        void initialize(Transaction *pTransaction, unsigned int pOffset, uint32_t pSequence,
+          int64_t pOutputAmount)
         {
             mTransaction = pTransaction;
             mInputOffset = pOffset;
@@ -222,7 +223,8 @@ namespace BitCoin
         }
 
         // Process script
-        bool process(NextCash::Buffer &pScript, int32_t pBlockVersion, Forks &pForks);
+        bool process(NextCash::Buffer &pScript, int32_t pBlockVersion, Forks &pForks,
+          unsigned int pBlockHeight);
 
         // No issues processing script
         bool isValid()
@@ -342,9 +344,10 @@ namespace BitCoin
 
         static void removeCodeSeparators(NextCash::Buffer &pInputScript, NextCash::Buffer &pOutputScript);
 
-        static NextCash::String scriptText(NextCash::Buffer &pScript, const Forks &pForks);
+        static NextCash::String scriptText(NextCash::Buffer &pScript, const Forks &pForks,
+          unsigned int pBlockHeight);
         static void printScript(NextCash::Buffer &pScript, const Forks &pForks,
-          NextCash::Log::Level pLevel = NextCash::Log::DEBUG);
+          unsigned int pBlockHeight, NextCash::Log::Level pLevel = NextCash::Log::DEBUG);
 
         // Write to a script to push the following size of data to the stack
         static void writePushDataSize(unsigned int pSize, NextCash::OutputStream *pOutput);
@@ -353,7 +356,7 @@ namespace BitCoin
 
         static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset, int64_t pOutputAmount,
           const Key &pPublicKey, const Signature &pSignature, NextCash::Buffer &pCurrentOutputScript,
-          unsigned int pSignatureStartOffset, const Forks &pForks);
+          unsigned int pSignatureStartOffset, const Forks &pForks, unsigned int pBlockHeight);
 
         static bool writeP2PKHOutputScript(NextCash::Buffer &pOutputScript,
           const NextCash::Hash &pPubKeyHash);

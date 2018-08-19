@@ -362,12 +362,17 @@ namespace BitCoin
 
             // Return block chain status message
             sendData.writeString("stat:");
-            sendData.writeInt(mChain->height());
+            sendData.writeInt(mChain->headerHeight());
+            sendData.writeInt(mChain->blockHeight());
             if(mChain->isInSync())
                 sendData.writeByte(-1);
             else
                 sendData.writeByte(0);
             if(Info::instance().initialBlockDownloadIsComplete())
+                sendData.writeByte(-1);
+            else
+                sendData.writeByte(0);
+            if(mChain->saveInProgress())
                 sendData.writeByte(-1);
             else
                 sendData.writeByte(0);
@@ -455,7 +460,7 @@ namespace BitCoin
             uint64_t amountSent;
 
             if(height < 0)
-                height = mChain->height();
+                height = mChain->blockHeight();
 
             sendData.writeString("blkd:");
             sendData.writeByte(0);
@@ -468,8 +473,8 @@ namespace BitCoin
                     break;
 
                 sendData.writeUnsignedInt(height - i); // Height
-                block.hash.write(&sendData); // Hash
-                sendData.writeUnsignedInt(block.time); // Time
+                block.header.hash.write(&sendData); // Hash
+                sendData.writeUnsignedInt(block.header.time); // Time
                 sendData.writeUnsignedInt(block.size()); // Size
                 sendData.writeUnsignedLong(block.actualCoinbaseAmount() - coinBaseAmount(height - i)); // Fees
                 sendData.writeUnsignedInt(block.transactions.size()); // Transaction Count
@@ -524,7 +529,7 @@ namespace BitCoin
             if(hours <= 168) // Week max
             {
                 if(height < 0)
-                    height = mChain->height();
+                    height = mChain->blockHeight();
 
                 int currentHeight = height;
 
@@ -542,15 +547,16 @@ namespace BitCoin
                     }
 
                     if(stopTime == 0)
-                        stopTime = block.time - (hours * 3600);
-                    else if(block.time < stopTime)
+                        stopTime = block.header.time - (hours * 3600);
+                    else if(block.header.time < stopTime)
                         break;
 
                     // Count inputs and outputs
                     inputCount = 0;
                     outputCount = 0;
                     amountSent = 0;
-                    for(std::vector<Transaction *>::iterator trans=block.transactions.begin();trans!=block.transactions.end();++trans)
+                    for(std::vector<Transaction *>::iterator trans = block.transactions.begin();
+                      trans != block.transactions.end(); ++trans)
                     {
                         inputCount += (*trans)->inputs.size();
                         outputCount += (*trans)->outputs.size();

@@ -50,7 +50,7 @@ namespace BitCoin
             FAILED     // Timeout reached without support threshold
         };
 
-        static const int NOT_LOCKED = -1;
+        static const unsigned int NOT_LOCKED = 0;
 
         SoftFork()
         {
@@ -76,7 +76,7 @@ namespace BitCoin
 
         // Revert last block added to soft fork data.
         //   pBlockHeight is the height of the block being reverted.
-        void revertLast(Chain *pChain, int pBlockHeight);
+        void revertLast(Chain *pChain, unsigned int pBlockHeight);
 
         // Reset to initial state
         void reset()
@@ -87,6 +87,8 @@ namespace BitCoin
 
         void write(NextCash::OutputStream *pStream);
         bool read(NextCash::InputStream *pStream);
+
+        bool isActive(unsigned int pBlockHeight);
 
         const char *stateName();
         NextCash::String description();
@@ -100,7 +102,7 @@ namespace BitCoin
 
         // Values that change based on chain state
         State state;
-        int lockedHeight;
+        unsigned int lockedHeight;
     };
 
     class Forks
@@ -110,7 +112,7 @@ namespace BitCoin
         Forks();
         ~Forks();
 
-        int height() const { return mHeight; }
+        unsigned int height() const { return mHeight; }
 
         // Version 2 BIP0034 Block height as first part of coinbase input script.
         //   Became enabled on mainnet at block height 224412.
@@ -121,10 +123,10 @@ namespace BitCoin
         // Version 4 BIP0065 OP_CHECKLOCKTIMEVERIFY.
         //   Became enabled on mainnet at block height 387277.
         //   Became active/enforced on mainnet at block height 388380.
-        int32_t enabledBlockVersion() const { return mEnabledBlockVersion; }
-        int32_t requiredBlockVersion() const { return mRequiredBlockVersion; }
+        int32_t enabledBlockVersion(unsigned int pBlockHeight) const;
+        int32_t requiredBlockVersion(unsigned int pBlockHeight) const;
 
-        SoftFork::State softForkState(unsigned int pID);
+        bool softForkIsActive(unsigned int pBlockHeight, unsigned int pID);
 
         static const unsigned int HARD_MAX_BLOCK_SIZE = 1000000;
 
@@ -137,40 +139,52 @@ namespace BitCoin
         static const unsigned int CASH_START_MAX_BLOCK_SIZE = 8000000;
 
         // TODO Change cash forks to be more dynamic, like the soft forks, like a list.
-        bool cashActive() const
-          { return mCashActivationBlockHeight != -1 && mHeight > mCashActivationBlockHeight; }
-        int cashForkBlockHeight() const { return mCashActivationBlockHeight; }
+        bool cashActive(unsigned int pBlockHeight) const
+        {
+            return mCashActivationBlockHeight != 0 &&
+              pBlockHeight > mCashActivationBlockHeight;
+        }
+        unsigned int cashForkBlockHeight() const { return mCashActivationBlockHeight; }
 
         // New Cash DAA (Nov 13th 2018)
         static const int32_t CASH_FORK_201711_ACTIVATION_TIME = 1510600000;
 
-        bool cashFork201711IsActive() const
-          { return mCashFork201711BlockHeight != -1 && mHeight > mCashFork201711BlockHeight; }
+        bool cashFork201711IsActive(unsigned int pBlockHeight) const
+        {
+            return mCashFork201711BlockHeight != 0 &&
+              pBlockHeight > mCashFork201711BlockHeight;
+        }
 
         // 2018 May Hard Fork
         static const int32_t CASH_FORK_201805_ACTIVATION_TIME = 1526400000;
         static const unsigned int FORK_201805_MAX_BLOCK_SIZE = 32000000;
 
-        bool cashFork201805IsActive() const
-          { return mCashFork201805BlockHeight != -1 && mHeight > mCashFork201805BlockHeight; }
+        bool cashFork201805IsActive(unsigned int pBlockHeight) const
+        {
+            return mCashFork201805BlockHeight != 0 &&
+              pBlockHeight > mCashFork201805BlockHeight;
+        }
 
         // 2018 Nov Hard Fork
         static const int32_t CASH_FORK_201811_ACTIVATION_TIME = 1542300000;
 
-        bool cashFork201811IsActive() const
-          { return mCashFork201811BlockHeight != -1 && mHeight > mCashFork201811BlockHeight; }
+        bool cashFork201811IsActive(unsigned int pBlockHeight) const
+        {
+            return mCashFork201811BlockHeight != 0 &&
+              pBlockHeight > mCashFork201811BlockHeight;
+        }
 
-        unsigned int blockMaxSize() const { return mBlockMaxSize; }
+        unsigned int blockMaxSize(unsigned int pBlockHeight) const { return mBlockMaxSize; }
 
-        unsigned int elementMaxSize() const { return mElementMaxSize; }
+        unsigned int elementMaxSize(unsigned int pBlockHeight) const { return mElementMaxSize; }
 
-        uint32_t cashForkID() const { return mCashForkID; }
+        uint32_t cashForkID(unsigned int pBlockHeight) const { return mCashForkID; }
 
-        void process(Chain *pChain, int pBlockHeight);
+        void process(Chain *pChain, unsigned int pBlockHeight);
 
         // Revert last block added to fork data.
         //   pBlockHeight is the height of the block being reverted.
-        void revertLast(Chain *pChain, int pBlockHeight);
+        void revertLast(Chain *pChain, unsigned int pBlockHeight);
 
         // Reset all soft forks to initial state
         void reset();
@@ -180,32 +194,30 @@ namespace BitCoin
         bool save();
 
         // For testing
-        void setFork201805Active()
+        void setFork201805Active(unsigned int pBlockHeight)
         {
-            mHeight = 1;
-            mCashFork201805BlockHeight = 0;
+            mHeight = pBlockHeight;
+            mCashFork201805BlockHeight = pBlockHeight;
         }
 
     private:
 
         void add(SoftFork *pSoftFork, bool pLocked = false);
 
-        int mHeight;
+        unsigned int mHeight;
 
         std::vector<SoftFork *> mForks;
 
         std::list<int32_t> mBlockVersions;
-        int32_t mEnabledBlockVersion;
-        int32_t mRequiredBlockVersion;
 
         // For revert
-        int mBlockVersionEnabledHeights[3];
-        int mBlockVersionRequiredHeights[3];
+        unsigned int mBlockVersionEnabledHeights[3];
+        unsigned int mBlockVersionRequiredHeights[3];
 
-        int mCashActivationBlockHeight;
-        int mCashFork201711BlockHeight;
-        int mCashFork201805BlockHeight;
-        int mCashFork201811BlockHeight;
+        unsigned int mCashActivationBlockHeight;
+        unsigned int mCashFork201711BlockHeight;
+        unsigned int mCashFork201805BlockHeight;
+        unsigned int mCashFork201811BlockHeight;
 
         unsigned int mBlockMaxSize;
         unsigned int mElementMaxSize;

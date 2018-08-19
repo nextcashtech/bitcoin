@@ -6,3 +6,4 @@ test.debug
 bitcoin
 bitcoin.debug
 .gdb*
+chain_test

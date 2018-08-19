@@ -28,7 +28,7 @@ namespace BitCoin
     {
         pOutput.blockHeight = blockHeight;
         pOutput.index = outputIndex;
-        return BlockFile::readBlockTransactionOutput(blockHeight, transactionOffset, outputIndex,
+        return Block::getOutput(blockHeight, transactionOffset, outputIndex,
           pOutput.transactionID, pOutput.output);
     }
 
@@ -50,20 +50,17 @@ namespace BitCoin
         }
 
         pOutputs.clear();
-        pOutputs.resize(count);
+        pOutputs.reserve(count);
 
-        std::vector<FullOutputData>::iterator output = pOutputs.begin();
-        while(item && item.hash() == pPubKeyHash)
+        FullOutputData output;
+        for(unsigned int i = 0; i < count && item;)
         {
             if(!(*item)->markedRemove())
             {
-                // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
-                  // "Fetching transaction %d output %d from block at height %d",
-                  // ((AddressOutputReference *)(*item))->transactionOffset,
-                  // ((AddressOutputReference *)(*item))->outputIndex, ((AddressOutputReference *)(*item))->blockHeight);
-                if(!((AddressOutputReference *)(*item))->getFullOutput(*output))
+                if(!((AddressOutputReference *)(*item))->getFullOutput(output))
                     return false;
-                ++output;
+                pOutputs.push_back(output);
+                ++i;
             }
             ++item;
         }
@@ -109,6 +106,9 @@ namespace BitCoin
                               transactionOffset, outputOffset);
                             if(!insert(*hash, newAddress))
                             {
+                                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
+                                  "Failed to insert block %d transaction %d output %d for address %s",
+                                  pBlockHeight, transactionOffset, outputOffset, hash->hex().text());
                                 delete newAddress;
                                 success = false;
                             }
@@ -126,7 +126,7 @@ namespace BitCoin
 
     bool Addresses::remove(std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
     {
-        if(pBlockHeight != mNextBlockHeight - 1)
+        if(mNextBlockHeight == 0 || pBlockHeight != mNextBlockHeight - 1)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_ADDRESSES_LOG_NAME,
               "Can't remove transaction addresses for non matching block height %d. Should be %d",

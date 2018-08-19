@@ -307,7 +307,8 @@ namespace BitCoin
         if(pBlockHeight != mNextBlockHeight)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Can't add transaction outputs for non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight);
+              "Can't add transaction outputs for non matching block height %d. Should be %d",
+              pBlockHeight, mNextBlockHeight);
             return false;
         }
 
@@ -423,14 +424,16 @@ namespace BitCoin
             if(pBlockHeight != mNextBlockHeight)
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Can't revert non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight);
+                  "Can't revert non matching block height %d. Should be %d", pBlockHeight,
+                  mNextBlockHeight);
                 return false;
             }
         }
-        else if(pBlockHeight != mNextBlockHeight - 1)
+        else if(mNextBlockHeight != 0 && pBlockHeight != mNextBlockHeight - 1)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Can't revert non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight - 1);
+              "Can't revert non matching block height %d. Should be %d", pBlockHeight,
+              mNextBlockHeight - 1);
             return false;
         }
 
