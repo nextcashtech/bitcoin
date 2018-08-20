@@ -91,6 +91,11 @@ namespace BitCoin
 
         static bool revertToHeight(unsigned int pBlockHeight);
 
+        // Validate block file CRCs and revert to last valid.
+        // Returns valid block count.
+        // pMaxCount is the maximum count that can be valid. Anything above that is removed.
+        static unsigned int validate();
+
         static void save(); // Save any unsaved data in files (i.e. update CRCs)
         static void clean();  // Release any static cache data
 

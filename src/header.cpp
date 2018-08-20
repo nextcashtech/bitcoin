@@ -210,7 +210,7 @@ namespace BitCoin
         static void clean();
 
         // Remove a header file.
-        static bool remove(unsigned int pID);
+        static bool remove(unsigned int pFileID);
 
         unsigned int id() const { return mID; }
         bool isValid() const { return mValid; }
@@ -309,7 +309,7 @@ namespace BitCoin
     {
         sCacheLock.lock();
 
-        // Check if the file is already open
+        // Check if the file is already open.
         for(unsigned int i = 0; i < CACHE_COUNT; ++i)
             if(sCache[i] != NULL && sCache[i]->mID == pFileID)
             {
@@ -348,6 +348,45 @@ namespace BitCoin
         moveToFront(CACHE_COUNT-1);
         sCacheLock.unlock();
         return result;
+    }
+
+    bool HeaderFile::remove(unsigned int pFileID)
+    {
+        // Remove from cache.
+        sCacheLock.lock();
+
+        // Check if the file is already open.
+        bool found = false;
+        for(unsigned int i = 0; i < CACHE_COUNT; ++i)
+            if(sCache[i] != NULL && sCache[i]->mID == pFileID)
+            {
+                delete sCache[i];
+                sCache[i] = NULL;
+                found = true;
+                break;
+            }
+
+        if(found)
+        {
+            // Push any files after up a slot.
+            for(unsigned int i = 0; i < CACHE_COUNT - 1; ++i)
+                if(sCache[i] == NULL)
+                {
+                    sCache[i] = sCache[i+1];
+                    sCache[i+1] = NULL;
+                }
+        }
+
+        sCacheLock.unlock();
+
+        if(NextCash::removeFile(filePathName(pFileID)))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_HEADER_LOG_NAME,
+              "Removed header file %08x", pFileID);
+            return true;
+        }
+
+        return false;
     }
 
     void HeaderFile::save()
@@ -574,18 +613,6 @@ namespace BitCoin
         }
 
         return true;
-    }
-
-    bool HeaderFile::remove(unsigned int pID)
-    {
-        if(NextCash::removeFile(filePathName(pID)))
-        {
-            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_HEADER_LOG_NAME,
-              "Removed header file %08x", pID);
-            return true;
-        }
-
-        return false;
     }
 
     unsigned int HeaderFile::itemCount()
@@ -1132,6 +1159,56 @@ namespace BitCoin
                 result += file->itemCount();
                 file->unlock();
             }
+        }
+
+        return result;
+    }
+
+    unsigned int Header::validate()
+    {
+        unsigned int result = 0;
+        unsigned int fileID = 0;
+        HeaderFile *file;
+
+        // Find top file ID.
+        while(HeaderFile::exists(fileID))
+            fileID += 50;
+
+        while(fileID > 0 && !HeaderFile::exists(fileID))
+            --fileID;
+
+        result = fileID * HeaderFile::MAX_COUNT;
+
+        // Adjust for last file not being full.
+        while(true)
+        {
+            file = HeaderFile::get(fileID);
+            if(file == NULL)
+            {
+                HeaderFile::remove(fileID);
+                if(fileID == 0)
+                    break;
+                --fileID;
+                result -= HeaderFile::MAX_COUNT;
+            }
+            else if(file->validate())
+            {
+                result += file->itemCount();
+                file->unlock();
+                break;
+            }
+            else
+            {
+                file->unlock();
+                HeaderFile::remove(fileID);
+                if(fileID == 0)
+                    break;
+                --fileID;
+                result -= HeaderFile::MAX_COUNT;
+            }
+
+            if(fileID == 0)
+                break;
         }
 
         return result;

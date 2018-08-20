@@ -2025,8 +2025,17 @@ namespace BitCoin
         bool success = true;
         Block *genesisBlock = NULL;
         NextCash::Hash emptyHash;
-        unsigned int headerCount = Header::totalCount();
-        unsigned int blockCount = Block::totalCount();
+
+        Header::clean(); // Close any open files
+        unsigned int headerCount = Header::validate(); // Validate latest file and get count.
+        Block::clean(); // Close any open files
+        unsigned int blockCount = Block::validate(); // Validate latest file and get count.
+        if(blockCount > headerCount)
+        {
+            // Revert blocks to latest header.
+            Block::revertToHeight(headerCount - 1);
+            blockCount = headerCount;
+        }
 
         mBlockStatHeight = 0;
         mNextHeaderHeight = 0;

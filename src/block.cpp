@@ -762,6 +762,45 @@ namespace BitCoin
         return result;
     }
 
+    bool BlockFile::remove(unsigned int pFileID)
+    {
+        // Remove from cache.
+        sCacheLock.lock();
+
+        // Check if the file is already open.
+        bool found = false;
+        for(unsigned int i = 0; i < CACHE_COUNT; ++i)
+            if(sCache[i] != NULL && sCache[i]->mID == pFileID)
+            {
+                delete sCache[i];
+                sCache[i] = NULL;
+                found = true;
+                break;
+            }
+
+        if(found)
+        {
+            // Push any files after up a slot.
+            for(unsigned int i = 0; i < CACHE_COUNT - 1; ++i)
+                if(sCache[i] == NULL)
+                {
+                    sCache[i] = sCache[i+1];
+                    sCache[i+1] = NULL;
+                }
+        }
+
+        sCacheLock.unlock();
+
+        if(NextCash::removeFile(filePathName(pFileID)))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
+              "Removed block file %08x", pFileID);
+            return true;
+        }
+
+        return false;
+    }
+
     void BlockFile::save()
     {
         sCacheLock.lock();
@@ -997,18 +1036,6 @@ namespace BitCoin
         }
 
         return true;
-    }
-
-    bool BlockFile::remove(unsigned int pID)
-    {
-        if(NextCash::removeFile(filePathName(pID)))
-        {
-            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
-              "Removed block file %08x", pID);
-            return true;
-        }
-
-        return false;
     }
 
     void BlockFile::getLastCount()
@@ -1417,6 +1444,56 @@ namespace BitCoin
                 result += file->itemCount();
                 file->unlock();
             }
+        }
+
+        return result;
+    }
+
+    unsigned int Block::validate()
+    {
+        unsigned int result = 0;
+        unsigned int fileID = 0;
+        BlockFile *file;
+
+        // Find top file ID.
+        while(BlockFile::exists(fileID))
+            fileID += 100;
+
+        while(fileID > 0 && !BlockFile::exists(fileID))
+            --fileID;
+
+        result = fileID * BlockFile::MAX_COUNT;
+
+        // Adjust for last file not being full.
+        while(true)
+        {
+            file = BlockFile::get(fileID);
+            if(file == NULL)
+            {
+                BlockFile::remove(fileID);
+                if(fileID == 0)
+                    break;
+                --fileID;
+                result -= BlockFile::MAX_COUNT;
+            }
+            else if(file->validate())
+            {
+                result += file->itemCount();
+                file->unlock();
+                break;
+            }
+            else
+            {
+                file->unlock();
+                BlockFile::remove(fileID);
+                if(fileID == 0)
+                    break;
+                --fileID;
+                result -= BlockFile::MAX_COUNT;
+            }
+
+            if(fileID == 0)
+                break;
         }
 
         return result;
