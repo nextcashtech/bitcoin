@@ -166,7 +166,7 @@ namespace BitCoin
         bool needsPurge() { return cacheDataSize() > mMaxCacheSize; }
 
         bool load(const char *pFilePath, uint64_t pCacheDataTargetSize);
-        bool save();
+        bool save(unsigned int pThreadCount);
 
     private:
 

@@ -130,8 +130,7 @@ namespace BitCoin
         // Timers
         int32_t mLastHeaderRequestTime;
         int32_t mLastConnectionActive;
-        int32_t mLastOutputsPurgeTime;
-        int32_t mLastAddressPurgeTime;
+        int32_t mLastDataSaveTime;
         int32_t mLastMemPoolCheckPending;
         int32_t mLastMonitorProcess;
         int32_t mLastFillNodesTime;

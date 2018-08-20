@@ -273,7 +273,7 @@ namespace BitCoin
         void markValid() { mIsValid = true; }
 
         bool load(const char *pFilePath, uint64_t pCacheDataTargetSize);
-        bool save();
+        bool save(unsigned int pThreadCount);
 
     private:
 

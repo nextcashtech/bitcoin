@@ -372,7 +372,7 @@ namespace BitCoin
                 sendData.writeByte(-1);
             else
                 sendData.writeByte(0);
-            if(mChain->saveInProgress())
+            if(mChain->saveDataInProgress())
                 sendData.writeByte(-1);
             else
                 sendData.writeByte(0);

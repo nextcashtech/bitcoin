@@ -53,8 +53,7 @@ namespace BitCoin
         mNodeCount = 0;
         mIncomingNodes = 0;
         mOutgoingNodes = 0;
-        mLastOutputsPurgeTime = getTime();
-        mLastAddressPurgeTime = getTime();
+        mLastDataSaveTime = getTime();
         mLastMemPoolCheckPending = getTime();
         mLastMonitorProcess = getTime();
         mLastFillNodesTime = 0;
@@ -1981,27 +1980,12 @@ namespace BitCoin
             if(mStopping)
                 return;
 
-            if((getTime() - mLastOutputsPurgeTime > 30 && mChain.outputs().needsPurge()) ||
-              getTime() - mLastOutputsPurgeTime > 3600)
+            int32_t time = getTime();
+            if((time - mLastDataSaveTime > 30 && mChain.saveDataNeeded()) ||
+              time - mLastDataSaveTime > 3600)
             {
-                mChain.startSaving();
-                if(!mChain.outputs().save())
-                    requestStop();
-                mChain.endSaving();
-                mLastOutputsPurgeTime = getTime();
-            }
-
-            if(mStopping)
-                return;
-
-            if((getTime() - mLastAddressPurgeTime > 30 && mChain.addresses().needsPurge()) ||
-              getTime() - mLastAddressPurgeTime > 3600)
-            {
-                mChain.startSaving();
-                if(!mChain.addresses().save())
-                    requestStop();
-                mChain.endSaving();
-                mLastAddressPurgeTime = getTime();
+                mChain.saveData();
+                mLastDataSaveTime = getTime();
             }
 
             if(mStopping)

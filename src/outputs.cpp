@@ -608,13 +608,17 @@ namespace BitCoin
         return mIsValid;
     }
 
-    bool TransactionOutputPool::save()
+    bool TransactionOutputPool::save(unsigned int pThreadCount)
     {
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
           "Saving transaction outputs at block height %d (%d KiB cached)", mNextBlockHeight - 1,
           cacheDataSize() / 1024);
 
+#ifdef SINGLE_THREAD
         if(!HashDataSet::save())
+#else
+        if(!HashDataSet::saveMultiThreaded(pThreadCount))
+#endif
             return false;
 
         NextCash::String filePathName = path();

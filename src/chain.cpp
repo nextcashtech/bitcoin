@@ -1701,7 +1701,7 @@ namespace BitCoin
                 else
                 {
                     mOutputs.revert(block.transactions, currentHeight);
-                    mOutputs.save();
+                    mOutputs.save(mInfo.saveThreadCount);
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                       "Failed to process block at height %d : %s",
                       currentHeight, block.header.hash.hex().text());
@@ -1712,7 +1712,7 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                   "Failed to read block %d from block file", currentHeight);
-                mOutputs.save();
+                mOutputs.save(mInfo.saveThreadCount);
                 return false;
             }
 
@@ -1720,13 +1720,13 @@ namespace BitCoin
 
             if(getTime() - lastPurgeTime > 10)
             {
-                if(mOutputs.needsPurge() && !mOutputs.save())
+                if(mOutputs.needsPurge() && !mOutputs.save(mInfo.saveThreadCount))
                     return false;
                 lastPurgeTime = getTime();
             }
         }
 
-        mOutputs.save();
+        mOutputs.save(mInfo.saveThreadCount);
         return mOutputs.height() == blockHeight();
     }
 
@@ -1782,7 +1782,7 @@ namespace BitCoin
 #endif
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                   "Failed to get block %d from block file", currentHeight);
-                mAddresses.save();
+                mAddresses.save(mInfo.saveThreadCount);
                 return false;
             }
 
@@ -1793,13 +1793,13 @@ namespace BitCoin
 
             if(getTime() - lastPurgeTime > 10)
             {
-                if(mAddresses.needsPurge() && !mAddresses.save())
+                if(mAddresses.needsPurge() && !mAddresses.save(mInfo.saveThreadCount))
                     return false;
                 lastPurgeTime = getTime();
             }
         }
 
-        mAddresses.save();
+        mAddresses.save(mInfo.saveThreadCount);
         return mAddresses.height() == blockHeight();
     }
 
@@ -1838,14 +1838,63 @@ namespace BitCoin
             success = false;
         if(!savePending())
             success = false;
-        if(!Info::instance().spvMode)
-        {
-            if(!mOutputs.save())
-                success = false;
-            if(!mAddresses.save())
-                success = false;
-        }
+        if(!saveData())
+            success = false;
         return success;
+    }
+
+    void Chain::saveOutputsThreadRun()
+    {
+        Chain *chain = (Chain *)NextCash::Thread::getParameter();
+        if(chain == NULL)
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+              "Save outputs thread parameter is null. Aborting save.");
+            return;
+        }
+
+        chain->mOutputs.save(chain->mInfo.saveThreadCount);
+    }
+
+    void Chain::saveAddressesThreadRun()
+    {
+        Chain *chain = (Chain *)NextCash::Thread::getParameter();
+        if(chain == NULL)
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
+              "Save addresses thread parameter is null. Aborting save.");
+            return;
+        }
+
+        chain->mAddresses.save(chain->mInfo.saveThreadCount);
+    }
+
+    bool Chain::saveData()
+    {
+        if(Info::instance().spvMode)
+            return true;
+
+        mSaveDataInProgress = true;
+
+#ifdef SINGLE_THREAD
+        mOutputs.save(1);
+        mAddresses.save(1);
+#else
+        // Run outputs and addresses saves simultaneously.
+        NextCash::Thread *outputsSaveThread = new NextCash::Thread("Save Outputs",
+          saveOutputsThreadRun, this);
+
+        NextCash::Thread *addressesSaveThread = new NextCash::Thread("Save Addresses",
+          saveAddressesThreadRun, this);
+
+        // Wait for threads to finish. Join is done in destroy.
+        delete outputsSaveThread;
+        delete addressesSaveThread;
+#endif
+
+        mSaveDataInProgress = false;
+
+        return true;
     }
 
     bool Chain::savePending()

@@ -308,9 +308,10 @@ namespace BitCoin
         bool load();
         bool save();
 
-        bool saveInProgress() const { return mSaveInProgress; }
-        void startSaving() { mSaveInProgress = true; }
-        void endSaving() { mSaveInProgress = false; }
+        // Save transaction outputs and addresses databases.
+        bool saveData();
+        bool saveDataNeeded() { return mOutputs.needsPurge() || mAddresses.needsPurge(); }
+        bool saveDataInProgress() const { return mSaveDataInProgress; }
 
         // Process pending headers and blocks
         void process();
@@ -353,6 +354,9 @@ namespace BitCoin
         // Load pending data from the file system
         bool loadPending();
 
+        static void saveOutputsThreadRun();
+        static void saveAddressesThreadRun();
+
         // Update the transaction outputs for any blocks it is missing
         bool updateOutputs();
 
@@ -366,7 +370,7 @@ namespace BitCoin
         bool mStopRequested;
         bool mIsInSync, mWasInSync;
         bool mHeadersNeeded;
-        bool mSaveInProgress;
+        bool mSaveDataInProgress;
 
         std::list<PendingHeaderData *> mPendingHeaders;
         unsigned int mNextHeaderHeight;

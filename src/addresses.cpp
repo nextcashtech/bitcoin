@@ -230,13 +230,17 @@ namespace BitCoin
         return mIsValid;
     }
 
-    bool Addresses::save()
+    bool Addresses::save(unsigned int pThreadCount)
     {
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
           "Saving transaction addresses at block height %d (%d KiB cached)", mNextBlockHeight - 1,
           cacheDataSize() / 1024);
 
+#ifdef SINGLE_THREAD
         if(!HashDataSet::save())
+#else
+        if(!HashDataSet::saveMultiThreaded(pThreadCount))
+#endif
             return false;
 
         NextCash::String filePathName = path();
