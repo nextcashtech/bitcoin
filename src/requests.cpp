@@ -466,7 +466,7 @@ namespace BitCoin
             sendData.writeByte(0);
 
             // Height, Hash, Size, Transaction Count, Input Count, Output Count
-            for(int i=0;i<count;++i)
+            for(int i = 0; i < count; ++i)
             {
                 // Get Block at height - i
                 if(!mChain->getBlock((unsigned int)(height - i), block))
@@ -482,9 +482,12 @@ namespace BitCoin
                 inputCount = 0;
                 outputCount = 0;
                 amountSent = 0;
+                bool skip = true;
                 for(std::vector<Transaction *>::iterator trans = block.transactions.begin();
                   trans != block.transactions.end(); ++trans)
                 {
+                    if(skip)
+                        continue;
                     inputCount += (*trans)->inputs.size();
                     outputCount += (*trans)->outputs.size();
                     for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
@@ -555,9 +558,12 @@ namespace BitCoin
                     inputCount = 0;
                     outputCount = 0;
                     amountSent = 0;
+                    bool skip = true;
                     for(std::vector<Transaction *>::iterator trans = block.transactions.begin();
                       trans != block.transactions.end(); ++trans)
                     {
+                        if(skip)
+                            continue;
                         inputCount += (*trans)->inputs.size();
                         outputCount += (*trans)->outputs.size();
                         for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
