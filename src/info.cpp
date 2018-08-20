@@ -92,7 +92,7 @@ namespace BitCoin
         pendingBlocksThreshold = 256;
         outputsThreshold = 1073741824; // 1 GiB
         memPoolThreshold = 536870912; // 512 MiB
-        addressesThreshold = 268435456; // 256 MiB
+        addressesThreshold = 536870912; // 512 MiB
         merkleBlockCountRequired = 4;
         spvMemPoolCountRequired = 4;
         saveThreadCount = 4;
