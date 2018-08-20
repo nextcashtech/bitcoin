@@ -55,6 +55,8 @@ namespace BitCoin
         uint64_t fees() const { return mFees; }
         NextCash::stream_size size() const { return mSize; }
 
+        void setSize(NextCash::stream_size pSize) { mSize = pSize; }
+
         uint64_t actualCoinbaseAmount(); // Amount from coinbase transaction
 
         void calculateMerkleHash(NextCash::Hash &pMerkleHash);

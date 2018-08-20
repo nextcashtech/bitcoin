@@ -643,7 +643,8 @@ namespace BitCoin
         bool removeBlocksAbove(unsigned int pOffset);
 
         // Read block at specified offset in file. Return false if the offset is too high.
-        bool readTransactions(unsigned int pOffset, std::vector<Transaction *> &pTransactions);
+        bool readTransactions(unsigned int pOffset, std::vector<Transaction *> &pTransactions,
+          NextCash::stream_size *pDataSize = NULL);
 
         // Read an output at the specified file offset.
         bool readOutput(NextCash::stream_size pFileOffset, Output &pOutput);
@@ -1294,7 +1295,8 @@ namespace BitCoin
         return true;
     }
 
-    bool BlockFile::readTransactions(unsigned int pOffset, std::vector<Transaction *> &pTransactions)
+    bool BlockFile::readTransactions(unsigned int pOffset,
+      std::vector<Transaction *> &pTransactions, NextCash::stream_size *pDataSize)
     {
         if(!openFile())
         {
@@ -1305,7 +1307,7 @@ namespace BitCoin
         // Go to location in header where the data offset to the block is
         mInputFile->setReadOffset(HEADER_START_OFFSET + (pOffset * HEADER_ITEM_SIZE) + 32);
 
-        unsigned int offset = mInputFile->readUnsignedInt();
+        NextCash::stream_size offset = mInputFile->readUnsignedInt();
         if(offset == 0)
             return false;
 
@@ -1325,6 +1327,9 @@ namespace BitCoin
             }
         }
 
+        if(pDataSize != NULL)
+            *pDataSize = mInputFile->readOffset() - offset;
+
         return true;
     }
 
@@ -1339,10 +1344,14 @@ namespace BitCoin
         if(file == NULL)
             return false;
 
-        bool success = file->readTransactions(BlockFile::fileOffset(pBlockHeight), pBlock.transactions);
+        NextCash::stream_size dataSize = 0;
+        bool success = file->readTransactions(BlockFile::fileOffset(pBlockHeight),
+          pBlock.transactions, &dataSize);
         file->unlock();
 
         pBlock.header.transactionCount = pBlock.transactions.size();
+
+        pBlock.setSize(80 + compactIntegerSize(pBlock.header.transactionCount) + dataSize);
 
         return success;
     }
