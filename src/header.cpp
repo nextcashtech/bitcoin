@@ -781,18 +781,30 @@ namespace BitCoin
 
         if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + 104) ||
           mInputFile->remaining() < ITEM_SIZE - 104)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x too short for starting target bits offset %d", mID, pOffset);
             return false;
+        }
 
         unsigned int count = itemCount();
         unsigned int added = 0;
         for(unsigned int i = pOffset; i < count && added < pCount; ++i, ++added)
         {
             pTargetBits.push_back(mInputFile->readUnsignedInt());
-            if(!mInputFile->skip(ITEM_SIZE - 4))
+            if(!mInputFile->skip(ITEM_SIZE - 8))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                  "Header file %08x too short for target bits offset %d", mID, i);
                 return false;
+            }
 
             if(mInputFile->remaining() < 4)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                  "Header file %08x too short for target bits offset %d", mID, i);
                 return false;
+            }
         }
 
         return true;
@@ -998,7 +1010,16 @@ namespace BitCoin
 
         HeaderFile *file = HeaderFile::get(fileID);
         if(file == NULL)
-            return !HeaderFile::exists(fileID);
+        {
+            if(HeaderFile::exists(fileID))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                  "Failed to get header file %08x", fileID);
+                return false;
+            }
+            else
+                return true;
+        }
 
         unsigned int offset = HeaderFile::fileOffset(pStartHeight);
         while(pTargetBits.size() < pCount)
@@ -1014,9 +1035,19 @@ namespace BitCoin
             ++fileID;
             file = HeaderFile::get(fileID);
             if(file == NULL)
-                return !HeaderFile::exists(fileID);
+            {
+                if(HeaderFile::exists(fileID))
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                      "Failed to get header file %08x", fileID);
+                    return false;
+                }
+                else
+                    return true;
+            }
         }
 
+        file->unlock();
         return true;
     }
 
@@ -1038,7 +1069,16 @@ namespace BitCoin
 
         HeaderFile *file = HeaderFile::get(fileID);
         if(file == NULL)
-            return !HeaderFile::exists(fileID);
+        {
+            if(HeaderFile::exists(fileID))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                  "Failed to get header file %08x", fileID);
+                return false;
+            }
+            else
+                return true;
+        }
 
         while(pBlockStats.size() < pCount)
         {
@@ -1055,7 +1095,16 @@ namespace BitCoin
                 break;
             file = HeaderFile::get(fileID);
             if(file == NULL)
-                return !HeaderFile::exists(fileID);
+            {
+                if(HeaderFile::exists(fileID))
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                      "Failed to get header file %08x", fileID);
+                    return false;
+                }
+                else
+                    return true;
+            }
         }
 
         file->unlock();

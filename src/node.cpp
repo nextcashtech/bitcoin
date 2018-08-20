@@ -1766,7 +1766,7 @@ namespace BitCoin
                     else
                     {
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                          "Received block (height %d) (%d KiB) : %s",
+                          "Received block (%d) (%d KiB) : %s",
                           mChain->hashHeight(((Message::BlockData *)message)->block->header.hash),
                           ((Message::BlockData *)message)->block->size() / 1024,
                           ((Message::BlockData *)message)->block->header.hash.hex().text());

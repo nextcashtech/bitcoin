@@ -854,7 +854,7 @@ namespace BitCoin
         mLastHeaderHash = pHeader.hash;
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Added header to chain at height %d : %s", mNextHeaderHeight - 1,
+          "Added header (%d) : %s", mNextHeaderHeight - 1,
           pHeader.hash.hex().text());
 
         updatePendingBlocks();
@@ -1142,12 +1142,12 @@ namespace BitCoin
 
         if(fullyValidated)
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added validated block to chain at height %d (%d trans) (%d KiB) (%d s) : %s",
+              "Added validated block (%d) (%d trans) (%d KiB) (%d s) : %s",
               mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1024,
               getTime() - startTime, pBlock.header.hash.hex().text());
         else
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added approved block to chain at height %d (%d trans) (%d KiB) (%d s) : %s",
+              "Added approved block (%d) (%d trans) (%d KiB) (%d s) : %s",
               mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1024,
               getTime() - startTime, pBlock.header.hash.hex().text());
 
@@ -1240,13 +1240,13 @@ namespace BitCoin
         return 1;
     }
 
-    void Chain::process()
+    bool Chain::process()
     {
 #ifdef PROFILER_ON
         NextCash::Profiler outputsProfiler("Chain Process");
 #endif
         if(mStopRequested || mApprovedBlockHeight == 0xffffffff)
-            return;
+            return false;
 
         mPendingLock.writeLock("Update Pending");
         updatePendingBlocks();
@@ -1276,13 +1276,13 @@ namespace BitCoin
             Header::save();
             Block::save();
             mForks.save();
-            return;
+            return false;
         }
 
         mPendingLock.readUnlock();
 
         if(mInfo.spvMode)
-            return;
+            return false;
 
         mPendingLock.writeLock("Process");
 
@@ -1294,7 +1294,7 @@ namespace BitCoin
             Block::save();
             mForks.save();
             mPendingLock.writeUnlock();
-            return;
+            return false;
         }
 
         // Process the next block and add it to the chain
@@ -1320,6 +1320,8 @@ namespace BitCoin
                 --mLastFullPendingOffset;
 
             mPendingLock.writeUnlock();
+
+            return true;
         }
         else
         {
@@ -1340,6 +1342,8 @@ namespace BitCoin
             mPendingLock.writeUnlock();
 
             checkBranches(); // Possibly switch to a branch that is valid
+
+            return false;
         }
     }
 
@@ -1843,58 +1847,17 @@ namespace BitCoin
         return success;
     }
 
-    void Chain::saveOutputsThreadRun()
-    {
-        Chain *chain = (Chain *)NextCash::Thread::getParameter();
-        if(chain == NULL)
-        {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-              "Save outputs thread parameter is null. Aborting save.");
-            return;
-        }
-
-        chain->mOutputs.save(chain->mInfo.saveThreadCount);
-    }
-
-    void Chain::saveAddressesThreadRun()
-    {
-        Chain *chain = (Chain *)NextCash::Thread::getParameter();
-        if(chain == NULL)
-        {
-            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
-              "Save addresses thread parameter is null. Aborting save.");
-            return;
-        }
-
-        chain->mAddresses.save(chain->mInfo.saveThreadCount);
-    }
-
     bool Chain::saveData()
     {
         if(Info::instance().spvMode)
             return true;
 
         mSaveDataInProgress = true;
-
-#ifdef SINGLE_THREAD
-        mOutputs.save(1);
-        mAddresses.save(1);
-#else
-        // Run outputs and addresses saves simultaneously.
-        NextCash::Thread *outputsSaveThread = new NextCash::Thread("Save Outputs",
-          saveOutputsThreadRun, this);
-
-        NextCash::Thread *addressesSaveThread = new NextCash::Thread("Save Addresses",
-          saveAddressesThreadRun, this);
-
-        // Wait for threads to finish. Join is done in destroy.
-        delete outputsSaveThread;
-        delete addressesSaveThread;
-#endif
-
+        bool succes = mOutputs.save(mInfo.saveThreadCount);
+        if(!mAddresses.save(mInfo.saveThreadCount))
+            succes = false;
         mSaveDataInProgress = false;
-
-        return true;
+        return succes;
     }
 
     bool Chain::savePending()
@@ -2016,8 +1979,6 @@ namespace BitCoin
     // Load block info from files
     bool Chain::load()
     {
-        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Indexing block hashes");
-
         mStopRequested = false;
 
         mProcessMutex.lock();
@@ -2063,6 +2024,8 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Added genesis header to chain : %s", genesisBlock->header.hash.hex().text());
         }
+
+        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Indexing header hashes");
 
 #ifndef LOW_MEM
         mHashes.clear();

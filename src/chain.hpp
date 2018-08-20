@@ -313,8 +313,9 @@ namespace BitCoin
         bool saveDataNeeded() { return mOutputs.needsPurge() || mAddresses.needsPurge(); }
         bool saveDataInProgress() const { return mSaveDataInProgress; }
 
-        // Process pending headers and blocks
-        void process();
+        // Process pending headers and blocks.
+        // Returns true if it did something.
+        bool process();
 
         std::vector<unsigned int> blackListedNodeIDs();
 
@@ -353,9 +354,6 @@ namespace BitCoin
         bool savePending();
         // Load pending data from the file system
         bool loadPending();
-
-        static void saveOutputsThreadRun();
-        static void saveAddressesThreadRun();
 
         // Update the transaction outputs for any blocks it is missing
         bool updateOutputs();

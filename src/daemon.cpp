@@ -1336,9 +1336,6 @@ namespace BitCoin
 
     void Daemon::sendHeaderRequest()
     {
-        if(getTime() - mLastHeaderRequestTime < 10)
-            return;
-
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         randomizeOutgoing(nodes);
@@ -1941,7 +1938,8 @@ namespace BitCoin
 
     void Daemon::process()
     {
-        mChain.process();
+        unsigned int count = 0;
+        while(mChain.process() && ++count < 50);
 
         if(mStopping)
             return;
