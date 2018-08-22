@@ -807,7 +807,11 @@ namespace BitCoin
         sCacheLock.lock();
         for(int i = CACHE_COUNT-1; i >= 0; --i)
             if(sCache[i] != NULL)
+            {
+                sCache[i]->lock();
                 sCache[i]->updateCRC();
+                sCache[i]->unlock();
+            }
         sCacheLock.unlock();
     }
 

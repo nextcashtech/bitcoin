@@ -246,7 +246,7 @@ namespace BitCoin
     private:
 
         HeaderFile(unsigned int pID, bool pCreate);
-        ~HeaderFile() { updateCRC(); if(mInputFile != NULL) delete mInputFile; }
+        ~HeaderFile() { lock(); updateCRC(); if(mInputFile != NULL) delete mInputFile; }
 
         /* File format
          *   Start string
@@ -394,7 +394,11 @@ namespace BitCoin
         sCacheLock.lock();
         for(int i = CACHE_COUNT-1; i >= 0; --i)
             if(sCache[i] != NULL)
+            {
+                sCache[i]->lock();
                 sCache[i]->updateCRC();
+                sCache[i]->unlock();
+            }
         sCacheLock.unlock();
 
         sFilePath.clear();
@@ -789,20 +793,14 @@ namespace BitCoin
 
         unsigned int count = itemCount();
         unsigned int added = 0;
-        for(unsigned int i = pOffset; i < count && added < pCount; ++i, ++added)
+        for(unsigned int i = pOffset; i < count && added < pCount; ++i)
         {
             pTargetBits.push_back(mInputFile->readUnsignedInt());
-            if(!mInputFile->skip(ITEM_SIZE - 8))
+            ++added;
+            if(!mInputFile->skip(ITEM_SIZE - 4))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
-                  "Header file %08x too short for target bits offset %d", mID, i);
-                return false;
-            }
-
-            if(mInputFile->remaining() < 4)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
-                  "Header file %08x too short for target bits offset %d", mID, i);
+                  "Header file %08x too short for target bits offset %d skip", mID, i);
                 return false;
             }
         }
@@ -871,7 +869,6 @@ namespace BitCoin
                 return false;
             }
 
-
             if(!mInputFile->skip(ITEM_SIZE - 36))
                 return false;
         }
@@ -937,6 +934,7 @@ namespace BitCoin
                 return !HeaderFile::exists(fileID);
         }
 
+        file->unlock();
         return true;
     }
 

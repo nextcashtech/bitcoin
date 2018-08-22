@@ -19,8 +19,8 @@ add_library( bitcoin STATIC SHARED
              src/chain.cpp
              src/daemon.cpp
              src/forks.cpp
+             src/header.cpp
              src/info.cpp
-             src/peer.cpp
              src/interpreter.cpp
              src/key.cpp
              src/mem_pool.cpp
@@ -28,6 +28,7 @@ add_library( bitcoin STATIC SHARED
              src/monitor.cpp
              src/node.cpp
              src/outputs.cpp
+             src/peer.cpp
              src/requests.cpp
              src/transaction.cpp
              bitcoin_test.cpp )

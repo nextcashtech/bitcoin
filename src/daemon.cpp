@@ -56,7 +56,6 @@ namespace BitCoin
         mLastDataSaveTime = getTime();
         mLastMemPoolCheckPending = getTime();
         mLastMonitorProcess = getTime();
-        mLastFillNodesTime = 0;
         mLastCleanTime = getTime();
         mNodeListener = NULL;
         mLastCleanTime = getTime();
@@ -250,6 +249,9 @@ namespace BitCoin
             mLoadingChain = false;
             return false;
         }
+
+        if(mChain.headerHeight() < mMonitor.height())
+            mMonitor.revertToHeight(mChain.headerHeight());
 
         mChain.setMonitor(mMonitor);
 
@@ -2520,10 +2522,7 @@ namespace BitCoin
         NextCash::Network::Connection *newConnection;
 
         if(mOutgoingNodes < mOutgoingNodeMax)
-        {
             recruitPeers();
-            mLastFillNodesTime = getTime();
-        }
 
         if(mStopping)
             return;

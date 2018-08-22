@@ -74,6 +74,7 @@ namespace BitCoin
         mActiveMerkleRequests = 0;
         mLastMerkleCheck = 0;
         mLastMerkleRequest = 0;
+        mLastMerkleReceive = 0;
         mBloomFilterID = 0;
         mChain = pChain;
 
@@ -964,37 +965,54 @@ namespace BitCoin
             if(mMonitor->filterNeedsResend(mID, mBloomFilterID))
                 sendBloomFilter();
 
-            if(mActiveMerkleRequests < 25)
+            if(mActiveMerkleRequests < 5)
             {
                 bool fail = false;
                 NextCash::HashList blockHashes;
 
-                mMonitor->getNeededMerkleBlocks(mID, *mChain, blockHashes);
-                for(NextCash::HashList::iterator hash = blockHashes.begin();
-                  hash != blockHashes.end(); ++hash)
-                    if(!requestMerkleBlock(*hash))
-                    {
-                        fail = true;
-                        break;
-                    }
+                mMonitor->getNeededMerkleBlocks(mID, *mChain, blockHashes, 25);
 
-                if(!fail && blockHashes.size() > 0)
+                if(blockHashes.size() == 0)
                 {
-                    mActiveMerkleRequests += blockHashes.size();
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                      "Requested %d merkle blocks", blockHashes.size());
-                    mLastMerkleRequest = getTime();
+                    if(mMonitor->height() < mChain->headerHeight())
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                          "No merkle blocks available to request", blockHashes.size());
                 }
+                else
+                {
+                    for(NextCash::HashList::iterator hash = blockHashes.begin();
+                      hash != blockHashes.end(); ++hash)
+                        if(!requestMerkleBlock(*hash))
+                        {
+                            fail = true;
+                            break;
+                        }
 
-                mLastMerkleCheck = time;
+                    if(!fail)
+                    {
+                        mActiveMerkleRequests += blockHashes.size();
+                        mLastMerkleRequest = getTime();
+                        mLastMerkleReceive = mLastMerkleRequest;
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                          "Requested %d merkle blocks", blockHashes.size());
+                    }
+                }
             }
-            else if(time - mLastMerkleCheck > 120)
+            else
             {
-                NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                  "Dropping. Took too long to return merkle blocks");
-                close();
-                return;
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                  "Waiting for %d merkle blocks from %ds ago", mActiveMerkleRequests,
+                  time - mLastMerkleRequest);
+                if(time - mLastMerkleReceive > 10)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                      "Dropping. Took too long to return merkle blocks");
+                    close();
+                    return;
+                }
             }
+
+            mLastMerkleCheck = time;
         }
 
         if(mReceivedVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
@@ -1933,6 +1951,7 @@ namespace BitCoin
                 }
                 break;
             case Message::MERKLE_BLOCK:
+                mLastMerkleReceive = getTime();
                 --mActiveMerkleRequests;
                 --mMessagesReceived; // Don't count to reduce turnover when syncing
                 if(!mIsIncoming && !mIsSeed && mMonitor != NULL &&

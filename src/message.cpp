@@ -984,8 +984,9 @@ namespace BitCoin
         }
 
         // Recursively add hashes to the merkle block data
-        void MerkleBlockData::addNode(MerkleNode *pNode, unsigned int pDepth, unsigned int &pNextBitOffset,
-          unsigned char &pNextByte, std::vector<Transaction *> &pIncludedTransactions)
+        void MerkleBlockData::addNode(MerkleNode *pNode, unsigned int pDepth,
+          unsigned int &pNextBitOffset, unsigned char &pNextByte,
+          std::vector<Transaction *> &pIncludedTransactions)
         {
             // NextCash::String padding;
             // for(unsigned int i=0;i<pDepth;i++)
@@ -1039,8 +1040,8 @@ namespace BitCoin
             }
         }
 
-        MerkleBlockData::MerkleBlockData(Block *pBlock, BloomFilter &pFilter, std::vector<Transaction *> &pIncludedTransactions) :
-          Data(MERKLE_BLOCK)
+        MerkleBlockData::MerkleBlockData(Block *pBlock, BloomFilter &pFilter,
+          std::vector<Transaction *> &pIncludedTransactions) : Data(MERKLE_BLOCK)
         {
             header = pBlock->header;
 
@@ -1080,36 +1081,57 @@ namespace BitCoin
             pStream->writeStream(&flags, flags.length());
         }
 
-        bool MerkleBlockData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool MerkleBlockData::read(NextCash::InputStream *pStream, unsigned int pSize,
+          int32_t pVersion)
         {
             NextCash::stream_size startReadOffset = pStream->readOffset();
 
             // Block Header
             if(!header.read(pStream, false, true))
+            {
+                NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                  "Merkle block read header failed.");
                 return false;
+            }
 
             if(pStream->readOffset() + 4 > startReadOffset + pSize)
+            {
+                NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                  "Merkle block read tran count failed.");
                 return false;
+            }
 
             // Transaction Count
             header.transactionCount = pStream->readUnsignedInt();
 
             if(pStream->readOffset() + 1 > startReadOffset + pSize)
+            {
+                NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                  "Merkle block read hash count failed.");
                 return false;
+            }
 
             // Hash Count
             uint64_t count = readCompactInteger(pStream);
 
             if(pStream->readOffset() + (count * 32) > startReadOffset + pSize)
+            {
+                NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                  "Merkle block read hashes failed : Not enough data.");
                 return false;
+            }
 
             // Hashes
             hashes.clear();
             hashes.reserve(count);
-            for(unsigned int i=0;i<count;i++)
+            for(unsigned int i = 0; i < count; i++)
             {
                 if(pStream->remaining() < 32)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                      "Merkle block read hash %d failed", i + 1);
                     return false;
+                }
                 else
                     hashes.emplace_back(pStream, 32);
             }
@@ -1119,7 +1141,11 @@ namespace BitCoin
             count = readCompactInteger(pStream);
 
             if(pStream->readOffset() + count > startReadOffset + pSize)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
+                  "Merkle block read flags failed");
                 return false;
+            }
 
             // Flags
             pStream->readStream(&flags, count);
@@ -1127,8 +1153,9 @@ namespace BitCoin
             return true;
         }
 
-        bool MerkleBlockData::parse(MerkleNode *pNode, unsigned int pDepth, unsigned int &pHashesOffset, unsigned int &pBitOffset,
-          unsigned char &pByte, NextCash::HashList &pIncludedTransactionHashes)
+        bool MerkleBlockData::parse(MerkleNode *pNode, unsigned int pDepth,
+          unsigned int &pHashesOffset, unsigned int &pBitOffset, unsigned char &pByte,
+          NextCash::HashList &pIncludedTransactionHashes)
         {
             if(pBitOffset == 8)
             {
@@ -1147,9 +1174,6 @@ namespace BitCoin
             }
 
             bool bitIsSet = (pByte >> pBitOffset++) & 0x01;
-            NextCash::String padding;
-            for(unsigned int i=0;i<pDepth;i++)
-                padding += "  ";
 
             if(bitIsSet)
             {
@@ -1172,12 +1196,14 @@ namespace BitCoin
                 {
                     // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                       // "%s  Left", padding.text());
-                    parse(pNode->left, pDepth + 1, pHashesOffset, pBitOffset, pByte, pIncludedTransactionHashes);
+                    parse(pNode->left, pDepth + 1, pHashesOffset, pBitOffset, pByte,
+                      pIncludedTransactionHashes);
                     if(pNode->left != pNode->right)
                     {
                         // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                           // "%s  Right", padding.text());
-                        parse(pNode->right, pDepth + 1, pHashesOffset, pBitOffset, pByte, pIncludedTransactionHashes);
+                        parse(pNode->right, pDepth + 1, pHashesOffset, pBitOffset, pByte,
+                          pIncludedTransactionHashes);
                         if(pNode->left->hash == pNode->right->hash)
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,

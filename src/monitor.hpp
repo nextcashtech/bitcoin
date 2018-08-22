@@ -94,12 +94,7 @@ namespace BitCoin
 
         // Get hashes for blocks that need merkle blocks
         void getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain,
-          NextCash::HashList &pBlockHashes,
-#ifdef LOW_MEM
-          unsigned int pMaxCount = 100);
-#else
-          unsigned int pMaxCount = 250);
-#endif
+          NextCash::HashList &pBlockHashes, unsigned int pMaxCount);
 
         int changeID() const { return mChangeID; }
         void incrementChange() { ++mChangeID; }
@@ -121,7 +116,8 @@ namespace BitCoin
         bool isConfirmed(const NextCash::Hash &pTransactionID);
         NextCash::Hash confirmBlockHash(const NextCash::Hash &pTransactionID);
 
-        void revertBlock(const NextCash::Hash &pBlockHash, unsigned int pBlockHeight);
+        void revertBlockHash(NextCash::Hash &pHash);
+        void revertToHeight(unsigned int pBlockHeight);
 
         void process(Chain &pChain);
 
@@ -278,6 +274,8 @@ namespace BitCoin
         // Cancel all pending merkle requests and update the bloom filter.
         void restartBloomFilter();
         void clearMerkleRequest(MerkleRequestData *pData);
+
+        bool addNeedsClose(unsigned int pNodeID);
 
         NextCash::MutexWithConstantName mMutex;
         KeyStore *mKeyStore;

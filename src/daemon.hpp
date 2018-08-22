@@ -133,7 +133,6 @@ namespace BitCoin
         int32_t mLastDataSaveTime;
         int32_t mLastMemPoolCheckPending;
         int32_t mLastMonitorProcess;
-        int32_t mLastFillNodesTime;
         int32_t mLastCleanTime;
         int32_t mFinishTime;
 

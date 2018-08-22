@@ -286,9 +286,13 @@ namespace BitCoin
               mBlockVersions.size() < pBlockHeight)
             {
                 mBlockVersions.clear();
-                for(unsigned int height = pBlockHeight; mBlockVersions.size() < totalCount &&
-                  height >= 0; --height)
+                for(unsigned int height = pBlockHeight; mBlockVersions.size() < totalCount;
+                  --height)
+                {
                     mBlockVersions.push_front(pChain->version(height));
+                    if(height == 0)
+                        break;
+                }
             }
             mBlockVersions.push_back(pChain->version(pBlockHeight));
             while(mBlockVersions.size() > totalCount)
@@ -434,13 +438,15 @@ namespace BitCoin
 
                         unsigned int support = 0;
                         int offset = 0;
-                        for(unsigned int height = pBlockHeight; height >= 0 && offset < RETARGET_PERIOD;
+                        for(unsigned int height = pBlockHeight; offset < RETARGET_PERIOD;
                           --height, ++offset)
                         {
                             version = pChain->version(height);
                             if((version & 0xE0000000) == 0x20000000 &&
                               (version >> (*softFork)->bit) & 0x01)
                                 ++support;
+                            if(height == 0)
+                                break;
                         }
 
                         if(support >= mThreshHold)
@@ -482,18 +488,26 @@ namespace BitCoin
                 unknownSupport[i] = 0;
 
             unsigned int offset = 0;
-            for(unsigned int height = pBlockHeight; height >= 0 && offset < RETARGET_PERIOD;
+            for(unsigned int height = pBlockHeight; offset < RETARGET_PERIOD;
               --height, ++offset)
             {
                 version = pChain->version(height);
                 if((version & 0xE0000000) != 0x20000000)
-                    continue;
+                {
+                    if(height == 0)
+                        break;
+                    else
+                        continue;
+                }
                 if((version | compositeValue) != compositeValue)
                 {
                     for(i = 0; i < 29; i++)
                         if((version & (0x01 << i)) && !(compositeValue & (0x01 << i)))
                             ++unknownSupport[i]; // Bit set in version and not in composite
                 }
+
+                if(height == 0)
+                    break;
             }
 
             for(i = 0; i < 29; i++)

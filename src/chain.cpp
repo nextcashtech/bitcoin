@@ -31,7 +31,7 @@ namespace BitCoin
     NextCash::Hash Chain::sBTCForkBlockHash("00000000000000000019f112ec0a9982926f1258cdcc558dd7c3b7e5dc7fa148");
 
     Chain::Chain() : mInfo(Info::instance()), mPendingLock("Chain Pending"),
-      mProcessMutex("Chain Process")
+      mProcessMutex("Chain Process"), mHeadersLock("Chain Headers"), mBranchLock("Chain Branches")
     {
         mNextBlockHeight = 0;
         mPendingSize = 0;
@@ -59,9 +59,11 @@ namespace BitCoin
         for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
           pending != mPendingBlocks.end(); ++pending)
             delete *pending;
+        mBranchLock.lock();
         for(std::vector<Branch *>::iterator branch = mBranches.begin();
           branch != mBranches.end(); ++branch)
             delete *branch;
+        mBranchLock.unlock();
         if(mAnnounceBlock != NULL)
             delete mAnnounceBlock;
         mPendingLock.writeUnlock();
@@ -223,19 +225,20 @@ namespace BitCoin
     bool Chain::headerInBranch(const NextCash::Hash &pHash)
     {
         // Loop through all branches
-        mPendingLock.readLock();
-        for(std::vector<Branch *>::iterator branch=mBranches.begin();branch!=mBranches.end();++branch)
+        mBranchLock.lock();
+        for(std::vector<Branch *>::iterator branch = mBranches.begin(); branch != mBranches.end();
+          ++branch)
         {
             // Loop through all pending blocks on the branch
             for(std::list<PendingBlockData *>::iterator pending = (*branch)->pendingBlocks.begin();
               pending != (*branch)->pendingBlocks.end(); ++pending)
                 if((*pending)->block->header.hash == pHash)
                 {
-                    mPendingLock.readUnlock();
+                    mBranchLock.unlock();
                     return true;
                 }
         }
-        mPendingLock.readUnlock();
+        mBranchLock.unlock();
         return false;
     }
 
@@ -243,10 +246,12 @@ namespace BitCoin
     {
         NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME, "Checking branches");
 
-        mPendingLock.writeLock("Check Branches");
+        mHeadersLock.writeLock("Check Branches");
+        mBranchLock.lock();
         if(mBranches.size() == 0)
         {
-            mPendingLock.writeUnlock();
+            mHeadersLock.writeUnlock();
+            mBranchLock.unlock();
             return true;
         }
 
@@ -284,7 +289,8 @@ namespace BitCoin
 
         if(longestBranch == NULL)
         {
-            mPendingLock.writeUnlock();
+            mHeadersLock.writeUnlock();
+            mBranchLock.unlock();
             return true;
         }
 
@@ -332,7 +338,8 @@ namespace BitCoin
         if(!revert(longestBranch->height - 1))
         {
             delete newBranch;
-            mPendingLock.writeUnlock();
+            mHeadersLock.writeUnlock();
+            mBranchLock.unlock();
             return false;
         }
 
@@ -387,7 +394,8 @@ namespace BitCoin
         // Add the previous main branch as a new branch
         mBranches.push_back(newBranch);
 
-        mPendingLock.writeUnlock();
+        mBranchLock.unlock();
+        mHeadersLock.writeUnlock();
 
         if(!success)
             checkBranches(); // Call recursively to re-activate main branch
@@ -397,10 +405,10 @@ namespace BitCoin
 
     Chain::HashStatus Chain::addPendingHash(const NextCash::Hash &pHash, unsigned int pNodeID)
     {
-        mPendingLock.readLock();
+        mHeadersLock.readLock();
         if(mBlackListHashes.contains(pHash))
         {
-            mPendingLock.readUnlock();
+            mHeadersLock.readUnlock();
             return BLACK_LISTED;
         }
         else if(Forks::CASH_ACTIVATION_TIME == 1501590000)
@@ -409,21 +417,21 @@ namespace BitCoin
             //   block size or transaction verification
             if(sBTCForkBlockHash == pHash)
             {
-                mPendingLock.readUnlock();
-                mPendingLock.writeLock("Black List");
+                mHeadersLock.readUnlock();
+                mHeadersLock.writeLock("Black List");
                 addBlackListedHash(pHash);
-                mPendingLock.writeUnlock();
+                mHeadersLock.writeUnlock();
                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
                   "Rejecting BTC fork block hash : %s", pHash.hex().text());
                 return BLACK_LISTED;
             }
         }
-        mPendingLock.readUnlock();
+        mHeadersLock.readUnlock();
 
         if(headerAvailable(pHash) || headerInBranch(pHash))
             return ALREADY_HAVE;
 
-        mPendingLock.readLock();
+        mHeadersLock.readLock();
         // Check if block is requested for the chain
         for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
           pending != mPendingBlocks.end(); ++pending)
@@ -431,20 +439,20 @@ namespace BitCoin
             {
                 if(!mInfo.spvMode && !(*pending)->isFull() && (*pending)->requestingNode == 0)
                 {
-                    mPendingLock.readUnlock();
+                    mHeadersLock.readUnlock();
                     return NEED_BLOCK;
                 }
                 else
                 {
-                    mPendingLock.readUnlock();
+                    mHeadersLock.readUnlock();
                     return ALREADY_HAVE;
                 }
                 break;
             }
-        mPendingLock.readUnlock();
+        mHeadersLock.readUnlock();
 
         // Check for a preexisting pending header
-        mPendingLock.writeLock("Add Pending Hash");
+        mHeadersLock.writeLock("Add Pending Hash");
         for(std::list<PendingHeaderData *>::iterator pendingHeader = mPendingHeaders.begin();
           pendingHeader != mPendingHeaders.end(); ++pendingHeader)
             if((*pendingHeader)->hash == pHash)
@@ -455,12 +463,12 @@ namespace BitCoin
                     (*pendingHeader)->requestingNode = pNodeID;
                     (*pendingHeader)->requestedTime = getTime();
                     (*pendingHeader)->updateTime = getTime();
-                    mPendingLock.writeUnlock();
+                    mHeadersLock.writeUnlock();
                     return NEED_HEADER;
                 }
                 else
                 {
-                    mPendingLock.writeUnlock();
+                    mHeadersLock.writeUnlock();
                     return ALREADY_HAVE;
                 }
                 break;
@@ -470,18 +478,18 @@ namespace BitCoin
         // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
           // "Adding pending header : %s", pHash.hex().text());
         mPendingHeaders.push_back(new PendingHeaderData(pHash, pNodeID, getTime()));
-        mPendingLock.writeUnlock();
+        mHeadersLock.writeUnlock();
         return NEED_HEADER;
     }
 
     bool Chain::getPendingHeaderHashes(NextCash::HashList &pList)
     {
         pList.clear();
-        mPendingLock.readLock();
+        mHeadersLock.readLock();
         for(std::list<PendingHeaderData *>::iterator pendingHeader = mPendingHeaders.begin();
           pendingHeader != mPendingHeaders.end(); ++pendingHeader)
             pList.push_back((*pendingHeader)->hash);
-        mPendingLock.readUnlock();
+        mHeadersLock.readUnlock();
         return true;
     }
 
@@ -519,9 +527,6 @@ namespace BitCoin
 
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
               "Reverting block (%d) : %s", headerHeight(), hash.hex().text());
-
-            if(mMonitor != NULL)
-                mMonitor->revertBlock(hash, headerHeight());
 
             if(!mInfo.spvMode && blockHeight() == headerHeight())
             {
@@ -561,6 +566,9 @@ namespace BitCoin
             revertLastBlockStat();
             --mNextHeaderHeight;
         }
+
+        if(mMonitor != NULL)
+            mMonitor->revertToHeight(headerHeight());
 
         // Save accumulated work to prevent an invalid value in the file
         saveAccumulatedWork();
@@ -865,7 +873,7 @@ namespace BitCoin
     int Chain::addHeader(Header &pHeader, bool pLocked)
     {
         if(!pLocked)
-            mPendingLock.writeLock("Add");
+            mHeadersLock.writeLock("Add");
 
         // Remove pending header
         for(std::list<PendingHeaderData *>::iterator pendingHeader = mPendingHeaders.begin();
@@ -882,7 +890,7 @@ namespace BitCoin
         if(mBlackListHashes.contains(pHeader.hash))
         {
             if(!pLocked)
-                mPendingLock.writeUnlock();
+                mHeadersLock.writeUnlock();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
               "Rejecting black listed block hash : %s", pHeader.hash.hex().text());
             return -1;
@@ -891,7 +899,7 @@ namespace BitCoin
         {
             // Manually reject BTC fork block hash.
             if(!pLocked)
-                mPendingLock.writeUnlock();
+                mHeadersLock.writeUnlock();
             NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
               "Rejecting BTC fork block header : %s", pHeader.hash.hex().text());
             return -1;
@@ -909,7 +917,7 @@ namespace BitCoin
               "Target                   : %s", target.hex().text());
             addBlackListedHash(pHeader.hash);
             if(!pLocked)
-                mPendingLock.writeUnlock();
+                mHeadersLock.writeUnlock();
             return -1;
         }
 
@@ -918,12 +926,12 @@ namespace BitCoin
             if(!processHeader(pHeader))
             {
                 if(!pLocked)
-                    mPendingLock.writeUnlock();
+                    mHeadersLock.writeUnlock();
                 return -1;
             }
 
             if(!pLocked)
-                mPendingLock.writeUnlock();
+                mHeadersLock.writeUnlock();
             return 0;
         }
 
@@ -932,12 +940,13 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
               "Header already in chain : %s", pHeader.hash.hex().text());
             if(!pLocked)
-                mPendingLock.writeUnlock();
+                mHeadersLock.writeUnlock();
             return 1;
         }
 
         // Check branches
         unsigned int branchID = 1;
+        mBranchLock.lock();
         for(std::vector<Branch *>::iterator branch = mBranches.begin();
           branch != mBranches.end(); ++branch, ++branchID)
         {
@@ -946,7 +955,8 @@ namespace BitCoin
                 // Add at end of branch
                 (*branch)->addBlock(new Block(pHeader));
                 if(!pLocked)
-                    mPendingLock.writeUnlock();
+                    mHeadersLock.writeUnlock();
+                mBranchLock.unlock();
                 checkBranches();
                 return 0;
             }
@@ -960,7 +970,8 @@ namespace BitCoin
                       "Header already in branch %d (%d blocks) : %s", branchID,
                       (*branch)->pendingBlocks.size(), pHeader.hash.hex().text());
                     if(!pLocked)
-                        mPendingLock.writeUnlock();
+                        mHeadersLock.writeUnlock();
+                    mBranchLock.unlock();
                     return 1;
                 }
         }
@@ -984,11 +995,12 @@ namespace BitCoin
                     Branch *newBranch = new Branch(chainHeight, accumulatedWork(chainHeight));
                     newBranch->addBlock(new Block(pHeader));
                     mBranches.push_back(newBranch);
+                    mBranchLock.unlock();
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                       "Started branch at height %d : %s", newBranch->height,
                       pHeader.hash.hex().text());
                     if(!pLocked)
-                        mPendingLock.writeUnlock();
+                        mHeadersLock.writeUnlock();
                     checkBranches();
                     return 0;
                 }
@@ -996,10 +1008,12 @@ namespace BitCoin
                     break;
         }
 
+        mBranchLock.unlock();
+
         NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
           "Unknown header : %s", pHeader.hash.hex().text());
         if(!pLocked)
-            mPendingLock.writeUnlock();
+            mHeadersLock.writeUnlock();
         return -1;
     }
 
@@ -1154,10 +1168,10 @@ namespace BitCoin
         return true;
     }
 
-    int Chain::addBlock(Block *pBlock, bool pLocked)
+    int Chain::addBlock(Block *pBlock)
     {
         // Ensure header has been processed. For when block is seen before header.
-        if(addHeader(pBlock->header, pLocked) < 0)
+        if(addHeader(pBlock->header) < 0)
             return -1;
 
         if(!pBlock->validate(this, mNextBlockHeight))
@@ -1174,8 +1188,7 @@ namespace BitCoin
             return -1;
         }
 
-        if(!pLocked)
-            mPendingLock.writeLock();
+        mPendingLock.writeLock();
 
         unsigned int offset = 0;
         for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
@@ -1187,8 +1200,7 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE,
                       BITCOIN_CHAIN_LOG_NAME, "Block already received from [%d]: %s",
                       (*pending)->requestingNode, pBlock->header.hash.hex().text());
-                    if(!pLocked)
-                        mPendingLock.writeUnlock();
+                    mPendingLock.writeUnlock();
                     return 1;
                 }
                 else
@@ -1199,14 +1211,14 @@ namespace BitCoin
                     ++mPendingBlockCount;
                     if(offset > mLastFullPendingOffset)
                         mLastFullPendingOffset = offset;
-                    if(!pLocked)
-                        mPendingLock.writeUnlock();
+                    mPendingLock.writeUnlock();
                     return 0;
                 }
             }
 
         // Check if it is in a branch
         unsigned int branchID = 1;
+        mBranchLock.lock();
         for(std::vector<Branch *>::iterator branch = mBranches.begin();
           branch != mBranches.end(); ++branch, ++branchID)
             for(std::list<PendingBlockData *>::iterator pending =
@@ -1216,27 +1228,27 @@ namespace BitCoin
                 {
                     if((*pending)->isFull())
                     {
+                        mPendingLock.writeUnlock();
+                        mBranchLock.unlock();
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                           "Block already received on branch %d from [%d]: %s", branchID,
                           (*pending)->requestingNode, pBlock->header.hash.hex().text());
-                        if(!pLocked)
-                            mPendingLock.writeUnlock();
                         return 1;
                     }
                     else
                     {
                         (*pending)->replace(pBlock);
+                        mPendingLock.writeUnlock();
+                        mBranchLock.unlock();
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                           "Block received on branch %d from [%d]: %s", branchID,
                           (*pending)->requestingNode, pBlock->header.hash.hex().text());
-                        if(!pLocked)
-                            mPendingLock.writeUnlock();
                         return 0;
                     }
                 }
 
-        if(!pLocked)
-            mPendingLock.writeUnlock();
+        mPendingLock.writeUnlock();
+        mBranchLock.unlock();
         return 1;
     }
 
@@ -1626,8 +1638,8 @@ namespace BitCoin
 
         std::vector<BlockStat *> values, toDelete;
         BlockStat *newStat;
-        for(unsigned int i = (unsigned int)pBlockHeight - pMedianCount + 1;
-          i <= (unsigned int)pBlockHeight; ++i)
+        for(unsigned int i = pBlockHeight - pMedianCount + 1;
+          i <= pBlockHeight; ++i)
         {
             newStat = blockStat(i);
             if(newStat == NULL)
@@ -1981,8 +1993,7 @@ namespace BitCoin
     {
         mStopRequested = false;
 
-        mProcessMutex.lock();
-        NextCash::HashList hashes;
+        mHeadersLock.writeLock("Load");
         bool success = true;
         Block *genesisBlock = NULL;
         NextCash::Hash emptyHash;
@@ -2015,7 +2026,7 @@ namespace BitCoin
 
             if(!Header::add(0, genesisBlock->header))
             {
-                mProcessMutex.unlock();
+                mHeadersLock.writeUnlock();
                 delete genesisBlock;
                 return false;
             }
@@ -2033,17 +2044,15 @@ namespace BitCoin
 #endif
 
         // Load header files
+        NextCash::HashList hashes;
         hashes.reserve(1000);
         while(mNextHeaderHeight < headerCount)
         {
-            if(!Header::getHashes(mNextHeaderHeight, 1000, hashes))
+            if(!Header::getHashes(mNextHeaderHeight, 1000, hashes) || hashes.size() == 0)
             {
                 success = false;
                 break;
             }
-
-            if(hashes.size() == 0)
-                break;
 
             for(NextCash::HashList::iterator hash = hashes.begin(); hash != hashes.end(); ++hash)
             {
@@ -2066,35 +2075,21 @@ namespace BitCoin
         if(mNextHeaderHeight > 0)
         {
             unsigned int startHeight;
-            if(height() > RECENT_BLOCK_COUNT)
-                startHeight = (unsigned int)height() - RECENT_BLOCK_COUNT;
+            unsigned int hashCount = RECENT_BLOCK_COUNT;
+            if(headerCount > RECENT_BLOCK_COUNT)
+                startHeight = headerCount - RECENT_BLOCK_COUNT;
             else
-                startHeight = 0;
-
-            while(mLastHashes.size() < RECENT_BLOCK_COUNT)
             {
-                if(!Header::getHashes(startHeight, 1000, hashes))
-                {
-                    success = false;
-                    break;
-                }
-
-                if(hashes.size() == 0)
-                    break;
-
-                for(NextCash::HashList::iterator hash = hashes.begin(); hash != hashes.end();
-                  ++hash)
-                    mLastHashes.push_back(*hash);
-
-                startHeight += hashes.size();
+                hashCount = headerCount;
+                startHeight = 0;
             }
 
-            while(mLastHashes.size() > RECENT_BLOCK_COUNT)
-                mLastHashes.erase(mLastHashes.begin());
-        }
+            if(!Header::getHashes(startHeight, hashCount, mLastHashes))
+                success = false;
 
-        if(mLastHashes.size() > 0)
-            mLastHeaderHash = mLastHashes.back();
+            if(mLastHashes.size() > 0)
+                mLastHeaderHash = mLastHashes.back();
+        }
 #else
         if(mHashes.size() > 0)
             mLastHeaderHash = mHashes.back();
@@ -2158,12 +2153,18 @@ namespace BitCoin
                 // Calculate accumulated work up to chain height
                 NextCash::Hash blockWork(32);
                 std::vector<uint32_t> targetBits;
+                unsigned int accumulatedCount;
 
                 targetBits.reserve(1000);
 
                 while(accumulatedWorkHeight < headerHeight())
                 {
-                    if(!Header::getTargetBits(accumulatedWorkHeight, 1000, targetBits))
+                    accumulatedCount = headerHeight() - accumulatedWorkHeight;
+
+                    if(accumulatedCount > 1000)
+                        accumulatedCount = 1000;
+
+                    if(!Header::getTargetBits(accumulatedWorkHeight, accumulatedCount, targetBits))
                     {
                         success = false;
                         break;
@@ -2220,7 +2221,7 @@ namespace BitCoin
 
         if(mStopRequested)
         {
-            mProcessMutex.unlock();
+            mHeadersLock.writeUnlock();
             if(genesisBlock != NULL)
                 delete genesisBlock;
             return false;
@@ -2263,7 +2264,7 @@ namespace BitCoin
             mForks.save();
         }
 
-        mProcessMutex.unlock();
+        mHeadersLock.writeUnlock();
 
         if(mStopRequested || !success)
         {

@@ -202,7 +202,13 @@ namespace BitCoin
             else
                 return (unsigned int)mNextBlockHeight - 1;
         }
-        const NextCash::Hash &lastHeaderHash() const { return mLastHeaderHash; }
+        NextCash::Hash lastHeaderHash()
+        {
+            mHeadersLock.readLock();
+            NextCash::Hash result = mLastHeaderHash;
+            mHeadersLock.readUnlock();
+            return result;
+        }
         unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
 
         TransactionOutputPool &outputs() { return mOutputs; }
@@ -270,7 +276,7 @@ namespace BitCoin
         //     == 0  Block/header added
         //      > 0  Valid block/header not added (i.e. already have)
         int addHeader(Header &pHeader, bool pLocked = false);
-        int addBlock(Block *pBlock, bool pLocked = false);
+        int addBlock(Block *pBlock);
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
         bool getHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash,
@@ -370,6 +376,7 @@ namespace BitCoin
         bool mHeadersNeeded;
         bool mSaveDataInProgress;
 
+        NextCash::ReadersLock mHeadersLock;
         std::list<PendingHeaderData *> mPendingHeaders;
         unsigned int mNextHeaderHeight;
         NextCash::Hash mLastHeaderHash;
@@ -417,6 +424,7 @@ namespace BitCoin
 
         // Branches being monitored for possible future most proof of work
         std::vector<Branch *> mBranches;
+        NextCash::Mutex mBranchLock;
 
         // Check if a branch has more accumulated proof of work than the main chain
         bool checkBranches();

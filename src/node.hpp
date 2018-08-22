@@ -173,8 +173,7 @@ namespace BitCoin
         int32_t mPingRoundTripTime;
         int32_t mPingCutoff;
         int32_t mLastBlackListCheck;
-        int32_t mLastMerkleCheck;
-        int32_t mLastMerkleRequest;
+        int32_t mLastMerkleCheck, mLastMerkleRequest, mLastMerkleReceive;
 
         BloomFilter mFilter; // Bloom filter received from peer
         uint64_t mMinimumFeeRate;

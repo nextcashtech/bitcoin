@@ -17,11 +17,7 @@
 #define BITCOIN_MONITOR_LOG_NAME "Monitor"
 
 // Maximum number of concurrent merkle requests
-#ifdef LOW_MEM
-#define MAX_MERKLE_REQUESTS 500
-#else
 #define MAX_MERKLE_REQUESTS 2000
-#endif
 
 
 namespace BitCoin
@@ -600,7 +596,7 @@ namespace BitCoin
                   highestPassHeight(true) < (unsigned int)pChain->headerHeight() - 20000)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                      "Starting new pass at block height %d to monitor new blocks",
+                      "Starting new pass at block (%d) to monitor new blocks",
                       pChain->headerHeight());
                     mPasses.emplace_back(pChain->headerHeight() - 1);
                     mPasses.back().addressesIncluded = mAddressHashes.size();
@@ -1329,6 +1325,16 @@ namespace BitCoin
         return false;
     }
 
+    bool Monitor::addNeedsClose(unsigned int pNodeID)
+    {
+        for(std::vector<unsigned int>::iterator node = mNodesToClose.begin();
+          node != mNodesToClose.end(); ++node)
+            if(*node == pNodeID)
+                return false;
+        mNodesToClose.push_back(pNodeID);
+        return true;
+    }
+
     void Monitor::release(unsigned int pNodeID)
     {
         mMutex.lock();
@@ -1368,8 +1374,7 @@ namespace BitCoin
     }
 
     void Monitor::getNeededMerkleBlocks(unsigned int pNodeID, Chain &pChain,
-                                        NextCash::HashList &pBlockHashes,
-                                        unsigned int pMaxCount)
+      NextCash::HashList &pBlockHashes, unsigned int pMaxCount)
     {
         NextCash::Hash nextBlockHash;
         NextCash::HashContainerList<MerkleRequestData *>::Iterator request;
@@ -1418,21 +1423,11 @@ namespace BitCoin
                     if((*request)->node != 0 && (*request)->requestTime != 0)
                     {
                         // Close slow node
-                        bool found = false;
-                        for(std::vector<unsigned int>::iterator node = mNodesToClose.begin();
-                            node != mNodesToClose.end(); ++node)
-                            if(*node == (*request)->node)
-                            {
-                                found = true;
-                                break;
-                            }
-
-                        if(!found)
+                        if(addNeedsClose((*request)->node))
                         {
                             NextCash::Log::addFormatted(NextCash::Log::INFO,
                               BITCOIN_MONITOR_LOG_NAME,
                               "Node [%d] needs closed. Merkle blocks too slow", (*request)->node);
-                            mNodesToClose.push_back((*request)->node);
                         }
                     }
 
@@ -1481,6 +1476,9 @@ namespace BitCoin
         if(!pData->validate(transactionHashes))
         {
             request->release();
+            if(addNeedsClose(pNodeID))
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                  "Node [%d] needs closed. Sent invalid merkle block.", pNodeID);
             mMutex.unlock();
             return false;
         }
@@ -1792,13 +1790,13 @@ namespace BitCoin
         return result;
     }
 
-    void Monitor::revertBlock(const NextCash::Hash &pBlockHash, unsigned int pBlockHeight)
+    void Monitor::revertBlockHash(NextCash::Hash &pHash)
     {
         mMutex.lock();
 
         // If there is an active request then remove it and that is all
         NextCash::HashContainerList<MerkleRequestData *>::Iterator request =
-          mMerkleRequests.get(pBlockHash);
+          mMerkleRequests.get(pHash);
         if(request != mMerkleRequests.end())
         {
             // TODO Move transactions back to pending
@@ -1808,30 +1806,44 @@ namespace BitCoin
             return;
         }
 
-        // Remove any transactions associated with this block
-        unsigned int transactionCount = 0;
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mTransactions.begin(); trans != mTransactions.end();)
         {
-            if((*trans)->blockHash == pBlockHash)
+            if((*trans)->blockHash == pHash)
             {
-                ++transactionCount;
                 delete *trans;
                 trans = mTransactions.erase(trans);
-                ++mChangeID;
             }
             else
                 ++trans;
         }
 
+        mMutex.unlock();
+    }
+
+    void Monitor::revertToHeight(unsigned int pBlockHeight)
+    {
+        mMutex.lock();
+
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-          "Reverted block with %d transactions at height %d : %s", transactionCount,
-          pBlockHeight, pBlockHash.hex().text());
+          "Reverted to block height %d", pBlockHeight);
 
         // Update last block height
         for(std::vector<PassData>::iterator pass = mPasses.begin(); pass != mPasses.end(); ++pass)
             if(!pass->complete && pass->blockHeight == pBlockHeight)
                 --(pass->blockHeight);
+
+        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
+          mTransactions.begin(); trans != mTransactions.end();)
+        {
+            if((*trans)->blockHeight > pBlockHeight)
+            {
+                delete *trans;
+                trans = mTransactions.erase(trans);
+            }
+            else
+                ++trans;
+        }
 
         mMutex.unlock();
     }
@@ -1954,7 +1966,7 @@ namespace BitCoin
                         }
 
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                          "Adding merkle block from node [%d] with %d/%d trans at height %d : %s",
+                          "Adding merkle block from node [%d] with %d/%d trans (%d) : %s",
                           merkleRequest->node,
                           merkleRequest->transactions.size() - falsePositiveCount,
                           merkleRequest->transactions.size(), pass->blockHeight + 1,
@@ -1972,23 +1984,13 @@ namespace BitCoin
                             if(falsePositiveCount > 5 && (float)falsePositiveCount /
                               (float)merkleRequest->totalTransactions > 0.02)
                             {
-                                bool found = false;
-                                for(std::vector<unsigned int>::iterator node =
-                                  mNodesToClose.begin(); node != mNodesToClose.end(); ++node)
-                                    if(*node == merkleRequest->node)
-                                    {
-                                        found = true;
-                                        break;
-                                    }
-
-                                if(!found)
+                                if(addNeedsClose(merkleRequest->node))
                                 {
                                     NextCash::Log::addFormatted(NextCash::Log::INFO,
                                       BITCOIN_MONITOR_LOG_NAME,
                                       "Node [%d] needs closed. False positive rate %d/%d",
                                       merkleRequest->node, falsePositiveCount,
                                       merkleRequest->totalTransactions);
-                                    mNodesToClose.push_back(merkleRequest->node);
                                 }
                             }
                             else
