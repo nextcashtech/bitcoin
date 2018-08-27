@@ -163,6 +163,16 @@ namespace BitCoin
         unsigned int mGoodNodeMax;
         unsigned int mOutgoingNodeMax;
 
+        unsigned int maxOutgoingNodes()
+        {
+            unsigned int monitorHeight = mMonitor.height();
+            if(monitorHeight > 0 && monitorHeight < mChain.headerHeight() &&
+              mChain.headerHeight() - monitorHeight > 5000)
+                return mOutgoingNodeMax * 2;
+            else
+                return mOutgoingNodeMax;
+        }
+
         class IPBytes
         {
         public:

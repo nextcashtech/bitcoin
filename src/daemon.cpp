@@ -141,7 +141,7 @@ namespace BitCoin
         if(mQueryingSeed)
             return FINDING_PEERS;
 
-        if(mConnecting && peerCount() < mOutgoingNodeMax / 2)
+        if(mConnecting && peerCount() < maxOutgoingNodes() / 2)
             return CONNECTING_TO_PEERS;
 
         if(mChain.isInSync())
@@ -1405,7 +1405,7 @@ namespace BitCoin
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
         sortOutgoingNodesByPing(nodes);
 
-        if(nodes.size() < mOutgoingNodeMax)
+        if(nodes.size() < maxOutgoingNodes())
         {
             mNodeLock.readUnlock();
             return;
@@ -1438,7 +1438,7 @@ namespace BitCoin
 
         // Regularly drop some nodes to increase diversity
         int churnDrop = 0;
-        if(nodes.size() >= mOutgoingNodeMax)
+        if(nodes.size() >= maxOutgoingNodes())
             churnDrop = nodes.size() / 8;
 
         // Drop slowest
@@ -1473,7 +1473,7 @@ namespace BitCoin
         mNodeLock.readLock();
         std::vector<Node *> nodes = mNodes; // Copy list of nodes
 
-        if(nodes.size() < mOutgoingNodeMax / 2)
+        if(nodes.size() < maxOutgoingNodes() / 2)
         {
             mNodeLock.readUnlock();
             return;
@@ -1486,7 +1486,7 @@ namespace BitCoin
             else
                 ++node;
 
-        if(nodes.size() < mOutgoingNodeMax / 2)
+        if(nodes.size() < maxOutgoingNodes() / 2)
         {
             mNodeLock.readUnlock();
             return;
@@ -1601,7 +1601,7 @@ namespace BitCoin
 
         // Always drop some nodes so nodes with lower pings can still be found
         int churnDrop = 0;
-        if(sortedScores.size() >= mOutgoingNodeMax)
+        if(sortedScores.size() >= maxOutgoingNodes())
             churnDrop = sortedScores.size() / 8;
 
         // Drop slowest
@@ -2259,7 +2259,7 @@ namespace BitCoin
             }
         }
 
-        if(!mStopping && allCount < mOutgoingNodeMax - 2)
+        if(!mStopping && allCount < maxOutgoingNodes() - 2)
         {
             // Try peers with okay ratings
             peers.clear();
@@ -2268,7 +2268,7 @@ namespace BitCoin
               "Found %d okay peers", peers.size());
             int32_t startTime = getTime();
             for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
-              !mStopping && allCount < mOutgoingNodeMax - 3; ++peer)
+              !mStopping && allCount < maxOutgoingNodes() - 3; ++peer)
             {
                 // Skip nodes already connected
                 found = false;
@@ -2333,7 +2333,7 @@ namespace BitCoin
             }
         }
 
-        if(!mStopping && allCount < mOutgoingNodeMax)
+        if(!mStopping && allCount < maxOutgoingNodes())
         {
             // Try peers with no ratings
             peers.clear();
@@ -2342,7 +2342,7 @@ namespace BitCoin
               "Found %d usable peers", peers.size());
             int32_t startTime = getTime();
             for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
-              !mStopping && allCount < mOutgoingNodeMax; ++peer)
+              !mStopping && allCount < maxOutgoingNodes(); ++peer)
             {
                 // Skip nodes already connected
                 found = false;
@@ -2521,7 +2521,7 @@ namespace BitCoin
     {
         NextCash::Network::Connection *newConnection;
 
-        if(mOutgoingNodes < mOutgoingNodeMax)
+        if(mOutgoingNodes < maxOutgoingNodes())
             recruitPeers();
 
         if(mStopping)
