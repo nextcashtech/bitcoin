@@ -105,7 +105,7 @@ namespace BitCoin
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mTransactions.begin(); trans != mTransactions.end(); ++trans)
         {
-            if((*trans)->blockHeight == -1)
+            if((*trans)->blockHeight == 0)
                 (*trans)->blockHeight = pChain->hashHeight((*trans)->blockHash);
             transactions.push_back(*trans);
         }
@@ -1871,7 +1871,7 @@ namespace BitCoin
                 if(pass->complete)
                     continue;
 
-                if(pass->blockHeight == (unsigned int)pChain.headerHeight() &&
+                if(pass->blockHeight == pChain.headerHeight() &&
                   passIndex < mPasses.size())
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
