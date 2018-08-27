@@ -487,7 +487,10 @@ namespace BitCoin
                   trans != block.transactions.end(); ++trans)
                 {
                     if(skip)
+                    {
+                        skip = false;
                         continue;
+                    }
                     inputCount += (*trans)->inputs.size();
                     outputCount += (*trans)->outputs.size();
                     for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
@@ -563,7 +566,10 @@ namespace BitCoin
                       trans != block.transactions.end(); ++trans)
                     {
                         if(skip)
+                        {
+                            skip = false;
                             continue;
+                        }
                         inputCount += (*trans)->inputs.size();
                         outputCount += (*trans)->outputs.size();
                         for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
