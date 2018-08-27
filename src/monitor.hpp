@@ -133,7 +133,7 @@ namespace BitCoin
 
             SPVTransactionData()
             {
-                blockHeight = -1;
+                blockHeight = 0;
                 transaction = NULL;
                 amount = 0;
                 announceTime = getTime();
@@ -152,7 +152,7 @@ namespace BitCoin
                 amount = pCopy.amount;
                 announceTime = pCopy.announceTime;
             }
-            SPVTransactionData(const NextCash::Hash &pBlockHash, int pBlockHeight)
+            SPVTransactionData(const NextCash::Hash &pBlockHash, unsigned int pBlockHeight)
             {
                 blockHash = pBlockHash;
                 blockHeight = pBlockHeight;
@@ -160,7 +160,7 @@ namespace BitCoin
                 amount = 0;
                 announceTime = getTime();
             }
-            SPVTransactionData(const NextCash::Hash &pBlockHash, int pBlockHeight,
+            SPVTransactionData(const NextCash::Hash &pBlockHash, unsigned int pBlockHeight,
               Transaction *pTransaction)
             {
                 blockHash = pBlockHash;
@@ -184,7 +184,7 @@ namespace BitCoin
             }
 
             NextCash::Hash blockHash; // Hash of block containing transaction
-            int blockHeight;
+            unsigned int blockHeight;
             Transaction *transaction;
             int64_t amount;
             std::vector<unsigned int> payOutputs, spendInputs;
