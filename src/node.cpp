@@ -40,7 +40,7 @@ namespace BitCoin
         mReceivedVersionData = NULL;
         mHeaderRequestTime = 0;
         mBlockRequestTime = 0;
-        mBlockReceiveTime = 0;
+        mLastBlockReceiveTime = 0;
         mLastReceiveTime = getTime();
         mLastCheckTime = getTime();
         mLastBlackListCheck = getTime();
@@ -137,7 +137,6 @@ namespace BitCoin
               mMessageInterpreter.pendingBlockUpdateTime - mMessageInterpreter.pendingBlockStartTime,
               mMessageInterpreter.pendingBlockHash.hex().text());
 
-        release();
         mConnectionMutex.lock();
         if(mConnection != NULL)
             delete mConnection;
@@ -182,6 +181,7 @@ namespace BitCoin
 
     void Node::close()
     {
+
         mConnectionMutex.lock();
         if(mConnection != NULL)
             mConnection->close();
@@ -272,47 +272,35 @@ namespace BitCoin
             return false;
         }
 
-        if(!mIsIncoming)
+        if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 15 &&
+          time - mLastBlockReceiveTime > 15)
         {
-            if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 30 &&
-              time - mBlockReceiveTime > 30)
+            // Haven't received more of the block in the last 15 seconds
+            if(mMessageInterpreter.pendingBlockUpdateTime == 0 ||
+              time - mMessageInterpreter.pendingBlockUpdateTime > 15)
             {
-                // Haven't started receiving blocks 30 seconds after requesting
-                if(mMessageInterpreter.pendingBlockUpdateTime == 0)
-                {
-                    NextCash::Log::add(NextCash::Log::INFO, mName,
-                      "Dropping. No block for 30 seconds");
-                    Info::instance().addPeerFail(mAddress);
-                    close();
-                    return false;
-                }
-
-                // Haven't received more of the block in the last 30 seconds
-                if(time - mMessageInterpreter.pendingBlockUpdateTime > 30)
-                {
-                    NextCash::Log::add(NextCash::Log::INFO, mName,
-                      "Dropping. No update on block for 30 seconds");
-                    Info::instance().addPeerFail(mAddress);
-                    close();
-                    return false;
-                }
-            }
-
-            if(!mHeaderRequested.isEmpty() && time - mHeaderRequestTime > 30)
-            {
-                NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Not providing headers");
+                NextCash::Log::add(NextCash::Log::INFO, mName,
+                  "Dropping. No update on block for 15 seconds");
                 Info::instance().addPeerFail(mAddress);
                 close();
                 return false;
             }
+        }
 
-            if(mLastReceiveTime != 0 && time - mLastReceiveTime > 1200)
-            {
-                NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Not responding");
-                Info::instance().addPeerFail(mAddress);
-                close();
-                return false;
-            }
+        if(!mHeaderRequested.isEmpty() && time - mHeaderRequestTime > 15)
+        {
+            NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Not providing headers");
+            Info::instance().addPeerFail(mAddress);
+            close();
+            return false;
+        }
+
+        if(mLastReceiveTime != 0 && time - mLastReceiveTime > 1200)
+        {
+            NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Not responding");
+            Info::instance().addPeerFail(mAddress);
+            close();
+            return false;
         }
 
         return true;
@@ -811,6 +799,7 @@ namespace BitCoin
         }
 
         node->mStopped = true;
+        node->release();
     }
 
     void Node::addAnnouncedBlock(const NextCash::Hash &pHash)
@@ -1798,12 +1787,15 @@ namespace BitCoin
                             if(*hash == ((Message::BlockData *)message)->block->header.hash)
                             {
                                 mBlocksRequested.erase(hash);
-                                mBlockReceiveTime = time;
                                 ++mBlockDownloadCount;
-                                mBlockDownloadTime +=
-                                  time - mMessageInterpreter.pendingBlockStartTime;
-                                mBlockDownloadSize +=
-                                  ((Message::BlockData *)message)->block->size();
+                                mLastBlockReceiveTime = time;
+                                if(mMessageInterpreter.pendingBlockStartTime != 0)
+                                {
+                                    mBlockDownloadTime +=
+                                      time - mMessageInterpreter.pendingBlockStartTime;
+                                    mBlockDownloadSize +=
+                                      ((Message::BlockData *)message)->block->size();
+                                }
                                 break;
                             }
                         mBlockRequestMutex.unlock();

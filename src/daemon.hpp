@@ -133,7 +133,7 @@ namespace BitCoin
         int32_t mLastDataSaveTime;
         int32_t mLastMemPoolCheckPending;
         int32_t mLastMonitorProcess;
-        int32_t mLastCleanTime;
+        int32_t mLastCleanTime, mLastRequestCleanTime;
         int32_t mFinishTime;
 
         NextCash::Hash mLastHeaderHash;

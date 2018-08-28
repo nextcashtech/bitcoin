@@ -58,7 +58,7 @@ namespace BitCoin
         mLastMonitorProcess = getTime();
         mLastCleanTime = getTime();
         mNodeListener = NULL;
-        mLastCleanTime = getTime();
+        mLastRequestCleanTime = getTime();
         mRequestsListener = NULL;
         mGoodNodeMax = 5;
         mOutgoingNodeMax = 8;
@@ -1203,8 +1203,6 @@ namespace BitCoin
 
         if(blocksToRequestCount <= 0)
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-              "No blocks need requested");
             mNodeLock.readUnlock();
             return;
         }
@@ -1214,8 +1212,6 @@ namespace BitCoin
 
         if(blocksToRequest.size() == 0)
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-              "No blocks to request");
             mNodeLock.readUnlock();
             return;
         }
@@ -2440,7 +2436,8 @@ namespace BitCoin
             else
             {
                 dropped = false;
-                for(std::vector<unsigned int>::iterator nodeID=blackListedNodeIDs.begin();nodeID!=blackListedNodeIDs.end();++nodeID)
+                for(std::vector<unsigned int>::iterator nodeID = blackListedNodeIDs.begin();
+                  nodeID != blackListedNodeIDs.end(); ++nodeID)
                     if(*nodeID == (*node)->id())
                     {
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
@@ -2463,7 +2460,7 @@ namespace BitCoin
             }
         mNodeLock.writeUnlock();
 
-        for(std::vector<Node *>::iterator node=toDelete.begin();node!=toDelete.end();++node)
+        for(std::vector<Node *>::iterator node = toDelete.begin(); node != toDelete.end(); ++node)
         {
             (*node)->collectStatistics(mStatistics);
             delete *node;
@@ -2483,7 +2480,8 @@ namespace BitCoin
         // Drop all closed nodes
         std::vector<RequestChannel *> toDelete;
         mRequestsLock.writeLock("Clean");
-        for(std::vector<RequestChannel *>::iterator requestChannel=mRequestChannels.begin();requestChannel!=mRequestChannels.end();)
+        for(std::vector<RequestChannel *>::iterator requestChannel = mRequestChannels.begin();
+          requestChannel != mRequestChannels.end();)
             if((*requestChannel)->isStopped())
             {
                 toDelete.push_back(*requestChannel);
@@ -2493,7 +2491,8 @@ namespace BitCoin
                 ++requestChannel;
         mRequestsLock.writeUnlock();
 
-        for(std::vector<RequestChannel *>::iterator requestChannel=toDelete.begin();requestChannel!=toDelete.end();++requestChannel)
+        for(std::vector<RequestChannel *>::iterator requestChannel = toDelete.begin();
+          requestChannel != toDelete.end(); ++requestChannel)
             delete *requestChannel;
     }
 
@@ -2521,17 +2520,17 @@ namespace BitCoin
     {
         NextCash::Network::Connection *newConnection;
 
-        if(mOutgoingNodes < maxOutgoingNodes())
-            recruitPeers();
-
-        if(mStopping)
-            return;
-
         if(getTime() - mLastCleanTime > 10)
         {
             mLastCleanTime = getTime();
             cleanNodes();
         }
+
+        if(mStopping)
+            return;
+
+        if(mOutgoingNodes < maxOutgoingNodes())
+            recruitPeers();
 
         if(mStopping)
             return;
@@ -2590,9 +2589,9 @@ namespace BitCoin
     {
         NextCash::Network::Connection *newConnection;
 
-        if(getTime() - mLastCleanTime > 10)
+        if(getTime() - mLastRequestCleanTime > 10)
         {
-            mLastCleanTime = getTime();
+            mLastRequestCleanTime = getTime();
             cleanRequestChannels();
         }
 

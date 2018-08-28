@@ -189,7 +189,7 @@ namespace BitCoin
 
         NextCash::Mutex mBlockRequestMutex;
         NextCash::HashList mBlocksRequested;
-        int32_t mBlockRequestTime, mBlockReceiveTime;
+        int32_t mBlockRequestTime, mLastBlockReceiveTime;
 
         NextCash::Mutex mAnnounceMutex;
         NextCash::HashList mAnnounceBlocks, mAnnounceTransactions, mSentTransactions;
