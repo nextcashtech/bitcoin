@@ -669,7 +669,8 @@ namespace BitCoin
             delete mInputFile;
         mInputFile = NULL;
 
-        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(mFilePathName, false, true);
+        NextCash::FileOutputStream *outputFile = new NextCash::FileOutputStream(mFilePathName,
+          false, true);
         outputFile->setOutputEndian(NextCash::Endian::LITTLE);
         if(!outputFile->isValid())
         {
@@ -797,6 +798,10 @@ namespace BitCoin
         {
             pTargetBits.push_back(mInputFile->readUnsignedInt());
             ++added;
+
+            if(i == count - 1)
+                break;
+
             if(!mInputFile->skip(ITEM_SIZE - 4))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
@@ -1130,9 +1135,12 @@ namespace BitCoin
 
                 if(previousFile->lastHash() != pHeader.previousHash)
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
-                      "Header file %08x add header failed : Invalid previous file last hash : %s",
-                      file->id(), previousFile->lastHash().hex().text());
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                      "Header file %08x add header (%d) failed : Invalid previous hash : %s",
+                      file->id(), pHeight, pHeader.previousHash.hex().text());
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                      "Does not match last hash of previous block file : %s",
+                      previousFile->lastHash().hex().text());
                     file->unlock();
                     previousFile->unlock();
                     return false;
@@ -1142,9 +1150,11 @@ namespace BitCoin
             }
             else if(file->lastHash() != pHeader.previousHash)
             {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
-                  "Header file %08x add header failed : Invalid previous hash : %s", file->id(),
-                  file->lastHash().hex().text());
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                  "Header file %08x add header (%d) failed : Invalid previous hash : %s",
+                  file->id(), pHeight, pHeader.previousHash.hex().text());
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                  "Does not match last hash of block file : %s", file->lastHash().hex().text());
                 file->unlock();
                 return false;
             }

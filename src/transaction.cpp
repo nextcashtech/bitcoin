@@ -762,20 +762,22 @@ namespace BitCoin
     {
         if(inputs.size() == 0)
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              "Zero inputs");
             return false;
         }
 
         if(outputs.size() == 0)
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME, "Zero outputs");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              "Zero outputs");
             return false;
         }
 
         // Process Inputs
         TransactionReference *reference;
         unsigned int index = 0;
-        for(std::vector<Input>::iterator input=inputs.begin();input!=inputs.end();++input)
+        for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end(); ++input)
         {
             if(input->outpoint.index != 0xffffffff)
             {
@@ -785,14 +787,14 @@ namespace BitCoin
 
                 if(reference == NULL)
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE,
+                      BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction not found : trans %s index %d", index + 1,
                       input->outpoint.transactionID.hex().text(), input->outpoint.index);
                     return false;
                 }
 
                 pSpentAges.push_back(pBlockHeight - reference->blockHeight);
-
                 pOutputs.spend(reference, input->outpoint.index, pBlockHeight);
             }
 
@@ -810,16 +812,18 @@ namespace BitCoin
         Transaction *outpointTransaction;
         unsigned int index = 0;
         bool outpointsFound = true;
-        for(std::vector<Input>::iterator input=inputs.begin();input!=inputs.end();++input)
+        for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end(); ++input)
         {
             // Find unspent transaction for input
             reference = pOutputs.findUnspent(input->outpoint.transactionID, input->outpoint.index);
             if(reference != NULL)
                 outputReference = reference->outputAt(input->outpoint.index);
-            if(reference == NULL || outputReference == NULL || outputReference->blockFileOffset == 0)
+            if(reference == NULL || outputReference == NULL ||
+              outputReference->blockFileOffset == 0)
             {
                 // Search mempool
-                outpointTransaction = pMemPoolTransactions.getSorted(input->outpoint.transactionID);
+                outpointTransaction =
+                  pMemPoolTransactions.getSorted(input->outpoint.transactionID);
                 if(outpointTransaction != NULL)
                 {
                     if(outpointTransaction->outputs.size() <= input->outpoint.index)
@@ -843,7 +847,8 @@ namespace BitCoin
                         input->outpoint.output = NULL;
                     }
                     input->outpoint.signatureStatus = 0;
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                      BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint not found : index %d trans %s", index,
                       input->outpoint.index, input->outpoint.transactionID.hex().text());
                     outpointsFound = false;
@@ -858,7 +863,8 @@ namespace BitCoin
                   *input->outpoint.output))
                 {
                     //TODO This should be a system failure, not an invalid transaction
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                      BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction failed to read : index %d trans %s", index,
                       input->outpoint.index, input->outpoint.transactionID.hex().text());
                     reference->print(NextCash::Log::WARNING);

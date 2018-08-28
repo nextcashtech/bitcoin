@@ -1048,10 +1048,12 @@ namespace BitCoin
         if(mCount != INVALID_COUNT)
             return;
 
+        mCount = 0;
+        mLastHash.clear();
+
         if(!openFile())
         {
             mValid = false;
-            mCount = 0;
             return;
         }
 
@@ -1142,6 +1144,15 @@ namespace BitCoin
         if(file == NULL)
             return false;
 
+        if(file->itemCount() != BlockFile::fileOffset(pBlockHeight))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x add block failed : Invalid block height : file %d / added %d",
+              (file->id() * BlockFile::MAX_COUNT) + file->itemCount(), pBlockHeight);
+            file->unlock();
+            return false;
+        }
+
         if(pBlockHeight != 0)
         {
             // Check previous hash
@@ -1157,9 +1168,12 @@ namespace BitCoin
 
                 if(previousFile->lastHash() != pBlock.header.previousHash)
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-                      "Block file %08x add block failed : Invalid previous file last hash : %s",
-                      BlockFile::fileID(pBlockHeight), previousFile->lastHash().hex().text());
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                      "Block file %08x add block (%d) failed : Invalid previous hash : %s",
+                      file->id(), pBlockHeight, pBlock.header.previousHash.hex().text());
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                      "Does not match last hash of previous block file : %s",
+                      previousFile->lastHash().hex().text());
                     file->unlock();
                     previousFile->unlock();
                     return false;
@@ -1169,9 +1183,11 @@ namespace BitCoin
             }
             else if(file->lastHash() != pBlock.header.previousHash)
             {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-                  "Block file %08x add block failed : Invalid previous hash : %s",
-                  BlockFile::fileID(pBlockHeight), file->lastHash().hex().text());
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                  "Block file %08x add block (%d) failed : Invalid previous hash : %s",
+                  file->id(), pBlockHeight, pBlock.header.previousHash.hex().text());
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                  "Does not match last hash of block file : %s", file->lastHash().hex().text());
                 file->unlock();
                 return false;
             }
@@ -1262,7 +1278,7 @@ namespace BitCoin
 
         if(!NextCash::renameFile(swapFilePathName, mFilePathName))
         {
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x failed to rename swap file", mID);
             return false;
         }
