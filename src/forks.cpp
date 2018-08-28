@@ -268,7 +268,7 @@ namespace BitCoin
         NextCash::Profiler outputsProfiler("Forks Process");
 #endif
 
-        if(mBlockVersionRequiredHeights[2] != 0)
+        if(mBlockVersionRequiredHeights[2] == 0)
         {
             unsigned int totalCount = 1000;
             unsigned int activateCount = 750;
@@ -397,7 +397,7 @@ namespace BitCoin
         if(mBlockVersionRequiredHeights[2] != 0 && pBlockHeight != 0 && pBlockHeight % RETARGET_PERIOD == 0)
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-              "Updating for block height %d", pBlockHeight);
+              "Updating at height %d", pBlockHeight);
 
             uint32_t compositeValue = 0;
             int32_t version;
@@ -413,14 +413,14 @@ namespace BitCoin
                         if(medianTimePast > (*softFork)->timeout)
                         {
                             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                              "(%s) failed (height %d)", (*softFork)->name.text(), pBlockHeight);
+                              "(%s) failed at height %d", (*softFork)->name.text(), pBlockHeight);
                             (*softFork)->state = SoftFork::FAILED;
                             mModified = true;
                         }
                         else if(medianTimePast > (*softFork)->startTime)
                         {
                             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                              "(%s) started (height %d)", (*softFork)->name.text(), pBlockHeight);
+                              "(%s) started at height %d", (*softFork)->name.text(), pBlockHeight);
                             (*softFork)->state = SoftFork::STARTED;
                             mModified = true;
                         }
@@ -430,7 +430,7 @@ namespace BitCoin
                         if(medianTimePast > (*softFork)->timeout)
                         {
                             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                              "(%s) failed (height %d)", (*softFork)->name.text(), pBlockHeight);
+                              "(%s) failed at height %d", (*softFork)->name.text(), pBlockHeight);
                             (*softFork)->state = SoftFork::FAILED;
                             mModified = true;
                             break;
@@ -452,7 +452,7 @@ namespace BitCoin
                         if(support >= mThreshHold)
                         {
                             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                              "(%s) locked in with support %d/%d (height %d)",
+                              "(%s) locked in with support %d/%d at height %d",
                               (*softFork)->name.text(), support, mThreshHold, pBlockHeight);
                             (*softFork)->lockedHeight = pBlockHeight;
                             (*softFork)->state = SoftFork::LOCKED_IN;
@@ -461,7 +461,7 @@ namespace BitCoin
                         else
                         {
                             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                              "(%s) still started with support %d/%d (height %d)",
+                              "(%s) still started with support %d/%d at height %d",
                               (*softFork)->name.text(), support, mThreshHold, pBlockHeight);
                         }
 
@@ -469,7 +469,7 @@ namespace BitCoin
                     }
                     case SoftFork::LOCKED_IN:
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
-                          "Soft fork (%s) active (height %d)", (*softFork)->name.text(),
+                          "Soft fork (%s) active at height %d", (*softFork)->name.text(),
                           pBlockHeight);
                         (*softFork)->state = SoftFork::ACTIVE;
                         mModified = true;
@@ -796,6 +796,28 @@ namespace BitCoin
             mCashFork201711BlockHeight = file.readInt();
             mCashFork201805BlockHeight = file.readInt();
             mCashFork201811BlockHeight = file.readInt();
+
+            if(mCashActivationBlockHeight != 0)
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                  "Cash fork active since block height %d", mCashActivationBlockHeight);
+
+            if(mCashFork201711BlockHeight != 0)
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                  "Cash DAA active since block height %d", mCashFork201711BlockHeight);
+
+            if(mCashFork201805BlockHeight != 0)
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                  "2018 May fork active since block height %d", mCashFork201805BlockHeight);
+
+            if(mCashFork201811BlockHeight != 0)
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+                  "2018 Nov fork active since block height %d", mCashFork201811BlockHeight);
+
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+              "Max block size %d", mBlockMaxSize);
+
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
+              "Cash fork ID 0x%08x", mCashForkID);
         }
 
         SoftFork *newSoftFork;
