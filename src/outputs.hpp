@@ -257,6 +257,8 @@ namespace BitCoin
         // Revert transactions in a block.
         bool revert(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
 
+        // bool revertToHeight(unsigned int pBlockHeight);
+
         // Height of last block
         unsigned int height() const
         {

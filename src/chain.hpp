@@ -12,12 +12,15 @@
 #include "hash.hpp"
 #include "mutex.hpp"
 #include "base.hpp"
+#include "info.hpp"
 #include "message.hpp"
 #include "forks.hpp"
 #include "block.hpp"
 #include "outputs.hpp"
 #include "mem_pool.hpp"
+#ifndef DISABLE_ADDRESSES
 #include "addresses.hpp"
+#endif
 
 #include <list>
 #include <vector>
@@ -163,7 +166,7 @@ namespace BitCoin
     public:
 
         Branch(unsigned int pBlockHeight, const NextCash::Hash &pWork) : accumulatedWork(pWork)
-          { height = pBlockHeight + 1; }
+          { height = pBlockHeight; }
         ~Branch();
 
         void addBlock(Block *pBlock)
@@ -214,7 +217,9 @@ namespace BitCoin
         TransactionOutputPool &outputs() { return mOutputs; }
         Forks &forks() { return mForks; }
         MemPool &memPool() { return mMemPool; }
+#ifndef DISABLE_ADDRESSES
         Addresses &addresses() { return mAddresses; }
+#endif
 
         unsigned int branchCount() const { return mBranches.size(); }
         const Branch *branchAt(unsigned int pOffset) const
@@ -275,7 +280,7 @@ namespace BitCoin
         //      < 0 Invalid/unknown block/header
         //     == 0  Block/header added
         //      > 0  Valid block/header not added (i.e. already have)
-        int addHeader(Header &pHeader, bool pLocked = false);
+        int addHeader(Header &pHeader, bool pLocked = false, bool pBranchesLocked = false);
         int addBlock(Block *pBlock);
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
@@ -316,7 +321,11 @@ namespace BitCoin
 
         // Save transaction outputs and addresses databases.
         bool saveData();
+#ifndef DISABLE_ADDRESSES
         bool saveDataNeeded() { return mOutputs.needsPurge() || mAddresses.needsPurge(); }
+#else
+        bool saveDataNeeded() { return mOutputs.needsPurge(); }
+#endif
         bool saveDataInProgress() const { return mSaveDataInProgress; }
 
         // Process pending headers and blocks.
@@ -340,7 +349,9 @@ namespace BitCoin
         static NextCash::Hash sBTCForkBlockHash;
 
         TransactionOutputPool mOutputs;
+#ifndef DISABLE_ADDRESSES
         Addresses mAddresses;
+#endif
         Info &mInfo;
 #ifndef LOW_MEM
         NextCash::HashList mHashes;
@@ -364,8 +375,10 @@ namespace BitCoin
         // Update the transaction outputs for any blocks it is missing
         bool updateOutputs();
 
+#ifndef DISABLE_ADDRESSES
         // Update the transaction addresses for any blocks it is missing
         bool updateAddresses();
+#endif
 
         Monitor *mMonitor;
 
@@ -390,8 +403,8 @@ namespace BitCoin
         void updatePendingBlocks();
 
         // Revert to a lower height
-        bool revert(unsigned int pBlockHeight);
-        bool revertBlockHeight(unsigned int pBlockHeight);
+        bool revert(unsigned int pHeight);
+        bool revertFileHeight(unsigned int pHeight);
 
         uint32_t calculateTargetBits(); // Calculate required target bits for new header.
         bool processHeader(Header &pHeader); // Validate header and add it to the chain.

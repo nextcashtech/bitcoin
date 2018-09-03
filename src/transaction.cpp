@@ -756,9 +756,9 @@ namespace BitCoin
         return result;
     }
 
-    bool Transaction::updateOutputs(TransactionOutputPool &pOutputs,
+    bool Transaction::updateOutputs(Chain *pChain,
       const std::vector<Transaction *> &pBlockTransactions, uint64_t pBlockHeight,
-      std::vector<unsigned int> &pSpentAges)
+      unsigned int pOffset, std::vector<unsigned int> &pSpentAges)
     {
         if(inputs.size() == 0)
         {
@@ -774,6 +774,8 @@ namespace BitCoin
             return false;
         }
 
+        mFee = 0;
+
         // Process Inputs
         TransactionReference *reference;
         unsigned int index = 0;
@@ -782,7 +784,7 @@ namespace BitCoin
             if(input->outpoint.index != 0xffffffff)
             {
                 // Find unspent transaction for input
-                reference = pOutputs.findUnspent(input->outpoint.transactionID,
+                reference = pChain->outputs().findUnspent(input->outpoint.transactionID,
                   input->outpoint.index);
 
                 if(reference == NULL)
@@ -795,11 +797,26 @@ namespace BitCoin
                 }
 
                 pSpentAges.push_back(pBlockHeight - reference->blockHeight);
-                pOutputs.spend(reference, input->outpoint.index, pBlockHeight);
+                pChain->outputs().spend(reference, input->outpoint.index, pBlockHeight);
+
+                // Requires reading output from block file, which might not be worth it, since it
+                //   won't be fully validated anyway.
+                // mFee += input->outpoint.output->amount;
             }
 
             ++index;
         }
+
+        // for(std::vector<Output>::iterator output = outputs.begin(); output != outputs.end(); ++output)
+            // mFee -= output->amount;
+
+        // if(pOffset != 0 && mFee < 0) // Not coinbase and amount is negative
+        // {
+            // NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              // "Outputs amounts are more than inputs amounts");
+            // print(pChain->forks(), NextCash::Log::VERBOSE);
+            // return false;
+        // }
 
         return true;
     }

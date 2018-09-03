@@ -557,9 +557,11 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Outputs : %d trans (%d KiB cached)", mChain.outputs().size(),
               mChain.outputs().cacheDataSize() / 1024);
+#ifndef DISABLE_ADDRESSES
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Addresses : %d addrs (%d KiB cached)", mChain.addresses().size(),
               mChain.addresses().cacheDataSize() / 1024);
+#endif
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Mem Pool : %d/%d trans/pending (%d KiB)", mChain.memPool().count(),
               mChain.memPool().pendingCount(), mChain.memPool().size() / 1024);

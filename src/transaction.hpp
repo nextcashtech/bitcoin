@@ -276,9 +276,8 @@ namespace BitCoin
         uint8_t checkOutpoints(TransactionOutputPool &pOutputs,
           TransactionList &pMemPoolTransactions);
 
-        bool updateOutputs(TransactionOutputPool &pOutputs,
-          const std::vector<Transaction *> &pBlockTransactions, uint64_t pBlockHeight,
-          std::vector<unsigned int> &pSpentAges);
+        bool updateOutputs(Chain *pChain, const std::vector<Transaction *> &pBlockTransactions,
+          uint64_t pBlockHeight, unsigned int pOffset, std::vector<unsigned int> &pSpentAges);
 
         void getSignatureHash(const Forks &pForks, unsigned int pBlockHeight,
           NextCash::Hash &pHash, unsigned int pInputOffset, NextCash::Buffer &pOutputScript,

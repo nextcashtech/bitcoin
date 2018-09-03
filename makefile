@@ -1,6 +1,6 @@
 
 COMPILER=g++
-COMPILE_FLAGS=-I./include -I../nextcash/include -I../bitcoin-abc/src/secp256k1/include -pthread -std=c++11 -Wall
+COMPILE_FLAGS=-I./include -I../nextcash/include -I../bitcoin-abc/src/secp256k1/include -pthread -std=c++11 -Wall -DDISABLE_ADDRESSES
 # To disable Bitcoin Cash add this to the end of COMPILE_FLAGS : -DDISABLE_CASH
 # To Turn profiler on add this to the end of COMPILE_FLAGS : -DPROFILER_ON
 LIBRARY_PATHS=-L../nextcash -L../bitcoin-abc/src/secp256k1/.libs

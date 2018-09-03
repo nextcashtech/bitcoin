@@ -372,7 +372,7 @@ namespace BitCoin
         }
     }
 
-    bool Block::updateOutputs(TransactionOutputPool &pOutputs, int pBlockHeight)
+    bool Block::updateOutputs(Chain *pChain, unsigned int pBlockHeight)
     {
         if(transactions.size() == 0)
         {
@@ -381,22 +381,48 @@ namespace BitCoin
             return false;
         }
 
-        // Add the transaction outputs from this block to the output pool
-        pOutputs.add(this->transactions, pBlockHeight);
+        mFees = 0;
 
+        // Add the transaction outputs from this block to the output pool
+        if(!pChain->outputs().add(transactions, pBlockHeight))
+            return false;
+
+        bool isCoinBase = true;
         unsigned int transactionOffset = 0;
         std::vector<unsigned int> spentAges;
         for(std::vector<Transaction *>::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction)
         {
-            if(!(*transaction)->updateOutputs(pOutputs, transactions, pBlockHeight, spentAges))
+            if(!(*transaction)->updateOutputs(pChain, transactions, pBlockHeight,
+              transactionOffset, spentAges))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Transaction %d update failed", transactionOffset);
                 return false;
             }
+            if(!isCoinBase)
+                mFees += (*transaction)->fee();
+            else
+                isCoinBase = false;
             ++transactionOffset;
         }
+
+        // Check that coinbase output amount - fees is correct for block height
+        // Requires reading output from block file, which might not be worth it, since it won't be
+        //   fully validated anyway.
+        // if(-transactions.front()->fee() - mFees > coinBaseAmount(pBlockHeight))
+        // {
+            // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              // "Coinbase outputs are too high");
+            // NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              // "Coinbase %.08f", bitcoins(-transactions.front()->fee()));
+            // NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              // "Fees     %.08f", bitcoins(mFees));
+            // NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              // "Block %d Coinbase amount should be %.08f", pBlockHeight,
+              // bitcoins(coinBaseAmount(pBlockHeight)));
+            // return false;
+        // }
 
         if(spentAges.size() > 0)
         {
@@ -409,6 +435,7 @@ namespace BitCoin
               "Average spent age for block %d is %d for %d inputs", pBlockHeight, averageSpentAge,
               spentAges.size());
         }
+
         return true;
     }
 
@@ -496,7 +523,8 @@ namespace BitCoin
             }
             if(!isCoinBase)
                 mFees += (*transaction)->fee();
-            isCoinBase = false;
+            else
+                isCoinBase = false;
             ++transactionOffset;
         }
 

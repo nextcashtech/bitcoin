@@ -307,7 +307,7 @@ namespace BitCoin
         if(pBlockHeight != mNextBlockHeight)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Can't add transaction outputs for non matching block height %d. Should be %d",
+              "Can't add transaction outputs for non-matching block height %d. Should be %d",
               pBlockHeight, mNextBlockHeight);
             return false;
         }
@@ -379,14 +379,14 @@ namespace BitCoin
         if(pBlockHeight != mNextBlockHeight)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Can't commit non matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight - 1);
+              "Can't commit non-matching block height %d. Should be %d", pBlockHeight, mNextBlockHeight);
             return false;
         }
 
         if(mToCommit.size() != pBlockTransactions.size())
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Can't commit non matching transaction set");
+              "Can't commit non-matching transaction set");
             return false;
         }
 
@@ -403,7 +403,7 @@ namespace BitCoin
             else
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Can't commit non matching transaction");
+                  "Can't commit non-matching transaction");
                 return false;
             }
         }
@@ -424,7 +424,7 @@ namespace BitCoin
             if(pBlockHeight != mNextBlockHeight)
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Can't revert non matching block height %d. Should be %d", pBlockHeight,
+                  "Can't revert non-matching block height %d. Should be %d", pBlockHeight,
                   mNextBlockHeight);
                 return false;
             }
@@ -432,7 +432,7 @@ namespace BitCoin
         else if(mNextBlockHeight != 0 && pBlockHeight != mNextBlockHeight - 1)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-              "Can't revert non matching block height %d. Should be %d", pBlockHeight,
+              "Can't revert non-matching block height %d. Should be %d", pBlockHeight,
               mNextBlockHeight - 1);
             return false;
         }
@@ -444,7 +444,8 @@ namespace BitCoin
         bool found;
 
         // Process transactions in reverse since they can unspend previous transactions in the same block
-        for(std::vector<Transaction *>::const_reverse_iterator transaction=pBlockTransactions.rbegin();transaction!=pBlockTransactions.rend();++transaction)
+        for(std::vector<Transaction *>::const_reverse_iterator transaction =
+          pBlockTransactions.rbegin(); transaction != pBlockTransactions.rend(); ++transaction)
         {
             // Unspend inputs
             for(input=(*transaction)->inputs.begin();input!=(*transaction)->inputs.end();++input)
@@ -515,7 +516,46 @@ namespace BitCoin
         return success;
     }
 
-    TransactionReference *TransactionOutputPool::findUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex)
+    // bool TransactionOutputPool::revertToHeight(unsigned int pBlockHeight)
+    // {
+        // mLock.writeLock("Revert");
+
+        // if(!mIsValid)
+        // {
+            // NextCash::Log::addFormatted(NextCash::Log::ERROR, NEXTCASH_HASH_DATA_SET_LOG_NAME,
+              // "%s : can't revert invalid data set", mName.text());
+            // mLock.writeUnlock();
+            // return false;
+        // }
+
+        // for(NextCash::HashContainerList<NextCash::HashData *>::Iterator item = mCache.begin();
+          // item != mCache.end(); ++item)
+        // {
+
+        // }
+
+        // SubSet *subSet = mSubSets;
+        // uint32_t lastReport = getTime();
+        // bool success = true;
+
+        // for(unsigned int i = 0; i < tSetCount; ++i)
+        // {
+            // if(getTime() - lastReport > 10)
+            // {
+                // NextCash::Log::addFormatted(NextCash::Log::INFO, NEXTCASH_HASH_DATA_SET_LOG_NAME,
+                  // "%s revert is %2d%% Complete", mName.text(),
+                  // (int)(((float)i / (float)tSetCount) * 100.0f));
+                // lastReport = getTime();
+            // }
+
+            // ++subSet;
+        // }
+
+        // mLock.writeUnlock();
+    // }
+
+    TransactionReference *TransactionOutputPool::findUnspent(const NextCash::Hash &pTransactionID,
+      uint32_t pIndex)
     {
         if(!mIsValid)
             return NULL;

@@ -69,7 +69,7 @@ namespace BitCoin
         // Validate transactions and update outputs.
         bool process(Chain *pChain, unsigned int pBlockHeight);
 
-        bool updateOutputs(TransactionOutputPool &pOutputs, int pBlockHeight);
+        bool updateOutputs(Chain *pChain, unsigned int pBlockHeight);
 
         // Create the Genesis block
         static Block *genesis(uint32_t pTargetBits);

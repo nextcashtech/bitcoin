@@ -475,12 +475,14 @@ bool chainTest()
     BitCoin::setNetwork(BitCoin::MAINNET);
     BitCoin::Info::setPath("chain_test");
 
-    std::vector<NextCash::Hash> branchHashes;
+    NextCash::HashList branchHashes;
     unsigned int height = 0;
     NextCash::Hash lastHash, preBranchHash, transactionID;
     NextCash::HashList transactionHashes;
+#ifndef DISABLE_ADDRESSES
     std::vector<BitCoin::FullOutputData> coinbaseOutputs;
     std::vector<BitCoin::FullOutputData>::iterator fullOutput;
+#endif
     BitCoin::Key privateKey;
 
     BitCoin::Info::instance().approvedHash.clear();
@@ -552,11 +554,11 @@ bool chainTest()
             return false;
         }
 
-        for(unsigned int j=0;j<20;++j)
+        for(unsigned int j = 0; j < 20; ++j)
             chain.process();
         time += 605;
 
-        branchHashes.reserve(16);
+        branchHashes.reserve(32);
         branchHashes.push_back(branchHash);
 
         // Extend the branch
@@ -572,7 +574,7 @@ bool chainTest()
 
             NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s",
               chain.accumulatedWork(chain.headerHeight()).hex().text());
-            for(unsigned int i=0;i<chain.branchCount();++i)
+            for(unsigned int i = 0; i < chain.branchCount(); ++i)
             {
                 branch = chain.branchAt(i);
                 if(branch == NULL)
@@ -582,7 +584,7 @@ bool chainTest()
             }
             branchHashes.push_back(branchHash);
 
-            for(unsigned int j=0;j<20;++j)
+            for(unsigned int j = 0; j < 20; ++j)
                 chain.process();
             time += 605; // a little over 10 minutes to adjust for the 2015 block skew so difficulty doesn't increase
         }
@@ -595,10 +597,11 @@ bool chainTest()
             NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to add branch block");
             return false;
         }
+        branchHashes.push_back(branchHash);
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Main chain work : %s",
           chain.accumulatedWork(chain.headerHeight()).hex().text());
-        for(unsigned int i=0;i<chain.branchCount();++i)
+        for(unsigned int i = 0; i < chain.branchCount(); ++i)
         {
             branch = chain.branchAt(i);
             if(branch == NULL)
@@ -606,9 +609,8 @@ bool chainTest()
             NextCash::Log::addFormatted(NextCash::Log::INFO, "Test",
               "Branch %d work: %s", i + 1, branch->accumulatedWork.hex().text());
         }
-        branchHashes.push_back(branchHash);
 
-        for(unsigned int j=0;j<100;++j)
+        for(unsigned int j = 0; j < 100; ++j)
         {
             chain.process();
             if(chain.blockHeight() == chain.headerHeight())
@@ -632,6 +634,7 @@ bool chainTest()
         height = chain.blockHeight();
         lastHash = chain.lastHeaderHash();
 
+#ifndef DISABLE_ADDRESSES
         if(!chain.addresses().getOutputs(privateKey.hash(), coinbaseOutputs))
         {
             NextCash::Log::add(NextCash::Log::ERROR, "Test",
@@ -655,6 +658,13 @@ bool chainTest()
           checkCount < transactionHashes.size(); ++fullOutput)
             if(transactionHashes.contains(fullOutput->transactionID))
                 ++checkCount;
+            else
+            {
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test",
+                  "Failed transaction address output trans ID for block %d : %s",
+                  fullOutput->blockHeight, fullOutput->transactionID.hex().text());
+                return false;
+            }
 
         if(checkCount == transactionHashes.size())
             NextCash::Log::add(NextCash::Log::INFO, "Test",
@@ -662,10 +672,11 @@ bool chainTest()
         else
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test",
-              "Failed transaction address output trans ID for block %d : %s",
-              fullOutput->blockHeight, fullOutput->transactionID.hex().text());
+              "Failed transaction address outputs check %d != %d", checkCount,
+              transactionHashes.size());
             return false;
         }
+#endif
 
         if(!chain.save())
         {
@@ -735,6 +746,7 @@ bool chainTest()
         return false;
     }
 
+#ifndef DISABLE_ADDRESSES
     chain2.addresses().getOutputs(privateKey.hash(), coinbaseOutputs);
 
     if(coinbaseOutputs.size() == (unsigned int)chain2.blockHeight())
@@ -766,6 +778,7 @@ bool chainTest()
 
     NextCash::Log::add(NextCash::Log::INFO, "Test",
       "Passed transaction address outputs check after save");
+#endif
 
     NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed chain test");
     return true;
