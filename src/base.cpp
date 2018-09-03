@@ -20,6 +20,23 @@
 
 namespace BitCoin
 {
+    uint64_t currentSupply(unsigned int pHeight)
+    {
+        uint64_t amount = 5000000000UL; // 50 bitcoins
+        uint64_t result = amount; // Block 0 (genesis block)
+        while(pHeight > COINBASE_HALF_LIFE && pHeight < 6930000)
+        {
+            result += (uint64_t)COINBASE_HALF_LIFE * amount;
+            amount /= 2UL;
+            pHeight -= COINBASE_HALF_LIFE;
+        }
+
+        if(pHeight > 0)
+            result += (uint64_t)pHeight * amount;
+
+        return result;
+    }
+
     static Network sNetwork = MAINNET;
     static const uint8_t sMainNetworkStartBytes[4] = { 0xf9, 0xbe, 0xb4, 0xd9 };
     static const uint8_t sTestNetworkStartBytes[4] = { 0x0b, 0x11, 0x09, 0x07 };
@@ -305,6 +322,31 @@ namespace BitCoin
         bool test()
         {
             bool success = true;
+
+            /***********************************************************************************************
+             * Supply amounts
+             ***********************************************************************************************/
+            double supply = bitcoins(currentSupply(1));
+            if(supply == 100.0)
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BASE_LOG_NAME,
+                  "Passed supply for block height 1 = %0.2f", supply);
+            else
+            {
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BASE_LOG_NAME,
+                  "Failed supply for block height 1 = %0.2f", supply);
+                success = false;
+            }
+
+            supply = bitcoins(currentSupply(546191));
+            if(supply == 17327437.5)
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BASE_LOG_NAME,
+                  "Passed supply for block height 546,191 = %0.2f", supply);
+            else
+            {
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BASE_LOG_NAME,
+                  "Failed supply for block height 546,191 = %0.2f", supply);
+                success = false;
+            }
 
             /***********************************************************************************************
              * Target Bits Multiply MainNet High Bit - Block 32,256 Difficulty Adjustment

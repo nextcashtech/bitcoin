@@ -378,11 +378,13 @@ namespace BitCoin
                 sendData.writeByte(0);
             sendData.writeUnsignedInt(mChain->memPool().count());
             sendData.writeUnsignedInt(mChain->memPool().size());
+            sendData.writeUnsignedLong(currentSupply(mChain->headerHeight()));
 
             NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Sending status");
         }
         else if(command == "addr")
         {
+#ifndef DISABLE_ADDRESSES
             NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received address request");
 
             // Return address data message (UTXOs, balances, spent/unspent)
@@ -447,6 +449,9 @@ namespace BitCoin
                       "Sending %d outputs for address : %s", outputs.size(), address.text());
                 }
             }
+#else
+            sendData.writeString("fail:Addresses not enables", true);
+#endif
         }
         else if(command == "blkd")
         {

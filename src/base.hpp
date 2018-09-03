@@ -41,7 +41,7 @@ namespace BitCoin
     // Convert Satoshis to Bitcoins
     inline double bitcoins(int64_t pSatoshis)
     {
-        return (double)pSatoshis / 100000000;
+        return (double)pSatoshis / 100000000.0;
     }
 
     inline int64_t satoshisFromBitcoins(double pBitcoins)
@@ -49,22 +49,26 @@ namespace BitCoin
         return (uint64_t)(pBitcoins * 100000000.0);
     }
 
+    static uint64_t COINBASE_HALF_LIFE = 210000; // Half every 210,000 blocks
+
     // Amount of Satoshis generated for mining a block at this height
-    inline uint64_t coinBaseAmount(int pBlockHeight)
+    inline uint64_t coinBaseAmount(unsigned int pHeight)
     {
-        if(pBlockHeight >= 6930000)
+        if(pHeight >= 6930000)
             return 0;
 
-        uint64_t result = 5000000000; // 50 bitcoins
-        while(pBlockHeight > 210000)
+        uint64_t result = 5000000000UL; // 50 bitcoins
+        while(pHeight > COINBASE_HALF_LIFE)
         {
             // Half every 210,000 blocks
             result /= 2;
-            pBlockHeight -= 210000;
+            pHeight -= COINBASE_HALF_LIFE;
         }
 
         return result;
     }
+
+    uint64_t currentSupply(unsigned int pHeight);
 
     // Number of blocks for each difficulty and soft fork update
     static const int RETARGET_PERIOD = 2016;
