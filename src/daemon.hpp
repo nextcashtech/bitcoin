@@ -40,12 +40,14 @@ namespace BitCoin
         static void runRequests();
         static void runManage();
         static void runProcess();
+        static void runScan();
 
         void run(bool pInDaemonMode = true);
         void manage();
         void process();
         void handleConnections();
         void handleRequests();
+        void scan();
 
         bool loadWallets();
         bool loadChain();
@@ -109,6 +111,10 @@ namespace BitCoin
     protected:
 
         static const int MAX_BLOCK_REQUEST = 8;
+        static const int GOOD_RATING = 20;
+        static const int FALLBACK_GOOD_RATING = 5;
+        static const int OKAY_RATING = 1;
+        static const int USABLE_RATING = -4;
 
         Chain mChain;
         Info &mInfo;
@@ -125,6 +131,7 @@ namespace BitCoin
         NextCash::Thread *mRequestsThread;
         NextCash::Thread *mManagerThread;
         NextCash::Thread *mProcessThread;
+        NextCash::Thread *mScanThread;
 #endif
 
         // Timers
@@ -193,8 +200,8 @@ namespace BitCoin
 
         void addRejectedIP(const uint8_t *pIP);
 
-        bool addNode(NextCash::Network::Connection *pConnection, bool pIncoming, bool pIsSeed,
-                     bool pIsGood, uint64_t pServices);
+        bool addNode(NextCash::Network::Connection *pConnection, uint32_t pType,
+          uint64_t pServices);
         unsigned int recruitPeers();
         void cleanNodes();
 

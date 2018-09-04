@@ -381,7 +381,7 @@ namespace BitCoin
     }
 
     void Info::getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating,
-      uint64_t mServicesRequiredMask)
+      uint64_t mServicesRequiredMask, int pMaximumRating)
     {
         pPeers.clear();
 
@@ -391,8 +391,8 @@ namespace BitCoin
 
         mPeerLock.readLock();
         for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
-            if((*peer)->rating >= pMinimumRating && ((*peer)->services &
-              mServicesRequiredMask) == mServicesRequiredMask)
+            if((*peer)->rating >= pMinimumRating && (*peer)->rating <= pMaximumRating &&
+              ((*peer)->services & mServicesRequiredMask) == mServicesRequiredMask)
                 pPeers.push_back(*peer);
         mPeerLock.readUnlock();
 
@@ -400,7 +400,7 @@ namespace BitCoin
         std::random_shuffle(pPeers.begin(), pPeers.end());
     }
 
-    void Info::addPeerFail(const IPAddress &pAddress, int pCount, int pMinimum)
+    void Info::addPeerFail(const NextCash::IPAddress &pAddress, int pCount, int pMinimum)
     {
         if(!pAddress.isValid())
             return;
@@ -443,7 +443,8 @@ namespace BitCoin
         // }
     }
 
-    void Info::updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices)
+    void Info::updatePeer(const NextCash::IPAddress &pAddress, const char *pUserAgent,
+      uint64_t pServices)
     {
         if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) ||
           pServices == 0)
@@ -470,7 +471,7 @@ namespace BitCoin
         mPeerLock.readUnlock();
     }
 
-    void Info::addPeerSuccess(const IPAddress &pAddress, int pCount)
+    void Info::addPeerSuccess(const NextCash::IPAddress &pAddress, int pCount)
     {
         if(!pAddress.isValid())
             return;
@@ -493,7 +494,7 @@ namespace BitCoin
         mPeerLock.readUnlock();
     }
 
-    bool Info::addPeer(const IPAddress &pAddress, uint64_t pServices)
+    bool Info::addPeer(const NextCash::IPAddress &pAddress, uint64_t pServices)
     {
         if(!pAddress.isValid() || (pServices & Message::VersionData::FULL_NODE_BIT) == 0)
             return false;

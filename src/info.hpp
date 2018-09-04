@@ -74,11 +74,12 @@ namespace BitCoin
         NextCash::String notifyEmail;
 
         // Return list of peers in random order
-        void getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating, uint64_t mServicesRequiredMask = 0);
-        bool addPeer(const IPAddress &pAddress, uint64_t pServices);
-        void updatePeer(const IPAddress &pAddress, const char *pUserAgent, uint64_t pServices);
-        void addPeerSuccess(const IPAddress &pAddress, int pCount = 1);
-        void addPeerFail(const IPAddress &pAddress, int pCount = 1, int pMinimum = -500);
+        void getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating,
+          uint64_t mServicesRequiredMask = 0, int pMaximumRating = 500000);
+        bool addPeer(const NextCash::IPAddress &pAddress, uint64_t pServices);
+        void updatePeer(const NextCash::IPAddress &pAddress, const char *pUserAgent, uint64_t pServices);
+        void addPeerSuccess(const NextCash::IPAddress &pAddress, int pCount = 1);
+        void addPeerFail(const NextCash::IPAddress &pAddress, int pCount = 1, int pMinimum = -500);
 
         bool initialBlockDownloadIsComplete() { return mInitialBlockDownloadComplete; }
         void setInitialBlockDownloadComplete()

@@ -43,6 +43,7 @@ namespace BitCoin
         mRequestsThread = NULL;
         mManagerThread = NULL;
         mProcessThread = NULL;
+        mScanThread = NULL;
 #endif
         previousSigTermChildHandler = NULL;
         previousSigTermHandler= NULL;
@@ -429,7 +430,8 @@ namespace BitCoin
         // Wait for process thread to finish
         if(mProcessThread != NULL)
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping process thread");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              "Stopping process thread");
             delete mProcessThread;
             mProcessThread = NULL;
         }
@@ -437,9 +439,19 @@ namespace BitCoin
         // Wait for manager to finish
         if(mManagerThread != NULL)
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME, "Stopping manager thread");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              "Stopping manager thread");
             delete mManagerThread;
             mManagerThread = NULL;
+        }
+
+        // Wait for scan thread to finish
+        if(mScanThread != NULL)
+        {
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              "Stopping scan thread");
+            delete mScanThread;
+            mScanThread = NULL;
         }
 #endif
 
@@ -1667,7 +1679,14 @@ namespace BitCoin
 
     void Daemon::runManage()
     {
-        ((Daemon *)NextCash::Thread::getParameter())->manage();
+        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        if(daemon == NULL)
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Manage thread failed to get daemon");
+            return;
+        }
+        daemon->manage();
     }
 
     void Daemon::manage()
@@ -1736,6 +1755,15 @@ namespace BitCoin
             requestStop();
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
               "Failed to create process thread");
+            return;
+        }
+
+        mScanThread = new NextCash::Thread("Scan", runScan, this);
+        if(mScanThread == NULL)
+        {
+            requestStop();
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Failed to create scan thread");
             return;
         }
 #endif
@@ -1929,6 +1957,12 @@ namespace BitCoin
     void Daemon::runProcess()
     {
         Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        if(daemon == NULL)
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Process thread failed to get daemon");
+            return;
+        }
         while(!daemon->mStopping)
         {
             daemon->process();
@@ -1991,6 +2025,128 @@ namespace BitCoin
         }
     }
 
+    void Daemon::runScan()
+    {
+        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        if(daemon == NULL)
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Scan thread failed to get daemon");
+            return;
+        }
+        daemon->scan();
+    }
+
+    void Daemon::scan()
+    {
+        // Connect to a random zero score node to check for connectivity.
+        Node *scanNode = NULL;
+        NextCash::Network::Connection *connection;
+        uint64_t servicesMask = Message::VersionData::FULL_NODE_BIT;
+        std::vector<Peer *> peers;
+        bool found;
+
+        while(!mStopping)
+        {
+            NextCash::Thread::sleep(100);
+
+            // Try to get unrated peers up to okay rating.
+            mInfo.getRandomizedPeers(peers, USABLE_RATING, servicesMask, OKAY_RATING - 1);
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Found %d peers to scan", peers.size());
+            for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
+              !mStopping; ++peer)
+            {
+                // Skip nodes already connected
+                found = false;
+                mNodeLock.readLock();
+                for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+                  !mStopping; ++node)
+                    if((*node)->address() == (*peer)->address)
+                    {
+                        found = true;
+                        break;
+                    }
+                if(found)
+                {
+                    mNodeLock.readUnlock();
+                    continue;
+                }
+
+                for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
+                  recent != mRecentIPs.end(); ++recent)
+                    if(*recent == (*peer)->address.ip)
+                    {
+                        found = true;
+                        break;
+                    }
+                if(found)
+                {
+                    mNodeLock.readUnlock();
+                    continue;
+                }
+
+                mNodeLock.readUnlock();
+
+                try
+                {
+                    connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
+                      (*peer)->address.port, 5);
+                }
+                catch(std::bad_alloc &pBadAlloc)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                      "Bad allocation while allocating new scan connection : %s",
+                      pBadAlloc.what());
+                    continue;
+                }
+                catch(...)
+                {
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                      "Bad allocation while allocating new scan connection : unknown");
+                    continue;
+                }
+
+                if(!connection->isOpen())
+                {
+                    mInfo.addPeerFail((*peer)->address, 1, 1);
+                    delete connection;
+                }
+                else
+                {
+                    try
+                    {
+                        scanNode = new Node(connection, &mChain, Node::SCAN, (*peer)->services,
+                          mMonitor);
+                    }
+                    catch(std::bad_alloc &pBadAlloc)
+                    {
+                        NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                          "Bad allocation while allocating new scan node : %s", pBadAlloc.what());
+                        delete connection;
+                        continue;
+                    }
+                    catch(...)
+                    {
+                        NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+                          "Bad allocation while allocating new scan node : unknown");
+                        delete connection;
+                        continue;
+                    }
+
+                    // Wait for node to "prepare" or fail.
+                    while(!mStopping && scanNode->isOpen())
+                        NextCash::Thread::sleep(500);
+
+                    if(scanNode->isOpen())
+                        scanNode->close();
+
+                    delete scanNode;
+                }
+            }
+        }
+    }
+
     void Daemon::addRejectedIP(const uint8_t *pIP)
     {
         IPBytes ip = pIP;
@@ -2000,13 +2156,14 @@ namespace BitCoin
             mRejectedIPs.erase(mRejectedIPs.begin());
     }
 
-    bool Daemon::addNode(NextCash::Network::Connection *pConnection, bool pIncoming, bool pIsSeed,
-                         bool pIsGood, uint64_t pServices)
+    bool Daemon::addNode(NextCash::Network::Connection *pConnection, uint32_t pType,
+      uint64_t pServices)
     {
         mLastConnectionActive = getTime();
 
         // Check if IP is on reject list
-        for(std::vector<IPBytes>::iterator ip = mRejectedIPs.begin(); ip != mRejectedIPs.end(); ++ip)
+        for(std::vector<IPBytes>::iterator ip = mRejectedIPs.begin(); ip != mRejectedIPs.end();
+          ++ip)
             if(*ip == pConnection->ipv6Bytes())
             {
                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
@@ -2018,7 +2175,7 @@ namespace BitCoin
         Node *node;
         try
         {
-            node = new Node(pConnection, &mChain, pIncoming, pIsSeed, pIsGood, pServices, mMonitor);
+            node = new Node(pConnection, &mChain, pType, pServices, mMonitor);
         }
         catch(std::bad_alloc &pBadAlloc)
         {
@@ -2038,12 +2195,12 @@ namespace BitCoin
         mNodeLock.writeLock("Add");
         mNodes.push_back(node);
         ++mNodeCount;
-        if(pIncoming)
+        if(pType & Node::INCOMING)
         {
             ++mStatistics.incomingConnections;
             ++mIncomingNodes;
         }
-        else if(!pIsSeed)
+        else if(!(pType & Node::SEED))
         {
             ++mStatistics.outgoingConnections;
             ++mOutgoingNodes;
@@ -2128,7 +2285,7 @@ namespace BitCoin
                 connection = new NextCash::Network::Connection(*ip, networkPortString(), 5);
                 if(!connection->isOpen())
                     delete connection;
-                else if(addNode(connection, false, true, false, 0))
+                else if(addNode(connection, Node::SEED, 0))
                     result++;
             }
             else
@@ -2186,9 +2343,9 @@ namespace BitCoin
         if(!mStopping && goodCount < mGoodNodeMax)
         {
             // Try peers with good ratings first
-            mInfo.getRandomizedPeers(peers, 20, servicesMask);
+            mInfo.getRandomizedPeers(peers, GOOD_RATING, servicesMask);
             if(peers.size() < 50)
-                mInfo.getRandomizedPeers(peers, 5, servicesMask);
+                mInfo.getRandomizedPeers(peers, FALLBACK_GOOD_RATING, servicesMask);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Found %d good peers", peers.size());
             for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
@@ -2204,9 +2361,11 @@ namespace BitCoin
                         found = true;
                         break;
                     }
-                mNodeLock.readUnlock();
                 if(found)
+                {
+                    mNodeLock.readUnlock();
                     continue;
+                }
 
                 for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
                   recent != mRecentIPs.end(); ++recent)
@@ -2216,11 +2375,16 @@ namespace BitCoin
                         break;
                     }
                 if(found)
+                {
+                    mNodeLock.readUnlock();
                     continue;
+                }
 
                 mRecentIPs.emplace_back((*peer)->address.ip);
                 while(mRecentIPs.size() > 100)
                     mRecentIPs.erase(mRecentIPs.begin());
+
+                mNodeLock.readUnlock();
 
                 connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
                   (*peer)->address.port, 5);
@@ -2229,7 +2393,7 @@ namespace BitCoin
                     mInfo.addPeerFail((*peer)->address, 1, 1);
                     delete connection;
                 }
-                else if(addNode(connection, false, false, true, (*peer)->services))
+                else if(addNode(connection, Node::GOOD, (*peer)->services))
                 {
                     ++goodCount;
                     ++allCount;
@@ -2261,7 +2425,7 @@ namespace BitCoin
         {
             // Try peers with okay ratings
             peers.clear();
-            mInfo.getRandomizedPeers(peers, 1, servicesMask);
+            mInfo.getRandomizedPeers(peers, OKAY_RATING, servicesMask);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Found %d okay peers", peers.size());
             int32_t startTime = getTime();
@@ -2278,9 +2442,11 @@ namespace BitCoin
                         found = true;
                         break;
                     }
-                mNodeLock.readUnlock();
                 if(found)
+                {
+                    mNodeLock.readUnlock();
                     continue;
+                }
 
                 for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
                   recent != mRecentIPs.end(); ++recent)
@@ -2290,7 +2456,12 @@ namespace BitCoin
                         break;
                     }
                 if(found)
+                {
+                    mNodeLock.readUnlock();
                     continue;
+                }
+
+                mNodeLock.readUnlock();
 
                 mRecentIPs.emplace_back((*peer)->address.ip);
                 while(mRecentIPs.size() > 100)
@@ -2303,7 +2474,7 @@ namespace BitCoin
                     mInfo.addPeerFail((*peer)->address, 1, 1);
                     delete connection;
                 }
-                else if(addNode(connection, false, false, false, 0))
+                else if(addNode(connection, Node::NONE, 0))
                 {
                     ++allCount;
                     ++newCount;
@@ -2335,7 +2506,7 @@ namespace BitCoin
         {
             // Try peers with no ratings
             peers.clear();
-            mInfo.getRandomizedPeers(peers, -4, servicesMask);
+            mInfo.getRandomizedPeers(peers, USABLE_RATING, servicesMask);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Found %d usable peers", peers.size());
             int32_t startTime = getTime();
@@ -2352,9 +2523,11 @@ namespace BitCoin
                         found = true;
                         break;
                     }
-                mNodeLock.readUnlock();
                 if(found)
+                {
+                    mNodeLock.readUnlock();
                     continue;
+                }
 
                 for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
                   recent != mRecentIPs.end(); ++recent)
@@ -2364,7 +2537,12 @@ namespace BitCoin
                         break;
                     }
                 if(found)
+                {
+                    mNodeLock.readUnlock();
                     continue;
+                }
+
+                mNodeLock.readUnlock();
 
                 mRecentIPs.emplace_back((*peer)->address.ip);
                 while(mRecentIPs.size() > 100)
@@ -2377,7 +2555,7 @@ namespace BitCoin
                     mInfo.addPeerFail((*peer)->address, 1, 1);
                     delete connection;
                 }
-                else if(addNode(connection, false, false, false, 0))
+                else if(addNode(connection, Node::NONE, 0))
                 {
                     ++allCount;
                     ++newCount;
@@ -2501,6 +2679,12 @@ namespace BitCoin
     void Daemon::runConnections()
     {
         Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        if(daemon == NULL)
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Connection thread failed to get daemon");
+            return;
+        }
 
         if (daemon->mOutgoingNodeMax >= daemon->mInfo.maxConnections)
             daemon->mMaxIncoming = 0;
@@ -2561,7 +2745,7 @@ namespace BitCoin
             else
             {
                 while(!mStopping && (newConnection = mNodeListener->accept()) != NULL)
-                    if(addNode(newConnection, true, false, false, 0) && mIncomingNodes >= mMaxIncoming)
+                    if(addNode(newConnection, Node::INCOMING, 0) && mIncomingNodes >= mMaxIncoming)
                     {
                         delete mNodeListener;
                         mNodeListener = NULL;
@@ -2576,6 +2760,12 @@ namespace BitCoin
     void Daemon::runRequests()
     {
         Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        if(daemon == NULL)
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
+              "Request thread failed to get daemon");
+            return;
+        }
 
         while(!daemon->mStopping)
         {

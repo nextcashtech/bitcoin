@@ -127,43 +127,6 @@ namespace BitCoin
         return 0;
     }
 
-    void IPAddress::write(NextCash::OutputStream *pStream) const
-    {
-        // IP
-        pStream->write(ip, 16);
-
-        // Port
-        NextCash::Endian::Type previousType = pStream->outputEndian();
-        pStream->setOutputEndian(NextCash::Endian::BIG);
-        pStream->writeUnsignedShort(port);
-        pStream->setOutputEndian(previousType);
-    }
-
-    bool IPAddress::read(NextCash::InputStream *pStream)
-    {
-        // IP
-        pStream->read(ip, 16);
-
-        // Port
-        NextCash::Endian::Type previousType = pStream->inputEndian();
-        pStream->setInputEndian(NextCash::Endian::BIG);
-        port = pStream->readUnsignedShort();
-        pStream->setInputEndian(previousType);
-
-        return true;
-    }
-
-    NextCash::String IPAddress::text() const
-    {
-        char ipv6Text[INET6_ADDRSTRLEN];
-        std::memset(ipv6Text, 0, INET6_ADDRSTRLEN);
-        inet_ntop(AF_INET6, ip, ipv6Text, INET6_ADDRSTRLEN);
-
-        NextCash::String result;
-        result.writeFormatted("%s:%d", ipv6Text, port);
-        return result;
-    }
-
     uint32_t multiplyTargetBits(uint32_t pTargetBits, double pFactor, uint32_t pMax)
     {
         // Note: Negative values are not handled by this function

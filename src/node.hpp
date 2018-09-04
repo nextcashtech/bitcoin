@@ -32,8 +32,17 @@ namespace BitCoin
     {
     public:
 
-        Node(NextCash::Network::Connection *pConnection, Chain *pChain, bool pIncoming,
-          bool pIsSeed, bool pIsGood, uint64_t pServices, Monitor &pMonitor);
+        enum ConnectionType
+        {
+            NONE         = 0x00, // Plain outgoing connection.
+            SEED         = 0x01, // Seed node (only for retrieving peers).
+            INCOMING     = 0x02, // Connection initiated by peer.
+            GOOD         = 0x04, // Peer already has good rating.
+            SCAN         = 0x08, // Connection for validating a peer exists.
+        };
+
+        Node(NextCash::Network::Connection *pConnection, Chain *pChain, uint32_t pConnectionType,
+          uint64_t pServices, Monitor &pMonitor);
         ~Node();
 
         static void run();
@@ -47,9 +56,19 @@ namespace BitCoin
         void requestStop();
 
         const char *name() { return mName.text(); }
-        bool isIncoming() const { return mIsIncoming; }
-        bool isSeed() const { return mIsSeed; }
-        bool isGood() const { return mIsGood; }
+
+        // Connection initiated by peer.
+        bool isIncoming() const { return mConnectionType & INCOMING; }
+
+        // Connection only for requesting peers.
+        bool isSeed() const { return mConnectionType & SEED; }
+
+        // Connection made with good rated peer.
+        bool isGood() const { return mConnectionType & GOOD; }
+
+        // Connection only for validating peer.
+        bool isScan() const { return mConnectionType & SCAN; }
+
         // Versions exchanged and initial ping completed
         bool isReady() const { return mPingRoundTripTime != -1; }
         int32_t pingTime() const { return mPingRoundTripTime; }
@@ -107,7 +126,7 @@ namespace BitCoin
             return false;
         }
 
-        const IPAddress &address() { return mAddress; }
+        const NextCash::IPAddress &address() { return mAddress; }
         const uint8_t *ipv6Bytes() const { return mConnection->ipv6Bytes(); }
         bool wasRejected() const { return mRejected; }
 
@@ -151,7 +170,7 @@ namespace BitCoin
 #ifndef SINGLE_THREAD
         NextCash::Thread *mThread;
 #endif
-        IPAddress mAddress;
+        NextCash::IPAddress mAddress;
         Chain *mChain;
         Monitor *mMonitor;
         NextCash::Mutex mConnectionMutex;
@@ -159,7 +178,8 @@ namespace BitCoin
         NextCash::Buffer mReceiveBuffer;
         Statistics mStatistics;
         bool mStarted, mStopRequested, mStopped;
-        bool mIsIncoming, mIsSeed, mIsGood;
+        uint32_t mConnectionType;
+        bool mIsGood;
         bool mSendBlocksCompact;
         bool mRejected;
         bool mWasReady;

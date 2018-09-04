@@ -50,7 +50,7 @@ namespace BitCoin
         uint64_t services;
         NextCash::String userAgent;
         int32_t rating;
-        IPAddress address;
+        NextCash::IPAddress address;
     };
 }
 
