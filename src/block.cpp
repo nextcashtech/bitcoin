@@ -630,7 +630,7 @@ namespace BitCoin
         static unsigned int fileOffset(unsigned int pHeight) { return pHeight - (fileID(pHeight) * MAX_COUNT); }
         static NextCash::String filePathName(unsigned int pID);
 
-        static const unsigned int CACHE_COUNT = 5;
+        static const unsigned int CACHE_COUNT = 20;
         static NextCash::MutexWithConstantName sCacheLock;
         static BlockFile *sCache[CACHE_COUNT];
 
@@ -1164,6 +1164,10 @@ namespace BitCoin
         mLastHash = pBlock.header.hash;
         ++mCount;
         mModified = true;
+
+        // Update CRC when the file is full.
+        if(mCount == MAX_COUNT)
+            updateCRC();
         return true;
     }
 
@@ -1509,6 +1513,9 @@ namespace BitCoin
 
     unsigned int Block::validate()
     {
+        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+          "Validating block files");
+
         unsigned int result = 0;
         unsigned int fileID = 0;
         BlockFile *file;

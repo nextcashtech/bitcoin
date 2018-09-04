@@ -593,6 +593,9 @@ namespace BitCoin
 
     bool HeaderFile::validate()
     {
+        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+          "Validating header files");
+
         // Read CRC
         mInputFile->setReadOffset(CRC_OFFSET);
         uint32_t crc = mInputFile->readUnsignedInt();
@@ -687,6 +690,10 @@ namespace BitCoin
         delete outputFile;
 
         mModified = true;
+
+        // Update CRC when the file is full.
+        if(count + 1 == MAX_COUNT)
+            updateCRC();
         return true;
     }
 
