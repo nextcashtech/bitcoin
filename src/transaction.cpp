@@ -1246,9 +1246,6 @@ namespace BitCoin
             }
             else
             {
-                // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME,
-                  // "Processing input %d", index);
-
                 // Find unspent transaction for input
                 reference = pChain->outputs().findUnspent(input->outpoint.transactionID, input->outpoint.index);
                 if(reference == NULL)
@@ -1318,14 +1315,18 @@ namespace BitCoin
                     {
                         // Seconds since outpoint median past time in units of 512 seconds granularity
                         lock <<= 9;
-                        int32_t currentBlockMedianTime = pChain->getMedianPastTime(pBlockHeight, 11);
-                        int32_t spentBlockMedianTime = pChain->getMedianPastTime(reference->blockHeight, 11);
+                        int32_t currentBlockMedianTime =
+                          pChain->getMedianPastTime(pBlockHeight - 1, 11);
+                        int32_t spentBlockMedianTime =
+                          pChain->getMedianPastTime(reference->blockHeight - 1, 11);
                         if(currentBlockMedianTime < spentBlockMedianTime + lock)
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                              "Input %d sequence not valid. Required spent block time age %d, actual %d : index %d trans %s",
-                              index, lock, currentBlockMedianTime - spentBlockMedianTime,
-                              input->outpoint.index, input->outpoint.transactionID.hex().text());
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                              BITCOIN_TRANSACTION_LOG_NAME,
+                              "Input %d sequence 0x%08x not valid. Required spent block time age %d, actual %d : index %d trans %s",
+                              index, input->sequence, lock,
+                              currentBlockMedianTime - spentBlockMedianTime, input->outpoint.index,
+                              input->outpoint.transactionID.hex().text());
                             NextCash::String timeText;
                             timeText.writeFormattedTime(spentBlockMedianTime + lock);
                             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
@@ -1339,12 +1340,14 @@ namespace BitCoin
                     }
                     else if(pBlockHeight < reference->blockHeight + lock) // Number of blocks since outpoint
                     {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Input %d sequence not valid. Required block height age %d. actual %d : index %d trans %s",
-                          index, lock, pBlockHeight - reference->blockHeight,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                          BITCOIN_TRANSACTION_LOG_NAME,
+                          "Input %d sequence 0x%08x not valid. Required block height age %d. actual %d : index %d trans %s",
+                          index, input->sequence, lock, pBlockHeight - reference->blockHeight,
                           input->outpoint.index, input->outpoint.transactionID.hex().text());
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Not valid until block %d", reference->blockHeight + lock);
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                          BITCOIN_TRANSACTION_LOG_NAME, "Not valid until block %d",
+                          reference->blockHeight + lock);
                         reference->print(NextCash::Log::WARNING);
 #ifdef PROFILER_ON
                         verifyProfiler.stop();
@@ -1357,17 +1360,11 @@ namespace BitCoin
                     sequenceFound = true;
 
                 pChain->outputs().spend(reference, input->outpoint.index, pBlockHeight);
-                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  // "Transaction %s Input %d spent transaction output %s index %d", hash.hex().text(), index + 1,
-                  // input->outpoint.transactionID.hex().text(), input->outpoint.index);
 
                 interpreter.clear();
                 interpreter.initialize(this, index, input->sequence, output.amount);
 
                 // Process signature script
-                //NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "Input %d script : ", index);
-                //input->script.setReadOffset(0);
-                //ScriptInterpreter::printScript(input->script, NextCash::Log::DEBUG);
                 input->script.setReadOffset(0);
                 if(!interpreter.process(input->script, pBlockVersion, pChain->forks(),
                   pBlockHeight))
@@ -1383,9 +1380,6 @@ namespace BitCoin
                 }
 
                 // Process unspent transaction output script
-                //NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_TRANSACTION_LOG_NAME, "UTXO script : ");
-                //output.script.setReadOffset(0);
-                //ScriptInterpreter::printScript(output.script, NextCash::Log::DEBUG);
                 output.script.setReadOffset(0);
                 if(!interpreter.process(output.script, pBlockVersion, pChain->forks(),
                   pBlockHeight))
@@ -1460,8 +1454,8 @@ namespace BitCoin
                           .writeFormattedTime(pChain->getMedianPastTime(pBlockHeight, 11));
                         NextCash::Log::addFormatted(NextCash::Log::WARNING,
                           BITCOIN_TRANSACTION_LOG_NAME,
-                          "Lock time stamp is not valid. Lock time %s > block median time %s",
-                          lockTimeText.text(), blockTimeText.text());
+                          "Lock time 0x%08x time stamp is not valid. Lock time %s > block median time %s",
+                          lockTime, lockTimeText.text(), blockTimeText.text());
                         print(pChain->forks(), NextCash::Log::VERBOSE);
                         return false;
                     }
@@ -1478,8 +1472,8 @@ namespace BitCoin
                         blockTimeText.writeFormattedTime(pChain->time(pBlockHeight));
                         NextCash::Log::addFormatted(NextCash::Log::WARNING,
                           BITCOIN_TRANSACTION_LOG_NAME,
-                          "Lock time stamp is not valid. Lock time %s > block time %s",
-                          lockTimeText.text(), blockTimeText.text());
+                          "Lock time 0x%08x time stamp is not valid. Lock time %s > block time %s",
+                          lockTime, lockTimeText.text(), blockTimeText.text());
                         print(pChain->forks(), NextCash::Log::VERBOSE);
                         return false;
                     }

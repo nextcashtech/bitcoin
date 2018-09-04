@@ -519,6 +519,7 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Transaction %d failed", transactionOffset);
+                (*transaction)->print(pChain->forks(), NextCash::Log::WARNING);
                 return false;
             }
             if(!isCoinBase)
