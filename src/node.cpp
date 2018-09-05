@@ -60,6 +60,7 @@ namespace BitCoin
         mRejected = false;
         mWasReady = false;
         mReleased = false;
+        mMemPoolRequested = false;
 #ifndef SINGLE_THREAD
         mThread = NULL;
 #endif
@@ -235,13 +236,6 @@ namespace BitCoin
 
                 if(!isIncoming() && !isSeed())
                 {
-                    if(mSentVersionData != NULL &&
-                      (mSentVersionData->relay || mBloomFilterID != 0))
-                    {
-                        Message::Data memPoolMessage(Message::MEM_POOL);
-                        sendMessage(&memPoolMessage);
-                    }
-
                     Message::Data sendHeadersMessage(Message::SEND_HEADERS);
                     sendMessage(&sendHeadersMessage);
                 }
@@ -267,6 +261,17 @@ namespace BitCoin
         if(!isOpen())
             return false;
 
+        Info &info = Info::instance();
+
+        if(!isIncoming() && !isSeed() && !info.spvMode && mSentVersionData != NULL &&
+          !mSentVersionData->relay && info.initialBlockDownloadIsComplete() && mChain->isInSync())
+        {
+            NextCash::Log::add(NextCash::Log::INFO, mName,
+              "Dropping. To add relaying node.");
+            close();
+            return false;
+        }
+
         if(isSeed() && time - mConnectedTime > 120)
         {
             NextCash::Log::add(NextCash::Log::INFO, mName,
@@ -279,7 +284,7 @@ namespace BitCoin
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
               "Dropping. Not ready within %d seconds of connection.", mPingCutoff);
-            Info::instance().addPeerFail(mAddress, 5);
+            info.addPeerFail(mAddress, 5);
             close();
             return false;
         }
@@ -293,7 +298,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::INFO, mName,
                   "Dropping. No update on block for 15 seconds");
-                Info::instance().addPeerFail(mAddress);
+                info.addPeerFail(mAddress);
                 close();
                 return false;
             }
@@ -302,7 +307,7 @@ namespace BitCoin
         if(!mHeaderRequested.isEmpty() && time - mHeaderRequestTime > 15)
         {
             NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Not providing headers");
-            Info::instance().addPeerFail(mAddress);
+            info.addPeerFail(mAddress);
             close();
             return false;
         }
@@ -310,9 +315,23 @@ namespace BitCoin
         if(mLastReceiveTime != 0 && time - mLastReceiveTime > 1200)
         {
             NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Not responding");
-            Info::instance().addPeerFail(mAddress);
+            info.addPeerFail(mAddress);
             close();
             return false;
+        }
+
+        if(mPrepared && !isIncoming() && !isSeed() && !mMemPoolRequested &&
+          info.initialBlockDownloadIsComplete() && (info.spvMode || mChain->isInSync()) &&
+          mSentVersionData != NULL && (mSentVersionData->relay || mBloomFilterID != 0) &&
+          (info.spvMode || mChain->memPoolRequests() < 5))
+        {
+            NextCash::Log::add(NextCash::Log::INFO, mName, "Sending request for mem pool");
+            Message::Data memPoolMessage(Message::MEM_POOL);
+            if(sendMessage(&memPoolMessage))
+            {
+                mMemPoolRequested = true;
+                mChain->addMemPoolRequest();
+            }
         }
 
         return true;
@@ -379,29 +398,25 @@ namespace BitCoin
         if(mLastHeaderHash == mChain->lastHeaderHash())
             return false; // This node is in sync and will announce any new headers.
 
-        NextCash::HashList hashes;
-        if(!mChain->getReverseHashes(hashes, 16, 500))
+        Message::GetHeadersData getHeadersData;
+        if(!mChain->getReverseHashes(getHeadersData.hashes, 1, 16, 500))
             return false;
 
-        Message::GetHeadersData getHeadersData;
-        for(NextCash::HashList::iterator hash = hashes.begin(); hash != hashes.end(); ++hash)
-            getHeadersData.blockHeaderHashes.push_back(*hash);
-
-        if(hashes.size() == 0)
+        if(getHeadersData.hashes.size() == 0)
             NextCash::Log::add(NextCash::Log::VERBOSE, mName,
               "Sending request for headers from genesis");
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-              "Sending request for headers after %d : %s", mChain->headerHeight(),
-              hashes.front().hex().text());
+              "Sending request for headers after %d : %s", mChain->headerHeight() - 1,
+              getHeadersData.hashes.front().hex().text());
 
         bool success = sendMessage(&getHeadersData);
         if(success)
         {
-            if(hashes.size() == 0)
+            if(getHeadersData.hashes.size() == 0)
                 mChain->getHash(0, mHeaderRequested);
             else
-                mHeaderRequested = hashes.front();
+                mHeaderRequested = getHeadersData.hashes.front();
             mLastHeaderRequested = mHeaderRequested;
             mHeaderRequestTime = getTime();
         }
@@ -726,7 +741,8 @@ namespace BitCoin
             delete mSentVersionData;
         mSentVersionData = new Message::VersionData(mConnection->ipv6Bytes(), mConnection->port(),
           mServices, info.ip, info.port, info.spvMode, mChain->blockHeight(),
-          (!isIncoming() && !isSeed() && info.initialBlockDownloadIsComplete()));
+          (!isIncoming() && !isSeed() && info.initialBlockDownloadIsComplete() &&
+          mChain->isInSync()));
         bool success = sendMessage(mSentVersionData);
         mVersionSent = true;
         return success;
@@ -1398,9 +1414,8 @@ namespace BitCoin
 
                 // Find appropriate hashes
                 NextCash::HashList hashes;
-                for(std::vector<NextCash::Hash>::iterator i =
-                  getBlocksData->blockHeaderHashes.begin();
-                  i != getBlocksData->blockHeaderHashes.end(); ++i)
+                for(NextCash::HashList::iterator i = getBlocksData->hashes.begin();
+                  i != getBlocksData->hashes.end(); ++i)
                     if(mChain->getHashes(hashes, *i, 500))
                         break;
 
@@ -1526,40 +1541,59 @@ namespace BitCoin
 
                 Message::GetHeadersData *getHeadersData = (Message::GetHeadersData *)message;
                 Message::HeadersData sendHeadersData;
-                int height;
+                unsigned int height;
                 bool found = false;
+                unsigned int offset = 0;
 
-                for(std::vector<NextCash::Hash>::iterator hash =
-                  getHeadersData->blockHeaderHashes.begin();
-                  hash != getHeadersData->blockHeaderHashes.end(); ++hash)
+                for(NextCash::HashList::iterator hash = getHeadersData->hashes.begin();
+                  hash != getHeadersData->hashes.end(); ++hash)
                 {
                     height = mChain->hashHeight(*hash);
-                    if(height != -1)
+                    if(height != 0xffffffff)
                     {
-                        if(height > 5000 && height < mReceivedVersionData->startBlockHeight - 5000)
+                        if(height > HISTORY_BRANCH_CHECKING &&
+                          height < (unsigned int)mReceivedVersionData->startBlockHeight -
+                          HISTORY_BRANCH_CHECKING)
                         {
                             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                              "Not sending headers. Header height %d below node's start block height %d : %s",
-                              height, mReceivedVersionData->startBlockHeight, hash->hex().text());
+                              "Dropping. Requested header height %d (%d/%d) which is below start block height %d : %s",
+                              height, offset, getHeadersData->hashes.size(),
+                              mReceivedVersionData->startBlockHeight, hash->hex().text());
+                            sendReject(Message::nameFor(Message::GET_HEADERS),
+                              Message::RejectData::WRONG_CHAIN, "Too many unmatching headers");
+                            close();
+                            success = false;
                             break;
                         }
-                        else if(mChain->getHeaders(sendHeadersData.headers, *hash,
-                          getHeadersData->stopHeaderHash, 2000))
+                        else
                         {
-                            found = true;
+                            NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
+                              "Headers requested after height %d (%d/%d) : %s", height, offset,
+                              getHeadersData->hashes.size(), hash->hex().text());
+                            if(height == mChain->headerHeight())
+                                found = true; // Don't send any
+                            else if(mChain->getHeaders(sendHeadersData.headers, *hash,
+                              getHeadersData->stopHeaderHash, 2000))
+                                found = true; // Send up to 2000
+                            else
+                                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                                  "Failed to get headers for header request (%d/%d) : %s", offset,
+                                  getHeadersData->hashes.size(), hash->hex().text());
                             break; // match found
                         }
                     }
+
+                    ++offset;
                 }
 
                 if(found)
                 {
                     if(sendHeadersData.headers.size() == 0)
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                          "Sending zero block headers", sendHeadersData.headers.size());
+                          "Sending zero headers", sendHeadersData.headers.size());
                     else
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                          "Sending %d block headers starting at height %d",
+                          "Sending %d headers starting at height %d",
                           sendHeadersData.headers.size(),
                           mChain->hashHeight(sendHeadersData.headers.front().hash));
                     if(sendMessage(&sendHeadersData))
@@ -1587,8 +1621,8 @@ namespace BitCoin
                             blockCount++;
                             addAnnouncedBlock((*item)->hash);
 
-                            // Clear last header request so it doesn't prevent a new header request
-                            mLastHeaderRequested.clear();
+                            if(inventoryData->inventory.size() == 1)
+                                mLastHeaderHash = (*item)->hash;
 
                             switch(mChain->addPendingHash((*item)->hash, mID))
                             {
@@ -1660,7 +1694,8 @@ namespace BitCoin
                     if(headersNeeded)
                         requestHeaders();
 
-                    if(blockList.size() > 0)
+                    if(blockList.size() > 0 && !waitingForBlockRequests() &&
+                      !waitingForHeaderRequests())
                         requestBlocks(blockList);
 
                     if(transactionList.size() > 0)
@@ -1729,7 +1764,10 @@ namespace BitCoin
                     }
 
                     if(hashList.size() > 0)
-                        requestBlocks(hashList);
+                    {
+                        if(!waitingForBlockRequests() && !waitingForHeaderRequests())
+                            requestBlocks(hashList);
+                    }
                     else if(!lastAnnouncedHeaderFound && mChain->isInSync())
                     {
                         mRejected = true;

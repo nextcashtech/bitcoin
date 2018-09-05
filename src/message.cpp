@@ -865,11 +865,10 @@ namespace BitCoin
             pStream->writeUnsignedInt(version);
 
             // Hash Count
-            writeCompactInteger(pStream, blockHeaderHashes.size());
+            writeCompactInteger(pStream, hashes.size());
 
             // Hashes
-            for(std::vector<NextCash::Hash>::iterator hash = blockHeaderHashes.begin();
-              hash != blockHeaderHashes.end(); ++hash)
+            for(NextCash::HashList::iterator hash = hashes.begin(); hash != hashes.end(); ++hash)
                 hash->write(pStream);
 
             // Stop hash
@@ -892,9 +891,8 @@ namespace BitCoin
                 return false;
 
             // Hashes
-            blockHeaderHashes.resize(count);
-            for(std::vector<NextCash::Hash>::iterator hash = blockHeaderHashes.begin();
-              hash != blockHeaderHashes.end(); ++hash)
+            hashes.resize(count);
+            for(NextCash::HashList::iterator hash = hashes.begin(); hash != hashes.end(); ++hash)
                 if(!hash->read(pStream, 32))
                     return false;
 
@@ -908,11 +906,10 @@ namespace BitCoin
             pStream->writeUnsignedInt(version);
 
             // Hash Count
-            writeCompactInteger(pStream, blockHeaderHashes.size());
+            writeCompactInteger(pStream, hashes.size());
 
             // Hashes
-            for(std::vector<NextCash::Hash>::iterator hash = blockHeaderHashes.begin();
-              hash != blockHeaderHashes.end(); ++hash)
+            for(NextCash::HashList::iterator hash = hashes.begin(); hash != hashes.end(); ++hash)
                 hash->write(pStream);
 
             // Stop hash
@@ -935,9 +932,8 @@ namespace BitCoin
                 return false;
 
             // Block Header Hashes
-            blockHeaderHashes.resize(count);
-            for(std::vector<NextCash::Hash>::iterator hash = blockHeaderHashes.begin();
-              hash != blockHeaderHashes.end(); ++hash)
+            hashes.resize(count);
+            for(NextCash::HashList::iterator hash = hashes.begin(); hash != hashes.end(); ++hash)
                 if(!hash->read(pStream, 32))
                     return false;
 
@@ -1973,11 +1969,11 @@ namespace BitCoin
                 if(getBlocksData.version != receivedGetBlocksDataData->version)
                     getBlocksDataMatches = false;
 
-                if(getBlocksData.blockHeaderHashes.size () != receivedGetBlocksDataData->blockHeaderHashes.size())
+                if(getBlocksData.hashes.size () != receivedGetBlocksDataData->hashes.size())
                     getBlocksDataMatches = false;
 
-                for(unsigned int i=0;i<getBlocksData.blockHeaderHashes.size();i++)
-                    if(getBlocksData.blockHeaderHashes[i] != receivedGetBlocksDataData->blockHeaderHashes[i])
+                for(unsigned int i=0;i<getBlocksData.hashes.size();i++)
+                    if(getBlocksData.hashes[i] != receivedGetBlocksDataData->hashes[i])
                         getBlocksDataMatches = false;
 
                 if(getBlocksData.stopHeaderHash != receivedGetBlocksDataData->stopHeaderHash)
@@ -2120,11 +2116,11 @@ namespace BitCoin
                 if(getHeadersData.version != receivedGetHeadersData->version)
                     getHeadersDataMatches = false;
 
-                if(getHeadersData.blockHeaderHashes.size () != receivedGetHeadersData->blockHeaderHashes.size())
+                if(getHeadersData.hashes.size () != receivedGetHeadersData->hashes.size())
                     getHeadersDataMatches = false;
 
-                for(unsigned int i=0;i<getHeadersData.blockHeaderHashes.size();i++)
-                    if(getHeadersData.blockHeaderHashes[i] != receivedGetHeadersData->blockHeaderHashes[i])
+                for(unsigned int i=0;i<getHeadersData.hashes.size();i++)
+                    if(getHeadersData.hashes[i] != receivedGetHeadersData->hashes[i])
                         getHeadersDataMatches = false;
 
                 if(getHeadersData.stopHeaderHash != receivedGetHeadersData->stopHeaderHash)

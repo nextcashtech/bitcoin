@@ -184,6 +184,7 @@ namespace BitCoin
         bool mRejected;
         bool mWasReady;
         bool mReleased;
+        bool mMemPoolRequested;
 
         Message::VersionData *mSentVersionData, *mReceivedVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;

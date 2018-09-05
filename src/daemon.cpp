@@ -1189,7 +1189,8 @@ namespace BitCoin
         for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
         {
             blocksRequestedCount += (*node)->blocksRequestedCount();
-            if((*node)->isReady() && !(*node)->waitingForBlockRequests())
+            if((*node)->isReady() && !(*node)->waitingForBlockRequests() &&
+              !(*node)->waitingForHeaderRequests())
                 requestNodes.push_back(*node);
         }
 

@@ -26,6 +26,8 @@
 #include <vector>
 #include <stdlib.h>
 
+#define HISTORY_BRANCH_CHECKING 5000
+
 
 namespace BitCoin
 {
@@ -221,6 +223,9 @@ namespace BitCoin
         Addresses &addresses() { return mAddresses; }
 #endif
 
+        unsigned int memPoolRequests() const { return mMemPoolRequests; }
+        void addMemPoolRequest() { ++mMemPoolRequests; }
+
         unsigned int branchCount() const { return mBranches.size(); }
         const Branch *branchAt(unsigned int pOffset) const
         {
@@ -287,7 +292,8 @@ namespace BitCoin
         bool getHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash,
           unsigned int pCount);
         // Retrieve list of block hashes starting at top, going down and skipping around 100 between each.
-        bool getReverseHashes(NextCash::HashList &pHashes, unsigned int pCount, unsigned int pSpacing);
+        bool getReverseHashes(NextCash::HashList &pHashes, unsigned int pOffset,
+          unsigned int pCount, unsigned int pSpacing);
 
         // Retrieve block headers starting at a specific hash. (empty starting hash for first block)
         bool getHeaders(HeaderList &pBlockHeaders, const NextCash::Hash &pStartingHash,
@@ -425,6 +431,7 @@ namespace BitCoin
         bool processBlock(Block &pBlock);
 
         MemPool mMemPool;
+        unsigned int mMemPoolRequests;
 
         NextCash::HashList mBlocksToAnnounce;
         Block *mAnnounceBlock;

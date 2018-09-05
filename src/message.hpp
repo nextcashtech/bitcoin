@@ -352,7 +352,7 @@ namespace BitCoin
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             uint32_t version;
-            std::vector<NextCash::Hash> blockHeaderHashes; // In reverse order (Highest block first)
+            NextCash::HashList hashes; // In reverse order (Highest block first)
 
             NextCash::Hash stopHeaderHash; // Zeroized to stop at highest block on chain
 
@@ -411,7 +411,7 @@ namespace BitCoin
             // Maybe like every 100th block or something
             // First block in this list that they have they will send you headers for
             //   everything after through the stop header
-            std::vector<NextCash::Hash> blockHeaderHashes;
+            NextCash::HashList hashes;
 
             NextCash::Hash stopHeaderHash; // Zeroized to stop at highest block on chain
 

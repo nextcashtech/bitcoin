@@ -22,7 +22,6 @@
 #include <algorithm>
 
 #define BITCOIN_CHAIN_LOG_NAME "Chain"
-#define HISTORY_BRANCH_CHECKING 5000
 #define BLOCK_STATS_CACHE_SIZE 2500
 
 
@@ -46,6 +45,7 @@ namespace BitCoin
         mAnnounceBlock = NULL;
         mMonitor = NULL;
         mBlockStatHeight = 0;
+        mMemPoolRequests = 0;
 
         if(mInfo.approvedHash.isEmpty())
             mApprovedBlockHeight = 0x00000000; // Not set
@@ -1453,14 +1453,17 @@ namespace BitCoin
         return pHashes.size() > 0;
     }
 
-    bool Chain::getReverseHashes(NextCash::HashList &pHashes, unsigned int pCount,
-      unsigned int pSpacing)
+    bool Chain::getReverseHashes(NextCash::HashList &pHashes, unsigned int pOffset,
+      unsigned int pCount, unsigned int pSpacing)
     {
         pHashes.clear();
         pHashes.reserve(pCount);
 
+        if(pOffset > headerHeight())
+            pOffset = 0;
+
         mHeadersLock.readLock();
-        unsigned int height = headerHeight();
+        unsigned int height = headerHeight() - pOffset;
 #ifdef LOW_MEM
         NextCash::Hash hash;
         while(pHashes.size() < pCount)
@@ -1473,7 +1476,7 @@ namespace BitCoin
             height -= pSpacing;
         }
 #else
-        for(NextCash::HashList::reverse_iterator hash = mHashes.rbegin();
+        for(NextCash::HashList::reverse_iterator hash = mHashes.rbegin() + pOffset;
           hash != mHashes.rend() && pHashes.size() < pCount; hash += pSpacing, height -= pSpacing)
         {
             pHashes.emplace_back(*hash);
@@ -1490,7 +1493,11 @@ namespace BitCoin
     {
         unsigned int startingHeight = hashHeight(pStartingHash);
         if(startingHeight == 0xffffffff)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "Unknown starting header : %s", pStartingHash.hex().text());
             return false;
+        }
 
         unsigned int stoppingHeight = 0xffffffff;
         if(!pStoppingHash.isEmpty())
@@ -1499,12 +1506,17 @@ namespace BitCoin
         if(stoppingHeight != 0xffffffff)
         {
             if(stoppingHeight < startingHeight)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                  "Header stopping height %d below starting header %d", stoppingHeight,
+                  startingHeight);
                 return false;
+            }
             if(stoppingHeight - startingHeight < pCount)
                 count = stoppingHeight - startingHeight;
         }
 
-        return Header::getHeaders(startingHeight, count, pBlockHeaders);
+        return Header::getHeaders(startingHeight + 1, count, pBlockHeaders);
     }
 
     bool Chain::getHash(unsigned int pBlockHeight, NextCash::Hash &pHash)
