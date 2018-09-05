@@ -30,6 +30,8 @@ namespace BitCoin
         mStopped = false;
         mAuthenticated = false;
         mChain = pChain;
+        mPreviousStatisticsHeight = 0;
+        mPreviousStatisticsHours = 0;
         mName.writeFormatted("Request [%d]", mID);
 
         mLastReceiveTime = getTime();
@@ -475,7 +477,7 @@ namespace BitCoin
             {
                 // Get Block at height - i
                 if(!mChain->getBlock((unsigned int)(height - i), block))
-                    break;
+                    continue;
 
                 sendData.writeUnsignedInt(height - i); // Height
                 block.header.hash.write(&sendData); // Hash
@@ -518,153 +520,180 @@ namespace BitCoin
         }
         else if(command == "bkst")
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received block statistics request");
-
-            // Return statistics
-            int height = mReceiveBuffer.readInt(); // Start height
-            unsigned int hours = mReceiveBuffer.readUnsignedInt(); // Number of hours back in time to include
-            uint32_t stopTime = 0;
-            unsigned int blockCount = 0, totalTransactionCount = 0, totalInputCount = 0, totalOutputCount = 0;
-            unsigned int inputCount, outputCount;
-            uint64_t totalBlockSize = 0, totalFees = 0, fee, totalAmountSent = 0, amountSent;
-            std::vector<uint64_t> blockSizes, fees, amountsSent;
-            std::vector<unsigned int> transactionCounts, inputCounts, outputCounts;
-            Block block;
-
-            fees.reserve(256);
-            blockSizes.reserve(256);
-            transactionCounts.reserve(256);
-            inputCounts.reserve(256);
-            outputCounts.reserve(256);
-
-            if(hours <= 168) // Week max
+            if(mReceiveBuffer.remaining() < 8)
+                NextCash::Log::add(NextCash::Log::WARNING, mName,
+                  "Received short block statistics request");
+            else
             {
-                if(height < 0)
-                    height = mChain->blockHeight();
+                // Return statistics
+                int height = mReceiveBuffer.readInt(); // Start height
+                unsigned int hours = mReceiveBuffer.readUnsignedInt(); // Number of hours back in time to include
 
-                int currentHeight = height;
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                  "Received block statistics request for %d hours before height %d", hours, height);
 
-                while(currentHeight > 0)
+                if(mPreviousStatisticsResult.length() > 0 && mPreviousStatisticsHeight == height &&
+                  mPreviousStatisticsHours == hours)
                 {
-                    // Get Block at current height
-                    if(!mChain->getBlock((unsigned int)currentHeight--, block))
-                    {
-                        blockCount = 0;
-                        totalTransactionCount = 0;
-                        totalInputCount = 0;
-                        totalOutputCount = 0;
-                        totalBlockSize = 0;
-                        break;
-                    }
+                    NextCash::Log::add(NextCash::Log::VERBOSE, mName,
+                      "Resending previous block statistics result");
+                    mPreviousStatisticsResult.setReadOffset(0);
+                    sendData.writeStream(&mPreviousStatisticsResult,
+                      mPreviousStatisticsResult.length());
+                    mPreviousStatisticsResult.setReadOffset(0);
+                }
+                else
+                {
+                    uint32_t stopTime = 0;
+                    unsigned int blockCount = 0, totalTransactionCount = 0, totalInputCount = 0,
+                      totalOutputCount = 0;
+                    unsigned int inputCount, outputCount;
+                    uint64_t totalBlockSize = 0, totalFees = 0, fee, totalAmountSent = 0,
+                      amountSent;
+                    std::vector<uint64_t> blockSizes, fees, amountsSent;
+                    std::vector<unsigned int> transactionCounts, inputCounts, outputCounts;
+                    Block block;
 
-                    if(stopTime == 0)
-                        stopTime = block.header.time - (hours * 3600);
-                    else if(block.header.time < stopTime)
-                        break;
+                    fees.reserve(256);
+                    blockSizes.reserve(256);
+                    transactionCounts.reserve(256);
+                    inputCounts.reserve(256);
+                    outputCounts.reserve(256);
 
-                    // Count inputs and outputs
-                    inputCount = 0;
-                    outputCount = 0;
-                    amountSent = 0;
-                    bool skip = true;
-                    for(std::vector<Transaction *>::iterator trans = block.transactions.begin();
-                      trans != block.transactions.end(); ++trans)
+                    if(hours <= 168) // Week max
                     {
-                        if(skip)
+                        if(height < 0)
+                            height = mChain->blockHeight();
+
+                        int currentHeight = height;
+
+                        while(currentHeight > 0)
                         {
-                            skip = false;
-                            continue;
+                            // Get Block at current height
+                            if(!mChain->getBlock((unsigned int)currentHeight--, block))
+                                continue;
+
+                            if(stopTime == 0)
+                                stopTime = block.header.time - (hours * 3600);
+                            else if(block.header.time < stopTime)
+                                break;
+
+                            // Count inputs and outputs
+                            inputCount = 0;
+                            outputCount = 0;
+                            amountSent = 0;
+                            bool skip = true;
+                            for(std::vector<Transaction *>::iterator trans =
+                              block.transactions.begin(); trans != block.transactions.end();
+                              ++trans)
+                            {
+                                if(skip)
+                                {
+                                    skip = false;
+                                    continue;
+                                }
+                                inputCount += (*trans)->inputs.size();
+                                outputCount += (*trans)->outputs.size();
+                                for(std::vector<Output>::iterator output =
+                                  (*trans)->outputs.begin(); output != (*trans)->outputs.end();
+                                  ++output)
+                                    amountSent += output->amount;
+                            }
+
+                            totalBlockSize += block.size();
+                            blockSizes.push_back(block.size());
+
+                            totalTransactionCount += block.transactions.size();
+                            transactionCounts.push_back(block.transactions.size());
+
+                            totalInputCount += inputCount;
+                            inputCounts.push_back(inputCount);
+
+                            totalOutputCount += outputCount;
+                            outputCounts.push_back(outputCount);
+
+                            totalAmountSent += amountSent;
+                            amountsSent.push_back(amountSent);
+
+                            fee = block.actualCoinbaseAmount() - coinBaseAmount(currentHeight + 1);
+                            totalFees += fee;
+                            fees.push_back(fee);
+
+                            ++blockCount;
                         }
-                        inputCount += (*trans)->inputs.size();
-                        outputCount += (*trans)->outputs.size();
-                        for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
-                          output != (*trans)->outputs.end(); ++output)
-                            amountSent += output->amount;
                     }
 
-                    totalBlockSize += block.size();
-                    blockSizes.push_back(block.size());
+                    uint64_t medianBlockSize = 0;
+                    unsigned int medianTransactionCount = 0;
+                    unsigned int medianInputCount = 0;
+                    unsigned int medianOutputCount = 0;
+                    uint64_t medianFees = 0;
+                    uint64_t medianAmountSent = 0;
 
-                    totalTransactionCount += block.transactions.size();
-                    transactionCounts.push_back(block.transactions.size());
+                    if(blockCount > 1)
+                    {
+                        std::sort(blockSizes.begin(), blockSizes.end());
+                        medianBlockSize = blockSizes[blockSizes.size()/2];
 
-                    totalInputCount += inputCount;
-                    inputCounts.push_back(inputCount);
+                        std::sort(transactionCounts.begin(), transactionCounts.end());
+                        medianTransactionCount = transactionCounts[transactionCounts.size()/2];
 
-                    totalOutputCount += outputCount;
-                    outputCounts.push_back(outputCount);
+                        std::sort(inputCounts.begin(), inputCounts.end());
+                        medianInputCount = inputCounts[inputCounts.size()/2];
 
-                    totalAmountSent += amountSent;
-                    amountsSent.push_back(amountSent);
+                        std::sort(outputCounts.begin(), outputCounts.end());
+                        medianOutputCount = outputCounts[outputCounts.size()/2];
 
-                    fee = block.actualCoinbaseAmount() - coinBaseAmount(currentHeight + 1);
-                    totalFees += fee;
-                    fees.push_back(fee);
+                        std::sort(amountsSent.begin(), amountsSent.end());
+                        medianAmountSent = amountsSent[amountsSent.size()/2];
 
-                    ++blockCount;
+                        std::sort(fees.begin(), fees.end());
+                        medianFees = fees[fees.size()/2];
+                    }
+                    else if(blockCount == 1)
+                    {
+                        medianBlockSize = totalBlockSize;
+                        medianTransactionCount = totalTransactionCount;
+                        medianInputCount = totalInputCount;
+                        medianOutputCount = totalOutputCount;
+                        medianAmountSent = totalAmountSent;
+                        medianFees = totalFees;
+                    }
+
+                    sendData.writeString("bkst:");
+                    sendData.writeUnsignedInt(blockCount); // Total blocks
+
+                    sendData.writeUnsignedLong(totalBlockSize); // Total block size
+                    sendData.writeUnsignedLong(medianBlockSize); // Median block size
+
+                    sendData.writeUnsignedInt(totalTransactionCount); // Total transactions
+                    sendData.writeUnsignedInt(medianTransactionCount); // Median transactions
+
+                    sendData.writeUnsignedInt(totalInputCount); // Total Input Count
+                    sendData.writeUnsignedInt(medianInputCount); // Median Input Count
+
+                    sendData.writeUnsignedInt(totalOutputCount); // Total Output Count
+                    sendData.writeUnsignedInt(medianOutputCount); // Median Output Count
+
+                    sendData.writeUnsignedLong(totalAmountSent); // Total Amount Sent
+                    sendData.writeUnsignedLong(medianAmountSent); // Median Amount Sent
+
+                    sendData.writeUnsignedLong(totalFees); // Total Fees
+                    sendData.writeUnsignedLong(medianFees); // Median Fees
+
+                    // Save result
+                    mPreviousStatisticsHeight = height;
+                    mPreviousStatisticsHours = hours;
+                    mPreviousStatisticsResult.clear();
+                    sendData.setReadOffset(0);
+                    mPreviousStatisticsResult.writeStream(&sendData, sendData.length());
+                    sendData.setReadOffset(0);
+
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                      "Sending block statistics for %d blocks starting at height %d going back %d hours",
+                      blockCount, height, hours);
                 }
             }
-
-            uint64_t medianBlockSize = 0;
-            unsigned int medianTransactionCount = 0;
-            unsigned int medianInputCount = 0;
-            unsigned int medianOutputCount = 0;
-            uint64_t medianFees = 0;
-            uint64_t medianAmountSent = 0;
-
-            if(blockCount > 1)
-            {
-                std::sort(blockSizes.begin(), blockSizes.end());
-                medianBlockSize = blockSizes[blockSizes.size()/2];
-
-                std::sort(transactionCounts.begin(), transactionCounts.end());
-                medianTransactionCount = transactionCounts[transactionCounts.size()/2];
-
-                std::sort(inputCounts.begin(), inputCounts.end());
-                medianInputCount = inputCounts[inputCounts.size()/2];
-
-                std::sort(outputCounts.begin(), outputCounts.end());
-                medianOutputCount = outputCounts[outputCounts.size()/2];
-
-                std::sort(amountsSent.begin(), amountsSent.end());
-                medianAmountSent = amountsSent[amountsSent.size()/2];
-
-                std::sort(fees.begin(), fees.end());
-                medianFees = fees[fees.size()/2];
-            }
-            else if(blockCount == 1)
-            {
-                medianBlockSize = totalBlockSize;
-                medianTransactionCount = totalTransactionCount;
-                medianInputCount = totalInputCount;
-                medianOutputCount = totalOutputCount;
-                medianAmountSent = totalAmountSent;
-                medianFees = totalFees;
-            }
-
-            sendData.writeString("bkst:");
-            sendData.writeUnsignedInt(blockCount); // Total blocks
-
-            sendData.writeUnsignedLong(totalBlockSize); // Total block size
-            sendData.writeUnsignedLong(medianBlockSize); // Median block size
-
-            sendData.writeUnsignedInt(totalTransactionCount); // Total transactions
-            sendData.writeUnsignedInt(medianTransactionCount); // Median transactions
-
-            sendData.writeUnsignedInt(totalInputCount); // Total Input Count
-            sendData.writeUnsignedInt(medianInputCount); // Median Input Count
-
-            sendData.writeUnsignedInt(totalOutputCount); // Total Output Count
-            sendData.writeUnsignedInt(medianOutputCount); // Median Output Count
-
-            sendData.writeUnsignedLong(totalAmountSent); // Total Amount Sent
-            sendData.writeUnsignedLong(medianAmountSent); // Median Amount Sent
-
-            sendData.writeUnsignedLong(totalFees); // Total Fees
-            sendData.writeUnsignedLong(medianFees); // Median Fees
-
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-              "Sending block statistics for %d blocks starting at height %d going back %d hours", blockCount, height, hours);
         }
         else if(command == "trxn")
         {

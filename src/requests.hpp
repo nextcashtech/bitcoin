@@ -48,6 +48,10 @@ namespace BitCoin
 
         Chain *mChain;
 
+        int mPreviousStatisticsHeight;
+        unsigned int mPreviousStatisticsHours;
+        NextCash::Buffer mPreviousStatisticsResult;
+
         static unsigned int mNextID;
 
         RequestChannel(const RequestChannel &pCopy);
