@@ -635,7 +635,7 @@ namespace BitCoin
         static BlockFile *sCache[CACHE_COUNT];
 
         // Return locked header file.
-        static BlockFile *get(unsigned int pFileID, bool pCreate = false);
+        static BlockFile *get(unsigned int pFileID, bool pWriteAccess, bool pCreate = false);
 
         // Moves cached header file to the front of the list
         static void moveToFront(unsigned int pOffset);
@@ -652,10 +652,24 @@ namespace BitCoin
 
 
         BlockFile(unsigned int pID, bool pCreate);
-        ~BlockFile() { updateCRC(); if(mInputFile != NULL) delete mInputFile; }
+        ~BlockFile() { lock(true); updateCRC(); if(mInputFile != NULL) delete mInputFile; }
 
-        void lock() { mMutex.lock(); }
-        void unlock() { mMutex.unlock(); }
+        void lock(bool pWriteAccess)
+        {
+            mLock.lock();
+            // if(pWriteAccess)
+                // mLock.writeLock();
+            // else
+                // mLock.readLock();
+        }
+        void unlock(bool pWriteAccess)
+        {
+            mLock.unlock();
+            // if(pWriteAccess)
+                // mLock.writeUnlock();
+            // else
+                // mLock.readUnlock();
+        }
 
         unsigned int id() const { return mID; }
         bool isValid() const { return mValid; }
@@ -705,7 +719,7 @@ namespace BitCoin
         void updateCRC();
 
         unsigned int mID;
-        NextCash::MutexWithConstantName mMutex;
+        NextCash::MutexWithConstantName mLock;
         NextCash::FileInputStream *mInputFile;
         NextCash::String mFilePathName;
         bool mValid;
@@ -747,7 +761,7 @@ namespace BitCoin
         return NextCash::fileExists(BlockFile::filePathName(pFileID));
     }
 
-    BlockFile *BlockFile::get(unsigned int pFileID, bool pCreate)
+    BlockFile *BlockFile::get(unsigned int pFileID, bool pWriteAccess, bool pCreate)
     {
         sCacheLock.lock();
 
@@ -756,7 +770,7 @@ namespace BitCoin
             if(sCache[i] != NULL && sCache[i]->mID == pFileID)
             {
                 BlockFile *result = sCache[i];
-                result->lock();
+                result->lock(pWriteAccess);
                 moveToFront(i);
                 sCacheLock.unlock();
                 return result;
@@ -773,7 +787,7 @@ namespace BitCoin
             return NULL;
         }
 
-        result->lock();
+        result->lock(pWriteAccess);
 
         for(unsigned int i = 0; i < CACHE_COUNT; ++i)
             if(sCache[i] == NULL)
@@ -837,9 +851,9 @@ namespace BitCoin
         for(int i = CACHE_COUNT-1; i >= 0; --i)
             if(sCache[i] != NULL)
             {
-                sCache[i]->lock();
+                sCache[i]->lock(true);
                 sCache[i]->updateCRC();
-                sCache[i]->unlock();
+                sCache[i]->unlock(true);
             }
         sCacheLock.unlock();
     }
@@ -884,7 +898,7 @@ namespace BitCoin
         return result;
     }
 
-    BlockFile::BlockFile(unsigned int pID, bool pCreate) : mMutex("BlockFile")
+    BlockFile::BlockFile(unsigned int pID, bool pCreate) : mLock("BlockFile")
     {
         mValid = true;
         mFilePathName = filePathName(pID);
@@ -1173,7 +1187,7 @@ namespace BitCoin
 
     bool Block::add(unsigned int pBlockHeight, const Block &pBlock)
     {
-        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight), true);
+        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight), true, true);
         if(file == NULL)
             return false;
 
@@ -1182,7 +1196,7 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Block file %08x add block failed : Invalid block height : file %d / added %d",
               (file->id() * BlockFile::MAX_COUNT) + file->itemCount(), pBlockHeight);
-            file->unlock();
+            file->unlock(true);
             return false;
         }
 
@@ -1192,10 +1206,10 @@ namespace BitCoin
             if(file->itemCount() == 0)
             {
                 // First block in file. Verify last hash of previous file.
-                BlockFile *previousFile = BlockFile::get(BlockFile::fileID(pBlockHeight) - 1);
+                BlockFile *previousFile = BlockFile::get(BlockFile::fileID(pBlockHeight) - 1, true);
                 if(previousFile == NULL)
                 {
-                    file->unlock();
+                    file->unlock(true);
                     return false;
                 }
 
@@ -1207,12 +1221,12 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                       "Does not match last hash of previous block file : %s",
                       previousFile->lastHash().hex().text());
-                    file->unlock();
-                    previousFile->unlock();
+                    file->unlock(true);
+                    previousFile->unlock(true);
                     return false;
                 }
 
-                previousFile->unlock();
+                previousFile->unlock(true);
             }
             else if(file->lastHash() != pBlock.header.previousHash)
             {
@@ -1221,13 +1235,13 @@ namespace BitCoin
                   file->id(), pBlockHeight, pBlock.header.previousHash.hex().text());
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Does not match last hash of block file : %s", file->lastHash().hex().text());
-                file->unlock();
+                file->unlock(true);
                 return false;
             }
         }
 
         bool success = file->writeBlock(pBlock);
-        file->unlock();
+        file->unlock(true);
         return success;
     }
 
@@ -1332,7 +1346,7 @@ namespace BitCoin
                 return false;
 
             file->removeBlocksAbove(fileOffset);
-            file->unlock();
+            file->unlock(true);
             ++fileID;
         }
 
@@ -1393,14 +1407,14 @@ namespace BitCoin
         if(!Header::getHeader(pBlockHeight, pBlock.header))
             return false;
 
-        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight));
+        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight), false);
         if(file == NULL)
             return false;
 
         NextCash::stream_size dataSize = 0;
         bool success = file->readTransactions(BlockFile::fileOffset(pBlockHeight),
           pBlock.transactions, &dataSize);
-        file->unlock();
+        file->unlock(false);
 
         pBlock.header.transactionCount = pBlock.transactions.size();
 
@@ -1424,12 +1438,12 @@ namespace BitCoin
 
     bool Block::getOutput(unsigned int pBlockHeight, OutputReference &pReference, Output &pOutput)
     {
-        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight));
+        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight), false);
         if(file == NULL)
             return false;
 
         bool success = file->readOutput(pReference.blockFileOffset, pOutput);
-        file->unlock();
+        file->unlock(false);
         return success;
     }
 
@@ -1472,7 +1486,7 @@ namespace BitCoin
     bool Block::getOutput(unsigned int pBlockHeight, unsigned int pTransactionOffset,
       unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput)
     {
-        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight));
+        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight), false);
         if(file == NULL)
             return false;
 
@@ -1480,7 +1494,7 @@ namespace BitCoin
 
         bool success = file->readOutput(offset, pTransactionOffset, pOutputIndex, pTransactionID,
           pOutput);
-        file->unlock();
+        file->unlock(false);
         return success;
     }
 
@@ -1500,11 +1514,11 @@ namespace BitCoin
             --fileID;
             result -= BlockFile::MAX_COUNT;
 
-            BlockFile *file = BlockFile::get(fileID);
+            BlockFile *file = BlockFile::get(fileID, false);
             if(file != NULL)
             {
                 result += file->itemCount();
-                file->unlock();
+                file->unlock(false);
             }
         }
 
@@ -1532,7 +1546,7 @@ namespace BitCoin
         // Adjust for last file not being full.
         while(true)
         {
-            file = BlockFile::get(fileID);
+            file = BlockFile::get(fileID, false);
             if(file == NULL)
             {
                 BlockFile::remove(fileID);
@@ -1544,12 +1558,12 @@ namespace BitCoin
             else if(file->validate())
             {
                 result += file->itemCount();
-                file->unlock();
+                file->unlock(false);
                 break;
             }
             else
             {
-                file->unlock();
+                file->unlock(false);
                 BlockFile::remove(fileID);
                 if(fileID == 0)
                     break;
