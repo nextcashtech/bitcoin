@@ -2046,10 +2046,13 @@ namespace BitCoin
         uint64_t servicesMask = Message::VersionData::FULL_NODE_BIT;
         std::vector<Peer *> peers;
         bool found;
+        std::list<IPBytes> recentIPs;
 
         while(!mStopping)
         {
-            NextCash::Thread::sleep(100);
+            // Sleep for 10 seconds
+            for(unsigned int i = 0; i < 10; ++i)
+                NextCash::Thread::sleep(1000);
 
             // Try to get unrated peers up to okay rating.
             mInfo.getRandomizedPeers(peers, USABLE_RATING, servicesMask, OKAY_RATING - 1);
@@ -2086,6 +2089,23 @@ namespace BitCoin
                     mNodeLock.readUnlock();
                     continue;
                 }
+
+                for(std::list<IPBytes>::iterator recent = recentIPs.begin();
+                    recent != recentIPs.end(); ++recent)
+                    if(*recent == (*peer)->address.ip)
+                    {
+                        found = true;
+                        break;
+                    }
+                if(found)
+                {
+                    mNodeLock.readUnlock();
+                    continue;
+                }
+
+                recentIPs.emplace_back((*peer)->address.ip);
+                while(recentIPs.size() > 1000)
+                    recentIPs.pop_front();
 
                 mNodeLock.readUnlock();
 
@@ -2547,7 +2567,7 @@ namespace BitCoin
 
                 mRecentIPs.emplace_back((*peer)->address.ip);
                 while(mRecentIPs.size() > 100)
-                    mRecentIPs.erase(mRecentIPs.begin());
+                    mRecentIPs.pop_front();
 
                 connection = new NextCash::Network::Connection(AF_INET6, (*peer)->address.ip,
                   (*peer)->address.port, 5);
