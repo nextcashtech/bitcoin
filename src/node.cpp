@@ -535,8 +535,8 @@ namespace BitCoin
         if(!isOpen())
             return false;
 
-        NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Sending block : %s",
-          pBlock.header.hash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Sending block (%d) : %s",
+          mChain->hashHeight(pBlock.header.hash), pBlock.header.hash.hex().text());
         Message::BlockData blockData;
         blockData.block = &pBlock;
         bool success = sendMessage(&blockData);
