@@ -1385,17 +1385,15 @@ namespace BitCoin
 
     void Daemon::checkSync()
     {
+        if(mChain.lastHeaderHash().isEmpty() || mChain.lastHeaderHash().isZero())
+            return;
+
         mNodeLock.readLock();
         unsigned int count = 0;
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
-            if(!(*node)->isIncoming() && (*node)->isReady())
-            {
-                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  // "Node [%d] last header : %s", (*node)->id(),
-                  // (*node)->lastHeaderHash().hex().text());
-                if((*node)->lastHeaderHash() == mChain.lastHeaderHash())
-                    ++count;
-            }
+            if(!(*node)->isIncoming() && (*node)->isReady() &&
+              (*node)->lastHeaderHash() == mChain.lastHeaderHash())
+                ++count;
         mNodeLock.readUnlock();
 
         if(count >= 4 && (mInfo.spvMode || mChain.blockHeight() == mChain.headerHeight()))
@@ -1771,6 +1769,7 @@ namespace BitCoin
 
         int32_t startTime = getTime();
         int32_t lastStatReportTime = startTime;
+        int32_t lastSyncCheck = startTime;
         int32_t lastRequestCheckTime = startTime;
         int32_t lastInfoSaveTime = startTime;
         int32_t lastImprovement = startTime;
@@ -1847,8 +1846,13 @@ namespace BitCoin
                   (mChain.pendingBlockCount() == 0 && time - lastRequestCheckTime > 10))
                 {
                     lastRequestCheckTime = time;
-                    checkSync();
                     sendRequests();
+                }
+
+                if(time - lastSyncCheck > 10)
+                {
+                    checkSync();
+                    lastSyncCheck = time;
                 }
 
                 if(mStopping)
