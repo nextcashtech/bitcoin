@@ -61,15 +61,16 @@ namespace BitCoin
 
         void calculateMerkleHash(NextCash::Hash &pMerkleHash);
 
-        bool validateSize(Chain *pChain, unsigned int pBlockHeight);
+        bool checkSize(Chain *pChain, unsigned int pHeight);
 
         // Validate anything that doesn't require UTXO.
-        bool validate(Chain *pChain, unsigned int pBlockHeight);
+        bool validate(Chain *pChain, unsigned int pHeight);
 
         // Validate transactions and update outputs.
-        bool process(Chain *pChain, unsigned int pBlockHeight);
+        bool process(Chain *pChain, unsigned int pHeight);
+        bool processMultiThreaded(Chain *pChain, unsigned int pHeight, unsigned int pThreadCount);
 
-        bool updateOutputs(Chain *pChain, unsigned int pBlockHeight);
+        bool updateOutputs(Chain *pChain, unsigned int pHeight);
 
         // Create the Genesis block
         static Block *genesis(uint32_t pTargetBits);
@@ -80,18 +81,18 @@ namespace BitCoin
         static unsigned int totalCount();
 
         // Get block from appropriate block file.
-        static bool getBlock(unsigned int pBlockHeight, Block &pBlock);
+        static bool getBlock(unsigned int pHeight, Block &pBlock);
 
         // Read output from block file.
-        static bool getOutput(unsigned int pBlockHeight, OutputReference &pReference,
+        static bool getOutput(unsigned int pHeight, OutputReference &pReference,
           Output &pOutput);
-        static bool getOutput(unsigned int pBlockHeight, unsigned int pTransactionOffset,
+        static bool getOutput(unsigned int pHeight, unsigned int pTransactionOffset,
           unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput);
 
         // Add block to appropriate block file.
-        static bool add(unsigned int pBlockHeight, const Block &pBlock);
+        static bool add(unsigned int pHeight, const Block &pBlock);
 
-        static bool revertToHeight(unsigned int pBlockHeight);
+        static bool revertToHeight(unsigned int pHeight);
 
         // Validate block file CRCs and revert to last valid.
         // Returns valid block count.
@@ -100,6 +101,66 @@ namespace BitCoin
 
         static void save(); // Save any unsaved data in files (i.e. update CRCs)
         static void clean();  // Release any static cache data
+
+        class ProcessThreadData
+        {
+        public:
+
+            ProcessThreadData(Chain *pChain, Block *pBlock, unsigned int pHeight,
+              std::vector<Transaction *>::iterator pTransactionsBegin, unsigned int pCount) :
+              mutex("ProcessThreadData"), spentAgeLock("Spent Age")
+            {
+                chain = pChain;
+                block = pBlock;
+                height = pHeight;
+                transaction = pTransactionsBegin;
+                count = pCount;
+                offset = 0;
+                success = true;
+                complete = new bool[count];
+                std::memset(complete, 0, count);
+            }
+            ~ProcessThreadData()
+            {
+                delete[] complete;
+            }
+
+            NextCash::Mutex mutex;
+            Chain *chain;
+            Block *block;
+            unsigned int height, offset, count;
+            std::vector<Transaction *>::iterator transaction;
+            NextCash::Mutex spentAgeLock;
+            std::vector<unsigned int> spentAges;
+            bool success;
+            bool *complete;
+
+            Transaction *getNext(unsigned int &pOffset)
+            {
+                Transaction *result = NULL;
+                mutex.lock();
+                if(success && offset < count)
+                {
+                    pOffset = offset;
+                    result = *transaction++;
+                    ++offset;
+                }
+                else
+                    pOffset = 0xffffffff;
+                mutex.unlock();
+                return result;
+            }
+
+            void markComplete(unsigned int pOffset, bool pValid)
+            {
+                complete[pOffset] = true;
+                if(!pValid)
+                    success = false;
+            }
+
+        };
+
+        static void processThreadRun(); // Thread for process tasks
 
     private:
 

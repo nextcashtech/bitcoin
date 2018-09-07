@@ -62,8 +62,8 @@ namespace BitCoin
         // Number of peers that an unconfirmed transaction must be announced from before it has zero confirm trust.
         unsigned int spvMemPoolCountRequired;
 
-        // Number of threads used to save outputs and addresses databases.
-        unsigned int saveThreadCount;
+        // Number of threads used to process and save data.
+        unsigned int threadCount;
 
         // The block header hash of the highest pre-approved block. During IBD all blocks below
         //   this will not be fully validated. They will just be processed to update UTXOs and

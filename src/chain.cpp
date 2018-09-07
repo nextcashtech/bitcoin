@@ -356,18 +356,29 @@ namespace BitCoin
                 break;
             }
 
-        // Move branch's pending blocks to the main chain's pending blocks
-        offset = 0;
-        for(std::list<PendingBlockData *>::iterator branchPending = longestBranch->pendingBlocks.begin();
-          branchPending != longestBranch->pendingBlocks.end(); ++branchPending, ++offset)
+        if(success && mNextBlockHeight == longestBranch->height)
         {
-            mPendingBlocks.push_back(*branchPending);
-            mPendingSize += (*branchPending)->block->size();
-            if((*branchPending)->isFull())
+            // Move branch's pending blocks to the main chain's pending blocks
+            offset = 0;
+            for(std::list<PendingBlockData *>::iterator branchPending =
+              longestBranch->pendingBlocks.begin();
+              branchPending != longestBranch->pendingBlocks.end(); ++branchPending, ++offset)
             {
-                ++mPendingBlockCount;
-                mLastFullPendingOffset = offset;
+                mPendingBlocks.push_back(*branchPending);
+                mPendingSize += (*branchPending)->block->size();
+                if((*branchPending)->isFull())
+                {
+                    ++mPendingBlockCount;
+                    mLastFullPendingOffset = offset;
+                }
             }
+        }
+        else
+        {
+            for(std::list<PendingBlockData *>::iterator branchPending =
+              longestBranch->pendingBlocks.begin();
+              branchPending != longestBranch->pendingBlocks.end(); ++branchPending)
+                delete *branchPending;
         }
 
         longestBranch->pendingBlocks.clear(); // No deletes necessary since they were reused
@@ -1158,7 +1169,12 @@ namespace BitCoin
         }
         else // Fully validate block
         {
-            if(!pBlock.process(this, mNextBlockHeight))
+            if(pBlock.transactions.size() > 100)
+                success = pBlock.processMultiThreaded(this, mNextBlockHeight, mInfo.threadCount);
+            else
+                success = pBlock.process(this, mNextBlockHeight);
+
+            if(!success)
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
                   "Failed to process block (%d) (%d trans) (%d KiB) : %s",
@@ -1240,7 +1256,7 @@ namespace BitCoin
             return -1;
         }
 
-        if(!pBlock->validateSize(this, mNextBlockHeight))
+        if(!pBlock->checkSize(this, mNextBlockHeight))
         {
             // Block is an invalid size and headers need to be reverted out.
             revert(mNextBlockHeight - 1);
@@ -1397,12 +1413,12 @@ namespace BitCoin
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Clearing all pending blocks/headers");
 
-            // Delete block
-            delete nextPending;
             // Clear pending blocks since they assumed this block was good
             mBlackListedNodeIDs.push_back(nextPending->requestingNode);
             // Add hash to blacklist. So it isn't downloaded again.
             addBlackListedHash(nextPending->block->header.hash);
+            // Delete block
+            delete nextPending;
             for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
               pending != mPendingBlocks.end(); ++pending)
                 delete *pending;
@@ -1784,7 +1800,7 @@ namespace BitCoin
                 else
                 {
                     mOutputs.revert(block.transactions, currentHeight);
-                    mOutputs.save(mInfo.saveThreadCount);
+                    mOutputs.save(mInfo.threadCount);
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                       "Failed to process block at height %d : %s",
                       currentHeight, block.header.hash.hex().text());
@@ -1795,19 +1811,19 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                   "Failed to read block %d from block file", currentHeight);
-                mOutputs.save(mInfo.saveThreadCount);
+                mOutputs.save(mInfo.threadCount);
                 return false;
             }
 
             if(getTime() - lastPurgeTime > 10)
             {
-                if(mOutputs.needsPurge() && !mOutputs.save(mInfo.saveThreadCount))
+                if(mOutputs.needsPurge() && !mOutputs.save(mInfo.threadCount))
                     return false;
                 lastPurgeTime = getTime();
             }
         }
 
-        mOutputs.save(mInfo.saveThreadCount);
+        mOutputs.save(mInfo.threadCount);
         return mOutputs.height() == blockHeight();
     }
 
@@ -1864,7 +1880,7 @@ namespace BitCoin
 #endif
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                   "Failed to get block %d from block file", currentHeight);
-                mAddresses.save(mInfo.saveThreadCount);
+                mAddresses.save(mInfo.threadCount);
                 return false;
             }
 
@@ -1875,13 +1891,13 @@ namespace BitCoin
 
             if(getTime() - lastPurgeTime > 10)
             {
-                if(mAddresses.needsPurge() && !mAddresses.save(mInfo.saveThreadCount))
+                if(mAddresses.needsPurge() && !mAddresses.save(mInfo.threadCount))
                     return false;
                 lastPurgeTime = getTime();
             }
         }
 
-        mAddresses.save(mInfo.saveThreadCount);
+        mAddresses.save(mInfo.threadCount);
         return mAddresses.height() == blockHeight();
     }
 #endif
@@ -1932,11 +1948,16 @@ namespace BitCoin
             return true;
 
         mSaveDataInProgress = true;
-        bool succes = mOutputs.save(mInfo.saveThreadCount);
+
+        Header::save();
+        Block::save();
+
+        bool succes = mOutputs.save(mInfo.threadCount);
 #ifndef DISABLE_ADDRESSES
-        if(!mAddresses.save(mInfo.saveThreadCount))
+        if(!mAddresses.save(mInfo.threadCount))
             succes = false;
 #endif
+
         mSaveDataInProgress = false;
         return succes;
     }
@@ -2070,7 +2091,8 @@ namespace BitCoin
         NextCash::Hash emptyHash;
 
         Header::clean(); // Close any open files
-        unsigned int headerCount = Header::validate(mStopRequested); // Validate latest file and get count.
+        // Validate latest file and get count.
+        unsigned int headerCount = Header::validate(mStopRequested);
         if(mStopRequested)
         {
             mHeadersLock.writeUnlock();
@@ -2078,7 +2100,8 @@ namespace BitCoin
         }
 
         Block::clean(); // Close any open files
-        unsigned int blockCount = Block::validate(mStopRequested); // Validate latest file and get count.
+        // Validate latest file and get count.
+        unsigned int blockCount = Block::validate(mStopRequested);
         if(mStopRequested)
         {
             mHeadersLock.writeUnlock();
@@ -2088,6 +2111,8 @@ namespace BitCoin
         if(blockCount > headerCount)
         {
             // Revert blocks to latest header.
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Reverting blocks to valid header height %d", headerCount - 1);
             Block::revertToHeight(headerCount - 1);
             blockCount = headerCount;
         }

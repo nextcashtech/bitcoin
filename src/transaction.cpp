@@ -1173,8 +1173,8 @@ namespace BitCoin
     }
 
     bool Transaction::process(Chain *pChain, const std::vector<Transaction *> &pBlockTransactions,
-      unsigned int pBlockHeight, bool pCoinBase, int32_t pBlockVersion,
-      std::vector<unsigned int> &pSpentAges)
+      NextCash::Hash &pBlockHash, unsigned int pHeight, bool pCoinBase, int32_t pBlockVersion,
+      NextCash::Mutex &pSpentAgeLock, std::vector<unsigned int> &pSpentAges)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Transaction Process");
@@ -1201,6 +1201,13 @@ namespace BitCoin
             return false;
         }
 
+        if(!pChain->outputs().checkDuplicate(*this, pHeight, pBlockHash))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+              "Duplicate transaction ID hash");
+            return false;
+        }
+
         // Process Inputs
         ScriptInterpreter interpreter;
         TransactionReference *reference;
@@ -1222,7 +1229,7 @@ namespace BitCoin
                 }
 
                 // BIP-0034
-                if(pBlockVersion >= 2 && pChain->forks().enabledBlockVersion(pBlockHeight) >= 2)
+                if(pBlockVersion >= 2 && pChain->forks().enabledBlockVersion(pHeight) >= 2)
                 {
                     // Read block height
                     int64_t blockHeight = 0;
@@ -1234,12 +1241,12 @@ namespace BitCoin
                         return false;
                     }
 
-                    if(blockHeight < 0 || (uint64_t)blockHeight != pBlockHeight)
+                    if(blockHeight < 0 || (uint64_t)blockHeight != pHeight)
                     {
                         NextCash::Log::addFormatted(NextCash::Log::WARNING,
                           BITCOIN_TRANSACTION_LOG_NAME,
                           "Non matching coinbase block height : actual %d, coinbase %d",
-                          pBlockHeight, blockHeight);
+                          pHeight, blockHeight);
                         return false;
                     }
                 }
@@ -1266,9 +1273,11 @@ namespace BitCoin
                     return false;
                 }
 
-                pSpentAges.push_back(pBlockHeight - reference->blockHeight);
+                pSpentAgeLock.lock();
+                pSpentAges.push_back(pHeight - reference->blockHeight);
+                pSpentAgeLock.unlock();
 
-                if(reference->blockHeight == pBlockHeight)
+                if(reference->blockHeight == pHeight)
                 {
                     // Get output from this block since it hasn't been written to a block file yet
                     bool found = false;
@@ -1307,7 +1316,7 @@ namespace BitCoin
 #endif
                 // BIP-0068 Relative time lock sequence
                 if(version >= 2 && !input->sequenceDisabled() &&
-                  pChain->forks().softForkIsActive(pBlockHeight, SoftFork::BIP0068))
+                  pChain->forks().softForkIsActive(pHeight, SoftFork::BIP0068))
                 {
                     // Sequence is an encoded relative time lock
                     int32_t lock = input->sequence & Input::SEQUENCE_LOCKTIME_MASK;
@@ -1316,7 +1325,7 @@ namespace BitCoin
                         // Seconds since outpoint median past time in units of 512 seconds granularity
                         lock <<= 9;
                         int32_t currentBlockMedianTime =
-                          pChain->getMedianPastTime(pBlockHeight - 1, 11);
+                          pChain->getMedianPastTime(pHeight - 1, 11);
                         int32_t spentBlockMedianTime =
                           pChain->getMedianPastTime(reference->blockHeight - 1, 11);
                         if(currentBlockMedianTime < spentBlockMedianTime + lock)
@@ -1338,12 +1347,12 @@ namespace BitCoin
                             return false;
                         }
                     }
-                    else if(pBlockHeight < reference->blockHeight + lock) // Number of blocks since outpoint
+                    else if(pHeight < reference->blockHeight + lock) // Number of blocks since outpoint
                     {
                         NextCash::Log::addFormatted(NextCash::Log::WARNING,
                           BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d sequence 0x%08x not valid. Required block height age %d. actual %d : index %d trans %s",
-                          index, input->sequence, lock, pBlockHeight - reference->blockHeight,
+                          index, input->sequence, lock, pHeight - reference->blockHeight,
                           input->outpoint.index, input->outpoint.transactionID.hex().text());
                         NextCash::Log::addFormatted(NextCash::Log::WARNING,
                           BITCOIN_TRANSACTION_LOG_NAME, "Not valid until block %d",
@@ -1359,7 +1368,7 @@ namespace BitCoin
                 if(input->sequence != Input::SEQUENCE_NONE)
                     sequenceFound = true;
 
-                pChain->outputs().spend(reference, input->outpoint.index, pBlockHeight);
+                pChain->outputs().spend(reference, input->outpoint.index, pHeight);
 
                 interpreter.clear();
                 interpreter.initialize(this, index, input->sequence, output.amount);
@@ -1367,7 +1376,7 @@ namespace BitCoin
                 // Process signature script
                 input->script.setReadOffset(0);
                 if(!interpreter.process(input->script, pBlockVersion, pChain->forks(),
-                  pBlockHeight))
+                  pHeight))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d signature script failed : ", index);
@@ -1382,7 +1391,7 @@ namespace BitCoin
                 // Process unspent transaction output script
                 output.script.setReadOffset(0);
                 if(!interpreter.process(output.script, pBlockVersion, pChain->forks(),
-                  pBlockHeight))
+                  pHeight))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING,
                       BITCOIN_TRANSACTION_LOG_NAME,
@@ -1444,14 +1453,14 @@ namespace BitCoin
             if(lockTime >= LOCKTIME_THRESHOLD)
             {
                 // Lock time is a timestamp
-                if(pChain->forks().softForkIsActive(pBlockHeight, SoftFork::BIP0113))
+                if(pChain->forks().softForkIsActive(pHeight, SoftFork::BIP0113))
                 {
-                    if((int32_t)lockTime > pChain->getMedianPastTime(pBlockHeight, 11))
+                    if((int32_t)lockTime > pChain->getMedianPastTime(pHeight, 11))
                     {
                         NextCash::String lockTimeText, blockTimeText;
                         lockTimeText.writeFormattedTime(lockTime);
                         blockTimeText
-                          .writeFormattedTime(pChain->getMedianPastTime(pBlockHeight, 11));
+                          .writeFormattedTime(pChain->getMedianPastTime(pHeight, 11));
                         NextCash::Log::addFormatted(NextCash::Log::WARNING,
                           BITCOIN_TRANSACTION_LOG_NAME,
                           "Lock time 0x%08x time stamp is not valid. Lock time %s > block median time %s",
@@ -1465,11 +1474,11 @@ namespace BitCoin
                     // Add 600 to fake having a "peer time offset" for older blocks
                     //   Block 357903 transaction 98 has a lock time about 3 minutes after the
                     //   block time.
-                    if((int32_t)lockTime > pChain->time(pBlockHeight) + 600)
+                    if((int32_t)lockTime > pChain->time(pHeight) + 600)
                     {
                         NextCash::String lockTimeText, blockTimeText;
                         lockTimeText.writeFormattedTime(lockTime);
-                        blockTimeText.writeFormattedTime(pChain->time(pBlockHeight));
+                        blockTimeText.writeFormattedTime(pChain->time(pHeight));
                         NextCash::Log::addFormatted(NextCash::Log::WARNING,
                           BITCOIN_TRANSACTION_LOG_NAME,
                           "Lock time 0x%08x time stamp is not valid. Lock time %s > block time %s",
@@ -1482,12 +1491,12 @@ namespace BitCoin
             else
             {
                 // Lock time is a block height
-                if(lockTime > pBlockHeight)
+                if(lockTime > pHeight)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING,
                       BITCOIN_TRANSACTION_LOG_NAME,
                       "Lock time block height is not valid. Lock height %d > block height %d",
-                      lockTime, pBlockHeight);
+                      lockTime, pHeight);
                     print(pChain->forks(), NextCash::Log::VERBOSE);
                     return false;
                 }
@@ -1608,6 +1617,12 @@ namespace BitCoin
 
         // Script
         uint64_t bytes = readCompactInteger(pStream);
+        if(bytes > MAX_SCRIPT_SIZE)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+              "Failed to read input. Script too long : %d", bytes);
+            return false;
+        }
         if(pStream->remaining() < bytes)
             return false;
         script.clear();
@@ -2088,8 +2103,16 @@ namespace BitCoin
 
         // Input Count
         uint64_t count = readCompactInteger(pStream);
+        if(count > MAX_TRANSACTION_INPUTS)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              "Transaction read failed. Too many inputs : %d", count);
+            return false;
+        }
+
         if(pCalculateHash)
             writeCompactInteger(digest, count);
+
         if(pStream->remaining() < count)
         {
             if(digest != NULL)
@@ -2118,6 +2141,13 @@ namespace BitCoin
 
         // Output Count
         count = readCompactInteger(pStream);
+        if(count > MAX_TRANSACTION_OUTPUTS)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+              "Transaction read failed. Too many outputs : %d", count);
+            return false;
+        }
+
         if(pCalculateHash)
             writeCompactInteger(digest, count);
 

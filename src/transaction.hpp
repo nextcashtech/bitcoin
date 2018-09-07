@@ -265,7 +265,8 @@ namespace BitCoin
           int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, const Forks &pForks);
 
         bool process(Chain *pChain, const std::vector<Transaction *> &pBlockTransactions,
-          unsigned int pBlockHeight, bool pCoinBase, int32_t pBlockVersion,
+          NextCash::Hash &pBlockHash, unsigned int pBlockHeight, bool pCoinBase,
+          int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
           std::vector<unsigned int> &pSpentAges);
 
         // Check validity and return status

@@ -1302,9 +1302,6 @@ namespace BitCoin
                 --fileID;
                 result -= HeaderFile::MAX_COUNT;
             }
-
-            if(fileID == 0)
-                break;
         }
 
         return result;

@@ -41,6 +41,12 @@ namespace BitCoin
         amount = pStream->readLong();
 
         uint64_t bytes = readCompactInteger(pStream);
+        if(bytes > MAX_SCRIPT_SIZE)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_OUTPUTS_LOG_NAME,
+              "Failed to read output. Script too long : %d", bytes);
+            return false;
+        }
         if(pStream->remaining() < bytes)
             return false;
         script.setSize(bytes);
@@ -198,7 +204,7 @@ namespace BitCoin
             return false;
 
         OutputReference *output = mOutputs;
-        for(unsigned int i=0;i<mOutputCount;++i,++output)
+        for(unsigned int i = 0; i < mOutputCount; ++i, ++output)
             if(output->spentBlockHeight >= pBlockHeight)
                 return true;
 
@@ -209,7 +215,7 @@ namespace BitCoin
     {
         unsigned int result = 0;
         OutputReference *output = mOutputs;
-        for(unsigned int i=0;i<mOutputCount;++i)
+        for(unsigned int i = 0; i < mOutputCount; ++i)
         {
             if(output->spentBlockHeight == 0)
                 return MAX_BLOCK_HEIGHT;
@@ -230,7 +236,8 @@ namespace BitCoin
         }
 
         OutputReference *output = mOutputs;
-        for(std::vector<Output>::iterator fullOutput=pOutputs.begin();fullOutput!=pOutputs.end();++fullOutput,++output)
+        for(std::vector<Output>::iterator fullOutput = pOutputs.begin();
+          fullOutput != pOutputs.end(); ++fullOutput, ++output)
             if(output->commit(*fullOutput))
                 setModified();
     }
@@ -238,18 +245,23 @@ namespace BitCoin
     void TransactionReference::print(NextCash::Log::Level pLevel)
     {
         NextCash::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "Transaction Reference");
-        NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Height         : %d", blockHeight);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Height         : %d",
+          blockHeight);
 
         OutputReference *output = mOutputs;
         for(unsigned int i=0;i<mOutputCount;++i,++output)
         {
-            NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Output Reference %d", i);
-            NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "    File Offset : %d", output->blockFileOffset);
-            NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "    Spent       : %d", output->spentBlockHeight);
+            NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Output Reference %d",
+              i);
+            NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "    File Offset : %d",
+              output->blockFileOffset);
+            NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "    Spent       : %d",
+              output->spentBlockHeight);
         }
     }
 
-    const unsigned int TransactionOutputPool::BIP0030_HEIGHTS[BIP0030_HASH_COUNT] = { 91842, 91880 };
+    const unsigned int TransactionOutputPool::BIP0030_HEIGHTS[BIP0030_HASH_COUNT] =
+      { 91842, 91880 };
     const NextCash::Hash TransactionOutputPool::BIP0030_HASHES[BIP0030_HASH_COUNT] =
     {
         NextCash::Hash("00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"),
@@ -260,7 +272,8 @@ namespace BitCoin
       unsigned int pBlockHeight, const NextCash::Hash &pBlockHash)
     {
         Iterator reference;
-        for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
+        for(std::vector<Transaction *>::const_iterator transaction = pBlockTransactions.begin();
+          transaction != pBlockTransactions.end(); ++transaction)
         {
             // Get references set for transaction ID
             reference = get((*transaction)->hash);
@@ -277,13 +290,15 @@ namespace BitCoin
                     {
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
                           "BIP-0030 Exception for duplicate transaction ID at block height %d : transaction %s",
-                          ((TransactionReference *)(*reference))->blockHeight, (*transaction)->hash.hex().text());
+                          ((TransactionReference *)(*reference))->blockHeight,
+                          (*transaction)->hash.hex().text());
                     }
                     else
                     {
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                           "Matching transaction output hash from block height %d has unspent outputs : %s",
-                          ((TransactionReference *)(*reference))->blockHeight, (*transaction)->hash.hex().text());
+                          ((TransactionReference *)(*reference))->blockHeight,
+                          (*transaction)->hash.hex().text());
                         return false;
                     }
                 }
@@ -295,8 +310,47 @@ namespace BitCoin
         return true;
     }
 
+    bool TransactionOutputPool::checkDuplicate(const Transaction &pTransaction,
+      unsigned int pBlockHeight, const NextCash::Hash &pBlockHash)
+    {
+        // Get references set for transaction ID
+        Iterator reference = get(pTransaction.hash);
+        while(reference && reference.hash() == pTransaction.hash)
+        {
+            if(!((TransactionReference *)(*reference))->markedRemove() &&
+              ((TransactionReference *)(*reference))->hasUnspentOutputs() &&
+              ((TransactionReference *)(*reference))->blockHeight != pBlockHeight)
+            {
+                bool exceptionFound = false;
+                for(unsigned int i = 0; i < BIP0030_HASH_COUNT; ++i)
+                    if(BIP0030_HEIGHTS[i] == pBlockHeight && BIP0030_HASHES[i] == pBlockHash)
+                        exceptionFound = true;
+                if(exceptionFound)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                      "BIP-0030 Exception for duplicate transaction ID at block height %d : transaction %s",
+                      ((TransactionReference *)(*reference))->blockHeight,
+                      pTransaction.hash.hex().text());
+                }
+                else
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Matching transaction output hash from block height %d has unspent outputs : %s",
+                      ((TransactionReference *)(*reference))->blockHeight,
+                      pTransaction.hash.hex().text());
+                    return false;
+                }
+            }
+
+            ++reference;
+        }
+
+        return true;
+    }
+
     // Add all the outputs from a block (cached since they have no block file IDs or offsets yet)
-    bool TransactionOutputPool::add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight)
+    bool TransactionOutputPool::add(const std::vector<Transaction *> &pBlockTransactions,
+      unsigned int pBlockHeight)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Outputs Add Block");
@@ -316,10 +370,12 @@ namespace BitCoin
         Iterator item;
         unsigned int count = 0;
         bool success = true, valid;
-        for(std::vector<Transaction *>::const_iterator transaction=pBlockTransactions.begin();transaction!=pBlockTransactions.end();++transaction)
+        for(std::vector<Transaction *>::const_iterator transaction = pBlockTransactions.begin();
+          transaction != pBlockTransactions.end(); ++transaction)
         {
             // Get references set for transaction ID
-            transactionReference = new TransactionReference(pBlockHeight, (*transaction)->outputs.size());
+            transactionReference = new TransactionReference(pBlockHeight,
+              (*transaction)->outputs.size());
 
             valid = true;
             if(!insert((*transaction)->hash, transactionReference))
@@ -334,8 +390,8 @@ namespace BitCoin
                     {
                         // Unmark the matching item for removal
                         NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
-                          "Reversing removal of transaction output for block height %d : %s", pBlockHeight,
-                          (*transaction)->hash.hex().text());
+                          "Reversing removal of transaction output for block height %d : %s",
+                          pBlockHeight, (*transaction)->hash.hex().text());
                         (*item)->clearRemove();
                         valid = true;
                         delete transactionReference;
