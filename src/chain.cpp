@@ -2060,6 +2060,7 @@ namespace BitCoin
     bool Chain::load()
     {
         mStopRequested = false;
+        mWasInSync = false;
 
         mHeadersLock.writeLock("Load");
         bool success = true;
@@ -2067,9 +2068,21 @@ namespace BitCoin
         NextCash::Hash emptyHash;
 
         Header::clean(); // Close any open files
-        unsigned int headerCount = Header::validate(); // Validate latest file and get count.
+        unsigned int headerCount = Header::validate(mStopRequested); // Validate latest file and get count.
+        if(mStopRequested)
+        {
+            mHeadersLock.writeUnlock();
+            return false;
+        }
+
         Block::clean(); // Close any open files
-        unsigned int blockCount = Block::validate(); // Validate latest file and get count.
+        unsigned int blockCount = Block::validate(mStopRequested); // Validate latest file and get count.
+        if(mStopRequested)
+        {
+            mHeadersLock.writeUnlock();
+            return false;
+        }
+
         if(blockCount > headerCount)
         {
             // Revert blocks to latest header.
@@ -2081,7 +2094,23 @@ namespace BitCoin
         mNextHeaderHeight = 0;
         mNextBlockHeight = blockCount;
         mLastHeaderHash.clear();
+#ifdef LOW_MEM
+        mLastHashes.clear();
+#else
+        mHashes.clear();
+#endif
         clearBlockStats();
+        HashLookupSet *lookup = mHashLookup;
+        for(unsigned int i = 0; i < 0x10000; ++i)
+        {
+            lookup->clear();
+            ++lookup;
+            if(mStopRequested)
+            {
+                mHeadersLock.writeUnlock();
+                return false;
+            }
+        }
 
         if(headerCount == 0)
         {
@@ -2107,14 +2136,13 @@ namespace BitCoin
         NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Indexing header hashes");
 
 #ifndef LOW_MEM
-        mHashes.clear();
         mHashes.reserve(headerCount);
 #endif
 
         // Load header files
         NextCash::HashList hashes;
         hashes.reserve(1000);
-        while(mNextHeaderHeight < headerCount)
+        while(!mStopRequested && mNextHeaderHeight < headerCount)
         {
             if(!Header::getHashes(mNextHeaderHeight, 1000, hashes) || hashes.size() == 0)
             {
@@ -2126,17 +2154,24 @@ namespace BitCoin
             {
                 HashLookupSet &blockSet = mHashLookup[hash->lookup16()];
                 blockSet.lock();
+                blockSet.push_back(new HashInfo(*hash, mNextHeaderHeight));
+                blockSet.unlock();
 #ifndef LOW_MEM
                 mHashes.push_back(*hash);
 #endif
-                blockSet.push_back(new HashInfo(*hash, mNextHeaderHeight));
-                blockSet.unlock();
                 ++mNextHeaderHeight;
             }
         }
 
+        if(mStopRequested)
+        {
+            mHeadersLock.writeUnlock();
+            if(genesisBlock != NULL)
+                delete genesisBlock;
+            return false;
+        }
+
 #ifdef LOW_MEM
-        mLastHashes.clear();
         mLastHashes.reserve(RECENT_BLOCK_COUNT);
 
         // Get top block hashes
@@ -2225,7 +2260,7 @@ namespace BitCoin
 
                 targetBits.reserve(1000);
 
-                while(accumulatedWorkHeight < headerHeight())
+                while(!mStopRequested && accumulatedWorkHeight < headerHeight())
                 {
                     accumulatedCount = headerHeight() - accumulatedWorkHeight;
 
@@ -2253,6 +2288,14 @@ namespace BitCoin
 
                         ++accumulatedWorkHeight;
                     }
+                }
+
+                if(mStopRequested)
+                {
+                    mHeadersLock.writeUnlock();
+                    if(genesisBlock != NULL)
+                        delete genesisBlock;
+                    return false;
                 }
 
                 // Calculate previous block stats

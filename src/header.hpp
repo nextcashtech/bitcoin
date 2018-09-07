@@ -170,7 +170,7 @@ namespace BitCoin
 
         // Validate header file CRCs and revert to last valid.
         // Returns valid header count.
-        static unsigned int validate();
+        static unsigned int validate(bool &pAbort);
 
         static void save(); // Save any unsaved data in files (i.e. update CRCs)
         static void clean();  // Release any static cache data

@@ -56,7 +56,7 @@ namespace BitCoin
         bool walletsAreLoaded() { return mWalletsLoaded; }
         bool chainIsLoaded() { return mChainLoaded; }
         bool isRunning() { return mRunning; }
-        bool isStopping() { return mStopping; }
+        bool isStopping() { return mStopping || mStopRequested; }
 
         static const int FINISH_ON_REQUEST = 0x00;
         static const int FINISH_ON_SYNC    = 0x01;

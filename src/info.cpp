@@ -349,7 +349,11 @@ namespace BitCoin
     bool Info::readPeersFile()
     {
         if(!sPath)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INFO_LOG_NAME,
+              "No path to read peers file");
             return false;
+        }
 
         NextCash::String dataFilePath = sPath;
         dataFilePath.pathAppend("peers");

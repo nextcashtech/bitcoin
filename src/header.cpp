@@ -1254,23 +1254,29 @@ namespace BitCoin
         return result;
     }
 
-    unsigned int Header::validate()
+    unsigned int Header::validate(bool &pAbort)
     {
         unsigned int result = 0;
         unsigned int fileID = 0;
         HeaderFile *file;
 
         // Find top file ID.
-        while(HeaderFile::exists(fileID))
+        while(!pAbort && HeaderFile::exists(fileID))
             fileID += 50;
 
-        while(fileID > 0 && !HeaderFile::exists(fileID))
+        if(pAbort)
+            return 0;
+
+        while(!pAbort && fileID > 0 && !HeaderFile::exists(fileID))
             --fileID;
+
+        if(pAbort)
+            return 0;
 
         result = fileID * HeaderFile::MAX_COUNT;
 
         // Adjust for last file not being full.
-        while(true)
+        while(!pAbort)
         {
             file = HeaderFile::get(fileID, false);
             if(file == NULL)

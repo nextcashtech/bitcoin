@@ -247,6 +247,8 @@ namespace BitCoin
 
         if(!mChain.load())
         {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
+              "Failed to load chain.");
             mLoadingChain = false;
             return false;
         }

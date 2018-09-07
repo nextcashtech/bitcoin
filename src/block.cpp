@@ -1525,7 +1525,7 @@ namespace BitCoin
         return result;
     }
 
-    unsigned int Block::validate()
+    unsigned int Block::validate(bool &pAbort)
     {
         NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Validating block files");
@@ -1535,16 +1535,22 @@ namespace BitCoin
         BlockFile *file;
 
         // Find top file ID.
-        while(BlockFile::exists(fileID))
+        while(!pAbort && BlockFile::exists(fileID))
             fileID += 100;
 
-        while(fileID > 0 && !BlockFile::exists(fileID))
+        if(pAbort)
+            return 0;
+
+        while(!pAbort && fileID > 0 && !BlockFile::exists(fileID))
             --fileID;
+
+        if(pAbort)
+            return 0;
 
         result = fileID * BlockFile::MAX_COUNT;
 
         // Adjust for last file not being full.
-        while(true)
+        while(!pAbort)
         {
             file = BlockFile::get(fileID, false);
             if(file == NULL)
