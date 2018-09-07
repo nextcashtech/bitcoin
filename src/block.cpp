@@ -128,8 +128,8 @@ namespace BitCoin
 
         NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Total Fees    : %f",
           bitcoins(mFees));
-        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Size (KiB)    : %d",
-          mSize / 1024);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Size (KB)     : %d",
+          mSize / 1000);
 
         if(!pIncludeTransactions)
             return;
@@ -511,7 +511,7 @@ namespace BitCoin
             transaction = data->getNext(offset);
             if(transaction == NULL)
             {
-                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
                   "No more transactions to process");
                 break;
             }
@@ -534,8 +534,8 @@ namespace BitCoin
       unsigned int pThreadCount)
     {
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Processing block %d (multi-threaded) (%d trans) (%d KiB) : %s", pHeight,
-          transactions.size(), size() / 1024, header.hash.hex().text());
+          "Processing block %d (multi-threaded) (%d trans) (%d KB) : %s", pHeight,
+          transactions.size(), size() / 1000, header.hash.hex().text());
 
         mFees = 0;
 
@@ -598,7 +598,7 @@ namespace BitCoin
         }
 
         // Delete threads
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, NEXTCASH_HASH_DATA_SET_LOG_NAME,
+        NextCash::Log::addFormatted(NextCash::Log::DEBUG, NEXTCASH_HASH_DATA_SET_LOG_NAME,
           "Deleting process block %d threads", pHeight);
         for(i = 0; i < pThreadCount; ++i)
             delete threads[i];
@@ -646,8 +646,8 @@ namespace BitCoin
         NextCash::Profiler profiler("Block Process");
 #endif
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Processing block %d (%d trans) (%d KiB) : %s", pBlockHeight,
-          transactions.size(), size() / 1024, header.hash.hex().text());
+          "Processing block %d (%d trans) (%d KB) : %s", pBlockHeight,
+          transactions.size(), size() / 1000, header.hash.hex().text());
 
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pBlockHeight))
@@ -1205,7 +1205,7 @@ namespace BitCoin
         mModified = false;
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Block file %08x CRC updated : %08x", mID, crc);
+          "Block file %08x CRC updated : 0x%08x", mID, crc);
     }
 
     bool BlockFile::validate()
@@ -1229,7 +1229,7 @@ namespace BitCoin
         if(crc != calculatedCRC)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
-              "Block file %08x has invalid CRC : %08x != %08x", mID, crc, calculatedCRC);
+              "Block file %08x has invalid CRC : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
             return false;
         }
 

@@ -694,8 +694,8 @@ namespace BitCoin
         if(mIsValid)
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-              "Loaded %d transaction outputs at block height %d (%d KiB cached)",
-              size(), mNextBlockHeight - 1, cacheDataSize() / 1024);
+              "Loaded %d transaction outputs at block height %d (%d KB cached)",
+              size(), mNextBlockHeight - 1, cacheDataSize() / 1000);
             mSavedBlockHeight = mNextBlockHeight;
 
             setTargetCacheDataSize(pCacheDataTargetSize);
@@ -707,8 +707,8 @@ namespace BitCoin
     bool TransactionOutputPool::save(unsigned int pThreadCount)
     {
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-          "Saving transaction outputs at block height %d (%d KiB cached)", mNextBlockHeight - 1,
-          cacheDataSize() / 1024);
+          "Saving transaction outputs at block height %d (%d KB cached)", mNextBlockHeight - 1,
+          cacheDataSize() / 1000);
 
 #ifdef SINGLE_THREAD
         if(!HashDataSet::save())
@@ -733,7 +733,8 @@ namespace BitCoin
 
         mSavedBlockHeight = mNextBlockHeight;
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-          "Saved %d transaction outputs at block height %d (%d KiB cached)", size(), mNextBlockHeight - 1, cacheDataSize() / 1024);
+          "Saved %d transaction outputs at block height %d (%d KB cached)", size(),
+          mNextBlockHeight - 1, cacheDataSize() / 1000);
         return true;
     }
 }

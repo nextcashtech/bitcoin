@@ -1161,8 +1161,8 @@ namespace BitCoin
             if(!pBlock.updateOutputs(this, mNextBlockHeight))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
-                  "Failed to process approved block (%d) (%d trans) (%d KiB) : %s",
-                  mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1024,
+                  "Failed to process approved block (%d) (%d trans) (%d KB) : %s",
+                  mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1000,
                   pBlock.header.hash.hex().text());
                 success = false;
             }
@@ -1177,8 +1177,8 @@ namespace BitCoin
             if(!success)
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
-                  "Failed to process block (%d) (%d trans) (%d KiB) : %s",
-                  mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1024,
+                  "Failed to process block (%d) (%d trans) (%d KB) : %s",
+                  mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1000,
                   pBlock.header.hash.hex().text());
                 success = false;
             }
@@ -1229,13 +1229,13 @@ namespace BitCoin
 
         if(fullyValidated)
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added validated block (%d) (%d trans) (%d KiB) (%d s) : %s",
-              mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1024,
+              "Added validated block (%d) (%d trans) (%d KB) (%d s) : %s",
+              mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1000,
               getTime() - startTime, pBlock.header.hash.hex().text());
         else
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added approved block (%d) (%d trans) (%d KiB) (%d s) : %s",
-              mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1024,
+              "Added approved block (%d) (%d trans) (%d KB) (%d s) : %s",
+              mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1000,
               getTime() - startTime, pBlock.header.hash.hex().text());
 
         return true;
@@ -1791,9 +1791,9 @@ namespace BitCoin
                 if(block.updateOutputs(this, currentHeight))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                      "Processed outputs in block %d (%d trans) (%d KiB) (%d s)", currentHeight,
+                      "Processed outputs in block %d (%d trans) (%d KB) (%d s)", currentHeight,
                       block.transactions.size(),
-                      block.size() / 1024, getTime() - startTime);
+                      block.size() / 1000, getTime() - startTime);
 
                     mOutputs.commit(block.transactions, currentHeight);
                 }
@@ -1869,8 +1869,8 @@ namespace BitCoin
                 mAddresses.add(block.transactions, currentHeight);
 
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                  "Processed addresses in block %d (%d trans) (%d KiB) (%d s)", currentHeight,
-                  block.transactions.size(), block.size() / 1024,
+                  "Processed addresses in block %d (%d trans) (%d KB) (%d s)", currentHeight,
+                  block.transactions.size(), block.size() / 1000,
                   getTime() - startTime);
             }
             else

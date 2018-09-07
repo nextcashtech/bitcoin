@@ -569,30 +569,32 @@ namespace BitCoin
         else
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Outputs : %d trans (%d KiB cached)", mChain.outputs().size(),
-              mChain.outputs().cacheDataSize() / 1024);
+              "Outputs : %d trans (%d KB cached)", mChain.outputs().size(),
+              mChain.outputs().cacheDataSize() / 1000);
 #ifndef DISABLE_ADDRESSES
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Addresses : %d addrs (%d KiB cached)", mChain.addresses().size(),
-              mChain.addresses().cacheDataSize() / 1024);
+              "Addresses : %d addrs (%d KB cached)", mChain.addresses().size(),
+              mChain.addresses().cacheDataSize() / 1000);
 #endif
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Mem Pool : %d/%d trans/pending (%d KiB)", mChain.memPool().count(),
-              mChain.memPool().pendingCount(), mChain.memPool().size() / 1024);
+              "Mem Pool : %d/%d trans/pending (%d KB)", mChain.memPool().count(),
+              mChain.memPool().pendingCount(), mChain.memPool().size() / 1000);
 
             if(!mChain.isInSync())
             {
                 unsigned int pendingBlocks = mChain.pendingBlockCount();
                 unsigned int pendingCount = mChain.pendingCount();
                 unsigned int pendingSize = mChain.pendingSize();
-                if(pendingSize > mInfo.pendingSizeThreshold || pendingBlocks > mInfo.pendingBlocksThreshold)
+                if(pendingSize > mInfo.pendingSizeThreshold ||
+                  pendingBlocks > mInfo.pendingBlocksThreshold)
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                      "Pending (above threshold) : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks,
-                      pendingCount - pendingBlocks, pendingSize / 1024, blocksRequestedCount);
+                      "Pending (above threshold) : %d/%d blocks/headers (%d KB) (%d requested)",
+                      pendingBlocks, pendingCount - pendingBlocks, pendingSize / 1000,
+                      blocksRequestedCount);
                 else
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                      "Pending : %d/%d blocks/headers (%d KiB) (%d requested)", pendingBlocks, pendingCount - pendingBlocks,
-                      pendingSize / 1024, blocksRequestedCount);
+                      "Pending : %d/%d blocks/headers (%d KB) (%d requested)", pendingBlocks,
+                      pendingCount - pendingBlocks, pendingSize / 1000, blocksRequestedCount);
             }
 
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
@@ -601,8 +603,8 @@ namespace BitCoin
 
         timeText.writeFormattedTime(mStatistics.startTime);
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Network : %d/%d KiB received/sent (since %s)", mStatistics.bytesReceived / 1024, mStatistics.bytesSent / 1024,
-          timeText.text());
+          "Network : %d/%d KB received/sent (since %s)", mStatistics.bytesReceived / 1000,
+          mStatistics.bytesSent / 1000, timeText.text());
     }
 
     bool Daemon::loadMonitor()
@@ -1458,21 +1460,22 @@ namespace BitCoin
             if((*node)->blockDownloadBytesPerSecond() > cutoff)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d KiB/s, %ds ping (dropping because of ping)", (*node)->name(),
-                  (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
+                  "Sorted Nodes : %s - %d KB/s, %ds ping (dropping because of ping)",
+                  (*node)->name(), (int)(*node)->blockDownloadBytesPerSecond() / 1000,
+                  (*node)->pingTime());
                 (*node)->close();
             }
             else if(churnDrop > 0)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d KiB/s, %ds ping (dropping for churn)", (*node)->name(),
-                  (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
+                  "Sorted Nodes : %s - %d KB/s, %ds ping (dropping for churn)", (*node)->name(),
+                  (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTime());
                 (*node)->close();
             }
             else
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d KiB/s, %ds ping", (*node)->name(),
-                  (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
+                  "Sorted Nodes : %s - %d KB/s, %ds ping", (*node)->name(),
+                  (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTime());
             --churnDrop;
         }
 
@@ -1607,8 +1610,8 @@ namespace BitCoin
 
         double dropScore = averageScore - (scoreStandardDeviation * 1.25);
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Node Performance Summary : average speed %d KiB/s, average ping %ds, drop score %d",
-          (int)averageSpeed / 1024, (int)averagePing, (int)(100.0 * dropScore));
+          "Node Performance Summary : average speed %d KB/s, average ping %ds, drop score %d",
+          (int)averageSpeed / 1000, (int)averagePing, (int)(100.0 * dropScore));
 
         // Always drop some nodes so nodes with lower pings can still be found
         int churnDrop = 0;
@@ -1622,21 +1625,21 @@ namespace BitCoin
             if(*nodeScore < dropScore)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping (dropping because of score)", (*node)->name(),
-                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
+                  "Sorted Nodes : %s (score %d) - %d KB/s, %ds ping (dropping because of score)", (*node)->name(),
+                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTime());
                 (*node)->close();
             }
             else if(churnDrop > 0)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping (dropping for churn)", (*node)->name(),
-                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
+                  "Sorted Nodes : %s (score %d) - %d KB/s, %ds ping (dropping for churn)", (*node)->name(),
+                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTime());
                 (*node)->close();
             }
             else
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d KiB/s, %ds ping", (*node)->name(),
-                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1024, (*node)->pingTime());
+                  "Sorted Nodes : %s (score %d) - %d KB/s, %ds ping", (*node)->name(),
+                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTime());
 
             --churnDrop;
             ++nodeScore;
