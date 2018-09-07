@@ -285,7 +285,7 @@ namespace BitCoin
         //      < 0 Invalid/unknown block/header
         //     == 0  Block/header added
         //      > 0  Valid block/header not added (i.e. already have)
-        int addHeader(Header &pHeader, bool pLocked = false, bool pBranchesLocked = false);
+        int addHeader(Header &pHeader, bool pHeadersLocked = false, bool pBranchesLocked = false);
         int addBlock(Block *pBlock);
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
@@ -409,7 +409,7 @@ namespace BitCoin
         void updatePendingBlocks();
 
         // Revert to a lower height
-        bool revert(unsigned int pHeight);
+        bool revert(unsigned int pHeight, bool pHeadersLocked = false);
         bool revertFileHeight(unsigned int pHeight);
 
         uint32_t calculateTargetBits(); // Calculate required target bits for new header.
