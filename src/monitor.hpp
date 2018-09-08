@@ -35,7 +35,8 @@ namespace BitCoin
         void write(NextCash::OutputStream *pStream);
         bool read(NextCash::InputStream *pStream);
 
-        unsigned int height(); // The block height of the lowest "pass"
+        // The block height of the lowest "pass"
+        unsigned int height() const { return mLowestPassHeight; }
         unsigned int highestPassHeight(bool pLocked = false);
         int64_t balance(bool pLocked = false); // Return total balance of all keys
         // Return balance associated with a specific key
@@ -275,6 +276,8 @@ namespace BitCoin
         void restartBloomFilter();
         void clearMerkleRequest(MerkleRequestData *pData);
 
+        void refreshLowestPassHeight();
+
         bool addNeedsClose(unsigned int pNodeID);
 
         NextCash::MutexWithConstantName mMutex;
@@ -285,6 +288,8 @@ namespace BitCoin
         BloomFilter mFilter;
         std::vector<unsigned int> mNodesToResendFilter, mNodesToClose;
         std::vector<PassData> mPasses;
+        unsigned int mLowestPassHeight;
+        bool mLowestPassHeightSet;
         NextCash::HashContainerList<MerkleRequestData *> mMerkleRequests;
         bool mLoaded;
 

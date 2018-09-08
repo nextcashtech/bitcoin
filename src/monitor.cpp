@@ -29,6 +29,8 @@ namespace BitCoin
         mChangeID = 0;
         mFilter.setup(0);
         mLoaded = false;
+        mLowestPassHeight = 0;
+        mLowestPassHeightSet = false;
     }
 
     Monitor::~Monitor()
@@ -169,6 +171,8 @@ namespace BitCoin
         // Passes
         unsigned int passesCount = pStream->readUnsignedInt();
         PassData newPassData;
+        mLowestPassHeightSet = false;
+        mLowestPassHeight = 0;
         for(unsigned int i=0;i<passesCount;++i)
         {
             newPassData.clear();
@@ -177,6 +181,12 @@ namespace BitCoin
                 mMutex.unlock();
                 clear();
                 return false;
+            }
+            if(!newPassData.complete &&
+              (!mLowestPassHeightSet || newPassData.blockHeight < mLowestPassHeight))
+            {
+                mLowestPassHeightSet = true;
+                mLowestPassHeight = newPassData.blockHeight;
             }
             mPasses.push_back(newPassData);
         }
@@ -522,6 +532,9 @@ namespace BitCoin
             mPasses.emplace_back(blockHeight);
             mPasses.back().addressesIncluded = mAddressHashes.size();
         }
+
+        refreshLowestPassHeight();
+        ++mChangeID;
     }
 
     void Monitor::restartBloomFilter()
@@ -752,21 +765,20 @@ namespace BitCoin
             mMutex.unlock();
     }
 
-    unsigned int Monitor::height()
+    void Monitor::refreshLowestPassHeight()
     {
         unsigned int result = 0;
         bool resultEmpty = true;
 
-        mMutex.lock();
         for(std::vector<PassData>::iterator pass = mPasses.begin(); pass != mPasses.end(); ++pass)
             if(!pass->complete && (resultEmpty || pass->blockHeight < result))
             {
                 resultEmpty = false;
                 result = pass->blockHeight;
             }
-        mMutex.unlock();
 
-        return result;
+        mLowestPassHeight = result;
+        mLowestPassHeightSet = !resultEmpty;
     }
 
     unsigned int Monitor::highestPassHeight(bool pLocked)
@@ -1831,7 +1843,12 @@ namespace BitCoin
         // Update last block height
         for(std::vector<PassData>::iterator pass = mPasses.begin(); pass != mPasses.end(); ++pass)
             if(!pass->complete && pass->blockHeight == pBlockHeight)
+            {
+                if(mLowestPassHeight == pass->blockHeight)
+                    --mLowestPassHeight;
                 --(pass->blockHeight);
+                ++mChangeID;
+            }
 
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mTransactions.begin(); trans != mTransactions.end();)
@@ -1877,6 +1894,8 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Pass %d completed at block height %d", passIndex, pass->blockHeight);
                     pass->complete = true;
+                    refreshLowestPassHeight();
+                    ++mChangeID;
                     continue;
                 }
 
@@ -2024,6 +2043,8 @@ namespace BitCoin
                         mMerkleRequests.erase(request);
 
                         // Update last block hash and height
+                        if(mLowestPassHeight == pass->blockHeight)
+                            ++mLowestPassHeight;
                         ++(pass->blockHeight);
                         ++mChangeID;
                     }
