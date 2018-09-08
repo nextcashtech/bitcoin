@@ -181,7 +181,7 @@ namespace BitCoin
             accumulatedWork += work;
         }
 
-        int height; // The chain height of the first block in the branch
+        unsigned int height; // The chain height of the first block in the branch
         std::list<PendingBlockData *> pendingBlocks;
         NextCash::Hash accumulatedWork;
     };

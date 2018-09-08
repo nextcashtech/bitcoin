@@ -243,6 +243,8 @@ namespace BitCoin
         //   Positive lookups can be limited extremely by cacheing transactions from recent (a few thousand) blocks
         bool checkDuplicates(const std::vector<Transaction *> &pBlockTransactions,
           unsigned int pBlockHeight, const NextCash::Hash &pBlockHash);
+        bool checkDuplicate(const Transaction &pTransaction, unsigned int pBlockHeight,
+          const NextCash::Hash &pBlockHash);
 
         // Add all the outputs from a block (pending since they have no block file IDs or offsets yet)
         // Returns false if one of the transaction IDs is currently unspent BIP-0030

@@ -602,7 +602,7 @@ namespace BitCoin
         mModified = false;
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
-          "Header file %08x CRC updated : %08x", mID, crc);
+          "Header file %08x CRC updated : 0x%08x", mID, crc);
     }
 
     bool HeaderFile::validate()
@@ -629,7 +629,7 @@ namespace BitCoin
         if(crc != calculatedCRC)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_HEADER_LOG_NAME,
-              "Header file %08x has invalid CRC : %08x != %08x", mID, crc, calculatedCRC);
+              "Header file %08x has invalid CRC : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
             return false;
         }
 
@@ -1302,9 +1302,6 @@ namespace BitCoin
                 --fileID;
                 result -= HeaderFile::MAX_COUNT;
             }
-
-            if(fileID == 0)
-                break;
         }
 
         return result;

@@ -340,16 +340,16 @@ namespace BitCoin
         {
             if(Info::instance().initialBlockDownloadIsComplete())
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Mem pool not reduced. %d trans, %d KiB",
-                  mTransactions.size() + mPendingTransactions.size(), mSize / 1024);
+                  "Mem pool not reduced. %d trans, %d KB",
+                  mTransactions.size() + mPendingTransactions.size(), mSize / 1000);
         }
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Mem pool reduced by %d trans, %d KiB, %d%% to %d trans, %d KiB",
+              "Mem pool reduced by %d trans, %d KB, %d%% to %d trans, %d KB",
               previousCount - (mTransactions.size() + mPendingTransactions.size()),
-              (previousSize - mSize) / 1024, (int)(((float)(previousSize - mSize) /
+              (previousSize - mSize) / 1000, (int)(((float)(previousSize - mSize) /
               (float)previousSize) * 100.0f), mTransactions.size() + mPendingTransactions.size(),
-              mSize / 1024);
+              mSize / 1000);
         mLock.writeUnlock();
     }
 
@@ -368,15 +368,15 @@ namespace BitCoin
         }
         if((mTransactions.size() + mPendingTransactions.size()) == previousCount)
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Mem pool not increased reverting block. %d trans, %d KiB",
-              mTransactions.size() + mPendingTransactions.size(), mSize / 1024);
+              "Mem pool not increased reverting block. %d trans, %d KB",
+              mTransactions.size() + mPendingTransactions.size(), mSize / 1000);
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Mem pool increased reverting block by %d trans, %d KiB, %d%% to %d trans, %d KiB",
+              "Mem pool increased reverting block by %d trans, %d KB, %d%% to %d trans, %d KB",
               (mTransactions.size() + mPendingTransactions.size()) - previousCount,
-              (mSize - previousSize) / 1024, (int)(((float)(mSize - previousSize) /
+              (mSize - previousSize) / 1000, (int)(((float)(mSize - previousSize) /
               (float)mSize) * 100.0f), mTransactions.size() + mPendingTransactions.size(),
-              mSize / 1024);
+              mSize / 1000);
         mLock.writeUnlock();
     }
 

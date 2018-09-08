@@ -95,7 +95,7 @@ namespace BitCoin
         addressesThreshold = 536870912; // 512 MiB
         merkleBlockCountRequired = 4;
         spvMemPoolCountRequired = 4;
-        saveThreadCount = 4;
+        threadCount = 4;
 
         // Block height 540,288 (Jul 23, 2018 7:17:35 PM)
         approvedHash.setHex("000000000000000000cbcd34ba48ce30891af1e5b224de1a1a7eca8af24b05a6");
@@ -198,8 +198,8 @@ namespace BitCoin
             memPoolThreshold = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "address_threshold") == 0)
             addressesThreshold = std::strtol(value, NULL, 0);
-        else if(std::strcmp(name, "save_threads") == 0)
-            saveThreadCount = std::strtol(value, NULL, 0);
+        else if(std::strcmp(name, "threads") == 0)
+            threadCount = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "approved_hash") == 0)
         {
             approvedHash.setHex(value);

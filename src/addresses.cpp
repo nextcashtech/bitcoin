@@ -223,8 +223,8 @@ namespace BitCoin
             setTargetCacheDataSize(pCacheDataTargetSize);
 
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
-              "Loaded %d transaction addresses at block height %d (cached %d KiB)",
-              size(), mNextBlockHeight - 1, cacheDataSize() / 1024);
+              "Loaded %d transaction addresses at block height %d (cached %d KB)",
+              size(), mNextBlockHeight - 1, cacheDataSize() / 1000);
         }
 
         return mIsValid;
@@ -233,8 +233,8 @@ namespace BitCoin
     bool Addresses::save(unsigned int pThreadCount)
     {
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
-          "Saving transaction addresses at block height %d (%d KiB cached)", mNextBlockHeight - 1,
-          cacheDataSize() / 1024);
+          "Saving transaction addresses at block height %d (%d KB cached)", mNextBlockHeight - 1,
+          cacheDataSize() / 1000);
 
 #ifdef SINGLE_THREAD
         if(!HashDataSet::save())
@@ -258,8 +258,8 @@ namespace BitCoin
         file.flush();
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_ADDRESSES_LOG_NAME,
-          "Saved %d transaction addresses at block height %d (cache %d KiB)", size(),
-          mNextBlockHeight - 1, cacheDataSize() / 1024);
+          "Saved %d transaction addresses at block height %d (cache %d KB)", size(),
+          mNextBlockHeight - 1, cacheDataSize() / 1000);
         return true;
     }
 }

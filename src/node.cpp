@@ -131,7 +131,7 @@ namespace BitCoin
 
         if(!mMessageInterpreter.pendingBlockHash.isEmpty())
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-              "Dropped block in progress %d KiB (%d secs) : %s", mReceiveBuffer.length() / 1024,
+              "Dropped block in progress %d KB (%d secs) : %s", mReceiveBuffer.length() / 1000,
               mMessageInterpreter.pendingBlockUpdateTime - mMessageInterpreter.pendingBlockStartTime,
               mMessageInterpreter.pendingBlockHash.hex().text());
 
@@ -1824,9 +1824,9 @@ namespace BitCoin
                     else
                     {
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                          "Received block (%d) (%d KiB) : %s",
+                          "Received block (%d) (%d KB) : %s",
                           mChain->hashHeight(((Message::BlockData *)message)->block->header.hash),
-                          ((Message::BlockData *)message)->block->size() / 1024,
+                          ((Message::BlockData *)message)->block->size() / 1000,
                           ((Message::BlockData *)message)->block->header.hash.hex().text());
                         ++mStatistics.blocksReceived;
 

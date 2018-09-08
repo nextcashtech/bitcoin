@@ -72,9 +72,16 @@ namespace BitCoin
         if(!header.read(pStream, true, true))
             return false;
 
+        clearTransactions();
+        if(header.transactionCount > MAX_BLOCK_TRANSACTIONS)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block read failed. Too many transactions : %d", header.transactionCount);
+              return false;
+        }
+
         // Transactions
         Transaction *transaction;
-        clearTransactions();
         transactions.reserve(header.transactionCount);
         for(unsigned int i = 0; i < header.transactionCount; ++i)
         {
@@ -121,8 +128,8 @@ namespace BitCoin
 
         NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Total Fees    : %f",
           bitcoins(mFees));
-        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Size (KiB)    : %d",
-          mSize / 1024);
+        NextCash::Log::addFormatted(pLevel, BITCOIN_BLOCK_LOG_NAME, "Size (KB)     : %d",
+          mSize / 1000);
 
         if(!pIncludeTransactions)
             return;
@@ -372,7 +379,7 @@ namespace BitCoin
         }
     }
 
-    bool Block::updateOutputs(Chain *pChain, unsigned int pBlockHeight)
+    bool Block::updateOutputs(Chain *pChain, unsigned int pHeight)
     {
         if(transactions.size() == 0)
         {
@@ -384,7 +391,7 @@ namespace BitCoin
         mFees = 0;
 
         // Add the transaction outputs from this block to the output pool
-        if(!pChain->outputs().add(transactions, pBlockHeight))
+        if(!pChain->outputs().add(transactions, pHeight))
             return false;
 
         bool isCoinBase = true;
@@ -393,7 +400,7 @@ namespace BitCoin
         for(std::vector<Transaction *>::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction)
         {
-            if(!(*transaction)->updateOutputs(pChain, transactions, pBlockHeight,
+            if(!(*transaction)->updateOutputs(pChain, transactions, pHeight,
               transactionOffset, spentAges))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
@@ -410,7 +417,7 @@ namespace BitCoin
         // Check that coinbase output amount - fees is correct for block height
         // Requires reading output from block file, which might not be worth it, since it won't be
         //   fully validated anyway.
-        // if(-transactions.front()->fee() - mFees > coinBaseAmount(pBlockHeight))
+        // if(-transactions.front()->fee() - mFees > coinBaseAmount(pHeight))
         // {
             // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               // "Coinbase outputs are too high");
@@ -419,8 +426,8 @@ namespace BitCoin
             // NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               // "Fees     %.08f", bitcoins(mFees));
             // NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-              // "Block %d Coinbase amount should be %.08f", pBlockHeight,
-              // bitcoins(coinBaseAmount(pBlockHeight)));
+              // "Block %d Coinbase amount should be %.08f", pHeight,
+              // bitcoins(coinBaseAmount(pHeight)));
             // return false;
         // }
 
@@ -432,16 +439,16 @@ namespace BitCoin
                 totalSpentAge += *spentAge;
             unsigned int averageSpentAge = totalSpentAge / spentAges.size();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-              "Average spent age for block %d is %d for %d inputs", pBlockHeight, averageSpentAge,
+              "Average spent age for block %d is %d for %d inputs", pHeight, averageSpentAge,
               spentAges.size());
         }
 
         return true;
     }
 
-    bool Block::validateSize(Chain *pChain, unsigned int pBlockHeight)
+    bool Block::checkSize(Chain *pChain, unsigned int pHeight)
     {
-        if(pChain->forks().cashForkBlockHeight() == pBlockHeight &&
+        if(pChain->forks().cashForkBlockHeight() == pHeight &&
           size() < Forks::HARD_MAX_BLOCK_SIZE)
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
@@ -450,18 +457,18 @@ namespace BitCoin
             return false;
         }
 
-        if(size() > pChain->forks().blockMaxSize(pBlockHeight))
+        if(size() > pChain->forks().blockMaxSize(pHeight))
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Block size must be less than %d bytes : %d",
-              pChain->forks().blockMaxSize(pBlockHeight), size());
+              pChain->forks().blockMaxSize(pHeight), size());
             return false;
         }
 
         return true;
     }
 
-    bool Block::validate(Chain *pChain, unsigned int pBlockHeight)
+    bool Block::validate(Chain *pChain, unsigned int pHeight)
     {
         if(transactions.size() == 0)
         {
@@ -487,18 +494,160 @@ namespace BitCoin
         return true;
     }
 
+    void Block::processThreadRun()
+    {
+        ProcessThreadData *data = (ProcessThreadData *)NextCash::Thread::getParameter();
+        if(data == NULL)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Process block thread parameter is null. Stopping");
+            return;
+        }
+
+        Transaction *transaction;
+        unsigned int offset;
+        while(true)
+        {
+            transaction = data->getNext(offset);
+            if(transaction == NULL)
+            {
+                NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
+                  "No more transactions to process");
+                break;
+            }
+
+            if(transaction->process(data->chain, data->block->transactions,
+              data->block->header.hash, data->height, offset == 0, data->block->header.version,
+              data->spentAgeLock, data->spentAges))
+                data->markComplete(offset, true);
+            else
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                  "Transaction %d failed : %s", offset);
+                transaction->print(data->chain->forks(), NextCash::Log::WARNING);
+                data->markComplete(offset, false);
+            }
+        }
+    }
+
+    bool Block::processMultiThreaded(Chain *pChain, unsigned int pHeight,
+      unsigned int pThreadCount)
+    {
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+          "Processing block %d (multi-threaded) (%d trans) (%d KB) : %s", pHeight,
+          transactions.size(), size() / 1000, header.hash.hex().text());
+
+        mFees = 0;
+
+        // Add the transaction outputs from this block to the output pool
+        if(!pChain->outputs().add(transactions, pHeight))
+            return false;
+
+        ProcessThreadData threadData(pChain, this, pHeight, transactions.begin(),
+          transactions.size());
+        NextCash::Thread *threads[pThreadCount];
+        int32_t lastReport = getTime();
+        unsigned int i;
+        NextCash::String threadName;
+
+        // Start threads
+        for(i = 0; i < pThreadCount; ++i)
+        {
+            threadName.writeFormatted("Process Block %d", i);
+            threads[i] = new NextCash::Thread(threadName, processThreadRun, &threadData);
+        }
+
+        // Monitor threads
+        unsigned int completedCount;
+        bool report;
+        while(threadData.success)
+        {
+            if(threadData.offset == transactions.size())
+            {
+                report = getTime() - lastReport > 10;
+                completedCount = 0;
+                for(i = 0; i < transactions.size(); ++i)
+                    if(threadData.complete[i])
+                        ++completedCount;
+                    else if(report)
+                        NextCash::Log::addFormatted(NextCash::Log::INFO,
+                          NEXTCASH_HASH_DATA_SET_LOG_NAME,
+                          "Process block %d waiting for transaction %d", pHeight, i);
+
+                if(report)
+                    lastReport = getTime();
+
+                if(completedCount == transactions.size())
+                    break;
+            }
+            else if(getTime() - lastReport > 10)
+            {
+                completedCount = 0;
+                for(i = 0; i < transactions.size(); ++i)
+                    if(threadData.complete[i])
+                        ++completedCount;
+
+                NextCash::Log::addFormatted(NextCash::Log::INFO, NEXTCASH_HASH_DATA_SET_LOG_NAME,
+                  "Process block %d is %2d%% Complete", pHeight,
+                  (int)(((float)completedCount / (float)transactions.size()) * 100.0f));
+
+                lastReport = getTime();
+            }
+
+            NextCash::Thread::sleep(500);
+        }
+
+        // Delete threads
+        NextCash::Log::addFormatted(NextCash::Log::DEBUG, NEXTCASH_HASH_DATA_SET_LOG_NAME,
+          "Deleting process block %d threads", pHeight);
+        for(i = 0; i < pThreadCount; ++i)
+            delete threads[i];
+
+        if(!threadData.success)
+            return false;
+
+        if(threadData.spentAges.size() > 0)
+        {
+            unsigned int totalSpentAge = 0;
+            for(std::vector<unsigned int>::iterator spentAge = threadData.spentAges.begin();
+              spentAge != threadData.spentAges.end(); ++spentAge)
+                totalSpentAge += *spentAge;
+            unsigned int averageSpentAge = totalSpentAge / threadData.spentAges.size();
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Average spent age for block %d is %d for %d inputs", pHeight, averageSpentAge,
+              threadData.spentAges.size());
+        }
+
+        for(std::vector<Transaction *>::iterator transaction = transactions.begin() + 1;
+          transaction != transactions.end(); ++transaction)
+            mFees += (*transaction)->fee();
+
+        // Check that coinbase output amount - fees is correct for block height
+        if(-transactions.front()->fee() - mFees > coinBaseAmount(pHeight))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Coinbase outputs are too high");
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Coinbase %.08f", bitcoins(-transactions.front()->fee()));
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Fees     %.08f", bitcoins(mFees));
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Block %d Coinbase amount should be %.08f", pHeight,
+              bitcoins(coinBaseAmount(pHeight)));
+            return false;
+        }
+
+        return true;
+    }
+
     bool Block::process(Chain *pChain, unsigned int pBlockHeight)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Block Process");
 #endif
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Processing block at height %d (%d trans) (%d KiB) : %s", pBlockHeight,
-          transactions.size(), size() / 1024, header.hash.hex().text());
-
-        // Check that this block doesn't have any duplicate transaction IDs
-        if(!pChain->outputs().checkDuplicates(transactions, pBlockHeight, header.hash))
-            return false;
+          "Processing block %d (%d trans) (%d KB) : %s", pBlockHeight,
+          transactions.size(), size() / 1000, header.hash.hex().text());
 
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pBlockHeight))
@@ -509,13 +658,14 @@ namespace BitCoin
         mFees = 0;
         unsigned int transactionOffset = 0;
         std::vector<unsigned int> spentAges;
+        NextCash::Mutex spentAgeLock("Spent Age");
         for(std::vector<Transaction *>::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction)
         {
             // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
               // "Processing transaction %d", transactionOffset);
-            if(!(*transaction)->process(pChain, transactions, pBlockHeight, isCoinBase,
-              header.version, spentAges))
+            if(!(*transaction)->process(pChain, transactions, header.hash, pBlockHeight,
+              isCoinBase, header.version, spentAgeLock, spentAges))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Transaction %d failed", transactionOffset);
@@ -1055,7 +1205,7 @@ namespace BitCoin
         mModified = false;
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Block file %08x CRC updated : %08x", mID, crc);
+          "Block file %08x CRC updated : 0x%08x", mID, crc);
     }
 
     bool BlockFile::validate()
@@ -1079,7 +1229,7 @@ namespace BitCoin
         if(crc != calculatedCRC)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
-              "Block file %08x has invalid CRC : %08x != %08x", mID, crc, calculatedCRC);
+              "Block file %08x has invalid CRC : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
             return false;
         }
 
@@ -1381,6 +1531,14 @@ namespace BitCoin
         Transaction *transaction;
         mInputFile->setReadOffset(offset);
         uint32_t transactionCount = mInputFile->readUnsignedInt();
+        if(transactionCount > MAX_BLOCK_TRANSACTIONS)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to read transactions from block file 0x%08x. Too many : %d", mID,
+              transactionCount);
+            return false;
+        }
+
         pTransactions.reserve(transactionCount);
         for(unsigned int i = 0; i < transactionCount; ++i)
         {
@@ -1400,19 +1558,19 @@ namespace BitCoin
         return true;
     }
 
-    bool Block::getBlock(unsigned int pBlockHeight, Block &pBlock)
+    bool Block::getBlock(unsigned int pHeight, Block &pBlock)
     {
         pBlock.clearTransactions();
 
-        if(!Header::getHeader(pBlockHeight, pBlock.header))
+        if(!Header::getHeader(pHeight, pBlock.header))
             return false;
 
-        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight), false);
+        BlockFile *file = BlockFile::get(BlockFile::fileID(pHeight), false);
         if(file == NULL)
             return false;
 
         NextCash::stream_size dataSize = 0;
-        bool success = file->readTransactions(BlockFile::fileOffset(pBlockHeight),
+        bool success = file->readTransactions(BlockFile::fileOffset(pHeight),
           pBlock.transactions, &dataSize);
         file->unlock(false);
 
@@ -1436,9 +1594,9 @@ namespace BitCoin
         return pOutput.read(mInputFile, true);
     }
 
-    bool Block::getOutput(unsigned int pBlockHeight, OutputReference &pReference, Output &pOutput)
+    bool Block::getOutput(unsigned int pHeight, OutputReference &pReference, Output &pOutput)
     {
-        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight), false);
+        BlockFile *file = BlockFile::get(BlockFile::fileID(pHeight), false);
         if(file == NULL)
             return false;
 
@@ -1483,14 +1641,14 @@ namespace BitCoin
         return Transaction::readOutput(mInputFile, pOutputIndex, pTransactionID, pOutput, true);
     }
 
-    bool Block::getOutput(unsigned int pBlockHeight, unsigned int pTransactionOffset,
+    bool Block::getOutput(unsigned int pHeight, unsigned int pTransactionOffset,
       unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput)
     {
-        BlockFile *file = BlockFile::get(BlockFile::fileID(pBlockHeight), false);
+        BlockFile *file = BlockFile::get(BlockFile::fileID(pHeight), false);
         if(file == NULL)
             return false;
 
-        unsigned int offset = BlockFile::fileOffset(pBlockHeight);
+        unsigned int offset = BlockFile::fileOffset(pHeight);
 
         bool success = file->readOutput(offset, pTransactionOffset, pOutputIndex, pTransactionID,
           pOutput);
@@ -1576,9 +1734,6 @@ namespace BitCoin
                 --fileID;
                 result -= BlockFile::MAX_COUNT;
             }
-
-            if(fileID == 0)
-                break;
         }
 
         return result;
