@@ -326,15 +326,18 @@ namespace BitCoin
             newBranch->addBlock(block);
         }
 
-        // Clear main pending blocks
-        mPendingLock.writeLock("Activate Branch");
-        for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
-          pending != mPendingBlocks.end(); ++pending)
-            delete *pending;
-        mPendingBlocks.clear();
-        mPendingSize = 0;
-        mLastFullPendingOffset = 0;
-        mPendingBlockCount = 0;
+        if(!info.spvMode)
+        {
+            // Clear main pending blocks
+            mPendingLock.writeLock("Activate Branch");
+            for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
+              pending != mPendingBlocks.end(); ++pending)
+                delete *pending;
+            mPendingBlocks.clear();
+            mPendingSize = 0;
+            mLastFullPendingOffset = 0;
+            mPendingBlockCount = 0;
+        }
 
         // Revert the main chain to the before branch height.
         if(!revert(longestBranch->height - 1, true))
@@ -342,7 +345,8 @@ namespace BitCoin
             delete newBranch;
             mBranchLock.unlock();
             mHeadersLock.writeUnlock();
-            mPendingLock.writeUnlock();
+            if(!info.spvMode)
+                mPendingLock.writeUnlock();
             return false;
         }
 
@@ -356,7 +360,7 @@ namespace BitCoin
                 break;
             }
 
-        if(success && mNextBlockHeight == longestBranch->height)
+        if(!mInfo.spvMode && success && mNextBlockHeight == longestBranch->height)
         {
             // Move branch's pending blocks to the main chain's pending blocks
             offset = 0;
@@ -394,11 +398,12 @@ namespace BitCoin
 
         mBranchLock.unlock();
         mHeadersLock.writeUnlock();
-        mPendingLock.writeUnlock();
+        if(!info.spvMode)
+            mPendingLock.writeUnlock();
 
         if(!success)
             return checkBranches(); // Call recursively to re-activate main branch
-        else
+        else if(!info.spvMode)
             updatePendingBlocks();
 
         return success;
@@ -594,13 +599,10 @@ namespace BitCoin
 
     void Chain::updatePendingBlocks()
     {
-        mPendingLock.writeLock("Update Pending");
-
         if(mInfo.spvMode)
-        {
-            mPendingLock.writeUnlock();
             return;
-        }
+
+        mPendingLock.writeLock("Update Pending");
 
         if(mApprovedBlockHeight == 0xffffffff)
         {
