@@ -619,17 +619,8 @@ namespace BitCoin
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Find Unspent");
 #endif
-        Iterator reference = get(pTransactionID);
-        while(reference && reference.hash() == pTransactionID)
-        {
-            if(!((TransactionReference *)(*reference))->markedRemove() &&
-              ((TransactionReference *)(*reference))->hasUnspentOutput(pIndex))
-                return (TransactionReference *)*reference;
 
-            ++reference;
-        }
-
-        return NULL;
+        return (TransactionReference *)getData(pTransactionID);
     }
 
     TransactionReference *TransactionOutputPool::find(const NextCash::Hash &pTransactionID, uint32_t pIndex)

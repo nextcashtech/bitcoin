@@ -1254,10 +1254,12 @@ namespace BitCoin
             else
             {
                 // Find unspent transaction for input
-                reference = pChain->outputs().findUnspent(input->outpoint.transactionID, input->outpoint.index);
+                reference = pChain->outputs().findUnspent(input->outpoint.transactionID,
+                  input->outpoint.index);
                 if(reference == NULL)
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                      BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint not found : index %d trans %s", index,
                       input->outpoint.index, input->outpoint.transactionID.hex().text());
                     return false;
@@ -1267,7 +1269,8 @@ namespace BitCoin
 
                 if(outputReference == NULL)
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                      BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint output index not found : index %d trans %s", index,
                       input->outpoint.index, input->outpoint.transactionID.hex().text());
                     return false;
@@ -1295,7 +1298,8 @@ namespace BitCoin
 
                     if(!found)
                     {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                          BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d outpoint transaction not found in current block : index %d trans %s",
                           index, input->outpoint.index, input->outpoint.transactionID.hex().text());
                         reference->print(NextCash::Log::WARNING);
@@ -1304,7 +1308,8 @@ namespace BitCoin
                 }
                 else if(!Block::getOutput(reference->blockHeight, *outputReference, output))
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                      BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction failed to read : index %d trans %s", index,
                       input->outpoint.index, input->outpoint.transactionID.hex().text());
                     reference->print(NextCash::Log::WARNING);
