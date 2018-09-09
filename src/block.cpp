@@ -780,7 +780,7 @@ namespace BitCoin
         static unsigned int fileOffset(unsigned int pHeight) { return pHeight - (fileID(pHeight) * MAX_COUNT); }
         static NextCash::String filePathName(unsigned int pID);
 
-        static const unsigned int CACHE_COUNT = 20;
+        static const unsigned int CACHE_COUNT = 50;
         static NextCash::MutexWithConstantName sCacheLock;
         static BlockFile *sCache[CACHE_COUNT];
 
