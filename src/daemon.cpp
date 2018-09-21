@@ -258,6 +258,7 @@ namespace BitCoin
 
         mChain.setMonitor(mMonitor);
 
+        mLastDataSaveTime = getTime();
         mLoadingChain = false;
         mChainLoaded = true;
         return true;
@@ -569,8 +570,8 @@ namespace BitCoin
         else
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Outputs : %d trans (%d KB cached)", mChain.outputs().size(),
-              mChain.outputs().cacheDataSize() / 1000);
+              "Outputs : %d trans (%d K, %d KB cached)", mChain.outputs().size(),
+              mChain.outputs().cacheSize() / 1000, mChain.outputs().cacheDataSize() / 1000);
 #ifndef DISABLE_ADDRESSES
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Addresses : %d addrs (%d KB cached)", mChain.addresses().size(),
@@ -585,8 +586,7 @@ namespace BitCoin
                 unsigned int pendingBlocks = mChain.pendingBlockCount();
                 unsigned int pendingCount = mChain.pendingCount();
                 unsigned int pendingSize = mChain.pendingSize();
-                if(pendingSize > mInfo.pendingSizeThreshold ||
-                  pendingBlocks > mInfo.pendingBlocksThreshold)
+                if(pendingSize > mInfo.pendingSize || pendingBlocks > mInfo.pendingBlocks)
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                       "Pending (above threshold) : %d/%d blocks/headers (%d KB) (%d requested)",
                       pendingBlocks, pendingCount - pendingBlocks, pendingSize / 1000,
@@ -1181,8 +1181,8 @@ namespace BitCoin
 
         unsigned int pendingBlockCount = mChain.pendingBlockCount();
         unsigned int pendingSize = mChain.pendingSize();
-        bool reduceOnly = pendingSize >= mInfo.pendingSizeThreshold ||
-          pendingBlockCount >= mInfo.pendingBlocksThreshold;
+        bool reduceOnly = pendingSize >= mInfo.pendingSize ||
+          pendingBlockCount >= mInfo.pendingBlocks;
         unsigned int blocksRequestedCount = 0;
 
         mNodeLock.readLock();
@@ -1214,7 +1214,7 @@ namespace BitCoin
             blocksToRequestCount = requestNodes.size();
         else
         {
-            blocksToRequestCount = mInfo.pendingBlocksThreshold - pendingBlockCount -
+            blocksToRequestCount = mInfo.pendingBlocks - pendingBlockCount -
               blocksRequestedCount;
             if(blocksToRequestCount > (int)requestNodes.size() * MAX_BLOCK_REQUEST)
                 blocksToRequestCount = (int)requestNodes.size() * MAX_BLOCK_REQUEST;
@@ -2017,7 +2017,7 @@ namespace BitCoin
             if(mStopping)
                 return;
 
-            mChain.memPool().process(mInfo.memPoolThreshold);
+            mChain.memPool().process(mInfo.memPoolSize);
 
             if(mStopping)
                 return;

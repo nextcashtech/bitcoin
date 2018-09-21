@@ -71,6 +71,8 @@ namespace BitCoin
         bool processMultiThreaded(Chain *pChain, unsigned int pHeight, unsigned int pThreadCount);
 
         bool updateOutputs(Chain *pChain, unsigned int pHeight);
+        bool updateOutputsMultiThreaded(Chain *pChain, unsigned int pHeight,
+          unsigned int pThreadCount);
 
         // Create the Genesis block
         static Block *genesis(uint32_t pTargetBits);
@@ -84,8 +86,6 @@ namespace BitCoin
         static bool getBlock(unsigned int pHeight, Block &pBlock);
 
         // Read output from block file.
-        static bool getOutput(unsigned int pHeight, OutputReference &pReference,
-          Output &pOutput);
         static bool getOutput(unsigned int pHeight, unsigned int pTransactionOffset,
           unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput);
 
@@ -101,6 +101,14 @@ namespace BitCoin
 
         static void save(); // Save any unsaved data in files (i.e. update CRCs)
         static void clean();  // Release any static cache data
+
+    private:
+
+        uint64_t mFees;
+        NextCash::stream_size mSize;
+
+        Block(Block &pCopy);
+        Block &operator = (Block &pRight);
 
         class ProcessThreadData
         {
@@ -161,14 +169,7 @@ namespace BitCoin
         };
 
         static void processThreadRun(); // Thread for process tasks
-
-    private:
-
-        uint64_t mFees;
-        NextCash::stream_size mSize;
-
-        Block(Block &pCopy);
-        Block &operator = (Block &pRight);
+        static void updateOutputsThreadRun(); // Thread for update outputs tasks
 
     };
 

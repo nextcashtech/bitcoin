@@ -120,8 +120,10 @@ namespace BitCoin
         void write(NextCash::OutputStream *pStream);
         bool read(NextCash::InputStream *pStream);
 
-        // Skip over input in stream (The input stream's read offset must be at the beginning of an input)
-        static bool skip(NextCash::InputStream *pInputStream, NextCash::OutputStream *pOutputStream = NULL);
+        // Skip over input in stream (The input stream's read offset must be at the beginning of
+        //   an input)
+        static bool skip(NextCash::InputStream *pInputStream,
+          NextCash::OutputStream *pOutputStream = NULL);
 
         // BIP-0068 Relative time lock sequence
         bool sequenceDisabled() const { return SEQUENCE_DISABLE & sequence; }
@@ -164,6 +166,7 @@ namespace BitCoin
     public:
 
         static const uint64_t DUST = 546;
+        static const int64_t INVALID_FEE = 0xffffffffffffffff;
 
         // Value below which lock times are considered block heights instead of timestamps
         static const uint32_t LOCKTIME_THRESHOLD = 500000000;
@@ -173,27 +176,26 @@ namespace BitCoin
             version = 2;
             lockTime = 0;
 
-            mFee = 0;
+            mFee = INVALID_FEE;
             mSize = 0;
             mTime = getTime();
             mStatus = 0;
         }
         Transaction(const Transaction &pCopy);
-        ~Transaction();
 
         Transaction &operator = (const Transaction &pRight);
 
-        void write(NextCash::OutputStream *pStream, bool pBlockFile = false);
+        void write(NextCash::OutputStream *pStream);
 
         // pCalculateHash will calculate the hash of the transaction data while it reads it
-        bool read(NextCash::InputStream *pStream, bool pCalculateHash = true, bool pBlockFile = false);
+        bool read(NextCash::InputStream *pStream, bool pCalculateHash = true);
 
         // Skip over transaction in stream (The input stream's read offset must be at the beginning of a transaction)
         static bool skip(NextCash::InputStream *pStream);
 
         // Read the script of the output at the specified offset (The input stream's read offset must be at the beginning of a transaction)
         static bool readOutput(NextCash::InputStream *pStream, unsigned int pOutputIndex,
-          NextCash::Hash &pTransactionID, Output &pOutput, bool pBlockFile = false);
+          NextCash::Hash &pTransactionID, Output &pOutput);
 
         void clear();
         void clearCache();
@@ -218,7 +220,8 @@ namespace BitCoin
         uint64_t outputAmount()
         {
             uint64_t result = 0;
-            for(std::vector<Output>::iterator output=outputs.begin();output!=outputs.end();++output)
+            for(std::vector<Output>::iterator output = outputs.begin(); output != outputs.end();
+              ++output)
                 result += output->amount;
             return result;
         }
@@ -244,43 +247,43 @@ namespace BitCoin
 
         // Flag masks
         static const uint8_t STANDARD_VERIFIED_MASK = IS_VALID | IS_STANDARD | SIGS_VERIFIED;
-        bool isStandardVerified() const { return (mStatus & STANDARD_VERIFIED_MASK) == STANDARD_VERIFIED_MASK; }
+        bool isStandardVerified() const
+          { return (mStatus & STANDARD_VERIFIED_MASK) == STANDARD_VERIFIED_MASK; }
 
         void calculateSize();
         void calculateHash();
         void setTime(int32_t pValue) { mTime = pValue; }
 
-        // Signs the inputs and adjusts the output amounts to set the fee
+        // Signs the inputs and adjusts the output amounts to set the fee.
         //
         // Parameters
-        //   pInputAmount is total amount in satoshis included in inputs
+        //   pInputAmount is total amount in satoshis included in inputs.
         //   pFeeRate is the rate in satoshis/byte at which to set the fee.
-        //   pSendAmount of 0xffffffffffffffffL means send all to last output
-        //   pChangeOutputOffset < 0 means there is no change output and remaining balance (below dust)
-        //     should be added to fee
+        //   pSendAmount of 0xffffffffffffffffL means send all to last output.
+        //   pChangeOutputOffset < 0 means there is no change output and remaining balance
+        //     (below dust) should be added to fee.
         // Returns
         //   1 if general failure
         //   5 if signature failure
         int sign(uint64_t pInputAmount, double pFeeRate, uint64_t pSendAmount,
           int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, const Forks &pForks);
 
-        bool process(Chain *pChain, const std::vector<Transaction *> &pBlockTransactions,
-          NextCash::Hash &pBlockHash, unsigned int pBlockHeight, bool pCoinBase,
-          int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
+        bool process(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight,
+          bool pCoinBase, int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
           std::vector<unsigned int> &pSpentAges);
 
         // Check validity and return status
         bool check(Chain *pChain, TransactionList &pMemPoolTransactions,
-          NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, unsigned int pBlockHeight);
+          NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, unsigned int pHeight);
 
         // Check that none of the outpoints are spent and return status
         uint8_t checkOutpoints(TransactionOutputPool &pOutputs,
           TransactionList &pMemPoolTransactions);
 
-        bool updateOutputs(Chain *pChain, const std::vector<Transaction *> &pBlockTransactions,
-          uint64_t pBlockHeight, unsigned int pOffset, std::vector<unsigned int> &pSpentAges);
+        bool updateOutputs(Chain *pChain, uint64_t pHeight, bool pCoinBase,
+          NextCash::Mutex &pSpentAgeLock, std::vector<unsigned int> &pSpentAges);
 
-        void getSignatureHash(const Forks &pForks, unsigned int pBlockHeight,
+        void getSignatureHash(const Forks &pForks, unsigned int pHeight,
           NextCash::Hash &pHash, unsigned int pInputOffset, NextCash::Buffer &pOutputScript,
           int64_t pOutputAmount, Signature::HashType pHashType);
 
@@ -294,7 +297,7 @@ namespace BitCoin
          ***********************************************************************************************/
         bool addInput(const NextCash::Hash &pTransactionID, unsigned int pIndex,
           uint32_t pSequence = Input::SEQUENCE_NONE);
-        bool addCoinbaseInput(int pBlockHeight);
+        bool addCoinbaseInput(int pHeight);
 
         bool addOutput(NextCash::Buffer pOutputScript, uint64_t pAmount);
 
@@ -319,7 +322,7 @@ namespace BitCoin
         bool addMultiSigOutput(unsigned int pRequiredSignatureCount, std::vector<Key *> pPublicKeys,
           uint64_t pAmount);
 
-        static Transaction *createCoinbaseTransaction(int pBlockHeight, int64_t pFees,
+        static Transaction *createCoinbaseTransaction(int pHeight, int64_t pFees,
           const NextCash::Hash &pPublicKeyHash);
 
         // Run unit tests
@@ -334,7 +337,7 @@ namespace BitCoin
 
         NextCash::Hash mOutpointHash, mSequenceHash, mOutputHash;
 
-        bool writeSignatureData(const Forks &pForks, unsigned int pBlockHeight,
+        bool writeSignatureData(const Forks &pForks, unsigned int pHeight,
           NextCash::OutputStream *pStream, unsigned int pInputOffset,
           NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType);
 

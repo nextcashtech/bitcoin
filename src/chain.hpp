@@ -304,7 +304,6 @@ namespace BitCoin
         bool getBlock(unsigned int pBlockHeight, Block &pBlock);
         bool getHeader(unsigned int pBlockHeight, Header &pHeader);
 
-        // Get the block or height for a specific hash
         unsigned int hashHeight(const NextCash::Hash &pHash); // Returns 0xffffffff when hash is not found
         bool getBlock(const NextCash::Hash &pHash, Block &pBlock);
         bool getHeader(const NextCash::Hash &pHash, Header &pHeader);
@@ -314,23 +313,20 @@ namespace BitCoin
         uint32_t targetBits(unsigned int pBlockHeight);
         NextCash::Hash accumulatedWork(unsigned int pBlockHeight);
 
-        // Note : Call after block has been added to stats
         int32_t getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount);
 
         void getMedianPastTimeAndWork(unsigned int pBlockHeight, int32_t &pTime,
           NextCash::Hash &pAccumulatedWork, unsigned int pMedianCount);
 
-        // Load block data from file system
-        //   If pList is true then all the block hashes will be output
         bool load();
         bool save();
 
         // Save transaction outputs and addresses databases.
         bool saveData();
 #ifndef DISABLE_ADDRESSES
-        bool saveDataNeeded() { return mOutputs.needsPurge() || mAddresses.needsPurge(); }
+        bool saveDataNeeded() { return mOutputs.cacheNeedsTrim() || mAddresses.needsPurge(); }
 #else
-        bool saveDataNeeded() { return mOutputs.needsPurge(); }
+        bool saveDataNeeded() { return mOutputs.cacheNeedsTrim(); }
 #endif
         bool saveDataInProgress() const { return mSaveDataInProgress; }
 

@@ -39,7 +39,7 @@ namespace BitCoin
     MemPool::HashStatus MemPool::addPending(const NextCash::Hash &pHash, Chain *pChain,
       unsigned int pNodeID)
     {
-        if(pChain->outputs().find(pHash, 0) != NULL)
+        if(pChain->outputs().exists(pHash))
             return ALREADY_HAVE; // Already in UTXO set
 
         mLock.writeLock("Add Pending");
@@ -246,7 +246,7 @@ namespace BitCoin
 
     MemPool::AddStatus MemPool::add(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain)
     {
-        if(pChain->outputs().find(pTransaction->hash, 0) != NULL)
+        if(pChain->outputs().exists(pTransaction->hash))
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Transaction already confirmed : %s", pTransaction->hash.hex().text());

@@ -10,6 +10,7 @@
 #include "transaction.hpp"
 #include "interpreter.hpp"
 #include "bloom_filter.hpp"
+#include "outputs.hpp"
 #include "chain.hpp"
 #include "info.hpp"
 
@@ -31,29 +32,32 @@ namespace BitCoin
 #endif
 
         if(!BitCoin::Base::test())
-            failed++;
+            ++failed;
 
         if(!BitCoin::Info::test())
-            failed++;
+            ++failed;
 
         if(!BitCoin::Key::test())
-            failed++;
+            ++failed;
 
         if(!BitCoin::Transaction::test())
-            failed++;
+            ++failed;
 
         if(!BitCoin::ScriptInterpreter::test())
-            failed++;
+            ++failed;
 
         if(!BitCoin::Message::test())
-            failed++;
+            ++failed;
 
         if(!BitCoin::BloomFilter::test())
-            failed++;
+            ++failed;
+
+        if(!BitCoin::TransactionOutputPool::test())
+            ++failed;
 
 #ifndef ANDROID
         if(!BitCoin::Chain::test())
-            failed++;
+            ++failed;
 
         // if(!merkleTest1())
             // failed++;
