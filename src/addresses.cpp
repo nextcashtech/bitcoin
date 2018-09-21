@@ -5,6 +5,8 @@
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
+#ifndef DISABLE_ADDRESSES
+
 #include "addresses.hpp"
 
 #include "block.hpp"
@@ -196,7 +198,7 @@ namespace BitCoin
         NextCash::String filePath = pFilePath;
         filePath.pathAppend("addresses");
 
-        if(!HashDataSet::load("Addresses", filePath))
+        if(!HashDataSet::load(filePath))
             return false;
 
         NextCash::String filePathName = filePath;
@@ -263,4 +265,5 @@ namespace BitCoin
         return true;
     }
 }
+#endif
 

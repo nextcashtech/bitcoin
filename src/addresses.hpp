@@ -5,6 +5,8 @@
  * Distributed under the MIT software license, see the accompanying       *
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
+#ifndef DISABLE_ADDRESSES
+
 #ifndef BITCOIN_ADDRESSES_HPP
 #define BITCOIN_ADDRESSES_HPP
 
@@ -85,7 +87,7 @@ namespace BitCoin
 
         bool getFullOutput(FullOutputData &pOutput) const;
 
-        uint64_t size() { return 12; }
+        NextCash::stream_size size() const { return 12; }
 
         // Evaluates the relative age of two objects.
         // Used to determine which objects to drop from cache
@@ -146,7 +148,8 @@ namespace BitCoin
             return pLookupValue.lookup16() & 0x3ff;
         }
 
-        Addresses() { mNextBlockHeight = 0; mMaxCacheSize = Info::instance().addressesThreshold; }
+        Addresses() : HashDataSet("Addresses")
+          { mNextBlockHeight = 0; mMaxCacheSize = Info::instance().addressesThreshold; }
         ~Addresses() {}
 
         unsigned int height()
@@ -175,5 +178,7 @@ namespace BitCoin
 
     };
 }
+
+#endif
 
 #endif
