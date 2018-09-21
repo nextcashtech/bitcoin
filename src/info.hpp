@@ -36,30 +36,34 @@ namespace BitCoin
         uint16_t port;
         bool spvMode;
 
-        // Maximum number of connections incoming and outgoing
+        // Maximum number of connections incoming and outgoing.
         uint32_t maxConnections;
 
-        // Maximum size in bytes/block count to download and save while waiting for processing
-        uint32_t pendingSizeThreshold;
-        uint32_t pendingBlocksThreshold;
+        // Maximum size in bytes/block count to download and save while waiting for processing.
+        NextCash::stream_size pendingSize;
+        uint32_t pendingBlocks;
 
-        // Amount of memory to use to cache transaction outputs. Will build to double this, then save and reduce cache.
-        uint32_t outputsThreshold;
+        // Amount of memory to use to cache transaction output data.
+        NextCash::stream_size outputsCacheSize;
+        // Amount of additional memory to use before saving and trimming the outputs data cache.
+        NextCash::stream_size outputsCacheDelta;
 
-        // Amount of memory to use for transaction outputs before saving to file
-        uint32_t addressesThreshold;
+        // Amount of memory to use for transaction outputs before saving to file.
+        NextCash::stream_size addressesCacheSize;
 
-        // Minimum fee for transaction mem pool (Satoshis per KB)
+        // Minimum fee for transaction mem pool (Satoshis per KB).
         uint64_t minFee;
 
-        // The size of the mem pool (unconfirmed transactions) at which they start getting dropped
-        uint32_t memPoolThreshold;
+        // The size of the mem pool (unconfirmed transactions) at which they start getting dropped.
+        uint32_t memPoolSize;
 
-        // Number of merkle blocks for same block header required from different peers to confirm a block's transactions
-        //   More than one required to prevent data withholding.
+        // Number of merkle blocks for same block header required from different peers to confirm a
+        //   block's transactions.
+        // More than one required to prevent data withholding.
         unsigned int merkleBlockCountRequired;
 
-        // Number of peers that an unconfirmed transaction must be announced from before it has zero confirm trust.
+        // Number of peers that an unconfirmed transaction must be announced from before it has
+        //   zero confirm trust.
         unsigned int spvMemPoolCountRequired;
 
         // Number of threads used to process and save data.

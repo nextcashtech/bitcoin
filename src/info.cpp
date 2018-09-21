@@ -86,13 +86,14 @@ namespace BitCoin
         spvMode = false;
 #endif
         maxConnections = 64;
-        minFee = 1000; // satoshis per KiB
+        minFee = 1000; // satoshis per KB
         mPeersModified = false;
-        pendingSizeThreshold = 104857600; // 100 MiB
-        pendingBlocksThreshold = 256;
-        outputsThreshold = 1073741824; // 1 GiB
-        memPoolThreshold = 536870912; // 512 MiB
-        addressesThreshold = 536870912; // 512 MiB
+        pendingSize = 100000000UL; // 100 MB
+        pendingBlocks = 256;
+        outputsCacheSize = 1000000000UL; // 1 GB
+        outputsCacheDelta = 500000000UL; // 500 MB
+        memPoolSize = 500000000UL; // 500 MB
+        addressesCacheSize = 500000000UL; // 500 MB
         merkleBlockCountRequired = 4;
         spvMemPoolCountRequired = 4;
         threadCount = 4;
@@ -189,15 +190,17 @@ namespace BitCoin
         else if(std::strcmp(name, "port") == 0)
             port = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "pending_size") == 0)
-            pendingSizeThreshold = std::strtol(value, NULL, 0);
+            pendingSize = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "pending_blocks") == 0)
-            pendingBlocksThreshold = std::strtol(value, NULL, 0);
-        else if(std::strcmp(name, "output_threshold") == 0)
-            outputsThreshold = std::strtol(value, NULL, 0);
+            pendingBlocks = std::strtol(value, NULL, 0);
+        else if(std::strcmp(name, "output_cache_size") == 0)
+            outputsCacheSize = std::strtol(value, NULL, 0);
+        else if(std::strcmp(name, "output_cache_delta") == 0)
+            outputsCacheDelta = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "mem_pool_size") == 0)
-            memPoolThreshold = std::strtol(value, NULL, 0);
-        else if(std::strcmp(name, "address_threshold") == 0)
-            addressesThreshold = std::strtol(value, NULL, 0);
+            memPoolSize = std::strtol(value, NULL, 0);
+        else if(std::strcmp(name, "address_cache_size") == 0)
+            addressesCacheSize = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "threads") == 0)
             threadCount = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "approved_hash") == 0)
