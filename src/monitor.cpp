@@ -58,13 +58,77 @@ namespace BitCoin
             delete *trans;
     }
 
-    bool Monitor::MerkleRequestData::isComplete()
+    bool Monitor::MerkleRequestData::addNode(unsigned int pNodeID, int32_t pRequestTime)
     {
-        if(receiveTime == 0)
+        if(complete || nodes.size() >= requiredNodeCount)
             return false;
 
-        if(complete || transactions.size() == 0)
+        for(std::vector<NodeData>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+            if(node->nodeID == pNodeID)
+                return false;
+
+        nodes.emplace_back(pNodeID, pRequestTime);
+        return true;
+    }
+
+    bool Monitor::MerkleRequestData::removeNode(unsigned int pNodeID)
+    {
+        for(std::vector<NodeData>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+            if(node->nodeID == pNodeID)
+            {
+                nodes.erase(node);
+                return true;
+            }
+
+        return false;
+    }
+
+    unsigned int Monitor::MerkleRequestData::timedOutNode(int32_t pTime)
+    {
+        unsigned int result = 0;
+        for(std::vector<NodeData>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+            if(node->receiveTime == 0 && pTime - node->requestTime > 60)
+            {
+                result = node->nodeID;
+                nodes.erase(node);
+                return result;
+            }
+
+        return result;
+    }
+
+    bool Monitor::MerkleRequestData::wasRequested(unsigned int pNodeID)
+    {
+        for(std::vector<NodeData>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+            if(node->nodeID == pNodeID)
+                return true;
+
+        return false;
+    }
+
+    bool Monitor::MerkleRequestData::markReceived(unsigned int pNodeID)
+    {
+        for(std::vector<NodeData>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+            if(node->nodeID == pNodeID && node->receiveTime == 0)
+            {
+                node->receiveTime = getTime();
+                return true;
+            }
+
+        return false;
+    }
+
+    bool Monitor::MerkleRequestData::isComplete()
+    {
+        if(complete)
             return true;
+
+        if(nodes.size() < requiredNodeCount)
+            return false;
+
+        for(std::vector<NodeData>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+            if(node->receiveTime == 0)
+                return false;
 
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           transactions.begin(); trans != transactions.end(); ++trans)
@@ -75,16 +139,15 @@ namespace BitCoin
         return true;
     }
 
-    void Monitor::MerkleRequestData::release()
+    void Monitor::MerkleRequestData::release(unsigned int pNodeID)
     {
         if(!isComplete())
-            requestTime = 0;
+            removeNode(pNodeID);
     }
 
     void Monitor::MerkleRequestData::clear()
     {
-        requestTime = 0;
-        receiveTime = 0;
+        nodes.clear();
         totalTransactions = 0;
         complete = false;
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
@@ -1353,8 +1416,7 @@ namespace BitCoin
 
         for(NextCash::HashContainerList<MerkleRequestData *>::Iterator request =
           mMerkleRequests.begin(); request != mMerkleRequests.end(); ++request)
-            if((*request)->node == pNodeID)
-                (*request)->release();
+            (*request)->release(pNodeID);
 
         for(std::vector<unsigned int>::iterator node = mNodesToResendFilter.begin();
           node != mNodesToResendFilter.end(); ++node)
@@ -1393,6 +1455,7 @@ namespace BitCoin
         MerkleRequestData *newMerkleRequest;
         unsigned int blockHeight;
         int32_t time = getTime();
+        uint8_t requiredNodeCount = Info::instance().merkleBlockCountRequired;
 
         pBlockHashes.clear();
 
@@ -1420,34 +1483,15 @@ namespace BitCoin
                     if(mMerkleRequests.size() < MAX_MERKLE_REQUESTS && !mFilter.isEmpty())
                     {
                         // Add new merkle block request
-                        newMerkleRequest = new MerkleRequestData(pNodeID, time);
+                        newMerkleRequest = new MerkleRequestData(requiredNodeCount, pNodeID, time);
                         mMerkleRequests.insert(nextBlockHash, newMerkleRequest);
                         pBlockHashes.push_back(nextBlockHash);
                     }
                     else
                         break;
                 }
-                else if(!(*request)->isComplete() &&
-                  (*request)->node != pNodeID && // Don't reassign to the same node
-                  ((*request)->requestTime == 0 || ((*request)->requestTime != 0 &&
-                  time - (*request)->requestTime > 60)))
-                {
-                    if((*request)->node != 0 && (*request)->requestTime != 0)
-                    {
-                        // Close slow node
-                        if(addNeedsClose((*request)->node))
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO,
-                              BITCOIN_MONITOR_LOG_NAME,
-                              "Node [%d] needs closed. Merkle blocks too slow", (*request)->node);
-                        }
-                    }
-
-                    // Assign request to this node
-                    (*request)->node = pNodeID;
-                    (*request)->requestTime = time;
+                else if((*request)->addNode(pNodeID, time))
                     pBlockHashes.push_back(nextBlockHash);
-                }
             }
 
             if(pBlockHashes.size() >= pMaxCount)
@@ -1475,22 +1519,28 @@ namespace BitCoin
         //   filter.
         // For Bloom filter updates based on finding new UTXOs.
         MerkleRequestData *request = *requestIter;
-        if(request->isComplete() ||
-          request->node != pNodeID || // Received from wrong/old node
-          request->requestTime == 0) // Request reset
+        if(!request->wasRequested(pNodeID) || request->isComplete())
         {
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+              "Node [%d] sent unrequested merkle block.", pNodeID);
             mMutex.unlock();
             return false;
         }
 
-        // Validate
+        // Validate and retrieve transaction hashes matching bloom filter.
         NextCash::HashList transactionHashes;
         if(!pData->validate(transactionHashes))
         {
-            request->release();
+            request->removeNode(pNodeID);
             if(addNeedsClose(pNodeID))
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   "Node [%d] needs closed. Sent invalid merkle block.", pNodeID);
+            mMutex.unlock();
+            return false;
+        }
+
+        if(!request->markReceived(pNodeID))
+        {
             mMutex.unlock();
             return false;
         }
@@ -1508,7 +1558,7 @@ namespace BitCoin
         NextCash::HashContainerList<SPVTransactionData *>::Iterator transaction;
         NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
         NextCash::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
-        for(NextCash::HashList::iterator hash= transactionHashes.begin();
+        for(NextCash::HashList::iterator hash = transactionHashes.begin();
           hash != transactionHashes.end(); ++hash)
         {
             transaction = request->transactions.get(*hash);
@@ -1548,35 +1598,6 @@ namespace BitCoin
                 }
             }
         }
-
-        // Check for any extra transactions (different false positives from previous peer)
-        for(transaction=request->transactions.begin();transaction!=request->transactions.end();)
-        {
-            if(transactionHashes.contains(transaction.hash()))
-                ++transaction;
-            else
-            {
-                // Move transaction to pending
-                if(mPendingTransactions.get(transaction.hash()) == mPendingTransactions.end())
-                {
-                    (*transaction)->blockHash.clear();
-                    mPendingTransactions.insert(transaction.hash(), *transaction);
-                }
-                else
-                    delete *transaction; // Already in pending
-
-                transaction = request->transactions.erase(transaction);
-            }
-        }
-
-        // Mark receive time
-        if(request->receiveTime != 0)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MONITOR_LOG_NAME,
-              "Repeated merkle block from node [%d] with %d transaction (%d sec ago) : %s", pNodeID,
-              request->transactions.size(), getTime() - request->receiveTime,
-              pData->header.hash.hex().text());
-
-        request->receiveTime = getTime();
 
         bool processNeeded = request->isComplete();
 
@@ -1882,6 +1903,8 @@ namespace BitCoin
             NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
             NextCash::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction;
             unsigned int passIndex = mPasses.size();
+            unsigned int nodeID;
+            int32_t time = getTime();
             for(std::vector<PassData>::reverse_iterator pass = mPasses.rbegin();
               pass != mPasses.rend(); ++pass, --passIndex)
             {
@@ -1910,7 +1933,21 @@ namespace BitCoin
                     {
                         merkleRequest = *request;
                         if(!merkleRequest->isComplete())
+                        {
+                            // Time out requests
+                            while((nodeID = merkleRequest->timedOutNode(time)) != 0)
+                            {
+                                // Close slow node
+                                if(addNeedsClose(nodeID))
+                                {
+                                    NextCash::Log::addFormatted(NextCash::Log::INFO,
+                                      BITCOIN_MONITOR_LOG_NAME,
+                                      "Node [%d] needs closed. Merkle blocks too slow", nodeID);
+                                }
+                            }
+
                             break; // Waiting for more transactions
+                        }
 
                         // Process transactions
                         falsePositiveCount = 0;
@@ -1985,8 +2022,7 @@ namespace BitCoin
                         }
 
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                          "Adding merkle block from node [%d] with %d/%d trans (%d) : %s",
-                          merkleRequest->node,
+                          "Adding merkle block with %d/%d trans (%d) : %s",
                           merkleRequest->transactions.size() - falsePositiveCount,
                           merkleRequest->transactions.size(), pass->blockHeight + 1,
                           request.hash().hex().text());
@@ -1995,48 +2031,48 @@ namespace BitCoin
                         //   deleted.
                         merkleRequest->transactions.clear();
 
-                        // Check for false positive rate too high
-                        if(merkleRequest->node != 0 && falsePositiveCount > 2 &&
-                          (float)falsePositiveCount / (float)merkleRequest->totalTransactions >
-                          0.001)
-                        {
-                            if(falsePositiveCount > 5 && (float)falsePositiveCount /
-                              (float)merkleRequest->totalTransactions > 0.02)
-                            {
-                                if(addNeedsClose(merkleRequest->node))
-                                {
-                                    NextCash::Log::addFormatted(NextCash::Log::INFO,
-                                      BITCOIN_MONITOR_LOG_NAME,
-                                      "Node [%d] needs closed. False positive rate %d/%d",
-                                      merkleRequest->node, falsePositiveCount,
-                                      merkleRequest->totalTransactions);
-                                }
-                            }
-                            else
-                            {
-                                bool found = false;
-                                for(std::vector<unsigned int>::iterator node =
-                                  mNodesToResendFilter.begin(); node != mNodesToResendFilter.end();
-                                  ++node)
-                                    if(*node == merkleRequest->node)
-                                    {
-                                        found = true;
-                                        break;
-                                    }
-
-                                //TODO Add delay so bloom filter doesn't get sent after every merkle
-                                //   block received before it actually updates
-                                if(!found)
-                                {
-                                    NextCash::Log::addFormatted(NextCash::Log::INFO,
-                                      BITCOIN_MONITOR_LOG_NAME,
-                                      "Node [%d] needs bloom filter resend. False positive rate %d/%d",
-                                      merkleRequest->node, falsePositiveCount,
-                                      merkleRequest->totalTransactions);
-                                    mNodesToResendFilter.push_back(merkleRequest->node);
-                                }
-                            }
-                        }
+                        //TODO Check for false positive rate too high
+//                        if(merkleRequest->node != 0 && falsePositiveCount > 2 &&
+//                          (float)falsePositiveCount / (float)merkleRequest->totalTransactions >
+//                          0.001)
+//                        {
+//                            if(falsePositiveCount > 5 && (float)falsePositiveCount /
+//                              (float)merkleRequest->totalTransactions > 0.02)
+//                            {
+//                                if(addNeedsClose(merkleRequest->node))
+//                                {
+//                                    NextCash::Log::addFormatted(NextCash::Log::INFO,
+//                                      BITCOIN_MONITOR_LOG_NAME,
+//                                      "Node [%d] needs closed. False positive rate %d/%d",
+//                                      merkleRequest->node, falsePositiveCount,
+//                                      merkleRequest->totalTransactions);
+//                                }
+//                            }
+//                            else
+//                            {
+//                                bool found = false;
+//                                for(std::vector<unsigned int>::iterator node =
+//                                  mNodesToResendFilter.begin(); node != mNodesToResendFilter.end();
+//                                  ++node)
+//                                    if(*node == merkleRequest->node)
+//                                    {
+//                                        found = true;
+//                                        break;
+//                                    }
+//
+//                                //TODO Add delay so bloom filter doesn't get sent after every merkle
+//                                //   block received before it actually updates
+//                                if(!found)
+//                                {
+//                                    NextCash::Log::addFormatted(NextCash::Log::INFO,
+//                                      BITCOIN_MONITOR_LOG_NAME,
+//                                      "Node [%d] needs bloom filter resend. False positive rate %d/%d",
+//                                      merkleRequest->node, falsePositiveCount,
+//                                      merkleRequest->totalTransactions);
+//                                    mNodesToResendFilter.push_back(merkleRequest->node);
+//                                }
+//                            }
+//                        }
 
                         // Remove merkle request
                         delete *request;

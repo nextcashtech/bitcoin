@@ -94,7 +94,7 @@ namespace BitCoin
         outputsCacheDelta = 500000000UL; // 500 MB
         memPoolSize = 500000000UL; // 500 MB
         addressesCacheSize = 500000000UL; // 500 MB
-        merkleBlockCountRequired = 4;
+        merkleBlockCountRequired = 3;
         spvMemPoolCountRequired = 4;
         threadCount = 4;
 
@@ -201,6 +201,8 @@ namespace BitCoin
             memPoolSize = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "address_cache_size") == 0)
             addressesCacheSize = std::strtol(value, NULL, 0);
+        else if(std::strcmp(name, "merkles_per_block") == 0)
+            merkleBlockCountRequired = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "threads") == 0)
             threadCount = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "approved_hash") == 0)

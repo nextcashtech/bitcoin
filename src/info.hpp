@@ -57,10 +57,10 @@ namespace BitCoin
         // The size of the mem pool (unconfirmed transactions) at which they start getting dropped.
         uint32_t memPoolSize;
 
-        // Number of merkle blocks for same block header required from different peers to confirm a
-        //   block's transactions.
+        // Number of merkle blocks per block required from different peers to confirm a block's
+        //   transactions.
         // More than one required to prevent data withholding.
-        unsigned int merkleBlockCountRequired;
+        uint8_t merkleBlockCountRequired;
 
         // Number of peers that an unconfirmed transaction must be announced from before it has
         //   zero confirm trust.

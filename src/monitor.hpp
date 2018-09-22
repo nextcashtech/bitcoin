@@ -201,33 +201,52 @@ namespace BitCoin
         {
         public:
 
-            MerkleRequestData()
+            class NodeData
             {
-                node = 0;
-                requestTime = 0;
-                receiveTime = 0;
+            public:
+
+                NodeData(unsigned int pNodeID, int32_t pRequestTime)
+                {
+                    nodeID = pNodeID;
+                    requestTime = pRequestTime;
+                    receiveTime = 0;
+                }
+
+                unsigned int nodeID;
+                int32_t requestTime, receiveTime;
+
+            };
+
+            MerkleRequestData(uint8_t pRequiredNodeCount)
+            {
+                requiredNodeCount = pRequiredNodeCount;
                 totalTransactions = 0;
                 complete = false;
             }
-            MerkleRequestData(unsigned int pNodeID, int32_t pRequestTime)
+            MerkleRequestData(uint8_t pRequiredNodeCount, unsigned int pNodeID,
+              int32_t pRequestTime)
             {
-                node = pNodeID;
-                requestTime = pRequestTime;
-                receiveTime = 0;
+                requiredNodeCount = pRequiredNodeCount;
+                nodes.emplace_back(pNodeID, pRequestTime);
                 totalTransactions = 0;
                 complete = false;
             }
             ~MerkleRequestData();
 
-            unsigned int node;
-            int32_t requestTime, receiveTime;
+            bool addNode(unsigned int pNodeID, int32_t pRequestTime);
+            bool removeNode(unsigned int pNodeID);
+            unsigned int timedOutNode(int32_t pTime);
+            bool wasRequested(unsigned int pNodeID);
+            bool markReceived(unsigned int pNodeID);
+            bool isComplete();
+            void release(unsigned int pNodeID);
+            void clear();
+
+            uint8_t requiredNodeCount;
+            std::vector<NodeData> nodes;
             unsigned int totalTransactions; // Total transaction count of full block
             NextCash::HashContainerList<SPVTransactionData *> transactions;
             bool complete;
-
-            bool isComplete();
-            void release();
-            void clear();
 
         };
 
