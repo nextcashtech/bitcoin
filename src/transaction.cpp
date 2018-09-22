@@ -1165,7 +1165,7 @@ namespace BitCoin
             }
             else
             {
-                if(input->outpoint.index != 0xffffffff)
+                if(input->outpoint.index == 0xffffffff)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING,
                       BITCOIN_TRANSACTION_LOG_NAME, "Input %d outpoint index is 0xffffffff : %08x",
