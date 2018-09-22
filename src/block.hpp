@@ -67,10 +67,10 @@ namespace BitCoin
         bool validate(Chain *pChain, unsigned int pHeight);
 
         // Validate transactions and update outputs.
-        bool process(Chain *pChain, unsigned int pHeight);
+        bool processSingleThreaded(Chain *pChain, unsigned int pHeight);
         bool processMultiThreaded(Chain *pChain, unsigned int pHeight, unsigned int pThreadCount);
 
-        bool updateOutputs(Chain *pChain, unsigned int pHeight);
+        bool updateOutputsSingleThreaded(Chain *pChain, unsigned int pHeight);
         bool updateOutputsMultiThreaded(Chain *pChain, unsigned int pHeight,
           unsigned int pThreadCount);
 
