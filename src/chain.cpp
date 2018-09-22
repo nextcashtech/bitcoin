@@ -2145,6 +2145,7 @@ namespace BitCoin
         mHashes.clear();
 #endif
         clearBlockStats();
+
         HashLookupSet *lookup = mHashLookup;
         for(unsigned int i = 0; i < 0x10000; ++i)
         {

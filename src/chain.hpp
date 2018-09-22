@@ -198,14 +198,14 @@ namespace BitCoin
             if(mNextHeaderHeight == 0)
                 return 0;
             else
-                return (unsigned int)mNextHeaderHeight - 1;
+                return mNextHeaderHeight - 1;
         }
         unsigned int blockHeight() const
         {
             if(mNextBlockHeight == 0)
                 return 0;
             else
-                return (unsigned int)mNextBlockHeight - 1;
+                return mNextBlockHeight - 1;
         }
         NextCash::Hash lastHeaderHash()
         {
@@ -214,7 +214,8 @@ namespace BitCoin
             mHeadersLock.readUnlock();
             return result;
         }
-        unsigned int highestFullPendingHeight() const { return mLastFullPendingOffset + mNextBlockHeight - 1; }
+        unsigned int highestFullPendingHeight() const
+          { return mLastFullPendingOffset + mNextBlockHeight - 1; }
 
         TransactionOutputPool &outputs() { return mOutputs; }
         Forks &forks() { return mForks; }
@@ -271,7 +272,8 @@ namespace BitCoin
         // Return the status of the specified block hash
         HashStatus addPendingHash(const NextCash::Hash &pHash, unsigned int pNodeID);
 
-        // Builds a list of blocks that need to be requested and marks them as requested by the node specified
+        // Builds a list of blocks that need to be requested and marks them as requested by the node
+        //   specified
         bool getBlocksNeeded(NextCash::HashList &pHashes, unsigned int pCount, bool pReduceOnly);
         // Mark that download progress has increased for this block
         void updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, int32_t pTime);
@@ -291,7 +293,8 @@ namespace BitCoin
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
         bool getHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash,
           unsigned int pCount);
-        // Retrieve list of block hashes starting at top, going down and skipping around 100 between each.
+        // Retrieve list of block hashes starting at top, going down and skipping around 100 between
+        //   each.
         bool getReverseHashes(NextCash::HashList &pHashes, unsigned int pOffset,
           unsigned int pCount, unsigned int pSpacing);
 
@@ -304,7 +307,9 @@ namespace BitCoin
         bool getBlock(unsigned int pBlockHeight, Block &pBlock);
         bool getHeader(unsigned int pBlockHeight, Header &pHeader);
 
-        unsigned int hashHeight(const NextCash::Hash &pHash); // Returns 0xffffffff when hash is not found
+        // Returns 0xffffffff when hash is not found
+        unsigned int hashHeight(const NextCash::Hash &pHash);
+
         bool getBlock(const NextCash::Hash &pHash, Block &pBlock);
         bool getHeader(const NextCash::Hash &pHash, Header &pHeader);
 
