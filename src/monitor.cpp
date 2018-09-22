@@ -658,23 +658,24 @@ namespace BitCoin
         return true;
     }
 
-    void Monitor::setKeyStore(KeyStore *pKeyStore, Chain *pChain, bool pStartNewPass)
+    void Monitor::setKeyStore(KeyStore *pKeyStore, Chain *pChain, bool pStartNewPass,
+      int32_t pNewPassTime)
     {
         mMutex.lock();
         mKeyStore = pKeyStore;
         if(refreshKeyStore())
         {
             if(pStartNewPass)
-                startPass();
+                startPass(pChain->heightBefore(pNewPassTime));
             else
             {
                 if(pChain->headerHeight() > 20000 &&
-                  highestPassHeight(true) < (unsigned int)pChain->headerHeight() - 20000)
+                  highestPassHeight(true) < pChain->headerHeight() - 20000)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Starting new pass at block (%d) to monitor new blocks",
                       pChain->headerHeight());
-                    mPasses.emplace_back(pChain->headerHeight() - 1);
+                    mPasses.emplace_back(pChain->headerHeight());
                     mPasses.back().addressesIncluded = mAddressHashes.size();
                 }
                 else if(mPasses.size() == 0)

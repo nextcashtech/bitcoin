@@ -638,7 +638,7 @@ namespace BitCoin
         // if(textFile.isValid() && !mMonitor.loadAddresses(&textFile))
             // return false;
 
-        mMonitor.setKeyStore(&mKeyStore, &mChain, true);
+        mMonitor.setKeyStore(&mKeyStore, &mChain, true, 0);
         return true;
     }
 

@@ -1750,6 +1750,42 @@ namespace BitCoin
             delete *stat;
     }
 
+    unsigned int Chain::heightBefore(int32_t pTime)
+    {
+        unsigned int beginHeight = 0;
+        unsigned int endHeight = headerHeight();
+        if(endHeight - beginHeight <= 1)
+            return beginHeight;
+        if(pTime < time(beginHeight))
+            return beginHeight;
+        if(pTime > time(endHeight))
+            return endHeight;
+
+        // Binary search
+        unsigned int currentHeight = beginHeight + ((endHeight - beginHeight) / 2);
+        int32_t currentTime = time(currentHeight);
+
+        while(true)
+        {
+            // Check which half the desired time is in.
+            if(currentTime > pTime)
+                endHeight = currentHeight;
+            else if(currentTime < pTime)
+                beginHeight = currentHeight;
+            else
+                return currentHeight;
+
+            if(endHeight - beginHeight <= 1)
+                return beginHeight;
+
+            // Get new middle.
+            currentHeight = beginHeight + ((endHeight - beginHeight) / 2);
+            currentTime = time(currentHeight);
+        }
+
+        return beginHeight;
+    }
+
     bool Chain::updateOutputs()
     {
         Block block;

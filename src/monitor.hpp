@@ -84,7 +84,8 @@ namespace BitCoin
         // Sets up monitoring on a key store.
         // Each key in the key store must be "primed". Meaning there must be some address keys
         //   already generated under the "chain" key according to a known hierarchal structure.
-        void setKeyStore(KeyStore *pKeyStore, Chain *pChain, bool pStartNewPass);
+        void setKeyStore(KeyStore *pKeyStore, Chain *pChain, bool pStartNewPass,
+          int32_t pNewPassTime);
 
         // Removes all addresses and adds them back from key store, then updates all transactions
         //   and removes any that are no longer relevant.

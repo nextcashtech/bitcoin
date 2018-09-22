@@ -255,15 +255,11 @@ namespace BitCoin
         // Return true if a header request at the top of the chain is needed
         bool headersNeeded();
         void setHeadersNeeded() { mHeadersNeeded = true; }
-        // Return true if a block request is needed
-        bool blocksNeeded();
+        bool blocksNeeded(); // Return true if a block request is needed
 
-        // Number of pending headers/blocks
-        unsigned int pendingCount();
-        // Number of pending full blocks
-        unsigned int pendingBlockCount();
-        // Bytes used by pending blocks
-        unsigned int pendingSize();
+        unsigned int pendingCount();  // Number of pending headers/blocks
+        unsigned int pendingBlockCount();  // Number of pending full blocks
+        unsigned int pendingSize();  // Bytes used by pending blocks
 
         bool getPendingHeaderHashes(NextCash::HashList &pList);
 
@@ -322,6 +318,9 @@ namespace BitCoin
 
         void getMedianPastTimeAndWork(unsigned int pBlockHeight, int32_t &pTime,
           NextCash::Hash &pAccumulatedWork, unsigned int pMedianCount);
+
+        // Return height of last block before specified time.
+        unsigned int heightBefore(int32_t pTime);
 
         bool load();
         bool save();
