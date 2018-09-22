@@ -1389,7 +1389,8 @@ namespace BitCoin
 
     void Daemon::checkSync()
     {
-        if(mChain.lastHeaderHash().isEmpty() || mChain.lastHeaderHash().isZero())
+        // Latest header older than 3 hours.
+        if(mChain.headerHeight() == 0 || getTime() - mChain.time(mChain.headerHeight()) > 10800)
             return;
 
         mNodeLock.readLock();
@@ -1407,9 +1408,6 @@ namespace BitCoin
               mChain.lastHeaderHash().hex().text());
             mChain.setInSync();
         }
-        // else
-            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-              // "Chain latest header : %s", mChain.lastBlockHash().hex().text());
     }
 
     void Daemon::improvePing()
