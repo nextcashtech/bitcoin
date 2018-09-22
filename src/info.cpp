@@ -86,7 +86,7 @@ namespace BitCoin
         spvMode = false;
 #endif
         maxConnections = 64;
-        minFee = 1000; // satoshis per KB
+        minFee = 500; // satoshis per KB
         mPeersModified = false;
         pendingSize = 100000000UL; // 100 MB
         pendingBlocks = 256;
