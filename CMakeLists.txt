@@ -2,7 +2,6 @@
 
 cmake_minimum_required(VERSION 3.4.1)
 
-
 include_directories( ../nextcash/src/base
                      ../nextcash/src/io
                      ../nextcash/src/crypto
@@ -12,7 +11,6 @@ include_directories( ../nextcash/src/base
                      . )
 
 add_library( bitcoin STATIC SHARED
-             src/addresses.cpp
              src/base.cpp
              src/block.cpp
              src/bloom_filter.cpp

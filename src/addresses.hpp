@@ -149,7 +149,7 @@ namespace BitCoin
         }
 
         Addresses() : HashDataSet("Addresses")
-          { mNextBlockHeight = 0; mMaxCacheSize = Info::instance().addressesThreshold; }
+          { mNextBlockHeight = 0; mMaxCacheSize = Info::instance().addressesCacheSize; }
         ~Addresses() {}
 
         unsigned int height()
