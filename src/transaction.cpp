@@ -865,7 +865,7 @@ namespace BitCoin
     {
         pOutpointsNeeded.clear();
         mStatus = IS_VALID | IS_STANDARD | WAS_CHECKED;
-        mFee = 0;
+        mFee = INVALID_FEE;
 
         if(size() > 100000)
         {
@@ -893,7 +893,7 @@ namespace BitCoin
 
         // Check inputs
         unsigned int index = 0;
-        for(std::vector<Input>::iterator input=inputs.begin();input!=inputs.end();++input)
+        for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end(); ++input)
         {
             if(input->outpoint.index == 0xffffffff)
             {
@@ -927,6 +927,7 @@ namespace BitCoin
         index = 0;
         ScriptInterpreter::ScriptType scriptType;
         NextCash::HashList hashes;
+        mFee = 0;
         for(std::vector<Output>::iterator output=outputs.begin();output!=outputs.end();++output)
         {
             if(output->amount < 0)
@@ -938,6 +939,7 @@ namespace BitCoin
                   NextCash::Log::WARNING);
                 print(pChain->forks(), NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
+                mFee = INVALID_FEE;
                 return true;
             }
 
@@ -965,6 +967,7 @@ namespace BitCoin
                   "Output %d is invalid : trans %s", index, hash.hex().text());
                 print(pChain->forks(), NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
+                mFee = INVALID_FEE;
                 return true;
             }
 
@@ -973,7 +976,10 @@ namespace BitCoin
         }
 
         if(!(mStatus & IS_STANDARD))
+        {
+            mFee = INVALID_FEE;
             return true; // Only standard currently supported so don't check signatures
+        }
 
         // Find outpoints and check signatures
         ScriptInterpreter interpreter;
@@ -1005,6 +1011,7 @@ namespace BitCoin
                               "Input %d outpoint index too high : index %d trans %s", index,
                               input->outpoint.index, input->outpoint.transactionID.hex().text());
                             mStatus ^= IS_VALID;
+                            mFee = INVALID_FEE;
                             return true;
                         }
 
@@ -1018,6 +1025,7 @@ namespace BitCoin
                           "Input %d outpoint transaction not found : index %d trans %s", index,
                           input->outpoint.index, input->outpoint.transactionID.hex().text());
                         pOutpointsNeeded.push_back(input->outpoint.transactionID);
+                        mFee = INVALID_FEE;
                         continue;
                     }
                 }
@@ -1036,6 +1044,7 @@ namespace BitCoin
                   "Input %d signature script is invalid : trans %s", index, hash.hex().text());
                 input->print(pChain->forks(), NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
+                mFee = INVALID_FEE;
                 return true;
             }
 
@@ -1050,6 +1059,7 @@ namespace BitCoin
                 input->outpoint.output->print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
                   NextCash::Log::WARNING);
                 mStatus ^= IS_VALID;
+                mFee = INVALID_FEE;
                 return true;
             }
             else if(!interpreter.isVerified())
@@ -1077,6 +1087,7 @@ namespace BitCoin
                   "Outputs amounts are more than inputs amounts");
                 print(pChain->forks(), NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
+                mFee = INVALID_FEE;
                 return true;
             }
             if((mStatus & IS_VALID) && sigsVerified)
@@ -1097,7 +1108,7 @@ namespace BitCoin
         NextCash::Profiler profiler("Transaction Process");
         NextCash::Profiler verifyProfiler("Transaction Inputs", false);
 #endif
-        mFee = 0;
+        mFee = INVALID_FEE;
 
         if(inputs.size() == 0)
         {
@@ -1121,6 +1132,8 @@ namespace BitCoin
         if(!pChain->outputs().checkDuplicate(*this, pHeight, pBlockHash))
             return false;
 
+        mFee = 0;
+
         // Process Inputs
         ScriptInterpreter interpreter;
         Output previousOutput;
@@ -1137,6 +1150,7 @@ namespace BitCoin
                       BITCOIN_TRANSACTION_LOG_NAME,
                       "Coinbase Input %d outpoint index is not 0xffffffff : %08x", index,
                       input->outpoint.index);
+                    mFee = INVALID_FEE;
                     return false;
                 }
 
@@ -1150,6 +1164,7 @@ namespace BitCoin
                     {
                         NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Coinbase input doesn't start with data push");
+                        mFee = INVALID_FEE;
                         return false;
                     }
 
@@ -1159,6 +1174,7 @@ namespace BitCoin
                           BITCOIN_TRANSACTION_LOG_NAME,
                           "Non matching coinbase block height : actual %d, coinbase %d",
                           pHeight, blockHeight);
+                        mFee = INVALID_FEE;
                         return false;
                     }
                 }
@@ -1170,6 +1186,7 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::WARNING,
                       BITCOIN_TRANSACTION_LOG_NAME, "Input %d outpoint index is 0xffffffff : %08x",
                       index, input->outpoint.index);
+                    mFee = INVALID_FEE;
                     return false;
                 }
 
@@ -1182,6 +1199,7 @@ namespace BitCoin
                       BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction not found : index %d trans %s", index,
                       input->outpoint.index, input->outpoint.transactionID.hex().text());
+                    mFee = INVALID_FEE;
                     return false;
                 }
 
@@ -1221,6 +1239,7 @@ namespace BitCoin
 #ifdef PROFILER_ON
                             verifyProfiler.stop();
 #endif
+                            mFee = INVALID_FEE;
                             return false;
                         }
                     }
@@ -1237,6 +1256,7 @@ namespace BitCoin
 #ifdef PROFILER_ON
                         verifyProfiler.stop();
 #endif
+                        mFee = INVALID_FEE;
                         return false;
                     }
                 }
@@ -1258,6 +1278,7 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
+                    mFee = INVALID_FEE;
                     return false;
                 }
 
@@ -1276,6 +1297,7 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
+                    mFee = INVALID_FEE;
                     return false;
                 }
 
@@ -1292,6 +1314,7 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
+                    mFee = INVALID_FEE;
                     return false;
                 }
 
@@ -1308,6 +1331,7 @@ namespace BitCoin
 #ifdef PROFILER_ON
                     verifyProfiler.stop();
 #endif
+                    mFee = INVALID_FEE;
                     return false;
                 }
 
@@ -1338,6 +1362,7 @@ namespace BitCoin
                           "Lock time 0x%08x time stamp is not valid. Lock time %s > block median time %s",
                           lockTime, lockTimeText.text(), blockTimeText.text());
                         print(pChain->forks(), NextCash::Log::VERBOSE);
+                        mFee = INVALID_FEE;
                         return false;
                     }
                 }
@@ -1356,6 +1381,7 @@ namespace BitCoin
                           "Lock time 0x%08x time stamp is not valid. Lock time %s > block time %s",
                           lockTime, lockTimeText.text(), blockTimeText.text());
                         print(pChain->forks(), NextCash::Log::VERBOSE);
+                        mFee = INVALID_FEE;
                         return false;
                     }
                 }
@@ -1370,6 +1396,7 @@ namespace BitCoin
                       "Lock time block height is not valid. Lock height %d > block height %d",
                       lockTime, pHeight);
                     print(pChain->forks(), NextCash::Log::VERBOSE);
+                    mFee = INVALID_FEE;
                     return false;
                 }
             }
@@ -1390,6 +1417,7 @@ namespace BitCoin
                 output->print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
                   NextCash::Log::WARNING);
                 print(pChain->forks(), NextCash::Log::VERBOSE);
+                mFee = INVALID_FEE;
                 return false;
             }
 
@@ -1398,6 +1426,7 @@ namespace BitCoin
                 NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                   "Outputs are more than inputs");
                 print(pChain->forks(), NextCash::Log::VERBOSE);
+                mFee = INVALID_FEE;
                 return false;
             }
 
@@ -1434,14 +1463,14 @@ namespace BitCoin
 
     uint64_t Transaction::feeRate()
     {
+        if(mFee == INVALID_FEE)
+            return 0;
         uint64_t currentSize = mSize;
         if(currentSize == 0)
         {
             calculateSize();
             currentSize = mSize;
         }
-        if(mFee == INVALID_FEE)
-            return 0;
         return (mFee * 1000) / currentSize; // Satoshis per KB
     }
 

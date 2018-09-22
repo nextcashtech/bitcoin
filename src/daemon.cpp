@@ -550,7 +550,7 @@ namespace BitCoin
           mChain.headerHeight(), timeText.text());
 
         const Branch *branch;
-        for(unsigned int i=0;i<mChain.branchCount();++i)
+        for(unsigned int i = 0; i < mChain.branchCount(); ++i)
         {
             branch = mChain.branchAt(i);
             if(branch == NULL)
@@ -560,8 +560,8 @@ namespace BitCoin
                 timeText.writeFormattedTime(branch->pendingBlocks.back()->block->header.time);
 
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Block Chain Branch %d : %d blocks (last %s)", i + 1,
-              branch->height + branch->pendingBlocks.size() - 1, timeText.text());
+              "Block Chain Branch %d : height %d (%d blocks) (last %s)", i + 1,
+              branch->height, branch->pendingBlocks.size(), timeText.text());
         }
 
         if(mInfo.spvMode)

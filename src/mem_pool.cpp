@@ -217,10 +217,15 @@ namespace BitCoin
         {
             if(!check(*transaction, pMinFeeRate, pChain))
             {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Failed to check pending transaction. Removing. (%d bytes) (%llu fee rate) : %s",
-                  (*transaction)->size(), (*transaction)->feeRate(),
-                  (*transaction)->hash.hex().text());
+                if((*transaction)->feeIsValid())
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                      "Failed to check pending transaction. Removing. (%d bytes) (%llu fee rate) : %s",
+                      (*transaction)->size(), (*transaction)->feeRate(),
+                      (*transaction)->hash.hex().text());
+                else
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                      "Failed to check pending transaction. Removing. (%d bytes) : %s",
+                      (*transaction)->size(), (*transaction)->hash.hex().text());
                 mSize -= (*transaction)->size();
                 transaction = mPendingTransactions.erase(transaction);
             }
@@ -278,7 +283,7 @@ namespace BitCoin
         if(!check(pTransaction, pMinFeeRate, pChain))
         {
             mLock.writeUnlock();
-            if(pTransaction->feeRate() < pMinFeeRate)
+            if(pTransaction->feeIsValid() && pTransaction->feeRate() < pMinFeeRate)
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
                   "Transaction has low fee (%d bytes) (%llu fee rate) : %s", pTransaction->size(),
@@ -470,7 +475,7 @@ namespace BitCoin
         if(toRemove != mTransactions.end())
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
-              "Dropping transaction with fee rate %llu (%d bytes) : %s", feeRate,
+              "Dropping transaction (%llu fee rate) (%d bytes) : %s", feeRate,
               (*toRemove)->size(), (*toRemove)->hash.hex().text());
             mSize -= (*toRemove)->size();
             delete *toRemove;

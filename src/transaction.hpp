@@ -214,6 +214,7 @@ namespace BitCoin
 
         unsigned int size() const { return mSize; }
         int32_t time() const { return mTime; }
+        bool feeIsValid() const { return mFee != INVALID_FEE; }
         int64_t fee() const { return mFee; }
         uint64_t feeRate(); // Satoshis per KB
 
