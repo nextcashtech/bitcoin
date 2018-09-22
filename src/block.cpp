@@ -379,7 +379,7 @@ namespace BitCoin
         }
     }
 
-    bool Block::updateOutputs(Chain *pChain, unsigned int pHeight)
+    bool Block::updateOutputsSingleThreaded(Chain *pChain, unsigned int pHeight)
     {
         if(transactions.size() == 0)
         {
@@ -649,7 +649,7 @@ namespace BitCoin
             else
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-                  "Transaction %d failed : %s", offset);
+                  "Transaction %d failed : %s", offset, transaction->hash.hex().text());
                 transaction->print(data->chain->forks(), NextCash::Log::WARNING);
                 data->markComplete(offset, false);
             }
@@ -766,7 +766,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Block::process(Chain *pChain, unsigned int pHeight)
+    bool Block::processSingleThreaded(Chain *pChain, unsigned int pHeight)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Block Process");
@@ -780,18 +780,17 @@ namespace BitCoin
             return false;
 
         // Validate and process transactions
-        bool isCoinBase = true;
         mFees = 0;
         unsigned int transactionOffset = 0;
         std::vector<unsigned int> spentAges;
         spentAges.reserve(transactions.size() * 2);
         NextCash::Mutex spentAgeLock("Spent Age");
         for(std::vector<Transaction *>::iterator transaction = transactions.begin();
-          transaction != transactions.end(); ++transaction)
+          transaction != transactions.end(); ++transaction, ++transactionOffset)
         {
             // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
               // "Processing transaction %d", transactionOffset);
-            if(!(*transaction)->process(pChain, header.hash, pHeight, isCoinBase,
+            if(!(*transaction)->process(pChain, header.hash, pHeight, transactionOffset == 0,
               header.version, spentAgeLock, spentAges))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
@@ -799,11 +798,8 @@ namespace BitCoin
                 (*transaction)->print(pChain->forks(), NextCash::Log::WARNING);
                 return false;
             }
-            if(!isCoinBase)
+            if(transactionOffset != 0)
                 mFees += (*transaction)->fee();
-            else
-                isCoinBase = false;
-            ++transactionOffset;
         }
 
         if(spentAges.size() > 0)
@@ -907,7 +903,7 @@ namespace BitCoin
         static unsigned int fileOffset(unsigned int pHeight) { return pHeight - (fileID(pHeight) * MAX_COUNT); }
         static NextCash::String filePathName(unsigned int pID);
 
-        static const unsigned int CACHE_COUNT = 50;
+        static const unsigned int CACHE_COUNT = 20;
         static NextCash::MutexWithConstantName sCacheLock;
         static BlockFile *sCache[CACHE_COUNT];
 

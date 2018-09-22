@@ -1164,7 +1164,7 @@ namespace BitCoin
                 success = pBlock.updateOutputsMultiThreaded(this, mNextBlockHeight,
                   mInfo.threadCount);
             else
-                success = pBlock.updateOutputs(this, mNextBlockHeight);
+                success = pBlock.updateOutputsSingleThreaded(this, mNextBlockHeight);
 
             if(!success)
             {
@@ -1179,7 +1179,7 @@ namespace BitCoin
             if(pBlock.transactions.size() > 100) // Enough to cover overhead of creating threads.
                 success = pBlock.processMultiThreaded(this, mNextBlockHeight, mInfo.threadCount);
             else
-                success = pBlock.process(this, mNextBlockHeight);
+                success = pBlock.processSingleThreaded(this, mNextBlockHeight);
 
             if(!success)
             {
@@ -1760,7 +1760,7 @@ namespace BitCoin
             startTime = getTime();
             if(Block::getBlock(0, block))
             {
-                if(block.updateOutputs(this, 0))
+                if(block.updateOutputsSingleThreaded(this, 0))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                       "Updated outputs for genesis block (%d trans) (%d KB) (%d s)",
@@ -1795,6 +1795,7 @@ namespace BitCoin
           blockHeight());
 
         int32_t lastCheckTime = getTime();
+        bool success;
         while(currentHeight < blockHeight() && !mStopRequested)
         {
             ++currentHeight;
@@ -1802,7 +1803,13 @@ namespace BitCoin
             startTime = getTime();
             if(Block::getBlock(currentHeight, block))
             {
-                if(block.updateOutputs(this, currentHeight))
+                if(block.transactions.size() > 200) // Enough to cover overhead of creating threads.
+                    success = block.updateOutputsMultiThreaded(this, currentHeight,
+                      mInfo.threadCount);
+                else
+                    success = block.updateOutputsSingleThreaded(this, currentHeight);
+
+                if(success)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                       "Updated outputs for block %d (%d trans) (%d KB) (%d s)", currentHeight,
@@ -2743,7 +2750,7 @@ namespace BitCoin
             Info::instance().setPath("chain_test");
             Chain chain;
             chain.load();
-            if(readBlock.process(&chain, 0))
+            if(readBlock.processSingleThreaded(&chain, 0))
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   "Passed read block process");
             else
