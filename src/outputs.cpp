@@ -79,9 +79,9 @@ namespace BitCoin
     {
         NextCash::Log::addFormatted(pLevel, pLogName, "  Amount : %.08f",
           bitcoins(amount));
-        script.setReadOffset(0);
         NextCash::Log::addFormatted(pLevel, pLogName, "  Script : (%d bytes)",
           script.length());
+        script.setReadOffset(0);
         ScriptInterpreter::printScript(script, pForks, pLevel);
     }
 

@@ -351,7 +351,6 @@ namespace BitCoin
 
         // Write to a script to push the following size of data to the stack
         static void writePushDataSize(unsigned int pSize, NextCash::OutputStream *pOutput);
-        static unsigned int pullDataSize(uint8_t pOpCode, NextCash::Buffer &pScript, bool pSkipData = true);
         static bool pullData(uint8_t pOpCode, NextCash::Buffer &pScript, NextCash::Buffer &pData);
 
         static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset, int64_t pOutputAmount,
@@ -378,6 +377,13 @@ namespace BitCoin
         }
 
     private:
+
+        // Returns the size of data pushed by the specified op code and script.
+        // Returns 0xffffffff when op code is not a data push code, it is invalid, or if length is
+        //   longer than script.
+        // If pSkipData is true, then the "pushed data" will be skipped in the script.
+        static unsigned int pullDataSize(uint8_t pOpCode, NextCash::Buffer &pScript,
+          bool pSkipData = true);
 
         bool mValid;
         bool mVerified;

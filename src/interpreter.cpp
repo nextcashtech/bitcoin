@@ -33,7 +33,7 @@ namespace BitCoin
         while(pScript.remaining() > 0)
         {
             opCode = pScript.readByte();
-            if(opCode != OP_0 && pullDataSize(opCode, pScript) == 0)
+            if(opCode != OP_0 && pullDataSize(opCode, pScript, true) == 0xffffffff)
                 return false;
         }
 
@@ -95,10 +95,18 @@ namespace BitCoin
                 if(pScript.length() < 224)
                     return NULL_DATA;
                 else
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                      "OP_RETURN script is too long : %d", pScript.length());
                     return NON_STANDARD;
+                }
             }
             else
+            {
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                  "OP_RETURN script is not push only");
                 return NON_STANDARD;
+            }
         }
         else if(opCode == OP_DUP)
         {
@@ -184,12 +192,13 @@ namespace BitCoin
         return NON_STANDARD;
     }
 
-    unsigned int ScriptInterpreter::pullDataSize(uint8_t pOpCode, NextCash::Buffer &pScript, bool pSkipData)
+    unsigned int ScriptInterpreter::pullDataSize(uint8_t pOpCode, NextCash::Buffer &pScript,
+      bool pSkipData)
     {
         if(pOpCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
         {
             if(pOpCode > pScript.remaining())
-                return 0;
+                return 0xffffffff;
             else if(pSkipData)
                 pScript.setReadOffset(pScript.readOffset() + pOpCode);
             return pOpCode;
@@ -223,7 +232,7 @@ namespace BitCoin
             {
                 uint8_t length = pScript.readByte();
                 if(length > pScript.remaining())
-                    return 0;
+                    return 0xffffffff;
                 else if(pSkipData)
                     pScript.setReadOffset(pScript.readOffset() + length);
                 return length;
@@ -232,7 +241,7 @@ namespace BitCoin
             {
                 uint16_t length = pScript.readUnsignedShort();
                 if(length > pScript.remaining())
-                    return 0;
+                    return 0xffffffff;
                 else if(pSkipData)
                     pScript.setReadOffset(pScript.readOffset() + length);
                 return length;
@@ -241,14 +250,14 @@ namespace BitCoin
             {
                 uint32_t length = pScript.readUnsignedInt();
                 if(length > pScript.remaining())
-                    return 0;
+                    return 0xffffffff;
                 else if(pSkipData)
                     pScript.setReadOffset(pScript.readOffset() + length);
                 return length;
             }
 
             default:
-                return 0;
+                return 0xffffffff;
         }
     }
 
@@ -834,7 +843,7 @@ namespace BitCoin
     {
         unsigned int length = pullDataSize(pScript.readByte(), pScript, false);
 
-        if(length == 0)
+        if(length == 0xffffffff)
             return false;
 
         NextCash::Buffer value;

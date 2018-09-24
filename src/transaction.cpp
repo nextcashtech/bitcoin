@@ -149,9 +149,9 @@ namespace BitCoin
           outpoint.index);
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME,
           "  Sequence       : 0x%08x", sequence);
-        script.setReadOffset(0);
         NextCash::Log::addFormatted(pLevel, BITCOIN_TRANSACTION_LOG_NAME,
           "  Script         : (%d bytes)",script.length());
+        script.setReadOffset(0);
         ScriptInterpreter::printScript(script, pForks, pLevel);
     }
 
@@ -870,7 +870,8 @@ namespace BitCoin
         if(size() > 100000)
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-              "Transaction over standard size of 100000 : trans %s", hash.hex().text());
+              "Transaction over standard size of 100000 (%d bytes) : trans %s", size(),
+              hash.hex().text());
             if(mStatus & IS_STANDARD)
                 mStatus ^= IS_STANDARD;
         }
@@ -906,7 +907,8 @@ namespace BitCoin
             if(input->script.length() > 1650)
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d script over standard size of 1650 : trans %s", index, hash.hex().text());
+                  "Input %d script over standard size of 1650 (%d bytes) : trans %s", index,
+                  input->script.length(), hash.hex().text());
                 if(mStatus & IS_STANDARD)
                     mStatus ^= IS_STANDARD;
             }
@@ -917,6 +919,9 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d script is not push only : trans %s", index, hash.hex().text());
+                input->script.setReadOffset(0);
+                ScriptInterpreter::printScript(input->script, pChain->forks(), pHeight,
+                  NextCash::Log::VERBOSE);
                 if(mStatus & IS_STANDARD)
                     mStatus ^= IS_STANDARD;
             }
@@ -949,6 +954,9 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d is non standard : trans %s", index, hash.hex().text());
+                output->script.setReadOffset(0);
+                ScriptInterpreter::printScript(output->script, pChain->forks(), pHeight,
+                  NextCash::Log::VERBOSE);
                 print(pChain->forks(), NextCash::Log::VERBOSE);
                 if(mStatus & IS_STANDARD)
                     mStatus ^= IS_STANDARD;
