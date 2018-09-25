@@ -287,9 +287,10 @@ namespace BitCoin
         bool refreshTransaction(SPVTransactionData *pTransaction, bool pAllowPending);
         bool updateRelatedTransactionData(RelatedTransactionData &pData,
           std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd);
-        Output *getOutput(NextCash::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending);
-        bool getPayAddresses(Output *pOutput, NextCash::HashList &pAddresses, bool pBlockOnly);
-        static bool outputIsRelated(Output *pOutput, std::vector<Key *>::iterator pChainKeyBegin,
+        bool getOutput(NextCash::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending,
+          Output &pOutput);
+        bool getPayAddresses(Output &pOutput, NextCash::HashList &pAddresses, bool pBlockOnly);
+        static bool outputIsRelated(Output &pOutput, std::vector<Key *>::iterator pChainKeyBegin,
           std::vector<Key *>::iterator pChainKeyEnd);
 
         // Cancel all pending merkle requests and update the bloom filter.
@@ -312,6 +313,7 @@ namespace BitCoin
         bool mLowestPassHeightSet;
         NextCash::HashContainerList<MerkleRequestData *> mMerkleRequests;
         bool mLoaded;
+        bool mBloomFilterNeedsRestart;
 
         // Transactions relating to the addresses in this block that have been confirmed in a block
         NextCash::HashContainerList<SPVTransactionData *> mTransactions;
