@@ -1106,7 +1106,8 @@ namespace BitCoin
         {
             highestNode = NULL;
             for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-                if(highestNode == NULL || highestNode->pingTime() < (*node)->pingTime())
+                if(highestNode == NULL ||
+                  highestNode->pingTimeMilliseconds() < (*node)->pingTimeMilliseconds())
                     highestNode = *node;
 
             pNodes.push_back(highestNode);
@@ -1124,7 +1125,7 @@ namespace BitCoin
     bool higherSpeedThan(Node *pLeft, Node *pRight)
     {
         if(pLeft->blockDownloadBytesPerSecond() == 0.0 && pRight->blockDownloadBytesPerSecond() == 0.0)
-            return pLeft->pingTime() < pRight->pingTime();
+            return pLeft->pingTimeMilliseconds() < pRight->pingTimeMilliseconds();
 
         if(pLeft->blockDownloadBytesPerSecond() == 0.0)
             return false;
@@ -1425,14 +1426,14 @@ namespace BitCoin
         // Calculate average
         double average = 0.0;
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            average += (double)(*node)->pingTime();
+            average += (double)(*node)->pingTimeMilliseconds();
         average /= (double)nodes.size();
 
         // Calculate variance
         double variance = 0.0;
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
             // Sum the squared difference from the mean
-            variance += NextCash::Math::square((double)(*node)->pingTime() - average);
+            variance += NextCash::Math::square((double)(*node)->pingTimeMilliseconds() - average);
         // Average the sum
         variance /= (double)nodes.size();
 
@@ -1445,7 +1446,7 @@ namespace BitCoin
         else
             cutoff = (int)(average + standardDeviation);
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Node ping : average %ds, cutoff %ds", (int)average, cutoff);
+          "Node ping : average %d ms, cutoff %d ms", (int)average, cutoff);
 
         // Regularly drop some nodes to increase diversity
         int churnDrop = 0;
@@ -1458,22 +1459,22 @@ namespace BitCoin
             if((*node)->blockDownloadBytesPerSecond() > cutoff)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d KB/s, %ds ping (dropping because of ping)",
+                  "Sorted Nodes : %s - %d KB/s, %d ms ping (dropping because of ping)",
                   (*node)->name(), (int)(*node)->blockDownloadBytesPerSecond() / 1000,
-                  (*node)->pingTime());
+                  (*node)->pingTimeMilliseconds());
                 (*node)->close();
             }
             else if(churnDrop > 0)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d KB/s, %ds ping (dropping for churn)", (*node)->name(),
-                  (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTime());
+                  "Sorted Nodes : %s - %d KB/s, %d ms ping (dropping for churn)", (*node)->name(),
+                  (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTimeMilliseconds());
                 (*node)->close();
             }
             else
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s - %d KB/s, %ds ping", (*node)->name(),
-                  (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTime());
+                  "Sorted Nodes : %s - %d KB/s, %d ms ping", (*node)->name(),
+                  (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTimeMilliseconds());
             --churnDrop;
         }
 
@@ -1492,7 +1493,7 @@ namespace BitCoin
         }
 
         // Remove nodes that aren't outgoing or aren't ready
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();)
+        for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end();)
             if((*node)->isIncoming() || (*node)->isSeed() || !(*node)->isReady())
                 node = nodes.erase(node);
             else
@@ -1508,14 +1509,14 @@ namespace BitCoin
         double averageSpeed = 0.0;
         double averagePing = 0.0;
         int nodesWithSpeed = 0;
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+        for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
         {
             if((*node)->blockDownloadBytesPerSecond() != 0.0)
             {
                 averageSpeed += (*node)->blockDownloadBytesPerSecond();
                 ++nodesWithSpeed;
             }
-            averagePing += (double)(*node)->pingTime();
+            averagePing += (double)(*node)->pingTimeMilliseconds();
         }
         if(nodesWithSpeed > 0)
             averageSpeed /= (double)nodesWithSpeed;
@@ -1524,12 +1525,12 @@ namespace BitCoin
         // Calculate variance
         double speedVariance = 0.0;
         double pingVariance = 0.0;
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+        for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
         {
             // Sum the squared difference from the mean
             if((*node)->blockDownloadBytesPerSecond() != 0.0)
                 speedVariance += NextCash::Math::square((*node)->blockDownloadBytesPerSecond() - averageSpeed);
-            pingVariance += NextCash::Math::square((double)(*node)->pingTime() - averagePing);
+            pingVariance += NextCash::Math::square((double)(*node)->pingTimeMilliseconds() - averagePing);
         }
 
         // Average the sum
@@ -1543,27 +1544,31 @@ namespace BitCoin
         // Score based on deviation from average of ping and speed
         std::vector<double> scores;
         double score;
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+        for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
         {
             if((*node)->blockDownloadBytesPerSecond() != 0.0 && speedStandardDeviation > 0.01)
-                score = ((*node)->blockDownloadBytesPerSecond() - averageSpeed) / speedStandardDeviation;
-            else // If no speed available, assume slightly below average.
+                score = ((*node)->blockDownloadBytesPerSecond() - averageSpeed) /
+                  speedStandardDeviation;
+            else if(nodesWithSpeed > 0) // If no speed available, assume slightly below average.
                 score = (averageSpeed * -0.1) / speedStandardDeviation;
+            else
+                score = 0.0;
             if(pingStandardDeviation > 0.01)
-                score += ((averagePing - (*node)->pingTime()) / pingStandardDeviation) / 2.0;
+                score += ((averagePing - (*node)->pingTimeMilliseconds()) /
+                  pingStandardDeviation) / 2.0;
             scores.push_back(score);
         }
 
         // Calculate average score
         double averageScore = 0.0;
         std::vector<double>::iterator nodeScore;
-        for(nodeScore=scores.begin();nodeScore!=scores.end();++nodeScore)
+        for(nodeScore = scores.begin(); nodeScore != scores.end(); ++nodeScore)
             averageScore += *nodeScore;
         averageScore /= (double)scores.size();
 
         // Calculate score variance
         double scoreVariance = 0.0;
-        for(nodeScore=scores.begin();nodeScore!=scores.end();++nodeScore)
+        for(nodeScore = scores.begin(); nodeScore != scores.end(); ++nodeScore)
             scoreVariance += NextCash::Math::square(*nodeScore - averageScore);
         scoreVariance /= (double)scores.size();
 
@@ -1579,7 +1584,7 @@ namespace BitCoin
         {
             lowestNode = NULL;
             nodeScore = scores.begin();
-            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+            for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
             {
                 if(lowestNode == NULL || *nodeScore < lowestScore)
                 {
@@ -1594,7 +1599,7 @@ namespace BitCoin
 
             // Remove highest
             nodeScore = scores.begin();
-            for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
+            for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
             {
                 if(*node == lowestNode)
                 {
@@ -1608,7 +1613,7 @@ namespace BitCoin
 
         double dropScore = averageScore - (scoreStandardDeviation * 1.25);
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-          "Node Performance Summary : average speed %d KB/s, average ping %ds, drop score %d",
+          "Node Performance Summary : average speed %d KB/s, average ping %d ms, drop score %d",
           (int)averageSpeed / 1000, (int)averagePing, (int)(100.0 * dropScore));
 
         // Always drop some nodes so nodes with lower pings can still be found
@@ -1623,21 +1628,26 @@ namespace BitCoin
             if(*nodeScore < dropScore)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d KB/s, %ds ping (dropping because of score)", (*node)->name(),
-                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTime());
+                  "Sorted Nodes : %s (score %d) - %d KB/s, %d ms ping (dropping because of score)",
+                  (*node)->name(),
+                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1000,
+                  (*node)->pingTimeMilliseconds());
                 (*node)->close();
             }
             else if(churnDrop > 0)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d KB/s, %ds ping (dropping for churn)", (*node)->name(),
-                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTime());
+                  "Sorted Nodes : %s (score %d) - %d KB/s, %d ms ping (dropping for churn)",
+                  (*node)->name(),
+                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1000,
+                  (*node)->pingTimeMilliseconds());
                 (*node)->close();
             }
             else
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "Sorted Nodes : %s (score %d) - %d KB/s, %ds ping", (*node)->name(),
-                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1000, (*node)->pingTime());
+                  "Sorted Nodes : %s (score %d) - %d KB/s, %d ms ping", (*node)->name(),
+                  (int)(100.0 * *nodeScore), (int)(*node)->blockDownloadBytesPerSecond() / 1000,
+                  (*node)->pingTimeMilliseconds());
 
             --churnDrop;
             ++nodeScore;

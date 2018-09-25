@@ -155,7 +155,7 @@ namespace BitCoin
         unsigned int height()
         {
             if(mNextBlockHeight == 0)
-                return 0;
+                return 0xffffffff;
             else
                 return mNextBlockHeight - 1;
         }

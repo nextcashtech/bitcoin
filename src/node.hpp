@@ -71,7 +71,7 @@ namespace BitCoin
 
         // Versions exchanged and initial ping completed
         bool isReady() const { return mPingRoundTripTime != -1; }
-        int32_t pingTime() const { return mPingRoundTripTime; }
+        milliseconds pingTimeMilliseconds() const { return mPingRoundTripTime; }
         void setPingCutoff(uint32_t pPingCutoff) { mPingCutoff = pPingCutoff; }
 
         // Time that the node connected
@@ -190,8 +190,8 @@ namespace BitCoin
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;
         int32_t mLastReceiveTime;
         int32_t mLastCheckTime;
-        int32_t mLastPingTime;
-        int32_t mPingRoundTripTime;
+        milliseconds mLastPingTime;
+        milliseconds mPingRoundTripTime;
         int32_t mPingCutoff;
         int32_t mLastBlackListCheck;
         int32_t mLastMerkleCheck, mLastMerkleRequest, mLastMerkleReceive;

@@ -1155,7 +1155,7 @@ namespace BitCoin
 #endif
         mProcessMutex.lock();
 
-        int32_t startTime = getTime();
+        milliseconds startTime = getTimeMilliseconds();
         bool success = true, fullyValidated = true;
         if(mApprovedBlockHeight >= mNextBlockHeight) // Just update transaction outputs
         {
@@ -1223,14 +1223,14 @@ namespace BitCoin
 
         if(fullyValidated)
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added validated block (%d) (%d trans) (%d KB) (%d s) : %s",
+              "Added validated block (%d) (%d trans) (%d KB) (%d ms) : %s",
               mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1000,
-              getTime() - startTime, pBlock.header.hash.hex().text());
+              getTimeMilliseconds() - startTime, pBlock.header.hash.hex().text());
         else
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added approved block (%d) (%d trans) (%d KB) (%d s) : %s",
+              "Added approved block (%d) (%d trans) (%d KB) (%d ms) : %s",
               mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1000,
-              getTime() - startTime, pBlock.header.hash.hex().text());
+              getTimeMilliseconds() - startTime, pBlock.header.hash.hex().text());
 
         return true;
     }
@@ -1789,18 +1789,19 @@ namespace BitCoin
     bool Chain::updateOutputs()
     {
         Block block;
-        int32_t startTime;
+        milliseconds startTime;
         if(mOutputs.height() == 0xffffffff)
         {
             // Process genesis block
-            startTime = getTime();
+            startTime = getTimeMilliseconds();
             if(Block::getBlock(0, block))
             {
                 if(block.updateOutputsSingleThreaded(this, 0))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                      "Updated outputs for genesis block (%d trans) (%d KB) (%d s)",
-                      block.transactions.size(), block.size() / 1000, getTime() - startTime);
+                      "Updated outputs for genesis block (%d trans) (%d KB) (%d ms)",
+                      block.transactions.size(), block.size() / 1000,
+                      getTimeMilliseconds() - startTime);
                 }
                 else
                 {
@@ -1848,8 +1849,9 @@ namespace BitCoin
                 if(success)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                      "Updated outputs for block %d (%d trans) (%d KB) (%d s)", currentHeight,
-                      block.transactions.size(), block.size() / 1000, getTime() - startTime);
+                      "Updated outputs for block %d (%d trans) (%d KB) (%d ms)", currentHeight,
+                      block.transactions.size(), block.size() / 1000,
+                      getTimeMilliseconds() - startTime);
                 }
                 else
                 {
@@ -1892,6 +1894,23 @@ namespace BitCoin
 #ifndef DISABLE_ADDRESSES
     bool Chain::updateAddresses()
     {
+        Block block;
+        milliseconds startTime;
+        if(mAddresses.height() == 0xffffffff)
+        {
+            // Process genesis block
+            startTime = getTimeMilliseconds();
+            if(Block::getBlock(0, block))
+            {
+                mAddresses.add(block.transactions, 0);
+
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  "Updated addresses for genesis block (%d trans) (%d KB) (%d ms)",
+                  block.transactions.size(), block.size() / 1000,
+                  getTimeMilliseconds() - startTime);
+            }
+        }
+
         unsigned int currentHeight = mAddresses.height();
         if(currentHeight == blockHeight())
             return true;
@@ -1909,7 +1928,7 @@ namespace BitCoin
         Block block;
         Forks emptyForks;
         int32_t lastPurgeTime = getTime();
-        int32_t startTime;
+        milliseconds startTime;
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Chain Update Addresses", false);
 #endif
@@ -1926,14 +1945,14 @@ namespace BitCoin
                 // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   // "Processing block %d : %s", currentHeight, block.hash.hex().text());
 
-                startTime = getTime();
+                startTime = getTimeMilliseconds();
 
                 mAddresses.add(block.transactions, currentHeight);
 
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                  "Updated addresses in block %d (%d trans) (%d KB) (%d s)", currentHeight,
+                  "Updated addresses in block %d (%d trans) (%d KB) (%d ms)", currentHeight,
                   block.transactions.size(), block.size() / 1000,
-                  getTime() - startTime);
+                  getTimeMilliseconds() - startTime);
             }
             else
             {
@@ -2025,19 +2044,20 @@ namespace BitCoin
 
     bool Chain::savePending()
     {
+        NextCash::String filePathName = Info::instance().path();
+        filePathName.pathAppend("pending");
+
         mPendingLock.readLock();
         if(mPendingBlocks.size() == 0)
         {
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "No pending blocks to save");
             mPendingLock.readUnlock();
+            NextCash::removeFile(filePathName);
             return true;
         }
 
-        NextCash::String filePathName = Info::instance().path();
-        filePathName.pathAppend("pending");
         NextCash::FileOutputStream file(filePathName, true);
-
         if(!file.isValid())
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
@@ -2117,6 +2137,9 @@ namespace BitCoin
                 delete newBlock;
         }
 
+        file.close();
+        NextCash::removeFile(filePathName);
+
         if(success)
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
@@ -2148,7 +2171,6 @@ namespace BitCoin
 
         mHeadersLock.writeLock("Load");
         bool success = true;
-        Block *genesisBlock = NULL;
         NextCash::Hash emptyHash;
 
         Header::clean(); // Close any open files
@@ -2204,7 +2226,7 @@ namespace BitCoin
         if(headerCount == 0)
         {
             // Add genesis header to chain
-            genesisBlock = Block::genesis(mMaxTargetBits);
+            Block *genesisBlock = Block::genesis(mMaxTargetBits);
 
             addBlockStat(genesisBlock->header.version, genesisBlock->header.time,
               genesisBlock->header.targetBits);
@@ -2220,6 +2242,22 @@ namespace BitCoin
 
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Added genesis header to chain : %s", genesisBlock->header.hash.hex().text());
+
+            if(blockCount == 0)
+            {
+                if(!Block::add(0, *genesisBlock))
+                {
+                    mHeadersLock.writeUnlock();
+                    delete genesisBlock;
+                    return false;
+                }
+                ++blockCount;
+                ++mNextBlockHeight;
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  "Added genesis block to chain : %s", genesisBlock->header.hash.hex().text());
+            }
+
+            delete genesisBlock;
         }
 
         NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME, "Indexing header hashes");
@@ -2255,8 +2293,6 @@ namespace BitCoin
         if(mStopRequested)
         {
             mHeadersLock.writeUnlock();
-            if(genesisBlock != NULL)
-                delete genesisBlock;
             return false;
         }
 
@@ -2382,8 +2418,6 @@ namespace BitCoin
                 if(mStopRequested)
                 {
                     mHeadersLock.writeUnlock();
-                    if(genesisBlock != NULL)
-                        delete genesisBlock;
                     return false;
                 }
 
@@ -2422,8 +2456,6 @@ namespace BitCoin
         if(mStopRequested)
         {
             mHeadersLock.writeUnlock();
-            if(genesisBlock != NULL)
-                delete genesisBlock;
             return false;
         }
 
@@ -2468,11 +2500,7 @@ namespace BitCoin
         mHeadersLock.writeUnlock();
 
         if(mStopRequested || !success)
-        {
-            if(genesisBlock != NULL)
-                delete genesisBlock;
             return false;
-        }
 
         if(!mInfo.spvMode)
         {
@@ -2502,17 +2530,7 @@ namespace BitCoin
                   "Failed to load. Bad allocation : %s", pBadAlloc.what());
                 success = false;
             }
-
-            if(success && genesisBlock != NULL)
-            {
-                NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-                  "Processing genesis block");
-                processBlock(*genesisBlock);
-                delete genesisBlock;
-            }
         }
-        else if(genesisBlock != NULL)
-            delete genesisBlock;
 
         return success && loadPending();
     }
@@ -2787,7 +2805,7 @@ namespace BitCoin
             Info::instance().setPath("chain_test");
             Chain chain;
             chain.load();
-            if(readBlock.processSingleThreaded(&chain, 0))
+            if(readBlock.processSingleThreaded(&chain, 1))
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   "Passed read block process");
             else

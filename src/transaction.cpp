@@ -1093,6 +1093,22 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Outputs amounts are more than inputs amounts");
+                index = 0;
+                for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
+                  ++input)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "    Input %d : %.08f", index, bitcoins(input->outpoint.output->amount));
+                    ++index;
+                }
+                index = 0;
+                for(std::vector<Output>::iterator output = outputs.begin(); output != outputs.end();
+                  ++output)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "    Output %d : %.08f", index, bitcoins(output->amount));
+                    ++index;
+                }
                 print(pChain->forks(), NextCash::Log::VERBOSE);
                 mStatus ^= IS_VALID;
                 mFee = INVALID_FEE;
@@ -1429,17 +1445,32 @@ namespace BitCoin
                 return false;
             }
 
-            if(!pCoinBase && output->amount > 0 && output->amount > mFee)
-            {
-                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Outputs are more than inputs");
-                print(pChain->forks(), NextCash::Log::VERBOSE);
-                mFee = INVALID_FEE;
-                return false;
-            }
-
             mFee -= output->amount;
             ++index;
+        }
+
+        if(!pCoinBase && mFee < 0)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+              "Outputs amounts are more than inputs amounts");
+            index = 0;
+            for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
+              ++input)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                  "    Input %d : %.08f", index, bitcoins(input->outpoint.output->amount));
+                ++index;
+            }
+            index = 0;
+            for(std::vector<Output>::iterator output = outputs.begin(); output != outputs.end();
+              ++output)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                  "    Output %d : %.08f", index, bitcoins(output->amount));
+                ++index;
+            }
+            print(pChain->forks(), NextCash::Log::WARNING);
+            return true;
         }
 
         clearCache();

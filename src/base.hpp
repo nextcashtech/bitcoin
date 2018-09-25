@@ -11,6 +11,7 @@
 #include "stream.hpp"
 #include "network.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <ctime>
 
@@ -55,12 +56,21 @@ namespace BitCoin
     enum Network { MAINNET, TESTNET };
 
     Network network();
+    typedef int32_t seconds;
     void setNetwork(Network pNetwork);
 
     // Seconds since epoch
     inline int32_t getTime()
     {
         return std::time(NULL);
+    }
+
+    // Milliseconds since epoch
+    typedef int64_t milliseconds;
+    inline int64_t getTimeMilliseconds()
+    {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch()).count();
     }
 
     // Convert Satoshis to Bitcoins
