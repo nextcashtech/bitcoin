@@ -110,7 +110,7 @@ namespace BitCoin
 
     protected:
 
-        static const int MAX_BLOCK_REQUEST = 8;
+        static const int MAX_BLOCK_REQUEST = 16;
         static const int GOOD_RATING = 20;
         static const int FALLBACK_GOOD_RATING = 5;
         static const int OKAY_RATING = 1;
@@ -172,12 +172,21 @@ namespace BitCoin
 
         unsigned int maxOutgoingNodes()
         {
-            unsigned int monitorHeight = mMonitor.height();
-            if(monitorHeight > 0 && monitorHeight < mChain.headerHeight() &&
-              mChain.headerHeight() - monitorHeight > 5000)
+            if(!mInfo.initialBlockDownloadIsComplete())
                 return mOutgoingNodeMax * 2;
-            else
-                return mOutgoingNodeMax;
+
+            if(mInfo.spvMode)
+            {
+                unsigned int monitorHeight = mMonitor.height();
+                if(monitorHeight > 0 && monitorHeight < mChain.headerHeight() &&
+                  mChain.headerHeight() - monitorHeight > 5000)
+                    return mOutgoingNodeMax * 2;
+            }
+            else if(mChain.headerHeight() > 1000 &&
+              mChain.blockHeight() < mChain.headerHeight() - 1000)
+                return mOutgoingNodeMax * 2;
+
+            return mOutgoingNodeMax;
         }
 
         class IPBytes
