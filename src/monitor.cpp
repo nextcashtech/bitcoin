@@ -2102,8 +2102,7 @@ namespace BitCoin
                         ++(pass->blockHeight);
                         ++mChangeID;
 
-                        // Update last block hash and height
-                        if(!mLowestPassHeightSet || pass->blockHeight <= mLowestPassHeight)
+                        if(!mLowestPassHeightSet || pass->blockHeight <= mLowestPassHeight + 1)
                             mLowestPassHeight = pass->blockHeight;
                     }
                     else
