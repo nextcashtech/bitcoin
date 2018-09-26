@@ -489,44 +489,59 @@ namespace BitCoin
             threads[i] = new NextCash::Thread(threadName, updateOutputsThreadRun, &threadData);
         }
 
+        NextCash::Thread::sleep(1);
+
         // Monitor threads
         unsigned int completedCount;
         bool report;
+        bool *complete;
+        unsigned int checkCount = 0;
         while(threadData.success)
         {
-            if(threadData.offset == transactions.size())
+            if(threadData.offset == threadData.count)
             {
-                report = getTime() - lastReport > 10;
+                if(++checkCount > 50)
+                {
+                    checkCount = 0;
+                    report = getTime() - lastReport > 10;
+                }
+                else
+                    report = false;
                 completedCount = 0;
-                for(i = 0; i < transactions.size(); ++i)
-                    if(threadData.complete[i])
+                complete = threadData.complete;
+                for(i = 0; i < threadData.count; ++i, ++complete)
+                    if(*complete)
                         ++completedCount;
                     else if(report)
-                        NextCash::Log::addFormatted(NextCash::Log::INFO,
-                          BITCOIN_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
                           "Update block %d waiting for transaction %d", pHeight, i);
 
                 if(report)
                     lastReport = getTime();
 
-                if(completedCount == transactions.size())
+                if(completedCount == threadData.count)
                     break;
             }
-            else if(getTime() - lastReport > 10)
+            else if(++checkCount > 50)
             {
-                completedCount = 0;
-                for(i = 0; i < transactions.size(); ++i)
-                    if(threadData.complete[i])
-                        ++completedCount;
+                checkCount = 0;
+                if(getTime() - lastReport > 10)
+                {
+                    completedCount = 0;
+                    complete = threadData.complete;
+                    for(i = 0; i < threadData.count; ++i, ++complete)
+                        if(*complete)
+                            ++completedCount;
 
-                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
-                  "Update block %d is %2d%% Complete", pHeight,
-                  (int)(((float)completedCount / (float)transactions.size()) * 100.0f));
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
+                      "Update block %d is %2d%% Complete", pHeight,
+                      (int)(((float)completedCount / (float)threadData.count) * 100.0f));
 
-                lastReport = getTime();
+                    lastReport = getTime();
+                }
             }
 
-            NextCash::Thread::sleep(500);
+            NextCash::Thread::sleep(10);
         }
 
         // Delete threads
@@ -683,44 +698,59 @@ namespace BitCoin
             threads[i] = new NextCash::Thread(threadName, processThreadRun, &threadData);
         }
 
+        NextCash::Thread::sleep(1);
+
         // Monitor threads
         unsigned int completedCount;
         bool report;
+        bool *complete;
+        unsigned int checkCount = 0;
         while(threadData.success)
         {
-            if(threadData.offset == transactions.size())
+            if(threadData.offset == threadData.count)
             {
-                report = getTime() - lastReport > 10;
+                if(++checkCount > 50)
+                {
+                    checkCount = 0;
+                    report = getTime() - lastReport > 10;
+                }
+                else
+                    report = false;
                 completedCount = 0;
-                for(i = 0; i < transactions.size(); ++i)
-                    if(threadData.complete[i])
+                complete = threadData.complete;
+                for(i = 0; i < threadData.count; ++i, ++complete)
+                    if(*complete)
                         ++completedCount;
                     else if(report)
-                        NextCash::Log::addFormatted(NextCash::Log::INFO,
-                          BITCOIN_BLOCK_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
                           "Process block %d waiting for transaction %d", pHeight, i);
 
                 if(report)
                     lastReport = getTime();
 
-                if(completedCount == transactions.size())
+                if(completedCount == threadData.count)
                     break;
             }
-            else if(getTime() - lastReport > 10)
+            else if(++checkCount > 50)
             {
-                completedCount = 0;
-                for(i = 0; i < transactions.size(); ++i)
-                    if(threadData.complete[i])
-                        ++completedCount;
+                checkCount = 0;
+                if(getTime() - lastReport > 10)
+                {
+                    completedCount = 0;
+                    complete = threadData.complete;
+                    for(i = 0; i < threadData.count; ++i, ++complete)
+                        if(*complete)
+                            ++completedCount;
 
-                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
-                  "Process block %d is %2d%% Complete", pHeight,
-                  (int)(((float)completedCount / (float)transactions.size()) * 100.0f));
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
+                      "Process block %d is %2d%% Complete", pHeight,
+                      (int)(((float)completedCount / (float)threadData.count) * 100.0f));
 
-                lastReport = getTime();
+                    lastReport = getTime();
+                }
             }
 
-            NextCash::Thread::sleep(500);
+            NextCash::Thread::sleep(10);
         }
 
         // Delete threads
