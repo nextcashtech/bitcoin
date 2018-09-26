@@ -1160,7 +1160,7 @@ namespace BitCoin
         if(mApprovedBlockHeight >= mNextBlockHeight) // Just update transaction outputs
         {
             fullyValidated = false;
-            if(pBlock.transactions.size() > 200) // Enough to cover overhead of creating threads.
+            if(pBlock.size() > 500000) // Enough to cover overhead of creating threads.
                 success = pBlock.updateOutputsMultiThreaded(this, mNextBlockHeight,
                   mInfo.threadCount);
             else
@@ -1176,7 +1176,7 @@ namespace BitCoin
         }
         else // Fully validate block
         {
-            if(pBlock.transactions.size() > 100) // Enough to cover overhead of creating threads.
+            if(pBlock.size() > 250000) // Enough to cover overhead of creating threads.
                 success = pBlock.processMultiThreaded(this, mNextBlockHeight, mInfo.threadCount);
             else
                 success = pBlock.processSingleThreaded(this, mNextBlockHeight);
@@ -1840,7 +1840,7 @@ namespace BitCoin
             startTime = getTime();
             if(Block::getBlock(currentHeight, block))
             {
-                if(block.transactions.size() > 200) // Enough to cover overhead of creating threads.
+                if(block.size() > 500000) // Enough to cover overhead of creating threads.
                     success = block.updateOutputsMultiThreaded(this, currentHeight,
                       mInfo.threadCount);
                 else
