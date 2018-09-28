@@ -414,16 +414,21 @@ namespace BitCoin
         bool allAreSynchronized();
         void setAllSynchronized();
 
+        // "Pass started" means that a monitor "pass" has been started to update transactions.
+        bool allPassesStarted(); // All keys marked with "pass started".
+        void setAllPassStarted(); // Mark all keys with "pass started".
+
         bool hasPrivate(unsigned int pOffset);
         NextCash::String name(unsigned int pOffset);
         bool isSynchronized(unsigned int pOffset);
         bool isBackedUp(unsigned int pOffset);
         Key::DerivationPathMethod derivationPathMethod(unsigned int pOffset);
+        int32_t createdDate(unsigned int pOffset);
+        bool passStarted(unsigned int pOffset);
         std::vector<Key *> *chainKeys(unsigned int pOffset);
         Key *chainKey(unsigned int pOffset, uint32_t pIndex);
 
         void setName(unsigned int pOffset, const char *pName);
-        void setSynchronized(unsigned int pOffset);
         void setBackedUp(unsigned int pOffset);
 
         // These functions require private keys to be loaded/decrypted.
@@ -433,7 +438,7 @@ namespace BitCoin
 
         bool synchronize(unsigned int pOffset);
 
-        int addSeed(const char *pSeed, Key::DerivationPathMethod pMethod);
+        int addSeed(const char *pSeed, Key::DerivationPathMethod pMethod, int32_t pCreatedDate);
 
         // Load a key from text
         // Valid values are:
@@ -447,7 +452,7 @@ namespace BitCoin
         //   3 = already exists
         //   4 = invalid derivation method for key
         //   5 = encryption key needed
-        int loadKey(const char *pText, Key::DerivationPathMethod pMethod);
+        int loadKey(const char *pText, Key::DerivationPathMethod pMethod, int32_t pCreatedDate);
 
         // Load keys from a text stream
         // Valid lines of text are:
@@ -469,14 +474,16 @@ namespace BitCoin
         void write(NextCash::OutputStream *pStream) const;
         bool read(NextCash::InputStream *pStream);
 
-        bool writePrivate(NextCash::OutputStream *pStream, const uint8_t *pKey, unsigned int pKeyLength) const;
-        bool readPrivate(NextCash::InputStream *pStream, const uint8_t *pKey, unsigned int pKeyLength);
+        bool writePrivate(NextCash::OutputStream *pStream, const uint8_t *pKey,
+          unsigned int pKeyLength) const;
+        bool readPrivate(NextCash::InputStream *pStream, const uint8_t *pKey,
+          unsigned int pKeyLength);
 
         void unloadPrivate();
 
     private:
 
-        int add(Key *pKey, Key::DerivationPathMethod pMethod);
+        int add(Key *pKey, Key::DerivationPathMethod pMethod, int32_t pCreatedDate);
 
         bool mLoaded;
         std::vector<PublicKeyData *> mKeys;

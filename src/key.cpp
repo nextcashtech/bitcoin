@@ -2318,11 +2318,13 @@ namespace BitCoin
             hasPrivate = false;
             derivationPathMethod = Key::UNKNOWN;
             flags = 0;
+            createdDate = 0;
         }
         PublicKeyData(const PublicKeyData &pCopy) : chainKeys(pCopy.chainKeys)
         {
             hasPrivate = pCopy.hasPrivate;
             name = pCopy.name;
+            createdDate = pCopy.createdDate;
             flags = pCopy.flags;
             derivationPathMethod = pCopy.derivationPathMethod;
         }
@@ -2330,6 +2332,7 @@ namespace BitCoin
         {
             hasPrivate = pRight.hasPrivate;
             name = pRight.name;
+            createdDate = pRight.createdDate;
             flags = pRight.flags;
             derivationPathMethod = pRight.derivationPathMethod;
             chainKeys = pRight.chainKeys;
@@ -2337,14 +2340,12 @@ namespace BitCoin
         }
         ~PublicKeyData()
         {
-            for(std::vector<Key *>::iterator key=chainKeys.begin();key!=chainKeys.end();++key)
+            for(std::vector<Key *>::iterator key = chainKeys.begin(); key != chainKeys.end(); ++key)
                 delete *key;
         }
 
         void write(NextCash::OutputStream *pStream) const
         {
-            pStream->writeUnsignedInt(1); // Version
-
             if(hasPrivate)
                 pStream->writeByte(0xff);
             else
@@ -2354,18 +2355,18 @@ namespace BitCoin
             pStream->writeUnsignedInt(flags);
 
             pStream->writeByte(derivationPathMethod);
+            pStream->writeInt(createdDate);
 
             pStream->writeUnsignedInt(chainKeys.size());
-            for(std::vector<Key *>::const_iterator key=chainKeys.begin();key!=chainKeys.end();++key)
+            for(std::vector<Key *>::const_iterator key = chainKeys.begin(); key != chainKeys.end();
+              ++key)
                 (*key)->writeTree(pStream);
         }
 
-        bool read(NextCash::InputStream *pStream)
+        bool read(NextCash::InputStream *pStream, unsigned int pVersion)
         {
-            unsigned int version = pStream->readUnsignedInt();
-
-            if(version != 1)
-                return false;
+            if(pVersion == 1)
+                pStream->readUnsignedInt();
 
             hasPrivate = pStream->readByte() != 0;
 
@@ -2376,12 +2377,20 @@ namespace BitCoin
 
             derivationPathMethod = static_cast<Key::DerivationPathMethod>(pStream->readByte());
 
+            if(pVersion > 1)
+                createdDate = pStream->readInt();
+            else
+            {
+                createdDate = 0;
+                flags |= PASS_STARTED;
+            }
+
             unsigned int chainCount = pStream->readUnsignedInt();
             Key *newKey;
 
             chainKeys.clear();
             chainKeys.reserve(chainCount);
-            for(unsigned int i=0;i<chainCount;++i)
+            for(unsigned int i = 0; i < chainCount; ++i)
             {
                 newKey = new Key();
                 if(newKey->readTree(pStream))
@@ -2399,11 +2408,13 @@ namespace BitCoin
         bool hasPrivate;
         NextCash::String name;
         Key::DerivationPathMethod derivationPathMethod;
+        int32_t createdDate;
         uint32_t flags;
 
         // Flag values
         static const uint32_t SYNCHRONIZED = 0x01;
         static const uint32_t BACKED_UP    = 0x02;
+        static const uint32_t PASS_STARTED = 0x04;
 
         // Public keys used to generate addresses without access to private keys
         std::vector<Key *> chainKeys;
@@ -2446,7 +2457,7 @@ namespace BitCoin
             key->writeTree(pStream);
         }
 
-        bool read(NextCash::InputStream *pStream)
+        bool read(NextCash::InputStream *pStream, unsigned int pVersion)
         {
             unsigned int seedLength = pStream->readUnsignedInt();
             seed = pStream->readString(seedLength);
@@ -2465,7 +2476,8 @@ namespace BitCoin
         Key *key;
     };
 
-    static const char sEncryptKeyInitVector[] = "0daf9958eec1c536d8bed3608942b56098ed723b0e26713b1ba8f83e85f1525d";
+    static const char sEncryptKeyInitVector[] =
+      "0daf9958eec1c536d8bed3608942b56098ed723b0e26713b1ba8f83e85f1525d";
 
     KeyStore::KeyStore()
     {
@@ -2477,25 +2489,40 @@ namespace BitCoin
     {
         for(std::vector<PublicKeyData *>::iterator key=mKeys.begin();key!=mKeys.end();++key)
             delete *key;
-        for(std::vector<PrivateKeyData *>::iterator key=mPrivateKeys.begin();key!=mPrivateKeys.end();++key)
+        for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
+          key != mPrivateKeys.end(); ++key)
             delete *key;
     }
 
     bool KeyStore::allAreSynchronized()
     {
         bool result = true;
-
         for(std::vector<PublicKeyData *>::iterator key = mKeys.begin(); key != mKeys.end(); ++key)
             if(((*key)->flags & PublicKeyData::SYNCHRONIZED) == 0)
                 result = false;
-
         return result;
     }
 
     void KeyStore::setAllSynchronized()
     {
         for(std::vector<PublicKeyData *>::iterator key = mKeys.begin(); key != mKeys.end(); ++key)
-            (*key)->flags |= PublicKeyData::SYNCHRONIZED;
+            if(((*key)->flags & PublicKeyData::PASS_STARTED) != 0)
+                (*key)->flags |= PublicKeyData::SYNCHRONIZED;
+    }
+
+    bool KeyStore::allPassesStarted()
+    {
+        bool result = true;
+        for(std::vector<PublicKeyData *>::iterator key = mKeys.begin(); key != mKeys.end(); ++key)
+            if(((*key)->flags & PublicKeyData::PASS_STARTED) == 0)
+                result = false;
+        return result;
+    }
+
+    void KeyStore::setAllPassStarted()
+    {
+        for(std::vector<PublicKeyData *>::iterator key = mKeys.begin(); key != mKeys.end(); ++key)
+            (*key)->flags |= PublicKeyData::PASS_STARTED;
     }
 
     bool KeyStore::hasPrivate(unsigned int pOffset)
@@ -2567,6 +2594,16 @@ namespace BitCoin
         return mPrivateKeys[pOffset]->seed;
     }
 
+    int32_t KeyStore::createdDate(unsigned int pOffset)
+    {
+        return mKeys[pOffset]->createdDate;
+    }
+
+    bool KeyStore::passStarted(unsigned int pOffset)
+    {
+        return (mKeys[pOffset]->flags & PublicKeyData::PASS_STARTED) != 0;
+    }
+
     Key *KeyStore::fullKey(unsigned int pOffset)
     {
         if(!mPrivateLoaded || pOffset >= mPrivateKeys.size() || !synchronize(pOffset))
@@ -2594,12 +2631,6 @@ namespace BitCoin
             mKeys[pOffset]->name = pName;
     }
 
-    void KeyStore::setSynchronized(unsigned int pOffset)
-    {
-        if(pOffset < mKeys.size())
-            mKeys[pOffset]->flags |= PublicKeyData::SYNCHRONIZED;
-    }
-
     void KeyStore::setBackedUp(unsigned int pOffset)
     {
         if(pOffset < mKeys.size())
@@ -2608,11 +2639,12 @@ namespace BitCoin
 
     void KeyStore::clear()
     {
-        for(std::vector<PublicKeyData *>::iterator key=mKeys.begin();key!=mKeys.end();++key)
+        for(std::vector<PublicKeyData *>::iterator key = mKeys.begin(); key != mKeys.end(); ++key)
             delete *key;
         mKeys.clear();
 
-        for(std::vector<PrivateKeyData *>::iterator key=mPrivateKeys.begin();key!=mPrivateKeys.end();++key)
+        for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
+          key != mPrivateKeys.end(); ++key)
             delete *key;
         mPrivateKeys.clear();
 
@@ -2623,8 +2655,10 @@ namespace BitCoin
     Key *KeyStore::findAddress(const NextCash::Hash &pHash)
     {
         Key *result = NULL;
-        for(std::vector<PublicKeyData *>::iterator keyData=mKeys.begin();keyData!=mKeys.end();++keyData)
-            for(std::vector<Key *>::iterator key=(*keyData)->chainKeys.begin();key!=(*keyData)->chainKeys.end();++key)
+        for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin(); keyData != mKeys.end();
+          ++keyData)
+            for(std::vector<Key *>::iterator key = (*keyData)->chainKeys.begin();
+              key != (*keyData)->chainKeys.end(); ++key)
             {
                 result = (*key)->findAddress(pHash);
                 if(result != NULL)
@@ -2638,8 +2672,10 @@ namespace BitCoin
     {
         pNewAddresses = false;
         Key *result = NULL;
-        for(std::vector<PublicKeyData *>::iterator keyData=mKeys.begin();keyData!=mKeys.end();++keyData)
-            for(std::vector<Key *>::iterator key=(*keyData)->chainKeys.begin();key!=(*keyData)->chainKeys.end();++key)
+        for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin(); keyData != mKeys.end();
+          ++keyData)
+            for(std::vector<Key *>::iterator key = (*keyData)->chainKeys.begin();
+              key != (*keyData)->chainKeys.end(); ++key)
             {
                 result = (*key)->markUsed(pHash, pGap, pNewAddresses);
                 if(result != NULL)
@@ -2652,11 +2688,12 @@ namespace BitCoin
     void KeyStore::write(NextCash::OutputStream *pStream) const
     {
         // Version
-        pStream->writeUnsignedInt(1);
+        pStream->writeUnsignedInt(2);
 
         // Keys
         pStream->writeUnsignedInt(mKeys.size());
-        for(std::vector<PublicKeyData *>::const_iterator keyData=mKeys.begin();keyData!=mKeys.end();++keyData)
+        for(std::vector<PublicKeyData *>::const_iterator keyData = mKeys.begin();
+          keyData != mKeys.end(); ++keyData)
             (*keyData)->write(pStream);
     }
 
@@ -2669,7 +2706,7 @@ namespace BitCoin
 
         // Version
         unsigned int version = pStream->readUnsignedInt();
-        if(version != 1)
+        if(version != 1 && version != 2)
             return false;
 
         // Keys
@@ -2677,10 +2714,10 @@ namespace BitCoin
         PublicKeyData *newPublicKey;
 
         mKeys.reserve(count);
-        for(unsigned int i=0;i<count;++i)
+        for(unsigned int i = 0; i < count; ++i)
         {
             newPublicKey = new PublicKeyData();
-            if(newPublicKey->read(pStream))
+            if(newPublicKey->read(pStream, version))
                 mKeys.push_back(newPublicKey);
             else
             {
@@ -2689,7 +2726,7 @@ namespace BitCoin
             }
         }
 
-        mPrivateLoaded = count == 0; // If there are no keys there is not private file to load.
+        mPrivateLoaded = count == 0; // If there are no keys there is no private file to load.
         return true;
     }
 
@@ -2760,7 +2797,7 @@ namespace BitCoin
         for(unsigned int i=0;i<count;++i)
         {
             newPrivateKey = new PrivateKeyData();
-            if(newPrivateKey->read(&decryptor))
+            if(newPrivateKey->read(&decryptor, version))
                 mPrivateKeys.push_back(newPrivateKey);
             else
             {
@@ -2783,7 +2820,7 @@ namespace BitCoin
         mPrivateLoaded = mKeys.size() == 0;
     }
 
-    int KeyStore::add(Key *pKey, Key::DerivationPathMethod pMethod)
+    int KeyStore::add(Key *pKey, Key::DerivationPathMethod pMethod, int32_t pCreatedDate)
     {
         if(!mPrivateLoaded)
             return 5; // Private keys need to be loaded to add a private key
@@ -2795,6 +2832,8 @@ namespace BitCoin
 
         PublicKeyData *newData = new PublicKeyData();
         Key *chain;
+
+        newData->createdDate = pCreatedDate;
 
         // Prime the key for several derivation methods
         switch(pMethod)
@@ -2957,7 +2996,7 @@ namespace BitCoin
         return 0; // Success
     }
 
-    int KeyStore::addSeed(const char *pSeed, Key::DerivationPathMethod pMethod)
+    int KeyStore::addSeed(const char *pSeed, Key::DerivationPathMethod pMethod, int32_t pCreatedDate)
     {
         if(!mPrivateLoaded)
             return 5; // Private keys need to be loaded to add a private key
@@ -2969,8 +3008,7 @@ namespace BitCoin
             return 6;
         }
 
-        int result = add(newKey, pMethod);
-
+        int result = add(newKey, pMethod, pCreatedDate);
         if(result != 0)
             delete newKey;
 
@@ -2980,7 +3018,7 @@ namespace BitCoin
         return result;
     }
 
-    int KeyStore::loadKey(const char *pText, Key::DerivationPathMethod pMethod)
+    int KeyStore::loadKey(const char *pText, Key::DerivationPathMethod pMethod, int32_t pCreatedDate)
     {
         if(!mPrivateLoaded)
             return 5; // Private keys need to be loaded to add a private key
@@ -2990,7 +3028,7 @@ namespace BitCoin
 
         if(newKey->decode(pText))
         {
-            int result = add(newKey, pMethod);
+            int result = add(newKey, pMethod, pCreatedDate);
             if(result != 0)
             {
                 delete newKey;
@@ -3005,7 +3043,8 @@ namespace BitCoin
         {
             paymentRequest = decodePaymentCode(pText);
 
-            if(paymentRequest.network == MAINNET && paymentRequest.pubKeyHash.size() == PUB_KEY_HASH_SIZE)
+            if(paymentRequest.network == MAINNET &&
+              paymentRequest.pubKeyHash.size() == PUB_KEY_HASH_SIZE)
             {
                 for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
                     keyData != mKeys.end(); ++keyData)
@@ -3021,6 +3060,7 @@ namespace BitCoin
 
                 PublicKeyData *newData = new PublicKeyData();
                 newData->hasPrivate = false;
+                newData->createdDate = pCreatedDate;
                 newData->chainKeys.push_back(newKey);
                 mPrivateKeys.push_back(new PrivateKeyData());
                 mKeys.push_back(newData);
@@ -3041,6 +3081,7 @@ namespace BitCoin
 
     bool KeyStore::loadKeys(NextCash::InputStream *pStream)
     {
+        // TODO Add create date to this file format.
         if(!mPrivateLoaded)
             return false; // Private keys need to be loaded to add a key
 
@@ -3068,7 +3109,7 @@ namespace BitCoin
             {
                 if(newKey->decode(line))
                 {
-                    int result = add(newKey, method);
+                    int result = add(newKey, method, getTime());
                     if(result != 0)
                         delete newKey;
 
@@ -3078,14 +3119,16 @@ namespace BitCoin
                 {
                     paymentRequest = decodePaymentCode(line);
 
-                    if(paymentRequest.network == MAINNET && paymentRequest.pubKeyHash.size() == PUB_KEY_HASH_SIZE)
+                    if(paymentRequest.network == MAINNET &&
+                      paymentRequest.pubKeyHash.size() == PUB_KEY_HASH_SIZE)
                     {
                         // Check if it is already in this block
                         found = false;
                         for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
                             keyData != mKeys.end() && !found; ++keyData)
-                            for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
-                                key != (*keyData)->chainKeys.end(); ++key)
+                            for(std::vector<Key *>::const_iterator key =
+                              (*keyData)->chainKeys.begin(); key != (*keyData)->chainKeys.end();
+                              ++key)
                                 if((*key)->hash() == paymentRequest.pubKeyHash)
                                 {
                                     found = true;
@@ -3252,7 +3295,8 @@ namespace BitCoin
             else
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 Master Key Private");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 Master Key Private");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3267,7 +3311,8 @@ namespace BitCoin
             else
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 Master Key Public");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 Master Key Public");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3288,7 +3333,8 @@ namespace BitCoin
             if(m0hKey == NULL)
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H Private : Derive Failed");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H Private : Derive Failed");
             }
             else
             {
@@ -3300,7 +3346,8 @@ namespace BitCoin
                 else
                 {
                     success = false;
-                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H Private");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Test 1 m/0H Private");
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3320,7 +3367,8 @@ namespace BitCoin
             else
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H Public");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H Public");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3341,7 +3389,8 @@ namespace BitCoin
             if(m0h1Key == NULL)
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1 Private : Derive Failed");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H/1 Private : Derive Failed");
             }
             else
             {
@@ -3353,7 +3402,8 @@ namespace BitCoin
                 else
                 {
                     success = false;
-                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1 Private");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Test 1 m/0H/1 Private");
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3373,7 +3423,8 @@ namespace BitCoin
             else
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1 Public");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H/1 Public");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3393,7 +3444,8 @@ namespace BitCoin
             if(m0h1PublicKey == NULL)
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1 Public Only : Derive Failed");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H/1 Public Only : Derive Failed");
             }
             else
             {
@@ -3405,7 +3457,8 @@ namespace BitCoin
                 else
                 {
                     success = false;
-                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1 Public Only");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Test 1 m/0H/1 Public Only");
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3428,7 +3481,8 @@ namespace BitCoin
             if(m0h12hKey == NULL)
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h Private : Derive Failed");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H/1/2h Private : Derive Failed");
             }
             else
             {
@@ -3440,7 +3494,8 @@ namespace BitCoin
                 else
                 {
                     success = false;
-                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h Private");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Test 1 m/0H/1/2h Private");
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3460,7 +3515,8 @@ namespace BitCoin
             else
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h Public");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H/1/2h Public");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3481,7 +3537,8 @@ namespace BitCoin
             if(m0h12h2Key == NULL)
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2 Private : Derive Failed");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H/1/2h/2 Private : Derive Failed");
             }
             else
             {
@@ -3493,7 +3550,8 @@ namespace BitCoin
                 else
                 {
                     success = false;
-                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2 Private");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Test 1 m/0H/1/2h/2 Private");
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3513,7 +3571,8 @@ namespace BitCoin
             else
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2 Public");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H/1/2h/2 Public");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3534,7 +3593,8 @@ namespace BitCoin
             if(m0h12h21000000000Key == NULL)
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Private : Derive Failed");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Private : Derive Failed");
             }
             else
             {
@@ -3546,7 +3606,8 @@ namespace BitCoin
                 else
                 {
                     success = false;
-                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Private");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Private");
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3566,7 +3627,8 @@ namespace BitCoin
             else
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Public");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 1 m/0H/1/2h/2/1000000000 Public");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3597,7 +3659,8 @@ namespace BitCoin
             else
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 3 Master Key Private");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 3 Master Key Private");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3612,7 +3675,8 @@ namespace BitCoin
             else
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 3 Master Key Public");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 3 Master Key Public");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3631,7 +3695,8 @@ namespace BitCoin
             if(m0hKey == NULL)
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 3 m/0H Private : Derive Failed");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 3 m/0H Private : Derive Failed");
             }
             else
             {
@@ -3643,7 +3708,8 @@ namespace BitCoin
                 else
                 {
                     success = false;
-                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 3 m/0H Private");
+                    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed BIP-0032 Test 3 m/0H Private");
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                       "Correct : %s", correctEncoding.text());
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3663,7 +3729,8 @@ namespace BitCoin
             else
             {
                 success = false;
-                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME, "Failed BIP-0032 Test 3 m/0H Public");
+                NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed BIP-0032 Test 3 m/0H Public");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                   "Correct : %s", correctEncoding.text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -3831,11 +3898,14 @@ namespace BitCoin
             {
                 trezorPassed = false;
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Failed BIP-0039 Trezor Test %d Load Mnemonic : Incorrect Processed Seed", i + 1);
+                  "Failed BIP-0039 Trezor Test %d Load Mnemonic : Incorrect Processed Seed",
+                  i + 1);
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Correct : %s", correctProcessedSeed.readHexString(correctProcessedSeed.length()).text());
+                  "Correct : %s",
+                  correctProcessedSeed.readHexString(correctProcessedSeed.length()).text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                  "Result  : %s", resultProcessedSeed.readHexString(resultProcessedSeed.length()).text());
+                  "Result  : %s",
+                  resultProcessedSeed.readHexString(resultProcessedSeed.length()).text());
                 continue;
             }
 
@@ -3861,7 +3931,8 @@ namespace BitCoin
         }
 
         if(trezorPassed)
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed BIP-0039 Trezor Test Vector");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+              "Passed BIP-0039 Trezor Test Vector");
 
         /******************************************************************************************
          * Decode Key Text 1
@@ -4087,7 +4158,8 @@ namespace BitCoin
                     {
                         walletSuccess = false;
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-                          "Failed to generate receiving address key : %d : Non Matching Address", i);
+                          "Failed to generate receiving address key : %d : Non Matching Address",
+                          i);
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
                           "Correct : %s", receivingAddresses[i]);
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
@@ -4173,7 +4245,8 @@ namespace BitCoin
         }
 
         if(walletSuccess)
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME, "Passed Wallet Test vs Electron Cash");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+              "Passed Wallet Test vs Electron Cash");
         else
             success = false;
 
@@ -4486,7 +4559,7 @@ namespace BitCoin
         bool readWriteSuccess = true;
 
         keyStore.loadKey("xpub661MyMwAqRbcGujPLVW3q6UQQGetTsUcM7EYwUTDFGif17McpzNmGu5P1kzwxvCNGnjtDPM5MDbRTD8QZQSpktu7f9CcYydG7PNc3tqCKZi",
-          SIMPLE);
+          SIMPLE, getTime());
 
         chain = *keyStore.chainKeys(0)->begin();
         chain->updateGap(5);

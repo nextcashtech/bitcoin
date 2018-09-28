@@ -77,6 +77,14 @@ namespace BitCoin
             delete *pending;
     }
 
+    void Chain::setInSync()
+    {
+        mIsInSync = true;
+        mWasInSync = true;
+        mInfo.setInitialBlockDownloadComplete();
+        mMonitor->updatePasses(this);
+    }
+
     bool Chain::blockAvailable(const NextCash::Hash &pHash)
     {
         return hashHeight(pHash) < mNextBlockHeight;

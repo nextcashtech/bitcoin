@@ -565,6 +565,36 @@ namespace BitCoin
         mMutex.unlock();
     }
 
+    void Monitor::updatePasses(Chain *pChain)
+    {
+        if(!pChain->isInSync())
+            return;
+
+        mMutex.lock();
+
+        if(mKeyStore == NULL || mKeyStore->allPassesStarted())
+        {
+            mMutex.unlock();
+            return;
+        }
+
+        // Find oldest create date which does not have a pass started.
+        int32_t oldestCreateDate = 0, thisCreateDate;
+        for(unsigned int i = 0; i < mKeyStore->size(); ++i)
+            if(!mKeyStore->passStarted(i))
+            {
+                thisCreateDate = mKeyStore->createdDate(i);
+                if(oldestCreateDate == 0 || thisCreateDate < oldestCreateDate)
+                    oldestCreateDate = thisCreateDate;
+            }
+
+        if(oldestCreateDate != 0)
+            startPass(pChain->heightBefore(oldestCreateDate));
+
+        mKeyStore->setAllPassStarted();
+        mMutex.unlock();
+    }
+
     void Monitor::startPass(unsigned int pBlockHeight)
     {
         // Check for existing passes that are close to this block height
@@ -575,7 +605,7 @@ namespace BitCoin
           ++pass, ++passIndex)
             if(!pass->complete)
             {
-                if(pass->blockHeight > blockHeight && pass->blockHeight - blockHeight < 20000)
+                if(pass->blockHeight > blockHeight && pass->blockHeight - blockHeight < 10000)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Pass %d marked complete at height %d to start new pass at height %d",
@@ -583,7 +613,7 @@ namespace BitCoin
                     pass->complete = true;
                     refreshLowestPassHeight();
                 }
-                else if(pass->blockHeight < blockHeight && blockHeight - pass->blockHeight < 20000)
+                else if(pass->blockHeight < blockHeight && blockHeight - pass->blockHeight < 10000)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Existing pass %d (at height %d) is before and close enough to use for height %d",
@@ -668,46 +698,11 @@ namespace BitCoin
         return true;
     }
 
-    void Monitor::setKeyStore(KeyStore *pKeyStore, Chain *pChain, bool pStartNewPass,
-      int32_t pNewPassTime)
+    void Monitor::setKeyStore(KeyStore *pKeyStore)
     {
         mMutex.lock();
         mKeyStore = pKeyStore;
-        if(refreshKeyStore())
-        {
-            if(pStartNewPass)
-                startPass(pChain->heightBefore(pNewPassTime));
-            else
-            {
-                unsigned int headerHeight = pChain->headerHeight();
-                if(headerHeight > 20000 &&
-                  highestPassHeight(true) < headerHeight - 20000)
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                      "Starting new pass at block (%d) to monitor new blocks",
-                      headerHeight);
-                    mPasses.emplace_back(headerHeight);
-                    mPasses.back().addressesIncluded = mAddressHashes.size();
-                    if(!mLowestPassHeightSet || headerHeight < mLowestPassHeight)
-                    {
-                        mLowestPassHeightSet = true;
-                        mLowestPassHeight = headerHeight;
-                    }
-                }
-                else if(mPasses.size() == 0)
-                {
-                    mPasses.emplace_back(0);
-                    mPasses.back().addressesIncluded = mAddressHashes.size();
-                    if(!mLowestPassHeightSet || 0 < mLowestPassHeight)
-                    {
-                        mLowestPassHeightSet = true;
-                        mLowestPassHeight = 0;
-                    }
-                }
-            }
-
-            mBloomFilterNeedsRestart = true;
-        }
+        refreshKeyStore();
         mMutex.unlock();
     }
 
@@ -809,6 +804,9 @@ namespace BitCoin
                 }
             }
         }
+
+        if(addedCount > 0)
+            mBloomFilterNeedsRestart = true;
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
           "Added %d new addresses from key store", addedCount);

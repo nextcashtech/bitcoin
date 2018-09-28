@@ -84,13 +84,19 @@ namespace BitCoin
         // Sets up monitoring on a key store.
         // Each key in the key store must be "primed". Meaning there must be some address keys
         //   already generated under the "chain" key according to a known hierarchal structure.
-        void setKeyStore(KeyStore *pKeyStore, Chain *pChain, bool pStartNewPass,
-          int32_t pNewPassTime);
+        void setKeyStore(KeyStore *pKeyStore);
+
+        // Update address list from key store and add any missing.
+        // Return number of new addresses added.
+        unsigned int refreshKeyStore();
 
         // Removes all addresses and adds them back from key store, then updates all transactions
         //   and removes any that are no longer relevant.
         // Call this after removing a key from the keystore.
         void resetKeyStore();
+
+        // Start a new pass if needed.
+        void updatePasses(Chain *pChain);
 
         unsigned int setupBloomFilter(BloomFilter &pFilter);
 
@@ -277,10 +283,6 @@ namespace BitCoin
 
         // Start a new "pass" to check new addresses for previous transactions
         void startPass(unsigned int pBlockHeight = 0);
-
-        // Update address list from key store and add any missing.
-        // Return number of new addresses added.
-        unsigned int refreshKeyStore();
 
         void refreshBloomFilter(bool pLocked);
         // Returns true if the bloom filter is reset

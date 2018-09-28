@@ -638,7 +638,7 @@ namespace BitCoin
         // if(textFile.isValid() && !mMonitor.loadAddresses(&textFile))
             // return false;
 
-        mMonitor.setKeyStore(&mKeyStore, &mChain, true, 0);
+        mMonitor.setKeyStore(&mKeyStore);
         return true;
     }
 
@@ -1802,8 +1802,8 @@ namespace BitCoin
             if(!mKeysSynchronized && mChain.isInSync() &&
               mMonitor.height() == mChain.headerHeight())
             {
-                mKeysSynchronized = true;
                 mKeyStore.setAllSynchronized();
+                mKeysSynchronized = mKeyStore.allAreSynchronized();
                 mMonitor.incrementChange();
             }
 

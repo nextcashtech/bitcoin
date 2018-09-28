@@ -238,8 +238,7 @@ namespace BitCoin
 
         // Chain is up to date with most chains
         bool isInSync() { return mIsInSync; }
-        void setInSync()
-          { mIsInSync = true; mWasInSync = true; mInfo.setInitialBlockDownloadComplete(); }
+        void setInSync();
         void clearInSync() { mIsInSync = false; }
         bool wasInSync() { return mWasInSync; }
         Block *blockToAnnounce();
