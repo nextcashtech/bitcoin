@@ -1,6 +1,6 @@
 
-.objects/
-include/
+.objects
+.include
 test
 test.debug
 bitcoin

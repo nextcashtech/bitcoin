@@ -1,6 +1,6 @@
 
 COMPILER=g++
-COMPILE_FLAGS=-I./include -I../nextcash/include -Isecp256k1/include -pthread -std=c++11 -Wall -DDISABLE_ADDRESSES
+COMPILE_FLAGS=-I./.include -I../nextcash/.include -Isecp256k1/include -pthread -std=c++11 -Wall -DDISABLE_ADDRESSES
 # To Turn profiler on add this to the end of COMPILE_FLAGS : -DPROFILER_ON
 LIBRARY_PATHS=-L../nextcash -Lsecp256k1/.libs
 LIBRARIES=-lnextcash -lsecp256k1
@@ -9,7 +9,7 @@ LINK_FLAGS=-pthread
 HEADER_FILES=$(wildcard src/*.hpp)
 SOURCE_FILES=$(wildcard src/*.cpp)
 OBJECT_DIRECTORY=.objects
-HEADER_DIRECTORY=include
+HEADER_DIRECTORY=.include
 OBJECTS=$(patsubst %.cpp,${OBJECT_DIRECTORY}/%.o,${SOURCE_FILES})
 DEBUG_OBJECTS=$(patsubst %.cpp,${OBJECT_DIRECTORY}/%.o.debug,${SOURCE_FILES})
 OUTPUT=bitcoin
@@ -122,6 +122,6 @@ clean:
 	@echo ----------------------------------------------------------------------------------------------------
 	@echo "\tCLEANING"
 	@echo ----------------------------------------------------------------------------------------------------
-	@rm -vfr include ${OBJECT_DIRECTORY} test test.debug ${OUTPUT} ${OUTPUT}.debug
+	@rm -vfr ${HEADER_DIRECTORY} ${OBJECT_DIRECTORY} test test.debug ${OUTPUT} ${OUTPUT}.debug
 	@cd secp256k1; make clean
 	@rm build_secp256k1
