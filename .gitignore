@@ -5,5 +5,7 @@ test
 test.debug
 bitcoin
 bitcoin.debug
+build_secp256k1
 .gdb*
 chain_test
+test_outputs

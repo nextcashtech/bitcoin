@@ -1,13 +1,10 @@
 
 COMPILER=g++
-COMPILE_FLAGS=-I./include -I../nextcash/include -I../bitcoin-abc/src/secp256k1/include -pthread -std=c++11 -Wall -DDISABLE_ADDRESSES
-# To disable Bitcoin Cash add this to the end of COMPILE_FLAGS : -DDISABLE_CASH
+COMPILE_FLAGS=-I./include -I../nextcash/include -Isecp256k1/include -pthread -std=c++11 -Wall -DDISABLE_ADDRESSES
 # To Turn profiler on add this to the end of COMPILE_FLAGS : -DPROFILER_ON
-LIBRARY_PATHS=-L../nextcash -L../bitcoin-abc/src/secp256k1/.libs
+LIBRARY_PATHS=-L../nextcash -Lsecp256k1/.libs
 LIBRARIES=-lnextcash -lsecp256k1
 DEBUG_LIBRARIES=-lnextcash.debug -lsecp256k1
-# Library secp256k1 is from https://github.com/Bitcoin-ABC/bitcoin-abc
-#   Clone repository next to this one and build it.
 LINK_FLAGS=-pthread
 HEADER_FILES=$(wildcard src/*.hpp)
 SOURCE_FILES=$(wildcard src/*.cpp)
@@ -23,10 +20,24 @@ list:
 	@echo Headers : $(HEADER_FILES)
 	@echo Sources : $(SOURCE_FILES)
 	@echo Run Options :
-	@echo "  make test    # Run tests"
+	@echo "  make build_secp256k1    # Run tests"
 	@echo "  make debug   # Build exe with gdb info"
 	@echo "  make release # Build release exe"
+	@echo "  make test    # Run tests"
 	@echo "  make clean   # Remove all generated files"
+
+build_secp256k1:
+	@echo ----------------------------------------------------------------------------------------------------
+	@echo "\tBUILDING secp256k1"
+	@echo ----------------------------------------------------------------------------------------------------
+	@cd secp256k1; ./autogen.sh; ./configure; make
+	@touch build_secp256k1
+
+test_secp256k1:
+	@echo ----------------------------------------------------------------------------------------------------
+	@echo "\tTESTING secp256k1"
+	@echo ----------------------------------------------------------------------------------------------------
+	@cd secp256k1; ./tests
 
 headers:
 	@echo ----------------------------------------------------------------------------------------------------
@@ -69,7 +80,7 @@ ${OBJECT_DIRECTORY}/%.o.debug: %.cpp | ${OBJECT_DIRECTORY}
 	@echo "\033[0;32m----------------------------------------------------------------------------------------------------\033[0m"
 	${COMPILER} -c -ggdb -o $@ $< ${COMPILE_FLAGS}
 
-release: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} main.cpp
+release: headers ${OBJECT_DIRECTORY}/.headers build_secp256k1 ${OBJECTS} main.cpp
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING RELEASE ${OUTPUT}\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
@@ -77,7 +88,7 @@ release: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} main.cpp
 	${COMPILER} ${OBJECTS} ${OBJECT_DIRECTORY}/main.o ${LIBRARY_PATHS} ${LIBRARIES} -o ${OUTPUT} ${LINK_FLAGS}
 	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
-debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} main.cpp
+debug: headers ${OBJECT_DIRECTORY}/.debug_headers build_secp256k1 ${DEBUG_OBJECTS} main.cpp
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING DEBUG ${OUTPUT}\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
@@ -85,7 +96,7 @@ debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} main.cpp
 	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/main.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o ${OUTPUT}.debug ${LINK_FLAGS}
 	@echo "\033[0;34m----------------------------------------------------------------------------------------------------\033[0m"
 
-test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} bitcoin_test.cpp
+test: headers ${OBJECT_DIRECTORY}/.headers build_secp256k1 ${OBJECTS} bitcoin_test.cpp
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
@@ -99,7 +110,7 @@ test: headers ${OBJECT_DIRECTORY}/.headers ${OBJECTS} bitcoin_test.cpp
 
 all: clean release debug test
 
-test.debug: headers ${OBJECT_DIRECTORY}/.debug_headers ${DEBUG_OBJECTS} bitcoin_test.cpp
+test.debug: headers ${OBJECT_DIRECTORY}/.debug_headers build_secp256k1 ${DEBUG_OBJECTS} bitcoin_test.cpp
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING DEBUG TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
@@ -112,3 +123,5 @@ clean:
 	@echo "\tCLEANING"
 	@echo ----------------------------------------------------------------------------------------------------
 	@rm -vfr include ${OBJECT_DIRECTORY} test test.debug ${OUTPUT} ${OUTPUT}.debug
+	@cd secp256k1; make clean
+	@rm build_secp256k1
