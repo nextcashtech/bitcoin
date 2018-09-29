@@ -320,10 +320,10 @@ namespace BitCoin
             return false;
         }
 
-        if(mPrepared && !isIncoming() && !isSeed() && !mMemPoolRequested && (info.spvMode ||
-          (info.initialBlockDownloadIsComplete() && mChain->isInSync()) &&
+        if(mPrepared && !isIncoming() && !isSeed() && !mMemPoolRequested &&
+          (info.spvMode || (info.initialBlockDownloadIsComplete() && mChain->isInSync())) &&
           mSentVersionData != NULL && (mSentVersionData->relay || mBloomFilterID != 0) &&
-          (info.spvMode || mChain->memPoolRequests() < 5)))
+          (info.spvMode || mChain->memPoolRequests() < 5))
         {
             NextCash::Log::add(NextCash::Log::INFO, mName, "Sending request for mem pool");
             Message::Data memPoolMessage(Message::MEM_POOL);
