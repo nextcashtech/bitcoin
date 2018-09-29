@@ -301,7 +301,7 @@ namespace BitCoin
     void Monitor::SPVTransactionData::write(NextCash::OutputStream *pStream)
     {
         // Block height
-        pStream->writeInt(blockHeight);
+        pStream->writeUnsignedInt(blockHeight);
 
         // Block hash
         blockHash.write(pStream);
@@ -328,9 +328,9 @@ namespace BitCoin
     bool Monitor::SPVTransactionData::read(NextCash::InputStream *pStream, unsigned int pVersion)
     {
         if(pVersion > 1)
-            blockHeight = pStream->readInt();
+            blockHeight = pStream->readUnsignedInt();
         else
-            blockHeight = -1;
+            blockHeight = 0xffffffff;
 
         // Block hash
         if(!blockHash.read(pStream, 32))

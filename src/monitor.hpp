@@ -54,7 +54,7 @@ namespace BitCoin
 
             Transaction transaction;
             NextCash::Hash blockHash;
-            int blockHeight;
+            unsigned int blockHeight;
             unsigned int nodesVerified;
 
             NextCash::HashList inputAddresses;
@@ -141,7 +141,7 @@ namespace BitCoin
 
             SPVTransactionData()
             {
-                blockHeight = 0;
+                blockHeight = 0xffffffff;
                 transaction = NULL;
                 amount = 0;
                 announceTime = getTime();
