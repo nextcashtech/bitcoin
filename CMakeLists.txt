@@ -2,11 +2,19 @@
 
 cmake_minimum_required(VERSION 3.4.1)
 
+# Setup SECP256K1 library
+set( secp256k1_lib_src_dir secp256k1 )
+set( secp256k1_lib_build_dir secp256k1/build )
+
+add_subdirectory( ${secp256k1_lib_src_dir}
+        ${secp256k1_lib_build_dir} )
+
+
 include_directories( ../nextcash/src/base
                      ../nextcash/src/io
                      ../nextcash/src/crypto
                      ../nextcash/src/dev
-                     ../secp256k1/include
+                     secp256k1/include
                      src
                      . )
 
