@@ -265,7 +265,8 @@ namespace BitCoin
         bool isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex);
         bool spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
           uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent);
-        bool hasUnspent(const NextCash::Hash &pTransactionID, uint32_t pSpentBlockHeight = 0xffffffff);
+        bool hasUnspent(const NextCash::Hash &pTransactionID,
+          uint32_t pSpentBlockHeight = 0xffffffff, bool pForcePull = false);
         bool exists(const NextCash::Hash &pTransactionID);
 
         // BIP-0030 Check if this block's transactions match any existing unspent transaction IDs
@@ -388,7 +389,8 @@ namespace BitCoin
             bool isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex);
             bool spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
               uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent);
-            bool hasUnspent(const NextCash::Hash &pTransactionID, uint32_t pSpentBlockHeight);
+            bool hasUnspent(const NextCash::Hash &pTransactionID, uint32_t pSpentBlockHeight,
+              bool pForcePull);
             bool exists(const NextCash::Hash &pTransactionID);
 
             SubSetIterator end() { return mCache.end(); }

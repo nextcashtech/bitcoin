@@ -350,7 +350,7 @@ namespace BitCoin
       unsigned int pBlockHeight, const NextCash::Hash &pBlockHash)
     {
         // Get references set for transaction ID
-        if(hasUnspent(pTransaction.hash, pBlockHeight))
+        if(hasUnspent(pTransaction.hash, pBlockHeight, true))
         {
             bool exceptionFound = false;
             for(unsigned int i = 0; i < BIP0030_HASH_COUNT; ++i)
@@ -619,14 +619,14 @@ namespace BitCoin
     }
 
     bool TransactionOutputPool::hasUnspent(const NextCash::Hash &pTransactionID,
-      uint32_t pSpentBlockHeight)
+      uint32_t pSpentBlockHeight, bool pForcePull)
     {
         if(!mIsValid)
             return false;
 
         mLock.readLock();
         SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
-        bool result = subSet->hasUnspent(pTransactionID, pSpentBlockHeight);
+        bool result = subSet->hasUnspent(pTransactionID, pSpentBlockHeight, pForcePull);
         mLock.readUnlock();
         return result;
     }
@@ -1074,13 +1074,16 @@ namespace BitCoin
     }
 
     bool TransactionOutputPool::SubSet::hasUnspent(const NextCash::Hash &pTransactionID,
-      uint32_t pSpentBlockHeight)
+      uint32_t pSpentBlockHeight, bool pForcePull)
     {
         mLock.lock();
 
+        if(pForcePull)
+            pull(pTransactionID);
+
         bool result = false;
         SubSetIterator item = mCache.get(pTransactionID);
-        if(item == mCache.end() && pull(pTransactionID))
+        if(!pForcePull && item == mCache.end() && pull(pTransactionID))
             item = mCache.get(pTransactionID);
 
         while(item != mCache.end() && item.hash() == pTransactionID)
