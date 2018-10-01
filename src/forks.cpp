@@ -32,7 +32,7 @@ namespace BitCoin
         pStream->writeUnsignedInt(timeout);
 
         pStream->writeByte(state);
-        pStream->writeInt(lockedHeight);
+        pStream->writeUnsignedInt(lockedHeight);
     }
 
     bool SoftFork::read(NextCash::InputStream *pStream)
@@ -52,7 +52,7 @@ namespace BitCoin
         timeout = pStream->readUnsignedInt();
 
         state = static_cast<SoftFork::State>(pStream->readByte());
-        lockedHeight = pStream->readInt();
+        lockedHeight = pStream->readUnsignedInt();
         return true;
     }
 
@@ -219,17 +219,22 @@ namespace BitCoin
             mThreshHold = 1916;
 
             // Add known soft forks
-            mForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0, 1462060800, 1493596800));
-            mForks.push_back(new SoftFork("BIP-0141", SoftFork::BIP0141, 1, 1479168000, 1510704000));
-            mForks.push_back(new SoftFork("BIP-0091", SoftFork::BIP0091, 4, 1496275200, 1510704000));
+            mForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0,
+              1462060800, 1493596800));
+            mForks.push_back(new SoftFork("BIP-0141", SoftFork::BIP0141, 1, 1479168000,
+              1510704000));
+            mForks.push_back(new SoftFork("BIP-0091", SoftFork::BIP0091, 4, 1496275200,
+              1510704000));
             break;
         default:
         case TESTNET:
             mThreshHold = 1512;
 
             // Add known soft forks
-            mForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0, 1462060800, 1493596800));
-            mForks.push_back(new SoftFork("BIP-0141", SoftFork::BIP0141, 1, 1462060800, 1493596800));
+            mForks.push_back(new SoftFork("BIP-0068,BIP-0112,BIP-0113", SoftFork::BIP0068, 0,
+              1462060800, 1493596800));
+            mForks.push_back(new SoftFork("BIP-0141", SoftFork::BIP0141, 1, 1462060800,
+              1493596800));
             break;
         }
     }
@@ -514,8 +519,8 @@ namespace BitCoin
                 if(unknownSupport[i] > 0)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::NOTIFICATION, BITCOIN_FORKS_LOG_NAME,
-                      "Unknown soft fork for bit %d with %d/%d support (height %d)", i, unknownSupport[i],
-                      RETARGET_PERIOD, pHeight);
+                      "Unknown soft fork for bit %d with %d/%d support (height %d)", i,
+                      unknownSupport[i], RETARGET_PERIOD, pHeight);
                 }
         }
 
@@ -561,7 +566,7 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                       "2018 Nov fork activated at block height %d", pHeight);
                     mCashFork201811BlockHeight = pHeight;
-                    mCashForkID = 0x00FF0001;
+                    //TODO mCashForkID = 0x00FF0001;
                 }
             }
         }
@@ -702,13 +707,13 @@ namespace BitCoin
         }
 
         // Read height
-        mHeight = file.readInt();
+        mHeight = file.readUnsignedInt();
 
         // Read versions block heights
         for(unsigned int i = 0; i < 3; ++i)
-            mBlockVersionEnabledHeights[i] = file.readInt();
+            mBlockVersionEnabledHeights[i] = file.readUnsignedInt();
         for(unsigned int i = 0; i < 3; ++i)
-            mBlockVersionRequiredHeights[i] = file.readInt();
+            mBlockVersionRequiredHeights[i] = file.readUnsignedInt();
 
         unsigned int requiredBlockVersion = 1;
         if(mBlockVersionRequiredHeights[2] != 0)
@@ -731,7 +736,7 @@ namespace BitCoin
 
         if(version == 1)
         {
-            mCashActivationBlockHeight = file.readInt();
+            mCashActivationBlockHeight = file.readUnsignedInt();
 
             mBlockMaxSize = file.readUnsignedInt();
             mCashForkID = file.readUnsignedInt();
@@ -792,10 +797,10 @@ namespace BitCoin
             if(cashForkCount != 4)
                 return false;
 
-            mCashActivationBlockHeight = file.readInt();
-            mCashFork201711BlockHeight = file.readInt();
-            mCashFork201805BlockHeight = file.readInt();
-            mCashFork201811BlockHeight = file.readInt();
+            mCashActivationBlockHeight = file.readUnsignedInt();
+            mCashFork201711BlockHeight = file.readUnsignedInt();
+            mCashFork201805BlockHeight = file.readUnsignedInt();
+            mCashFork201811BlockHeight = file.readUnsignedInt();
 
             if(mCashActivationBlockHeight != 0)
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
@@ -869,13 +874,13 @@ namespace BitCoin
         file.writeUnsignedInt(2);
 
         // Write height
-        file.writeInt(mHeight);
+        file.writeUnsignedInt(mHeight);
 
         // Write versions block heights
         for(unsigned int i = 0; i < 3; ++i)
-            file.writeInt(mBlockVersionEnabledHeights[i]);
+            file.writeUnsignedInt(mBlockVersionEnabledHeights[i]);
         for(unsigned int i = 0; i < 3; ++i)
-            file.writeInt(mBlockVersionRequiredHeights[i]);
+            file.writeUnsignedInt(mBlockVersionRequiredHeights[i]);
 
         // Write max size and cash fork ID
         file.writeUnsignedInt(mBlockMaxSize);
@@ -883,10 +888,10 @@ namespace BitCoin
 
         // Write cash fork block heights
         file.writeUnsignedInt(4);
-        file.writeInt(mCashActivationBlockHeight);
-        file.writeInt(mCashFork201711BlockHeight);
-        file.writeInt(mCashFork201805BlockHeight);
-        file.writeInt(mCashFork201811BlockHeight);
+        file.writeUnsignedInt(mCashActivationBlockHeight);
+        file.writeUnsignedInt(mCashFork201711BlockHeight);
+        file.writeUnsignedInt(mCashFork201805BlockHeight);
+        file.writeUnsignedInt(mCashFork201811BlockHeight);
 
         for(std::vector<SoftFork *>::iterator softFork = mForks.begin(); softFork != mForks.end();
           ++softFork)
