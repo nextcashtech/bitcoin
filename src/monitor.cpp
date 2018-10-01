@@ -171,7 +171,7 @@ namespace BitCoin
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mTransactions.begin(); trans != mTransactions.end(); ++trans)
         {
-            if((*trans)->blockHeight == 0)
+            if((*trans)->blockHeight == 0xffffffff)
                 (*trans)->blockHeight = pChain->hashHeight((*trans)->blockHash);
             transactions.push_back(*trans);
         }
@@ -455,7 +455,8 @@ namespace BitCoin
         return false;
     }
 
-    bool Monitor::getPayAddresses(Output &pOutput, NextCash::HashList &pAddresses, bool pBlockOnly)
+    bool Monitor::getPayAddresses(Output &pOutput, NextCash::HashList &pAddresses,
+      bool pRelatedOnly)
     {
         pAddresses.clear();
 
@@ -468,7 +469,7 @@ namespace BitCoin
             return false;
         }
 
-        if(pBlockOnly) // Check the output addresses against related addresses
+        if(pRelatedOnly) // Check the output addresses against related addresses
             for(NextCash::HashList::iterator hash = pAddresses.begin(); hash != pAddresses.end();)
             {
                 if(mAddressHashes.contains(*hash))
@@ -904,11 +905,11 @@ namespace BitCoin
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mTransactions.begin(); trans != mTransactions.end(); ++trans)
         {
+            // Subtract "spends" in inputs.
             for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
               index != (*trans)->spendInputs.end(); ++index)
-            {
                 if(getOutput((*trans)->transaction->inputs[*index].outpoint.transactionID,
-                  (*trans)->transaction->inputs[*index].outpoint.index, false, output) &&
+                  (*trans)->transaction->inputs[*index].outpoint.index, pIncludePending, output) &&
                   getPayAddresses(output, payAddresses, true))
                 {
                     for(NextCash::HashList::iterator hash = payAddresses.begin();
@@ -921,8 +922,8 @@ namespace BitCoin
                                 break;
                             }
                 }
-            }
 
+            // Add "pays" in outputs.
             for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
               index != (*trans)->payOutputs.end(); ++index)
                 if(getPayAddresses((*trans)->transaction->outputs[*index], payAddresses, true))
@@ -944,12 +945,12 @@ namespace BitCoin
             for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
               mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
             {
+                // Subtract "spends" in inputs.
                 for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
                   index != (*trans)->spendInputs.end(); ++index)
-                {
                     if(getOutput((*trans)->transaction->inputs[*index].outpoint.transactionID,
-                      (*trans)->transaction->inputs[*index].outpoint.index, false, output) &&
-                      getPayAddresses(output, payAddresses, true))
+                      (*trans)->transaction->inputs[*index].outpoint.index, pIncludePending,
+                      output) && getPayAddresses(output, payAddresses, true))
                     {
                         for(NextCash::HashList::iterator hash = payAddresses.begin();
                           hash != payAddresses.end(); ++hash)
@@ -961,11 +962,10 @@ namespace BitCoin
                                     break;
                                 }
                     }
-                }
 
+                // Add "pays" in outputs.
                 for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
                   index != (*trans)->payOutputs.end(); ++index)
-                {
                     if(getPayAddresses((*trans)->transaction->outputs[*index], payAddresses, true))
                     {
                         for(NextCash::HashList::iterator hash = payAddresses.begin();
@@ -978,7 +978,6 @@ namespace BitCoin
                                     break;
                                 }
                     }
-                }
             }
         }
 
@@ -1163,12 +1162,13 @@ namespace BitCoin
     {
         int64_t result = 0;
         for(std::vector<int64_t>::const_iterator input = relatedInputAmounts.begin();
-            input != relatedInputAmounts.end(); ++input)
-            result -= *input;
+          input != relatedInputAmounts.end(); ++input)
+            if(*input != -1)
+                result -= *input;
 
         unsigned int offset = 0;
         for(std::vector<bool>::const_iterator output = relatedOutputs.begin();
-            output != relatedOutputs.end(); ++output, ++offset)
+          output != relatedOutputs.end(); ++output, ++offset)
             if(*output)
                 result += transaction.outputs[offset].amount;
 
@@ -1589,6 +1589,7 @@ namespace BitCoin
                       hash->hex().text());
                     request->transactions.insert(*hash, *pendingTransaction);
                     (*pendingTransaction)->blockHash = pData->header.hash;
+                    (*pendingTransaction)->blockHeight = pChain.hashHeight(pData->header.hash);
                     mPendingTransactions.erase(pendingTransaction);
                 }
                 else

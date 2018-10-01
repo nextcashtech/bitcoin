@@ -291,7 +291,7 @@ namespace BitCoin
           std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd);
         bool getOutput(NextCash::Hash &pTransactionHash, unsigned int pIndex, bool pAllowPending,
           Output &pOutput);
-        bool getPayAddresses(Output &pOutput, NextCash::HashList &pAddresses, bool pBlockOnly);
+        bool getPayAddresses(Output &pOutput, NextCash::HashList &pAddresses, bool pRelatedOnly);
         static bool outputIsRelated(Output &pOutput, std::vector<Key *>::iterator pChainKeyBegin,
           std::vector<Key *>::iterator pChainKeyEnd);
 
