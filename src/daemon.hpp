@@ -78,7 +78,7 @@ namespace BitCoin
         Monitor *monitor() { return &mMonitor; }
         KeyStore *keyStore() { return &mKeyStore; }
 
-        // Send a P2PKH payment to the specified public key hash.
+        // Send a P2PKH or P2SH payment to the specified public key hash.
         //
         // pAmount is in satoshis.
         // pFeeRate is satoshis/byte.
@@ -91,8 +91,8 @@ namespace BitCoin
         //   4 : No change address
         //   5 : Signing Issue
         //   6 : Amount below dust
-        int sendP2PKHPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash, uint64_t pAmount,
-          double pFeeRate, bool pUsePending, bool pSendAll);
+        int sendStandardPayment(unsigned int pKeyOffset, AddressType pHashType,
+          NextCash::Hash pHash, uint64_t pAmount, double pFeeRate, bool pUsePending, bool pSendAll);
         int sendSpecifiedOutputPayment(unsigned int pKeyOffset, NextCash::Buffer pOutputScript,
           uint64_t pAmount, double pFeeRate, bool pUsePending, bool pTransmit);
 

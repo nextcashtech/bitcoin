@@ -812,11 +812,11 @@ namespace BitCoin
         return true;
     }
 
-    int estimatedP2PKHFee(int pInputCount, int pOutputCount, double pFeeRate)
+    int estimatedStandardFee(int pInputCount, int pOutputCount, double pFeeRate)
     {
-        // P2PKH input size
+        // P2PKH/P2SH input size
         //   Previous Transaction ID = 32 bytes
-        //   Previous Transction Output Index = 4 bytes
+        //   Previous Transaction Output Index = 4 bytes
         //   Signature push to stack = 75
         //       push size = 1 byte
         //       signature up to = 73 bytes
@@ -826,22 +826,23 @@ namespace BitCoin
         //       public key size = 33 bytes
         int inputSize = 32 + 4 + 75 + 34;
 
-        // P2PKH output size
+        // P2PKH/P2SH output size
         //   amount = 8 bytes
         //   push size = 1 byte
-        //   Script (24 bytes) OP_DUP OP_HASH160 <PUB KEY HASH (20 bytes)> OP_EQUALVERIFY OP_CHECKSIG
+        //   Script (24 bytes) OP_DUP OP_HASH160 <PUB KEY/SCRIPT HASH (20 bytes)> OP_EQUALVERIFY
+        //     OP_CHECKSIG
         int outputSize = 8 + 25;
 
         return (int)((double)((inputSize * pInputCount) + (pOutputCount * outputSize)) * pFeeRate);
     }
 
-    int Daemon::sendP2PKHPayment(unsigned int pKeyOffset, NextCash::Hash pPublicKeyHash,
-      uint64_t pAmount, double pFeeRate, bool pUsePending, bool pSendAll)
+    int Daemon::sendStandardPayment(unsigned int pKeyOffset, AddressType pHashType,
+      NextCash::Hash pHash, uint64_t pAmount, double pFeeRate, bool pUsePending, bool pSendAll)
     {
         if(pAmount < Transaction::DUST)
             return 6; // Below dust
 
-        if(pPublicKeyHash.size() != 20) // Required for P2PKH
+        if(pHash.size() != 20) // Required for P2PKH and P2SH
             return 3; // Invalid Hash
 
         Key *fullKey = mKeyStore.fullKey(pKeyOffset);
@@ -862,8 +863,8 @@ namespace BitCoin
 
         for(std::vector<Outpoint>::iterator output = unspentOutputs.begin();
           output != unspentOutputs.end() && (pSendAll || inputAmount <= sendAmount +
-          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), pSendAll ? 1 : 2, pFeeRate));
-          ++output)
+          estimatedStandardFee((unsigned int)transaction->inputs.size(), pSendAll ? 1 : 2,
+          pFeeRate)); ++output)
         {
             transaction->addInput(output->transactionID, output->index);
             transaction->inputs.back().outpoint.output = new Output(*output->output);
@@ -873,17 +874,26 @@ namespace BitCoin
         if(pSendAll)
             sendAmount = inputAmount;
         else if(inputAmount < sendAmount +
-          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), pSendAll ? 1 : 2, pFeeRate))
+          estimatedStandardFee((unsigned int)transaction->inputs.size(), pSendAll ? 1 : 2,
+          pFeeRate))
         {
             delete transaction;
             return 2; // Insufficient funds
         }
 
         // Add payment output
-        transaction->addP2PKHOutput(pPublicKeyHash, sendAmount);
+        if(pHashType == MAIN_PUB_KEY_HASH)
+            transaction->addP2PKHOutput(pHash, sendAmount);
+        else if(pHashType == MAIN_SCRIPT_HASH)
+            transaction->addP2SHOutput(pHash, sendAmount);
+        else
+        {
+            delete transaction;
+            return 3; // Insufficient funds
+        }
 
         bool sendingChange = !pSendAll && inputAmount - sendAmount -
-          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate) >
+          estimatedStandardFee((unsigned int)transaction->inputs.size(), 2, pFeeRate) >
           Transaction::DUST * 2;
         int changeOutputOffset = -1;
         if(sendingChange)
@@ -900,7 +910,7 @@ namespace BitCoin
 
             transaction->addP2PKHOutput(changeChainKey->getNextUnused()->hash(),
               inputAmount - sendAmount -
-              estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate));
+              estimatedStandardFee((unsigned int)transaction->inputs.size(), 2, pFeeRate));
             changeOutputOffset = (int)transaction->outputs.size() - 1;
         }
 
@@ -991,7 +1001,7 @@ namespace BitCoin
 
         for(std::vector<Outpoint>::iterator output = unspentOutputs.begin();
           output != unspentOutputs.end() && (inputAmount <= sendAmount +
-          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate));
+          estimatedStandardFee((unsigned int)transaction->inputs.size(), 2, pFeeRate));
           ++output)
         {
             transaction->addInput(output->transactionID, output->index);
@@ -1000,7 +1010,7 @@ namespace BitCoin
         }
 
         if(inputAmount < sendAmount +
-          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate))
+          estimatedStandardFee((unsigned int)transaction->inputs.size(), 2, pFeeRate))
         {
             delete transaction;
             return 2; // Insufficient funds
@@ -1010,7 +1020,7 @@ namespace BitCoin
         transaction->addOutput(pOutputScript, sendAmount);
 
         bool sendingChange = inputAmount - sendAmount -
-          estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate) >
+          estimatedStandardFee((unsigned int)transaction->inputs.size(), 2, pFeeRate) >
           Transaction::DUST * 2;
         int changeOutputOffset = -1;
         if(sendingChange)
@@ -1027,7 +1037,7 @@ namespace BitCoin
 
             transaction->addP2PKHOutput(changeChainKey->getNextUnused()->hash(),
               inputAmount - sendAmount -
-              estimatedP2PKHFee((unsigned int)transaction->inputs.size(), 2, pFeeRate));
+              estimatedStandardFee((unsigned int)transaction->inputs.size(), 2, pFeeRate));
             changeOutputOffset = (int)transaction->outputs.size() - 1;
         }
 
