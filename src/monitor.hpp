@@ -57,9 +57,9 @@ namespace BitCoin
             unsigned int blockHeight;
             unsigned int nodesVerified;
 
-            NextCash::HashList inputAddresses;
+            std::vector<NextCash::String> inputAddresses;
             std::vector<int64_t> relatedInputAmounts;
-            NextCash::HashList outputAddresses;
+            std::vector<NextCash::String> outputAddresses;
             std::vector<bool> relatedOutputs;
 
             int64_t amount() const;

@@ -1139,7 +1139,11 @@ namespace BitCoin
                 scriptType = ScriptInterpreter::parseOutputScript(spentOutput.script,
                   payAddresses);
                 if(scriptType == ScriptInterpreter::P2PKH)
-                    pData.inputAddresses[offset] = payAddresses.front();
+                    pData.inputAddresses[offset] = encodeCashAddress(payAddresses.front(),
+                      MAIN_PUB_KEY_HASH);
+                else if(scriptType == ScriptInterpreter::P2SH)
+                    pData.inputAddresses[offset] = encodeCashAddress(payAddresses.front(),
+                      MAIN_SCRIPT_HASH);
             }
         }
 
@@ -1152,7 +1156,11 @@ namespace BitCoin
             pData.relatedOutputs[offset] = outputIsRelated(*output, pChainKeyBegin, pChainKeyEnd);
             scriptType = ScriptInterpreter::parseOutputScript(output->script, payAddresses);
             if(scriptType == ScriptInterpreter::P2PKH)
-                pData.outputAddresses[offset] = payAddresses.front();
+                pData.outputAddresses[offset] = encodeCashAddress(payAddresses.front(),
+                  MAIN_PUB_KEY_HASH);
+            else if(scriptType == ScriptInterpreter::P2SH)
+                pData.outputAddresses[offset] = encodeCashAddress(payAddresses.front(),
+                  MAIN_SCRIPT_HASH);
         }
 
         return true;
