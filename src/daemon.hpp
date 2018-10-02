@@ -103,6 +103,7 @@ namespace BitCoin
                           unsigned int pPasswordLength = 0);
         bool saveKeyStore(const uint8_t *pPassword = (const uint8_t *)"",
                           unsigned int pPasswordLength = 0);
+        void resetKeysSynchronized();
 
         enum Status { INACTIVE, LOADING_WALLETS, LOADING_CHAIN, FINDING_PEERS, CONNECTING_TO_PEERS,
           SYNCHRONIZING, SYNCHRONIZED, FINDING_TRANSACTIONS };

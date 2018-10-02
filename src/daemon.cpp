@@ -777,6 +777,11 @@ namespace BitCoin
         return true;
     }
 
+    void Daemon::resetKeysSynchronized()
+    {
+        mKeysSynchronized = mKeyStore.allAreSynchronized();
+    }
+
     bool checkSignature(Transaction &pTransaction, Monitor &pMonitor,
       std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd,
       Chain *pChain)
