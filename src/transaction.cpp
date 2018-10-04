@@ -805,6 +805,10 @@ namespace BitCoin
     uint8_t Transaction::checkOutpoints(TransactionOutputPool &pOutputs,
       TransactionList &pMemPoolTransactions)
     {
+        // Reset spent outpoint flag in case there was a reorg
+        if(mStatus & OUTPOINTS_SPENT)
+            mStatus ^= OUTPOINTS_SPENT;
+
         Transaction *outpointTransaction;
         uint32_t previousHeight;
         unsigned int index = 0;
@@ -812,45 +816,46 @@ namespace BitCoin
         for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end(); ++input)
         {
             if(input->outpoint.output == NULL)
-                input->outpoint.output = new Output();
-            if(!pOutputs.getOutput(input->outpoint.transactionID, input->outpoint.index,
-              TransactionOutputPool::REQUIRE_UNSPENT, 0, *input->outpoint.output,
-              previousHeight))
             {
-                // Search mempool
-                outpointTransaction =
-                  pMemPoolTransactions.getSorted(input->outpoint.transactionID);
-                if(outpointTransaction != NULL)
-                {
-                    if(outpointTransaction->outputs.size() <= input->outpoint.index)
-                    {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                          BITCOIN_TRANSACTION_LOG_NAME,
-                          "Input %d outpoint index too high : index %d trans %s", index,
-                          input->outpoint.index, input->outpoint.transactionID.hex().text());
-                        return mStatus;
-                    }
+                input->outpoint.output = new Output();
 
-                    if(input->outpoint.output == NULL)
-                        input->outpoint.output = new Output();
-                    *input->outpoint.output = outpointTransaction->outputs[input->outpoint.index];
-                }
-                else
+                if(!pOutputs.getOutput(input->outpoint.transactionID, input->outpoint.index,
+                  TransactionOutputPool::REQUIRE_UNSPENT, 0, *input->outpoint.output,
+                  previousHeight))
                 {
-                    if(input->outpoint.output != NULL)
+                    // Search mempool
+                    outpointTransaction =
+                      pMemPoolTransactions.getSorted(input->outpoint.transactionID);
+                    if(outpointTransaction != NULL)
+                    {
+                        if(outpointTransaction->outputs.size() <= input->outpoint.index)
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                              BITCOIN_TRANSACTION_LOG_NAME,
+                              "Input %d outpoint index too high : index %d trans %s", index,
+                              input->outpoint.index, input->outpoint.transactionID.hex().text());
+                            return mStatus;
+                        }
+
+                        *input->outpoint.output = outpointTransaction->outputs[input->outpoint.index];
+                    }
+                    else
                     {
                         delete input->outpoint.output;
                         input->outpoint.output = NULL;
+                        input->outpoint.signatureStatus = 0;
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                          BITCOIN_TRANSACTION_LOG_NAME,
+                          "Input %d outpoint not found : index %d trans %s", index,
+                          input->outpoint.index, input->outpoint.transactionID.hex().text());
+                        outpointsFound = false;
+                        continue;
                     }
-                    input->outpoint.signatureStatus = 0;
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                      BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d outpoint not found : index %d trans %s", index,
-                      input->outpoint.index, input->outpoint.transactionID.hex().text());
-                    outpointsFound = false;
-                    continue;
                 }
             }
+            else if(!(mStatus & OUTPOINTS_SPENT) &&
+              !pOutputs.isUnspent(input->outpoint.transactionID, input->outpoint.index))
+                mStatus |= OUTPOINTS_SPENT;
             ++index;
         }
 
@@ -933,7 +938,7 @@ namespace BitCoin
         ScriptInterpreter::ScriptType scriptType;
         NextCash::HashList hashes;
         mFee = 0;
-        for(std::vector<Output>::iterator output=outputs.begin();output!=outputs.end();++output)
+        for(std::vector<Output>::iterator output = outputs.begin(); output != outputs.end(); ++output)
         {
             if(output->amount < 0)
             {
@@ -1028,12 +1033,13 @@ namespace BitCoin
                     }
                     else
                     {
+                        delete input->outpoint.output;
+                        input->outpoint.output = NULL;
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE,
                           BITCOIN_TRANSACTION_LOG_NAME,
                           "Input %d outpoint transaction not found : index %d trans %s", index,
                           input->outpoint.index, input->outpoint.transactionID.hex().text());
                         pOutpointsNeeded.push_back(input->outpoint.transactionID);
-                        mFee = INVALID_FEE;
                         continue;
                     }
                 }
@@ -1089,6 +1095,10 @@ namespace BitCoin
 
         if(pOutpointsNeeded.size() == 0)
         {
+            mStatus |= OUTPOINTS_FOUND;
+            if((mStatus & IS_VALID) && sigsVerified)
+                mStatus |= SIGS_VERIFIED;
+
             if(mFee < 0)
             {
                 NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
@@ -1114,13 +1124,12 @@ namespace BitCoin
                 mFee = INVALID_FEE;
                 return true;
             }
-            if((mStatus & IS_VALID) && sigsVerified)
-                mStatus |= SIGS_VERIFIED;
-            mStatus |= OUTPOINTS_FOUND;
-        }
 
-        if(pOutpointsNeeded.size() == 0)
             clearCache();
+        }
+        else
+            mFee = INVALID_FEE;
+
         return true;
     }
 
@@ -1457,8 +1466,15 @@ namespace BitCoin
             for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
               ++input)
             {
-                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                  "    Input %d : %.08f", index, bitcoins(input->outpoint.output->amount));
+                if(pChain->outputs().getOutput(input->outpoint.transactionID,
+                  input->outpoint.index,
+                  TransactionOutputPool::MARK_SPENT | TransactionOutputPool::REQUIRE_UNSPENT,
+                  pHeight, previousOutput, previousHeight))
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                      "    Input %d : %.08f", index, bitcoins(previousOutput.amount));
+                else
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                      "    Input %d : unknown", index);
                 ++index;
             }
             index = 0;

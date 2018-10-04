@@ -229,6 +229,8 @@ namespace BitCoin
                 mSize -= (*transaction)->size();
                 transaction = mPendingTransactions.erase(transaction);
             }
+            else if(!((*transaction)->status() & Transaction::OUTPOINTS_FOUND))
+                ++transaction; // Still not ready
             else if((*transaction)->isStandardVerified())
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
