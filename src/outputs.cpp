@@ -312,66 +312,14 @@ namespace BitCoin
         NextCash::Hash("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
     };
 
-    bool TransactionOutputPool::checkDuplicates(const std::vector<Transaction *> &pBlockTransactions,
+    bool TransactionOutputPool::checkDuplicate(const NextCash::Hash &pTransactionID,
       unsigned int pBlockHeight, const NextCash::Hash &pBlockHash)
     {
-        Iterator reference;
-        for(std::vector<Transaction *>::const_iterator transaction = pBlockTransactions.begin();
-          transaction != pBlockTransactions.end(); ++transaction)
-        {
-            if(hasUnspent((*transaction)->hash))
-            {
-                bool exceptionFound = false;
-                for(unsigned int i=0;i<BIP0030_HASH_COUNT;++i)
-                    if(BIP0030_HEIGHTS[i] == pBlockHeight && BIP0030_HASHES[i] == pBlockHash)
-                        exceptionFound = true;
-                if(exceptionFound)
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                      "BIP-0030 Exception for duplicate transaction ID at block height %d : transaction %s",
-                      ((TransactionReference *)(*reference))->blockHeight,
-                      (*transaction)->hash.hex().text());
-                }
-                else
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Matching transaction output hash from block height %d has unspent outputs : %s",
-                      ((TransactionReference *)(*reference))->blockHeight,
-                      (*transaction)->hash.hex().text());
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
-    bool TransactionOutputPool::checkDuplicate(const Transaction &pTransaction,
-      unsigned int pBlockHeight, const NextCash::Hash &pBlockHash)
-    {
-        // Get references set for transaction ID
-        if(hasUnspent(pTransaction.hash, pBlockHeight, true))
-        {
-            bool exceptionFound = false;
-            for(unsigned int i = 0; i < BIP0030_HASH_COUNT; ++i)
-                if(BIP0030_HEIGHTS[i] == pBlockHeight && BIP0030_HASHES[i] == pBlockHash)
-                    exceptionFound = true;
-            if(exceptionFound)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                  "BIP-0030 Exception for duplicate transaction ID : transaction %s",
-                  pTransaction.hash.hex().text());
-            }
-            else
-            {
-                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Matching transaction output hash has unspent outputs : %s",
-                  pTransaction.hash.hex().text());
-                return false;
-            }
-        }
-
-        return true;
+        mLock.readLock();
+        SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
+        bool result = subSet->checkDuplicate(pTransactionID, pBlockHeight, pBlockHash);
+        mLock.readUnlock();
+        return result;
     }
 
     typename TransactionOutputPool::Iterator TransactionOutputPool::get(
@@ -619,14 +567,14 @@ namespace BitCoin
     }
 
     bool TransactionOutputPool::hasUnspent(const NextCash::Hash &pTransactionID,
-      uint32_t pSpentBlockHeight, bool pForcePull)
+      uint32_t pSpentBlockHeight)
     {
         if(!mIsValid)
             return false;
 
         mLock.readLock();
         SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
-        bool result = subSet->hasUnspent(pTransactionID, pSpentBlockHeight, pForcePull);
+        bool result = subSet->hasUnspent(pTransactionID, pSpentBlockHeight);
         mLock.readUnlock();
         return result;
     }
@@ -1074,18 +1022,12 @@ namespace BitCoin
     }
 
     bool TransactionOutputPool::SubSet::hasUnspent(const NextCash::Hash &pTransactionID,
-      uint32_t pSpentBlockHeight, bool pForcePull)
+      uint32_t pSpentBlockHeight)
     {
         mLock.lock();
 
-        if(pForcePull)
-            pull(pTransactionID);
-
         bool result = false;
         SubSetIterator item = mCache.get(pTransactionID);
-        if(!pForcePull && item == mCache.end() && pull(pTransactionID))
-            item = mCache.get(pTransactionID);
-
         while(item != mCache.end() && item.hash() == pTransactionID)
         {
             if(!(*item)->markedRemove() &&
@@ -1093,6 +1035,49 @@ namespace BitCoin
             {
                 result = (*item)->hasUnspent();
                 break;
+            }
+
+            ++item;
+        }
+
+        mLock.unlock();
+        return result;
+    }
+
+    bool TransactionOutputPool::SubSet::checkDuplicate(const NextCash::Hash &pTransactionID,
+      unsigned int pBlockHeight, const NextCash::Hash &pBlockHash)
+    {
+        mLock.lock();
+
+        // Force pull because we know there is already one in the cache since this is called during
+        //   block validation after the blocks transactions have already been added to the output set.
+        pull(pTransactionID);
+
+        bool result = true;
+        SubSetIterator item = mCache.get(pTransactionID);
+        while(item != mCache.end() && item.hash() == pTransactionID)
+        {
+            if(!(*item)->markedRemove() && (*item)->blockHeight != pBlockHeight &&
+              (*item)->hasUnspent())
+            {
+                bool exceptionFound = false;
+                for(unsigned int i = 0; i < BIP0030_HASH_COUNT; ++i)
+                    if(BIP0030_HEIGHTS[i] == pBlockHeight && BIP0030_HASHES[i] == pBlockHash)
+                        exceptionFound = true;
+                if(exceptionFound)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
+                      "BIP-0030 Exception for duplicate transaction ID in block %d : %s",
+                      (*item)->blockHeight, pTransactionID.hex().text());
+                }
+                else
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_OUTPUTS_LOG_NAME,
+                      "Matching transaction hash from block %d has unspent outputs : %s",
+                      (*item)->blockHeight, pTransactionID.hex().text());
+                    result = false;
+                    break;
+                }
             }
 
             ++item;

@@ -1162,7 +1162,7 @@ namespace BitCoin
             return false;
         }
 
-        if(!pChain->outputs().checkDuplicate(*this, pHeight, pBlockHash))
+        if(!pChain->outputs().checkDuplicate(hash, pHeight, pBlockHash))
             return false;
 
         mFee = 0;

@@ -266,15 +266,14 @@ namespace BitCoin
         bool spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
           uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent);
         bool hasUnspent(const NextCash::Hash &pTransactionID,
-          uint32_t pSpentBlockHeight = 0xffffffff, bool pForcePull = false);
+          uint32_t pSpentBlockHeight = 0xffffffff);
         bool exists(const NextCash::Hash &pTransactionID);
 
-        // BIP-0030 Check if this block's transactions match any existing unspent transaction IDs
-        //   This is expensive since it is a negative lookup and has to search a file for every transaction.
-        //   Positive lookups can be limited extremely by cacheing transactions from recent (a few thousand) blocks
-        bool checkDuplicates(const std::vector<Transaction *> &pBlockTransactions,
-          unsigned int pBlockHeight, const NextCash::Hash &pBlockHash);
-        bool checkDuplicate(const Transaction &pTransaction, unsigned int pBlockHeight,
+        // BIP-0030 Check if a transaction ID exists with unspent outputs before this block height.
+        //   pBlockHash is for exceptions allowed before BIP-0030 was activated.
+        //   This is expensive since it is a negative lookup and has to search a file for every
+        //     transaction.
+        bool checkDuplicate(const NextCash::Hash &pTransactionID, unsigned int pBlockHeight,
           const NextCash::Hash &pBlockHash);
 
         // Add all the outputs from a block (pending since they have no block file IDs or offsets yet)
@@ -389,9 +388,11 @@ namespace BitCoin
             bool isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex);
             bool spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
               uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent);
-            bool hasUnspent(const NextCash::Hash &pTransactionID, uint32_t pSpentBlockHeight,
-              bool pForcePull);
+            bool hasUnspent(const NextCash::Hash &pTransactionID, uint32_t pSpentBlockHeight);
             bool exists(const NextCash::Hash &pTransactionID);
+
+            bool checkDuplicate(const NextCash::Hash &pTransactionID, unsigned int pBlockHeight,
+              const NextCash::Hash &pBlockHash);
 
             SubSetIterator end() { return mCache.end(); }
 
