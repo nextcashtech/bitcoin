@@ -67,6 +67,7 @@ namespace BitCoin
         mFinishMode = FINISH_ON_REQUEST;
         mFinishTime = 0;
         mKeysSynchronized = true;
+        mTransmittedTransToLastNode = false;
 
         NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
           "Creating daemon object");
@@ -110,9 +111,11 @@ namespace BitCoin
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
             if((*node)->isNewlyReady())
             {
-                for(std::vector<Transaction *>::iterator trans = mTransactionsToTransmit.begin();
-                  trans != mTransactionsToTransmit.end(); ++trans)
-                    (*node)->sendTransaction(*trans);
+                if(!mTransmittedTransToLastNode)
+                    for(std::vector<Transaction *>::iterator trans = mTransactionsToTransmit.begin();
+                      trans != mTransactionsToTransmit.end(); ++trans)
+                        (*node)->sendTransaction(*trans);
+                mTransmittedTransToLastNode = !mTransmittedTransToLastNode;
             }
         mNodeLock.readUnlock();
     }
@@ -961,16 +964,21 @@ namespace BitCoin
 
         transaction->print(mChain.forks());
 
+        mTransmittedTransToLastNode = false;
+
         // Transmit to all currently "ready" nodes.
         mNodeLock.readLock();
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
             if((*node)->isReady())
-                (*node)->sendTransaction(transaction);
+            {
+                if(!mTransmittedTransToLastNode)
+                    (*node)->sendTransaction(transaction);
+                mTransmittedTransToLastNode = !mTransmittedTransToLastNode;
+            }
         mNodeLock.readUnlock();
 
         // Save to transmit to other nodes.
         mTransactionsToTransmit.push_back(newTransaction);
-
         return 0;
     }
 
@@ -1089,11 +1097,17 @@ namespace BitCoin
 
         if(pTransmit)
         {
+            mTransmittedTransToLastNode = false;
+
             // Transmit to all currently "ready" nodes.
             mNodeLock.readLock();
             for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                 if((*node)->isReady())
-                    (*node)->sendTransaction(transaction);
+                {
+                    if(!mTransmittedTransToLastNode)
+                        (*node)->sendTransaction(transaction);
+                    mTransmittedTransToLastNode = !mTransmittedTransToLastNode;
+                }
             mNodeLock.readUnlock();
 
             // Save to transmit to other nodes.

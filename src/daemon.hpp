@@ -229,6 +229,7 @@ namespace BitCoin
         Monitor mMonitor;
 
         std::vector<Transaction *> mTransactionsToTransmit;
+        bool mTransmittedTransToLastNode;
 
         // Transmit any created transactions
         void transmitTransactions();
