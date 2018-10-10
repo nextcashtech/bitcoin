@@ -37,6 +37,8 @@ namespace BitCoin
 
         // The block height of the lowest "pass"
         unsigned int height() const { return mLowestPassHeight; }
+        // The block height at which at least one valid merkle block has been received.
+        unsigned int roughHeight() const { return mRoughMerkleHeight; }
         unsigned int highestPassHeight(bool pLocked = false);
         int64_t balance(bool pLocked = false); // Return total balance of all keys
         // Return balance associated with a specific key
@@ -119,9 +121,17 @@ namespace BitCoin
         bool addMerkleBlock(Chain &pChain, Message::MerkleBlockData *pData, unsigned int pNodeID);
 
         // Add a received transaction if it was confirmed in a merkle block
-        bool addTransaction(Chain &pChain, Message::TransactionData *pTransactionData); // Return true if added
+        void addTransaction(Chain &pChain, Message::TransactionData *pTransactionData);
 
-        bool isConfirmed(const NextCash::Hash &pTransactionID);
+        bool isConfirmed(NextCash::Hash &pTransactionID, bool pIsLocked = false)
+        {
+            if(!pIsLocked)
+                mMutex.lock();
+            bool result = mTransactions.get(pTransactionID) != mTransactions.end();
+            if(!pIsLocked)
+                mMutex.unlock();
+            return result;
+        }
         NextCash::Hash confirmBlockHash(const NextCash::Hash &pTransactionID);
 
         void revertBlockHash(NextCash::Hash &pHash);
@@ -224,12 +234,6 @@ namespace BitCoin
 
             };
 
-            MerkleRequestData(uint8_t pRequiredNodeCount)
-            {
-                requiredNodeCount = pRequiredNodeCount;
-                totalTransactions = 0;
-                complete = false;
-            }
             MerkleRequestData(uint8_t pRequiredNodeCount, unsigned int pNodeID,
               int32_t pRequestTime)
             {
@@ -245,16 +249,19 @@ namespace BitCoin
             unsigned int timedOutNode(int32_t pTime);
             bool wasRequested(unsigned int pNodeID);
             bool markReceived(unsigned int pNodeID);
+            bool hasReceived(); // Return true if any node has given a complete response
             bool isComplete();
             void release(unsigned int pNodeID);
             void clear();
 
             uint8_t requiredNodeCount;
             std::vector<NodeData> nodes;
-            unsigned int totalTransactions; // Total transaction count of full block
-            NextCash::HashContainerList<SPVTransactionData *> transactions;
             bool complete;
+            unsigned int totalTransactions; // Total transaction count of full block
 
+            // Transactions confirmed to be in a block.
+            // A NULL entry means the transaction has already been processed.
+            NextCash::HashContainerList<SPVTransactionData *> transactions;
         };
 
         // Data about a merkle block pass.
@@ -278,7 +285,6 @@ namespace BitCoin
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream);
-
         };
 
         // Start a new "pass" to check new addresses for previous transactions
@@ -295,6 +301,8 @@ namespace BitCoin
         static bool outputIsRelated(Output &pOutput, std::vector<Key *>::iterator pChainKeyBegin,
           std::vector<Key *>::iterator pChainKeyEnd);
 
+        bool confirmTransaction(SPVTransactionData *pTransaction, unsigned int pBlockHeight);
+
         // Cancel all pending merkle requests and update the bloom filter.
         void restartBloomFilter();
         void clearMerkleRequest(MerkleRequestData *pData);
@@ -303,7 +311,7 @@ namespace BitCoin
 
         bool addNeedsClose(unsigned int pNodeID);
 
-        NextCash::MutexWithConstantName mMutex;
+        NextCash::Mutex mMutex;
         KeyStore *mKeyStore;
         NextCash::HashList mAddressHashes;
         unsigned int mFilterID;
@@ -313,6 +321,8 @@ namespace BitCoin
         std::vector<PassData> mPasses;
         unsigned int mLowestPassHeight;
         bool mLowestPassHeightSet;
+        // The height at which at least one valid merkle block has been received.
+        unsigned int mRoughMerkleHeight;
         NextCash::HashContainerList<MerkleRequestData *> mMerkleRequests;
         bool mLoaded;
         bool mBloomFilterNeedsRestart;
@@ -320,7 +330,6 @@ namespace BitCoin
         // Transactions relating to the addresses in this block that have been confirmed in a block
         NextCash::HashContainerList<SPVTransactionData *> mTransactions;
         NextCash::HashContainerList<SPVTransactionData *> mPendingTransactions;
-
     };
 }
 
