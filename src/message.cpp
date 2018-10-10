@@ -1258,7 +1258,8 @@ namespace BitCoin
             if(flags.remaining())
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
-                  "Merkle Block failed to consume flags : %d/%d", flags.length() - flags.remaining(), flags.length());
+                  "Merkle Block failed to consume flags : %d/%d",
+                  flags.length() - flags.remaining(), flags.length());
                 delete merkleRoot;
                 return false; // Not all flags were consumed
             }
@@ -1282,7 +1283,8 @@ namespace BitCoin
                 transaction->write(pStream);
         }
 
-        bool TransactionData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool TransactionData::read(NextCash::InputStream *pStream, unsigned int pSize,
+          int32_t pVersion)
         {
             if(transaction == NULL)
                 transaction = new Transaction();
@@ -1336,11 +1338,14 @@ namespace BitCoin
             digest.writeUnsignedLong(nonce);
             digest.getResult(&sha256);
 
-            for(std::vector<Transaction *>::iterator trans=block->transactions.begin();trans!=block->transactions.end();++trans)
+            for(std::vector<Transaction *>::iterator trans = block->transactions.begin();
+              trans != block->transactions.end(); ++trans)
             {
                 // Check if in prefilled
                 found = false;
-                for(std::vector<PrefilledTransaction>::iterator prefilled=prefilledTransactionIDs.begin();prefilled!=prefilledTransactionIDs.end();++prefilled)
+                for(std::vector<PrefilledTransaction>::iterator prefilled =
+                  prefilledTransactionIDs.begin(); prefilled != prefilledTransactionIDs.end();
+                  ++prefilled)
                     if(prefilled->transaction == *trans)
                     {
                         found = true;
@@ -1350,7 +1355,8 @@ namespace BitCoin
                 if(found) // Don't put prefilled in short IDs
                     continue;
 
-                // SipHash-2-4 of transaction ID and first two little endian 64 bit integers from header SHA256
+                // SipHash-2-4 of transaction ID and first two little endian 64 bit integers from
+                //   header SHA256
                 // Drop 2 most significant bytes from SipHash-2-4 to get to 6 bytes
                 if(!(*trans)->hash.getShortID(shortID, sha256))
                     return false;
@@ -1376,7 +1382,8 @@ namespace BitCoin
             shortIDs.clear();
 
             // Add Coinbase to prefilled automatically
-            prefilledTransactionIDs.push_back(PrefilledTransaction(0, pBlock->transactions.front()));
+            prefilledTransactionIDs.push_back(PrefilledTransaction(0,
+              pBlock->transactions.front()));
 
             //TODO Add prefill transactions that we know the node doesn't have
         }
@@ -1422,18 +1429,21 @@ namespace BitCoin
             writeCompactInteger(pStream, shortIDs.size());
 
             // Short IDs
-            for(NextCash::HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
+            for(NextCash::HashList::iterator shortID = shortIDs.begin(); shortID != shortIDs.end();
+              ++shortID)
                 shortID->write(pStream);
 
             // Number of prefilled transactions
             writeCompactInteger(pStream, prefilledTransactionIDs.size());
 
             // Prefilled transactions
-            for(std::vector<PrefilledTransaction>::iterator trans=prefilledTransactionIDs.begin();trans!=prefilledTransactionIDs.end();++trans)
+            for(std::vector<PrefilledTransaction>::iterator trans = prefilledTransactionIDs.begin();
+              trans != prefilledTransactionIDs.end(); ++trans)
                 trans->write(pStream);
         }
 
-        bool CompactBlockData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool CompactBlockData::read(NextCash::InputStream *pStream, unsigned int pSize,
+          int32_t pVersion)
         {
             NextCash::stream_size startOffset = pStream->readOffset();
 
@@ -1463,7 +1473,8 @@ namespace BitCoin
 
             shortIDs.resize(count);
             unsigned int readCount = 0;
-            for(NextCash::HashList::iterator shortID=shortIDs.begin();shortID!=shortIDs.end();++shortID)
+            for(NextCash::HashList::iterator shortID = shortIDs.begin(); shortID != shortIDs.end();
+              ++shortID)
             {
                 if(!shortID->read(pStream, 6))
                 {
@@ -1487,7 +1498,8 @@ namespace BitCoin
             // Prefilled transactions
             prefilledTransactionIDs.resize(count);
             readCount = 0;
-            for(std::vector<PrefilledTransaction>::iterator trans=prefilledTransactionIDs.begin();trans!=prefilledTransactionIDs.end();++trans)
+            for(std::vector<PrefilledTransaction>::iterator trans = prefilledTransactionIDs.begin();
+              trans != prefilledTransactionIDs.end(); ++trans)
             {
                 if(!trans->read(pStream, pSize - pStream->readOffset() - startOffset))
                 {
@@ -1507,7 +1519,8 @@ namespace BitCoin
             //TODO
         }
 
-        bool GetBlockTransactionsData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool GetBlockTransactionsData::read(NextCash::InputStream *pStream, unsigned int pSize,
+          int32_t pVersion)
         {
             //TODO
             return false;
@@ -1518,7 +1531,8 @@ namespace BitCoin
             //TODO
         }
 
-        bool BlockTransactionsData::read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+        bool BlockTransactionsData::read(NextCash::InputStream *pStream, unsigned int pSize,
+          int32_t pVersion)
         {
             //TODO
             return false;
@@ -1526,7 +1540,8 @@ namespace BitCoin
 
         bool test()
         {
-            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "------------- Starting Message Tests -------------");
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME,
+              "------------- Starting Message Tests -------------");
 
             bool result = true;
             Interpreter interpreter;
