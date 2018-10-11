@@ -617,7 +617,15 @@ namespace BitCoin
             }
 
         if(oldestCreateDate != 0)
-            startPass(pChain->heightBefore(oldestCreateDate));
+        {
+            unsigned int height = pChain->heightBefore(oldestCreateDate);
+            // Backup a little more to be safe.
+            if(height > 100)
+                height -= 100;
+            else
+                height = 0;
+            startPass(height);
+        }
 
         mKeyStore->setAllPassStarted();
         mMutex.unlock();
