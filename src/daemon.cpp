@@ -2186,6 +2186,9 @@ namespace BitCoin
                     data->recentIPs->pop_front();
             }
             data->recentIPLock.unlock();
+
+            NextCash::Thread::sleep(100);
+
             if(found)
                 continue;
 
@@ -2207,6 +2210,8 @@ namespace BitCoin
                   "Bad allocation while allocating new scan connection : unknown");
                 continue;
             }
+
+            NextCash::Thread::sleep(100);
 
             if(!connection->isOpen())
             {
@@ -2237,6 +2242,8 @@ namespace BitCoin
 
                 delete scanNode;
             }
+
+            NextCash::Thread::sleep(100);
         }
     }
 
