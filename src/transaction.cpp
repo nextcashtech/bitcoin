@@ -1486,7 +1486,7 @@ namespace BitCoin
                 ++index;
             }
             print(pChain->forks(), NextCash::Log::WARNING);
-            return true;
+            return false;
         }
 
         clearCache();
