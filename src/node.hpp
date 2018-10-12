@@ -43,6 +43,8 @@ namespace BitCoin
             SCAN         = 0x08, // Connection for validating a peer exists.
         };
 
+        static const uint32_t NOT_OUTGOING = SEED | INCOMING | SCAN;
+
         Node(NextCash::Network::Connection *pConnection, uint32_t pConnectionType,
           uint64_t pServices, Daemon *pDaemon, bool *pStopFlag = NULL);
 
@@ -75,6 +77,11 @@ namespace BitCoin
         // Connection only for validating peer.
         bool isScan() const { return mConnectionType & SCAN; }
 
+        // Connection for requesting network data.
+        bool isOutgoing() const { return !(mConnectionType & (NOT_OUTGOING)); }
+
+        bool isInitialized() const { return mIsInitialized; }
+        bool isStopped() const { return mStopped; }
         // Versions exchanged and initial ping completed
         bool isReady() const { return mPingRoundTripTime != -1; }
         milliseconds pingTimeMilliseconds() const { return mPingRoundTripTime; }
@@ -186,7 +193,7 @@ namespace BitCoin
         NextCash::Network::Connection *mConnection;
         NextCash::Buffer mReceiveBuffer;
         Statistics mStatistics;
-        bool mStarted, mStopRequested, mStopped;
+        bool mStarted, mIsInitialized, mStopRequested, mStopped;
         uint32_t mConnectionType;
         bool mIsGood;
         bool mSendBlocksCompact;

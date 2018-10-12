@@ -1125,7 +1125,7 @@ namespace BitCoin
 
         // Remove incoming and seed nodes
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();)
-            if(!(*node)->isReady() || (*node)->isIncoming() || (*node)->isSeed())
+            if(!(*node)->isReady() || !(*node)->isOutgoing())
                 node = nodes.erase(node);
             else
                 ++node;
@@ -1172,7 +1172,7 @@ namespace BitCoin
 
         // Remove incoming and seed nodes
         for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();)
-            if(!(*node)->isReady() || (*node)->isIncoming() || (*node)->isSeed())
+            if(!(*node)->isReady() || !(*node)->isOutgoing())
                 node = nodes.erase(node);
             else
                 ++node;
@@ -1305,7 +1305,7 @@ namespace BitCoin
     void randomizeOutgoing(std::vector<Node *> &pNodeList)
     {
         for(std::vector<Node *>::iterator node=pNodeList.begin();node!=pNodeList.end();)
-            if((*node)->isIncoming() || !(*node)->isReady())
+            if(!(*node)->isOutgoing() || !(*node)->isReady())
                 node = pNodeList.erase(node);
             else
                 ++node;
@@ -1398,8 +1398,7 @@ namespace BitCoin
 
         // Check for node with empty last header. They haven't given headers yet.
         for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
-            if((*node)->isReady() && (*node)->lastHeaderHash().isEmpty() &&
-              (*node)->requestHeaders())
+            if((*node)->lastHeaderHash().isEmpty() && (*node)->requestHeaders())
             {
                 sent = true;
                 mLastHeaderRequestTime = getTime();
@@ -1428,7 +1427,7 @@ namespace BitCoin
         mNodeLock.readLock();
         unsigned int count = 0;
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
-            if(!(*node)->isIncoming() && (*node)->isReady() &&
+            if((*node)->isOutgoing() && (*node)->isReady() &&
               (*node)->lastHeaderHash() == mChain.lastHeaderHash())
                 ++count;
         mNodeLock.readUnlock();
@@ -1525,7 +1524,7 @@ namespace BitCoin
 
         // Remove nodes that aren't outgoing or aren't ready
         for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end();)
-            if((*node)->isIncoming() || (*node)->isSeed() || !(*node)->isReady())
+            if(!(*node)->isOutgoing() || !(*node)->isReady())
                 node = nodes.erase(node);
             else
                 ++node;
@@ -2286,30 +2285,19 @@ namespace BitCoin
             delete threads[i];
     }
 
-    void Daemon::addRejectedIP(const uint8_t *pIP)
-    {
-        IPBytes ip = pIP;
-        mRejectedIPs.push_back(ip);
-
-        while(mRejectedIPs.size() > RECENT_IP_COUNT)
-            mRejectedIPs.erase(mRejectedIPs.begin());
-    }
-
     bool Daemon::addNode(NextCash::Network::Connection *pConnection, uint32_t pType,
       uint64_t pServices)
     {
         mLastConnectionActive = getTime();
 
         // Check if IP is on reject list
-        for(std::vector<IPBytes>::iterator ip = mRejectedIPs.begin(); ip != mRejectedIPs.end();
-          ++ip)
-            if(*ip == pConnection->ipv6Bytes())
-            {
+        if(isRejectedIP(pConnection->ipv6Bytes()))
+        {
                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
                   "Rejecting connection from IP %s", pConnection->ipv6Address());
                 delete pConnection;
                 return false;
-            }
+        }
 
         Node *node;
         try
@@ -2436,7 +2424,6 @@ namespace BitCoin
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Found %d nodes from %s", ipList.size(), pName);
-        NextCash::Network::Connection *connection;
         unsigned int seedConnections;
         NextCash::IPAddress ipAddress;
         ipAddress.port = networkPort();
@@ -2467,8 +2454,8 @@ namespace BitCoin
                 {
                     // Process nodes so they don't wait a long time
                     mNodeLock.readLock();
-                    for (std::vector<Node *>::iterator node = mNodes.begin();
-                         node != mNodes.end() && !mStopRequested; ++node)
+                    for(std::vector<Node *>::iterator node = mNodes.begin();
+                      node != mNodes.end() && !mStopRequested; ++node)
                         (*node)->process();
                     mNodeLock.readUnlock();
                     lastNodeProcess = getTime();
@@ -2498,7 +2485,7 @@ namespace BitCoin
         unsigned int goodCount = 0;
         unsigned int allCount = 0;
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
-            if(!(*node)->isIncoming() && !(*node)->isSeed())
+            if((*node)->isOutgoing())
             {
                 if((*node)->isGood())
                     ++goodCount;
@@ -2748,7 +2735,7 @@ namespace BitCoin
         bool dropped;
         mNodeLock.writeLock("Clean");
         for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
-            if(!(*node)->isOpen())
+            if((*node)->isStopped())
             {
                 mLastConnectionActive = getTime();
                 if((*node)->wasRejected())
@@ -2850,6 +2837,22 @@ namespace BitCoin
             delete daemon->mNodeListener;
     }
 
+    void Daemon::addRejectedIP(const uint8_t *pIP)
+    {
+        mRejectedIPs.emplace_back(pIP);
+        while(mRejectedIPs.size() > RECENT_IP_COUNT)
+            mRejectedIPs.erase(mRejectedIPs.begin());
+    }
+
+    bool Daemon::isRejectedIP(const uint8_t *pIPv6Bytes)
+    {
+        for(std::vector<IPBytes>::iterator ip = mRejectedIPs.begin();
+          ip != mRejectedIPs.end(); ++ip)
+            if(*ip == pIPv6Bytes)
+                return true;
+        return false;
+    }
+
     void Daemon::handleConnections()
     {
         NextCash::Network::Connection *newConnection;
@@ -2894,7 +2897,14 @@ namespace BitCoin
             {
                 while(!mStopping && (newConnection = mNodeListener->accept()) != NULL)
                 {
-                    if(newConnection->isOpen())
+                    if(isRejectedIP(newConnection->ipv6Bytes()))
+                    {
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE,
+                          BITCOIN_DAEMON_LOG_NAME, "Rejecting IP : %s",
+                          newConnection->ipv6Address());
+                        delete newConnection;
+                    }
+                    else if(newConnection->isOpen())
                     {
                         if(addNode(newConnection, Node::INCOMING, 0) &&
                           mIncomingNodes >= mMaxIncoming)

@@ -254,6 +254,7 @@ namespace BitCoin
         std::list<IPBytes> mRecentIPs;
 
         void addRejectedIP(const uint8_t *pIP);
+        bool isRejectedIP(const uint8_t *pIP);
 
         bool addNode(NextCash::IPAddress &pIPAddress, uint32_t pType, uint64_t pServices);
         bool addNode(NextCash::Network::Connection *pConnection, uint32_t pType,
