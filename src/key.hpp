@@ -288,7 +288,8 @@ namespace BitCoin
          * Coin and Account value of 0xffffffff means use default for derivation path
          *   method.
          ******************************************************************************************/
-        enum DerivationPathMethod { UNKNOWN = 0, SIMPLE = 1, BIP0032 = 2, BIP0044 = 3 };
+        enum DerivationPathMethod { UNKNOWN = 0, SIMPLE = 1, BIP0032 = 2, BIP0044 = 3,
+          INDIVIDUAL = 4 };
         enum CoinIndex
         {
             BITCOIN      = 0x80000000, // 0x00'
@@ -442,6 +443,9 @@ namespace BitCoin
         bool synchronize(unsigned int pOffset);
 
         int addSeed(const char *pSeed, Key::DerivationPathMethod pMethod, int32_t pCreatedDate);
+
+        int addKey(const char *pEncodedKey, Key::DerivationPathMethod pDerivationMethod,
+          int32_t pCreatedDate);
 
         // Load a key from text
         // Valid values are:

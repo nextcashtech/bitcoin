@@ -1616,11 +1616,15 @@ namespace BitCoin
 
     bool Key::updateGap(unsigned int pGap)
     {
+        if(mDepth == NO_DEPTH)
+            return false;
+
         unsigned int gap = 0;
         unsigned int nextIndex = 0;
 
         mChildLock.lock();
-        for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
+        for(std::vector<Key *>::iterator child = mChildren.begin(); child != mChildren.end();
+          ++child)
         {
             if((*child)->mIndex >= nextIndex)
                 nextIndex = (*child)->mIndex + 1;
@@ -1772,8 +1776,12 @@ namespace BitCoin
 
     Key *Key::getNextUnused()
     {
+        if(mDepth == NO_DEPTH)
+            return this;
+
         mChildLock.lock();
-        for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
+        for(std::vector<Key *>::iterator child = mChildren.begin(); child != mChildren.end();
+          ++child)
             if(!(*child)->mUsed)
             {
                 mChildLock.unlock();
@@ -2539,6 +2547,10 @@ namespace BitCoin
         {
             key = NULL;
         }
+        PrivateKeyData(Key *pKey)
+        {
+            key = pKey;
+        }
         PrivateKeyData(const PrivateKeyData &pCopy)
         {
             seed = pCopy.seed;
@@ -2693,6 +2705,10 @@ namespace BitCoin
         for(std::vector<Key *>::iterator key = chainKeys.begin(); key != chainKeys.end(); ++key)
             if((*key)->index() == pIndex)
                 return *key;
+
+        // For individual keys that don't have an indices and depth.
+        if(chainKeys.size() == 1 && chainKeys.front()->depth() == Key::NO_DEPTH)
+            return chainKeys.front();
 
         return NULL;
     }
@@ -2949,6 +2965,10 @@ namespace BitCoin
         // Prime the key for several derivation methods
         switch(pMethod)
         {
+            case Key::INDIVIDUAL:
+                // Add only address key as chain key
+                newData->chainKeys.push_back(new Key(*pKey->publicKey()));
+                break;
             case Key::SIMPLE:
                 chain = pKey->chainKey(0, Key::SIMPLE);
                 if(chain != NULL)
@@ -3093,8 +3113,7 @@ namespace BitCoin
                 }
         }
 
-        PrivateKeyData *newPrivateData = new PrivateKeyData();
-        newPrivateData->key = pKey;
+        PrivateKeyData *newPrivateData = new PrivateKeyData(pKey);
         mPrivateKeys.push_back(newPrivateData);
 
         for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
@@ -3126,6 +3145,31 @@ namespace BitCoin
         mPrivateKeys.back()->seed = pSeed;
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
           "Added key from seed");
+        return result;
+    }
+
+    int KeyStore::addKey(const char *pEncodedKey, Key::DerivationPathMethod pDerivationMethod,
+      int32_t pCreatedDate)
+    {
+        if(!mPrivateLoaded)
+            return 5; // Private keys need to be loaded to add a private key
+
+        Key *newKey = new Key();
+        if(!newKey->decodePrivateKey(pEncodedKey))
+        {
+            delete newKey;
+            return 2;
+        }
+
+        int result = add(newKey, pDerivationMethod, pCreatedDate);
+        if(result != 0)
+        {
+            delete newKey;
+            return 1;
+        }
+
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+          "Added key from encoded private key");
         return result;
     }
 
