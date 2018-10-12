@@ -207,14 +207,18 @@ namespace BitCoin
         // Parse address into public key hash
         data.writeBase58AsBinary(pText);
 
+        pType = static_cast<AddressType>(data.readByte());
+
+        if(pType == MAIN_PRIVATE_KEY || pType == TEST_PRIVATE_KEY)
+            return false;
+
         if(data.length() < 24 || data.length() > 35)
         {
             NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-              "Invalid legacy address length : %d not within (24, 35)", data.length());
+              "Invalid legacy address length for type %02x : %d not within (24, 35)", pType,
+              data.length());
             return false;
         }
-
-        pType = static_cast<AddressType>(data.readByte());
 
         pHash.setSize(data.remaining() - 4);
         pHash.writeStream(&data, data.remaining() - 4);
@@ -1344,6 +1348,113 @@ namespace BitCoin
         return finalize();
     }
 
+    bool Key::decodePrivateKey(const char *pText)
+    {
+        clear();
+
+        NextCash::Buffer data;
+
+        // Parse address into public key hash
+        data.writeBase58AsBinary(pText);
+
+        if(data.length() != 38)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              "Invalid private key length %d : should be 38", data.length());
+            return false;
+        }
+
+        AddressType type = static_cast<AddressType>(data.readByte());
+
+        if(type != MAIN_PRIVATE_KEY && type != TEST_PRIVATE_KEY)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              "Invalid private key type 0x%02x", type);
+            return false;
+        }
+
+        switch(type)
+        {
+        case MAIN_PRIVATE_KEY:
+            mVersion = MAINNET_PRIVATE;
+            break;
+        case TEST_PRIVATE_KEY:
+            mVersion = TESTNET_PRIVATE;
+            break;
+        default:
+            return false;
+        }
+
+        mDepth = NO_DEPTH;
+        mIndex = NO_DEPTH;
+        std::memset(mParentFingerPrint, 0, 4);
+
+        mKey[0] = 0; // Zero for private key
+        data.read(mKey + 1, 32);
+
+        // Zeroize chain code
+        std::memset(mChainCode, 0, 32);
+
+        uint8_t byte = data.readByte();
+        if(byte != 0x01)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              "Unknown private key sub type 0x%02x : should be 0x01", byte);
+            return false;
+        }
+
+        uint32_t check = data.readUnsignedInt();
+
+        NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+        data.setReadOffset(0);
+        data.readStream(&digest, data.length() - 4);
+        NextCash::Buffer checkHash;
+        digest.getResult(&checkHash);
+
+        uint32_t checkValue = checkHash.readUnsignedInt();
+        if(checkValue != check)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Invalid legacy private key check : 0x%08x != 0x%08x", checkValue, check);
+            return false;
+        }
+
+        return secp256k1_ec_seckey_verify(context(SECP256K1_CONTEXT_VERIFY | SECP256K1_CONTEXT_SIGN),
+          mKey + 1) && finalize();
+    }
+
+    NextCash::String Key::encodePrivateKey()
+    {
+        NextCash::Buffer data;
+
+        switch(mVersion)
+        {
+        case MAINNET_PRIVATE:
+            data.writeByte(MAIN_PRIVATE_KEY);
+            break;
+        case TESTNET_PRIVATE:
+            data.writeByte(TEST_PRIVATE_KEY);
+            break;
+        default:
+            return NextCash::String();
+        }
+
+        data.write(mKey + 1, 32);
+
+        data.writeByte(0x01); // Private key sub type
+
+        NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+        data.setReadOffset(0);
+        data.readStream(&digest, data.length());
+        NextCash::Buffer checkHash;
+        digest.getResult(&checkHash);
+
+        data.writeUnsignedInt(checkHash.readUnsignedInt());
+
+        data.setReadOffset(0);
+        return data.readBase58String(data.length());
+    }
+
     bool Key::finalize()
     {
         unsigned int contextFlags = SECP256K1_CONTEXT_VERIFY;
@@ -1997,8 +2108,8 @@ namespace BitCoin
         hmac.getResult(&hmacResult);
 
         // Split HMAC SHA512 into halves for key and chain code
-        mKey[0] = 0;
-        hmacResult.read(mKey + 1, 32); // Zero for private key
+        mKey[0] = 0; // Zero for private key
+        hmacResult.read(mKey + 1, 32);
         hmacResult.read(mChainCode, 32);
 
         return secp256k1_ec_seckey_verify(context(SECP256K1_CONTEXT_VERIFY | SECP256K1_CONTEXT_SIGN),
@@ -4769,6 +4880,80 @@ namespace BitCoin
         if(cashAddressSuccess)
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
               "Passed Cash Address");
+        else
+            success = false;
+
+        /******************************************************************************************
+         * Dencode Private Key
+         *****************************************************************************************/
+        unsigned int privateKeyCount = 4;
+        NextCash::String encodedPrivateKey, privatePublicKey;
+        bool privateKeySuccess = true;
+        Key privateKey;
+        NextCash::String encodedPrivateKeys[] =
+        {
+            "KwmjS9XduZYuBLdTAwpYAcrEPDT4ntH7HZsrPkcEw89Uy2ncMSzN",
+            "L3mveoTMrLsXCUWBX2amqv5FEepdXqdWJqyNmFdejzvZr35LZS7n",
+            "KxU5bMCSrAicKje5GPRXbJGKMcdAY5DusLpAdjsjN3XxUqYaReEn",
+            "L5Lo2zy53pC9RhoQuADtqWDLSntutKH35quKyV93UV9X9nL2j938"
+        };
+        NextCash::String encodedPrivateKeysMatchingPublicKey[] =
+        {
+            "qzk0f7rgjwl6cm7rkvdzj7s4mvc9fs7yug7tgzz2zz",
+            "qqggnyvxe647hwk282gltztrxh3u77jvcclxmq307w",
+            "qpsjg5jr6wat0dz9qnatz84j8mull6f5s55a5egnv0",
+            "qzavued6cv9r80d8hs5qa549plkac97xduucecj39l"
+        };
+
+        for(unsigned int i = 0; i < privateKeyCount; ++i)
+        {
+            if(!privateKey.decodePrivateKey(encodedPrivateKeys[i]))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Private Key Decode %d : decode failed", i);
+                privateKeySuccess = false;
+                break;
+            }
+            else if(privateKey.version() != MAINNET_PRIVATE)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                  "Failed Private Key Decode %d : key type %02x", i, privateKey.version());
+                privateKeySuccess = false;
+                break;
+            }
+            else
+            {
+                privatePublicKey = encodeCashAddress(privateKey.hash(), MAIN_PUB_KEY_HASH);
+                if(privatePublicKey != encodedPrivateKeysMatchingPublicKey[i])
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed Private Key Decode %d : public key not matching", i);
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Generated : %s", privatePublicKey.text());
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Correct : %s", encodedPrivateKeysMatchingPublicKey[i].text());
+                    privateKeySuccess = false;
+                    break;
+                }
+
+                encodedPrivateKey = privateKey.encodePrivateKey();
+                if(encodedPrivateKey != encodedPrivateKeys[i])
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Failed Private Key Encode %d", i);
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Generated : %s", encodedPrivateKey.text());
+                    NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+                      "Correct : %s", encodedPrivateKeys[i].text());
+                    privateKeySuccess = false;
+                    break;
+                }
+            }
+        }
+
+        if(privateKeySuccess)
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+              "Passed Private Key Encoding/Decoding");
         else
             success = false;
 

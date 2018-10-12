@@ -193,6 +193,9 @@ namespace BitCoin
         // Decode key from base58 text
         bool decode(const char *pText);
 
+        bool decodePrivateKey(const char *pText);
+        NextCash::String encodePrivateKey();
+
         bool isPrivate() const { return mKey[0] == 0; }
         bool isHardened() const { return mIndex >= HARDENED_LIMIT; }
         const Version version() const { return (Version)mVersion; }
@@ -355,7 +358,7 @@ namespace BitCoin
 
         // Generate a random mnemonic sentence
         static NextCash::String generateMnemonicSeed(Mnemonic::Language,
-                                                     unsigned int pBytesEntropy);
+          unsigned int pBytesEntropy);
 
         // Validate check bits in mnemonic sentence
         bool static validateMnemonicSeed(const char *pText, const char *pPassPhrase = "",
