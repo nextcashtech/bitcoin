@@ -509,8 +509,8 @@ namespace BitCoin
             {
                 timeString.writeFormattedTime((*transaction)->time());
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Expiring pending transaction (time %d) %s : %s", (*transaction)->time(),
-                  timeString.text(), (*transaction)->hash.hex().text());
+                  "Expiring pending transaction (time %d) %s (%d bytes) : %s", (*transaction)->time(),
+                  timeString.text(), (*transaction)->size(), (*transaction)->hash.hex().text());
                 mSize -= (*transaction)->size();
                 transaction = mPendingTransactions.erase(transaction);
             }
@@ -521,7 +521,7 @@ namespace BitCoin
 
     void MemPool::expire()
     {
-        int32_t expireTime = getTime() - (60 * 60 * 24);
+        int32_t expireTime = getTime() - (60 * 60 * 24); // 24 hours
         NextCash::String timeString;
 
         for(TransactionList::iterator transaction = mTransactions.begin();
@@ -531,8 +531,9 @@ namespace BitCoin
             {
                 timeString.writeFormattedTime((*transaction)->time());
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Expiring transaction (time %d) %s : %s", (*transaction)->time(),
-                  timeString.text(), (*transaction)->hash.hex().text());
+                  "Expiring transaction (time %d) %s (%d bytes) : %s", (*transaction)->time(),
+                  timeString.text(), (*transaction)->size(), (*transaction)->hash.hex().text());
+                mSize -= (*transaction)->size();
                 delete *transaction;
                 transaction = mTransactions.erase(transaction);
             }
