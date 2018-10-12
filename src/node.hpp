@@ -28,6 +28,8 @@
 
 namespace BitCoin
 {
+    class Daemon;
+
     class Node
     {
     public:
@@ -41,11 +43,15 @@ namespace BitCoin
             SCAN         = 0x08, // Connection for validating a peer exists.
         };
 
-        Node(NextCash::Network::Connection *pConnection, Chain *pChain, uint32_t pConnectionType,
-          uint64_t pServices, Monitor &pMonitor);
+        Node(NextCash::Network::Connection *pConnection, uint32_t pConnectionType,
+          uint64_t pServices, Daemon *pDaemon, bool *pStopFlag = NULL);
+
+        Node(NextCash::IPAddress &pIPAddress, uint32_t pConnectionType,
+             uint64_t pServices, Daemon *pDaemon);
         ~Node();
 
         static void run();
+        void runInThread();
 
         unsigned int id() { return mID; }
         bool isOpen();
@@ -135,6 +141,8 @@ namespace BitCoin
 
     private:
 
+        bool initialize();
+
         Message::Interpreter mMessageInterpreter;
 
         // Check if node should be closed
@@ -171,6 +179,7 @@ namespace BitCoin
         NextCash::Thread *mThread;
 #endif
         NextCash::IPAddress mAddress;
+        Daemon *mDaemon;
         Chain *mChain;
         Monitor *mMonitor;
         NextCash::Mutex mConnectionMutex;
@@ -185,6 +194,7 @@ namespace BitCoin
         bool mWasReady;
         bool mReleased;
         bool mMemPoolRequested;
+        bool *mStopFlag;
 
         Message::VersionData *mSentVersionData, *mReceivedVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;

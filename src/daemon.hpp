@@ -33,49 +33,91 @@ namespace BitCoin
     public:
 
         Daemon();
+
         ~Daemon();
+
+        class IPBytes
+        {
+        public:
+
+            IPBytes() { std::memset(bytes, 0, INET6_ADDRLEN); }
+            IPBytes(const IPBytes &pCopy) { std::memcpy(bytes, pCopy.bytes, INET6_ADDRLEN); }
+            IPBytes(const uint8_t *pIP) { std::memcpy(bytes, pIP, INET6_ADDRLEN); }
+            bool operator == (const IPBytes &pRight) const { return std::memcmp(bytes, pRight.bytes, INET6_ADDRLEN) == 0; }
+            bool operator == (const uint8_t *pIP) const { return std::memcmp(bytes, pIP, INET6_ADDRLEN) == 0; }
+            const IPBytes &operator = (const IPBytes &pRight) { std::memcpy(bytes, pRight.bytes, INET6_ADDRLEN); return *this; }
+            const IPBytes &operator = (const uint8_t *pIP) { std::memcpy(bytes, pIP, INET6_ADDRLEN); return *this; }
+
+            uint8_t bytes[INET6_ADDRLEN];
+        };
 
         // Threads
         static void runConnections();
+
         static void runRequests();
+
         static void runManage();
+
         static void runProcess();
+
         static void runScan();
 
         void run(bool pInDaemonMode = true);
+
         void manage();
+
         void process();
+
         void handleConnections();
+
         void handleRequests();
-        void scan();
+
+        void scan(std::list<IPBytes> &pRecentIPs);
 
         bool loadWallets();
+
         bool loadChain();
+
         bool start(bool pInDaemonMode);
 
         bool walletsAreLoaded() { return mWalletsLoaded; }
+
         bool chainIsLoaded() { return mChainLoaded; }
+
         bool isRunning() { return mRunning; }
+
         bool isStopping() { return mStopping || mStopRequested; }
 
         static const int FINISH_ON_REQUEST = 0x00;
-        static const int FINISH_ON_SYNC    = 0x01;
+        static const int FINISH_ON_SYNC = 0x01;
 
         // Set criteria for daemon stopping on its own
         int finishMode() { return mFinishMode; }
+
         void setFinishMode(int pMode);
+
         void setFinishTime(int32_t pTime); // Set time to stop daemon (zero clears)
-        void requestStop() { mStopRequested = true; mChain.requestStop(); }
+        void requestStop()
+        {
+            mStopRequested = true;
+            mChain.requestStop();
+        }
 
         // Signals
         static void handleSigTermChild(int pValue);
+
         static void handleSigTerm(int pValue);
+
         static void handleSigInt(int pValue);
+
         static void handleSigPipe(int pValue);
 
         unsigned int peerCount();
+
         Chain *chain() { return &mChain; }
+
         Monitor *monitor() { return &mMonitor; }
+
         KeyStore *keyStore() { return &mKeyStore; }
 
         // Send a P2PKH or P2SH payment to the specified public key hash.
@@ -92,12 +134,29 @@ namespace BitCoin
         //   5 : Signing Issue
         //   6 : Amount below dust
         int sendStandardPayment(unsigned int pKeyOffset, AddressType pHashType,
-          NextCash::Hash pHash, uint64_t pAmount, double pFeeRate, bool pUsePending, bool pSendAll);
+                                NextCash::Hash pHash, uint64_t pAmount, double pFeeRate,
+                                bool pUsePending, bool pSendAll);
+
         int sendSpecifiedOutputPayment(unsigned int pKeyOffset, NextCash::Buffer pOutputScript,
-          uint64_t pAmount, double pFeeRate, bool pUsePending, bool pTransmit);
+                                       uint64_t pAmount, double pFeeRate, bool pUsePending,
+                                       bool pTransmit);
 
         bool loadMonitor();
+
         bool saveMonitor();
+
+        void registerConnection(uint32_t pConnectionType)
+        {
+            mLastConnectionActive = getTime();
+            if(pConnectionType & Node::INCOMING)
+            {
+                ++mStatistics.incomingConnections;
+            }
+            else if(!(pConnectionType & Node::SEED))
+            {
+                ++mStatistics.outgoingConnections;
+            }
+        }
 
         bool loadKeyStore(const uint8_t *pPassword = (const uint8_t *)"",
                           unsigned int pPasswordLength = 0);
@@ -109,13 +168,14 @@ namespace BitCoin
           SYNCHRONIZING, SYNCHRONIZED, FINDING_TRANSACTIONS };
         Status status();
 
-    protected:
-
-        static const int MAX_BLOCK_REQUEST = 16;
         static const int GOOD_RATING = 20;
         static const int FALLBACK_GOOD_RATING = 5;
         static const int OKAY_RATING = 1;
         static const int USABLE_RATING = -4;
+
+    protected:
+
+        static const int MAX_BLOCK_REQUEST = 16;
 
         Chain mChain;
         Info &mInfo;
@@ -190,26 +250,12 @@ namespace BitCoin
             return mOutgoingNodeMax;
         }
 
-        class IPBytes
-        {
-        public:
-
-            IPBytes() { std::memset(bytes, 0, INET6_ADDRLEN); }
-            IPBytes(const IPBytes &pCopy) { std::memcpy(bytes, pCopy.bytes, INET6_ADDRLEN); }
-            IPBytes(const uint8_t *pIP) { std::memcpy(bytes, pIP, INET6_ADDRLEN); }
-            bool operator == (const IPBytes &pRight) const { return std::memcmp(bytes, pRight.bytes, INET6_ADDRLEN) == 0; }
-            bool operator == (const uint8_t *pIP) const { return std::memcmp(bytes, pIP, INET6_ADDRLEN) == 0; }
-            const IPBytes &operator = (const IPBytes &pRight) { std::memcpy(bytes, pRight.bytes, INET6_ADDRLEN); return *this; }
-            const IPBytes &operator = (const uint8_t *pIP) { std::memcpy(bytes, pIP, INET6_ADDRLEN); return *this; }
-
-            uint8_t bytes[INET6_ADDRLEN];
-        };
-
         std::vector<IPBytes> mRejectedIPs;
         std::list<IPBytes> mRecentIPs;
 
         void addRejectedIP(const uint8_t *pIP);
 
+        bool addNode(NextCash::IPAddress &pIPAddress, uint32_t pType, uint64_t pServices);
         bool addNode(NextCash::Network::Connection *pConnection, uint32_t pType,
           uint64_t pServices);
         unsigned int recruitPeers();

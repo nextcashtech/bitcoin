@@ -13,6 +13,7 @@
 #include "block.hpp"
 #include "chain.hpp"
 #include "interpreter.hpp"
+#include "daemon.hpp"
 
 
 #define PEER_MESSAGE_LIMIT 5000
@@ -23,11 +24,21 @@ namespace BitCoin
 {
     unsigned int Node::mNextID = 256;
 
-    Node::Node(NextCash::Network::Connection *pConnection, Chain *pChain, uint32_t pConnectionType,
-      uint64_t pServices, Monitor &pMonitor) : mID(mNextID++), mConnectionMutex("Node Connection"),
+    Node::Node(NextCash::Network::Connection *pConnection, uint32_t pConnectionType,
+      uint64_t pServices, Daemon *pDaemon, bool *pStopFlag) : mConnectionMutex("Node Connection"),
       mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce")
     {
         mConnectionType = pConnectionType;
+        mConnection = pConnection;
+        mAddress = *pConnection;
+        mServices = pServices;
+        mDaemon = pDaemon;
+        mStopFlag = pStopFlag;
+        mChain = pDaemon->chain();
+        if(!isIncoming() && !isSeed() && !isScan())
+            mMonitor = pDaemon->monitor();
+        else
+            mMonitor = NULL;
         mConnected = false;
         mPrepared = false;
         mVersionSent = false;
@@ -64,52 +75,98 @@ namespace BitCoin
 #ifndef SINGLE_THREAD
         mThread = NULL;
 #endif
-        mServices = pServices;
-        if(!isIncoming() && !isSeed())
-            mMonitor = &pMonitor;
-        else
-            mMonitor = NULL;
         mActiveMerkleRequests = 0;
         mLastMerkleCheck = 0;
         mLastMerkleRequest = 0;
         mLastMerkleReceive = 0;
         mBloomFilterID = 0;
-        mChain = pChain;
 
+        mID = mNextID++;
         if(isIncoming())
             mName.writeFormatted("Node i[%d]", mID);
         else
             mName.writeFormatted("Node o[%d]", mID);
 
-        // Verify connection
-        mConnectionMutex.lock();
-        mConnection = pConnection;
-        if(!isIncoming())
-            mAddress = *mConnection;
-        if(!mConnection->isOpen())
+#ifdef SINGLE_THREAD
+        mThread = NULL;
+#else
+        if(isScan() && mStopFlag != NULL)
         {
-            mConnectionMutex.unlock();
-            mStopRequested = true;
-            mStopped = true;
-            if(!isSeed() && !isIncoming())
-                Info::instance().addPeerFail(mAddress, 1, 1);
-            return;
+            mThread = NULL;
+            runInThread();
         }
-        mConnected = true;
-        mConnectionMutex.unlock();
-        if(isIncoming())
-            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-              "Incoming Connection %s : %d", mConnection->ipv6Address(),
-              mConnection->port());
         else
-            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-              "Outgoing Connection %s : %d", mConnection->ipv6Address(),
-              mConnection->port());
+            mThread = new NextCash::Thread("Node", run, this);
+#endif
+    }
+
+    Node::Node(NextCash::IPAddress &pIPAddress, uint32_t pConnectionType, uint64_t pServices,
+      Daemon *pDaemon) : mConnectionMutex("Node Connection"),
+      mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce")
+    {
+        mConnectionType = pConnectionType;
+        mAddress = pIPAddress;
+        mConnection = NULL;
+        mServices = pServices;
+        mDaemon = pDaemon;
+        mStopFlag = NULL;
+        mChain = pDaemon->chain();
+        if(!isIncoming() && !isSeed())
+            mMonitor = pDaemon->monitor();
+        else
+            mMonitor = NULL;
+        mConnected = false;
+        mPrepared = false;
+        mVersionSent = false;
+        mVersionAcknowledged = false;
+        mVersionAcknowledgeSent = false;
+        mSendHeaders = false;
+        mMinimumFeeRate = 0;
+        mSentVersionData = NULL;
+        mReceivedVersionData = NULL;
+        mHeaderRequestTime = 0;
+        mBlockRequestTime = 0;
+        mLastBlockReceiveTime = 0;
+        mLastReceiveTime = getTime();
+        mLastCheckTime = getTime();
+        mLastBlackListCheck = getTime();
+        mLastPingNonce = 0;
+        mLastPingTime = 0;
+        mPingRoundTripTime = -1;
+        mPingCutoff = 30;
+        mBlockDownloadCount = 0;
+        mBlockDownloadSize = 0;
+        mBlockDownloadTime = 0;
+        mMessagesReceived = 0;
+        mPingCount = 0;
+        mConnectedTime = getTime();
+        mStarted = false;
+        mStopRequested = false;
+        mStopped = false;
+        mSendBlocksCompact = false;
+        mRejected = false;
+        mWasReady = false;
+        mReleased = false;
+        mMemPoolRequested = false;
+#ifndef SINGLE_THREAD
+        mThread = NULL;
+#endif
+        mActiveMerkleRequests = 0;
+        mLastMerkleCheck = 0;
+        mLastMerkleRequest = 0;
+        mLastMerkleReceive = 0;
+        mBloomFilterID = 0;
+
+        mID = mNextID++;
+        if(isIncoming())
+            mName.writeFormatted("Node i[%d]", mID);
+        else
+            mName.writeFormatted("Node o[%d]", mID);
 
 #ifndef SINGLE_THREAD
         // Start thread
         mThread = new NextCash::Thread(mName, run, this);
-        NextCash::Thread::sleep(500); // Give the thread a chance to initialize
+        NextCash::Thread::sleep(200); // Give the thread a chance to initialize
 #endif
     }
 
@@ -179,7 +236,6 @@ namespace BitCoin
 
     void Node::close()
     {
-
         mConnectionMutex.lock();
         if(mConnection != NULL)
             mConnection->close();
@@ -189,10 +245,6 @@ namespace BitCoin
 
     void Node::requestStop()
     {
-#ifndef SINGLE_THREAD
-        if(mThread == NULL)
-            return;
-#endif
         mStopRequested = true;
     }
 
@@ -215,7 +267,6 @@ namespace BitCoin
         if(!mPrepared && isReady())
         {
             Info &info = Info::instance();
-
             if(isScan())
             {
                 if(mReceivedVersionData != NULL)
@@ -772,7 +823,7 @@ namespace BitCoin
     }
 
     bool Node::sendReject(const char *pCommand, Message::RejectData::Code pCode,
-                          const char *pReason)
+      const char *pReason)
     {
         if(!isOpen())
             return false;
@@ -783,8 +834,7 @@ namespace BitCoin
     }
 
     bool Node::sendRejectWithHash(const char *pCommand, Message::RejectData::Code pCode,
-                                  const char *pReason,
-      const NextCash::Hash &pHash)
+      const char *pReason, const NextCash::Hash &pHash)
     {
         if(!isOpen())
             return false;
@@ -793,6 +843,80 @@ namespace BitCoin
         Message::RejectData rejectMessage(pCommand, pCode, pReason, NULL);
         pHash.write(&rejectMessage.extra);
         return sendMessage(&rejectMessage);
+    }
+
+    bool Node::initialize()
+    {
+        mConnectionMutex.lock();
+
+        bool isNewConnection = false;
+        if(mConnection == NULL)
+        {
+            isNewConnection = true;
+            mConnection = new NextCash::Network::Connection(AF_INET6, mAddress.ip, mAddress.port,
+              10);
+        }
+        else if(!isIncoming())
+            mAddress = *mConnection;
+
+        // Verify connection
+        if(!mConnection->isOpen())
+        {
+            mConnectionMutex.unlock();
+            mStopRequested = true;
+            mStopped = true;
+            if(!isSeed() && !isIncoming())
+                Info::instance().addPeerFail(mAddress, 1, 1);
+            return false;
+        }
+        mConnected = true;
+        mConnectionMutex.unlock();
+
+        if(isNewConnection)
+            mDaemon->registerConnection(mConnectionType);
+
+        if(isIncoming())
+            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+              "Incoming Connection %s : %d", mConnection->ipv6Address(),
+              mConnection->port());
+        else
+            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+              "Outgoing Connection %s : %d", mConnection->ipv6Address(),
+              mConnection->port());
+
+        return true;
+    }
+
+    void Node::runInThread()
+    {
+        mStarted = true;
+        if(!initialize())
+        {
+            mStopped = true;
+            release();
+            return;
+        }
+
+        if(mStopRequested || (mStopFlag != NULL && *mStopFlag))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+              "Node stopped before thread started");
+            mStopped = true;
+            return;
+        }
+
+        while(true)
+        {
+            process();
+
+            if(mStopRequested || (mStopFlag != NULL && *mStopFlag))
+                break;
+
+            NextCash::Thread::sleep(100);
+        }
+
+        mStopped = true;
+        release();
     }
 
     void Node::run()
@@ -804,30 +928,8 @@ namespace BitCoin
               "Thread parameter is null. Stopping");
             return;
         }
-        node->mStarted = true;
 
-        NextCash::String name = node->mName;
-
-        if(node->mStopRequested)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, name,
-              "Node stopped before thread started");
-            node->mStopped = true;
-            return;
-        }
-
-        while(!node->mStopRequested)
-        {
-            node->process();
-
-            if(node->mStopRequested)
-                break;
-
-            NextCash::Thread::sleep(100);
-        }
-
-        node->mStopped = true;
-        node->release();
+        node->runInThread();
     }
 
     void Node::addAnnouncedBlock(const NextCash::Hash &pHash)
@@ -860,7 +962,13 @@ namespace BitCoin
 
     void Node::process()
     {
-        if(!isOpen() || mStopRequested)
+        if(!isOpen())
+        {
+            close();
+            return;
+        }
+
+        if(mStopRequested)
             return;
 
         if(!mVersionSent)
@@ -968,8 +1076,7 @@ namespace BitCoin
             return;
         }
 
-        if(info.spvMode && isReady() && !isIncoming() && !isSeed() && mMonitor != NULL &&
-          time - mLastMerkleCheck > 2)
+        if(info.spvMode && isReady() && mMonitor != NULL && time - mLastMerkleCheck > 2)
         {
             if(mMonitor->needsClose(mID))
             {
