@@ -964,11 +964,11 @@ namespace BitCoin
             return 1;
         }
 
-        transaction->print(mChain.forks());
+        transaction->print(mChain.forks(), NextCash::Log::INFO);
 
         mTransmittedTransToLastNode = false;
 
-        // Transmit to all currently "ready" nodes.
+        // Transmit to every other currently "ready" node.
         mNodeLock.readLock();
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
             if((*node)->isReady())
@@ -1095,13 +1095,13 @@ namespace BitCoin
             return 1;
         }
 
-        transaction->print(mChain.forks());
+        transaction->print(mChain.forks(), NextCash::Log::INFO);
 
         if(pTransmit)
         {
             mTransmittedTransToLastNode = false;
 
-            // Transmit to all currently "ready" nodes.
+            // Transmit to every other currently "ready" node.
             mNodeLock.readLock();
             for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                 if((*node)->isReady())
@@ -2045,7 +2045,7 @@ namespace BitCoin
         {
             if(mLastHeaderHash != mChain.lastHeaderHash() || getTime() - mLastMonitorProcess > 2)
             {
-                mMonitor.process(mChain);
+                mMonitor.process(mChain, false);
                 mLastMonitorProcess = getTime();
                 mLastHeaderHash = mChain.lastHeaderHash();
             }

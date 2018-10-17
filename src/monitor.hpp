@@ -137,7 +137,7 @@ namespace BitCoin
         void revertBlockHash(NextCash::Hash &pHash);
         void revertToHeight(unsigned int pBlockHeight);
 
-        void process(Chain &pChain);
+        void process(Chain &pChain, bool pLocked);
 
         //TODO Add expiration of pending transactions when not related to prevent receiving them
         //   more than once.
@@ -241,6 +241,7 @@ namespace BitCoin
                 nodes.emplace_back(pNodeID, pRequestTime);
                 totalTransactions = 0;
                 complete = false;
+                isReverse = false;
             }
             ~MerkleRequestData();
 
@@ -256,7 +257,7 @@ namespace BitCoin
 
             uint8_t requiredNodeCount;
             std::vector<NodeData> nodes;
-            bool complete;
+            bool complete, isReverse;
             unsigned int totalTransactions; // Total transaction count of full block
 
             // Transactions confirmed to be in a block.
@@ -301,11 +302,14 @@ namespace BitCoin
         static bool outputIsRelated(Output &pOutput, std::vector<Key *>::iterator pChainKeyBegin,
           std::vector<Key *>::iterator pChainKeyEnd);
 
-        bool confirmTransaction(SPVTransactionData *pTransaction, unsigned int pBlockHeight);
+        bool confirmTransaction(SPVTransactionData *pTransaction);
 
         // Cancel all pending merkle requests and update the bloom filter.
         void restartBloomFilter();
         void clearMerkleRequest(MerkleRequestData *pData);
+
+        // Check if a merkle request is complete
+        bool processRequest(Chain &pChain, unsigned int pHeight, bool pIsReverse);
 
         void refreshLowestPassHeight();
 
@@ -319,6 +323,9 @@ namespace BitCoin
         BloomFilter mFilter;
         std::vector<unsigned int> mNodesToResendFilter, mNodesToClose;
         std::vector<PassData> mPasses;
+        // Run a reverse merkle block request pass of the previous 2016 blocks every time the node
+        //   runs.
+        unsigned int mReversePassHeight;
         unsigned int mLowestPassHeight;
         bool mLowestPassHeightSet;
         // The height at which at least one valid merkle block has been received.
