@@ -1705,11 +1705,23 @@ namespace BitCoin
         // Check if node id matches. It must match to ensure this is based on the latest bloom
         //   filter.
         // For Bloom filter updates based on finding new UTXOs.
-        MerkleRequestData *request = *requestIter;
-        if(!request->wasRequested(pNodeID) || request->isComplete())
+        if(!(*requestIter)->wasRequested(pNodeID))
         {
-            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-              "Node [%d] sent unrequested merkle block.", pNodeID);
+            // Check next item (for reverse mode)
+            ++requestIter;
+            if(requestIter == mMerkleRequests.end() || requestIter.hash() != pData->header.hash ||
+               !(*requestIter)->wasRequested(pNodeID))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                  "Node [%d] sent unrequested merkle block.", pNodeID);
+                mMutex.unlock();
+                return false;
+            }
+        }
+
+        MerkleRequestData *request = *requestIter;
+        if(request->isComplete())
+        {
             mMutex.unlock();
             return false;
         }
@@ -1741,6 +1753,18 @@ namespace BitCoin
             return false;
         }
 
+        if(!(*requestIter)->wasRequested(pNodeID))
+        {
+            // Check next item (for reverse mode)
+            ++requestIter;
+            if(requestIter == mMerkleRequests.end() || requestIter.hash() != pData->header.hash ||
+              !(*requestIter)->wasRequested(pNodeID))
+            {
+                mMutex.unlock();
+                return false;
+            }
+        }
+
         request = *requestIter;
         if(!request->markReceived(pNodeID))
         {
@@ -1762,7 +1786,7 @@ namespace BitCoin
         NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
         unsigned int blockHeight = pChain.hashHeight(pData->header.hash);
         for(NextCash::HashList::iterator hash = transactionHashes.begin();
-            hash != transactionHashes.end(); ++hash)
+          hash != transactionHashes.end(); ++hash)
         {
             transaction = request->transactions.get(*hash);
             if(transaction == request->transactions.end())
@@ -2198,7 +2222,11 @@ namespace BitCoin
 
         NextCash::HashContainerList<MerkleRequestData *>::Iterator request =
           mMerkleRequests.get(blockHash);
-        if(request != mMerkleRequests.end() && (*request)->isReverse == pIsReverse)
+        if(request != mMerkleRequests.end() && (*request)->isReverse != pIsReverse)
+            ++request;
+
+        if(request != mMerkleRequests.end() && request.hash() == blockHash &&
+          (*request)->isReverse == pIsReverse)
         {
             MerkleRequestData *merkleRequest = *request;
             unsigned int nodeID;
