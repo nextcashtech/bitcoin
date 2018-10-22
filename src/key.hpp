@@ -471,6 +471,7 @@ namespace BitCoin
 
         // Find an address level key with a matching hash
         Key *findAddress(const NextCash::Hash &pHash);
+        Key *findAddress(unsigned int pKeyOffset, const NextCash::Hash &pHash);
 
         // Mark a key as "used" and generate new keys if necessary.
         // Keep a specified number of unused addresses ahead of any used address.

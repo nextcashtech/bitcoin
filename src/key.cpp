@@ -2795,6 +2795,21 @@ namespace BitCoin
         return NULL;
     }
 
+    Key *KeyStore::findAddress(unsigned int pKeyOffset, const NextCash::Hash &pHash)
+    {
+        Key *result = NULL;
+        PublicKeyData *keyData = mKeys.at(pKeyOffset);
+        for(std::vector<Key *>::iterator key = keyData->chainKeys.begin();
+          key != keyData->chainKeys.end(); ++key)
+        {
+            result = (*key)->findAddress(pHash);
+            if(result != NULL)
+                return result;
+        }
+
+        return NULL;
+    }
+
     Key *KeyStore::markUsed(const NextCash::Hash &pHash, unsigned int pGap, bool &pNewAddresses)
     {
         pNewAddresses = false;
