@@ -2082,7 +2082,7 @@ namespace BitCoin
                 pending = mPendingTransactions.get((*trans)->transaction->hash);
                 if(pending == mPendingTransactions.end())
                 {
-                    (*trans)->blockHeight = 0;
+                    (*trans)->blockHeight = 0xffffffff;
                     (*trans)->blockHash.clear();
                     mPendingTransactions.insert((*trans)->transaction->hash, *trans);
                 }
@@ -2126,7 +2126,7 @@ namespace BitCoin
                 pending = mPendingTransactions.get((*trans)->transaction->hash);
                 if(pending == mPendingTransactions.end())
                 {
-                    (*trans)->blockHeight = 0;
+                    (*trans)->blockHeight = 0xffffffff;
                     (*trans)->blockHash.clear();
                     mPendingTransactions.insert((*trans)->transaction->hash, *trans);
                 }
@@ -2353,7 +2353,7 @@ namespace BitCoin
               mPendingTransactions.get(transaction.hash()) == mPendingTransactions.end())
             {
                 (*transaction)->blockHash.clear();
-                (*transaction)->blockHeight = 0;
+                (*transaction)->blockHeight = 0xffffffff;
                 mPendingTransactions.insert(transaction.hash(), *transaction);
                 transaction = pData->transactions.erase(transaction);
             }
