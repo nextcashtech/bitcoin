@@ -301,6 +301,7 @@ namespace BitCoin
         bool addCoinbaseInput(int pHeight);
 
         bool addOutput(NextCash::Buffer pOutputScript, uint64_t pAmount);
+        bool addOutput(const Output &pOutput);
 
         // P2PKH Pay to Public Key Hash
         bool signP2PKHInput(const Forks &pForks, Output &pOutput, unsigned int pInputOffset,

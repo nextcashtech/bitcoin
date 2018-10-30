@@ -267,6 +267,16 @@ namespace BitCoin
         return true;
     }
 
+    bool Transaction::addOutput(const Output &pOutput)
+    {
+        if(pOutput.amount < DUST || pOutput.script.length() == 0)
+            return false;
+
+        outputs.emplace_back(pOutput);
+        mOutputHash.clear();
+        return true;
+    }
+
     bool Transaction::addP2PKHOutput(const NextCash::Hash &pPublicKeyHash, uint64_t pAmount)
     {
         if(pPublicKeyHash.size() != PUB_KEY_HASH_SIZE)

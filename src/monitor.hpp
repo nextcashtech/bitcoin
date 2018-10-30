@@ -73,7 +73,6 @@ namespace BitCoin
         bool getTransactions(std::vector<Key *>::iterator pChainKeyBegin,
           std::vector<Key *>::iterator pChainKeyEnd,
           std::vector<RelatedTransactionData> &pTransactions, bool pIncludePending);
-        Transaction *findTransactionPaying(NextCash::Buffer pOutputScript, int64_t pAmount);
         void sortTransactions(Chain *pChain);
 
         void clear();
@@ -194,7 +193,11 @@ namespace BitCoin
 
             bool addNode(unsigned int pNodeID)
             {
-                for(std::vector<unsigned int>::iterator node=nodes.begin();node!=nodes.end();++node)
+                if(pNodeID == 0)
+                    return true;
+
+                for(std::vector<unsigned int>::iterator node = nodes.begin(); node != nodes.end();
+                  ++node)
                     if(*node == pNodeID)
                         return false;
                 nodes.push_back(pNodeID);

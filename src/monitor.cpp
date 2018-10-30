@@ -1421,37 +1421,6 @@ namespace BitCoin
         return true;
     }
 
-    Transaction *Monitor::findTransactionPaying(NextCash::Buffer pOutputScript, int64_t pAmount)
-    {
-        mMutex.lock();
-
-        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
-          mTransactions.begin(); trans != mTransactions.end(); ++trans)
-            for(std::vector<Output>::iterator output = (*trans)->transaction->outputs.begin();
-              output != (*trans)->transaction->outputs.end(); ++output)
-                if(output->amount == pAmount && output->script == pOutputScript)
-                {
-                    Transaction *result = (*trans)->transaction;
-                    mMutex.unlock();
-                    return result;
-                }
-
-        for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
-          mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
-            for(std::vector<Output>::iterator output = (*trans)->transaction->outputs.begin();
-              output != (*trans)->transaction->outputs.end(); ++output)
-                if(output->amount == pAmount && output->script == pOutputScript)
-                {
-                    Transaction *result = (*trans)->transaction;
-                    mMutex.unlock();
-                    return result;
-                }
-
-        mMutex.unlock();
-
-        return NULL;
-    }
-
     bool Monitor::filterNeedsResend(unsigned int pNodeID, unsigned int pBloomID)
     {
         mMutex.lock();
@@ -2007,7 +1976,7 @@ namespace BitCoin
     }
 
     bool Monitor::addTransactionAnnouncement(const NextCash::Hash &pTransactionHash,
-                                             unsigned int pNodeID)
+      unsigned int pNodeID)
     {
         bool result = false;
         mMutex.lock();
@@ -2020,13 +1989,11 @@ namespace BitCoin
             {
                 // Add new pending transaction
                 SPVTransactionData *newPendingTransaction = new SPVTransactionData();
-                if(pNodeID != 0)
-                {
-                    newPendingTransaction->nodes.push_back(pNodeID);
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                      "Pending transaction accepted on first node [%d] : %s", pNodeID,
-                      pTransactionHash.hex().text());
-                }
+                newPendingTransaction->addNode(pNodeID);
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                  "Pending transaction accepted on first node [%d] : %s", pNodeID,
+                  pTransactionHash.hex().text());
+                ++mChangeID;
                 mPendingTransactions.insert(pTransactionHash, newPendingTransaction);
                 result = true; // Need transaction
             }
@@ -2036,18 +2003,11 @@ namespace BitCoin
                 result = (*pendingTransaction)->transaction == NULL;
 
                 // Add node as accepting node
-                if((*pendingTransaction)->addNode(pNodeID))
-                {
-                    if(pNodeID != 0)
-                    {
-                        (*pendingTransaction)->nodes.push_back(pNodeID);
-                        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                          "Pending transaction accepted on %d nodes. [%d] : %s",
-                          (*pendingTransaction)->nodes.size(), pNodeID,
-                          pTransactionHash.hex().text());
-                    }
-                    ++mChangeID;
-                }
+                (*pendingTransaction)->addNode(pNodeID);
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                  "Pending transaction accepted on %d nodes. [%d] : %s",
+                  (*pendingTransaction)->nodes.size(), pNodeID, pTransactionHash.hex().text());
+                ++mChangeID;
             }
         }
         else

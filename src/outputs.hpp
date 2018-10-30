@@ -43,6 +43,11 @@ namespace BitCoin
             return *this;
         }
 
+        bool operator == (const Output &pRight)
+        {
+            return amount == pRight.amount && script == pRight.script;
+        }
+
         // 8 amount + script length size + script length
         NextCash::stream_size size() const
           { return 8 + compactIntegerSize(script.length()) + script.length(); }

@@ -134,12 +134,11 @@ namespace BitCoin
         //   5 : Signing Issue
         //   6 : Amount below dust
         int sendStandardPayment(unsigned int pKeyOffset, AddressType pHashType,
-                                NextCash::Hash pHash, uint64_t pAmount, double pFeeRate,
-                                bool pUsePending, bool pSendAll);
+          NextCash::Hash pHash, uint64_t pAmount, double pFeeRate, bool pUsePending, bool pSendAll,
+          bool pTransmit, Transaction *&pTransaction);
 
-        int sendSpecifiedOutputPayment(unsigned int pKeyOffset, NextCash::Buffer pOutputScript,
-                                       uint64_t pAmount, double pFeeRate, bool pUsePending,
-                                       bool pTransmit);
+        int sendSpecifiedOutputsPayment(unsigned int pKeyOffset, std::vector<Output> pOutputs,
+          double pFeeRate, bool pUsePending, bool pTransmit, Transaction *&pTransaction);
 
         bool loadMonitor();
 
@@ -275,6 +274,7 @@ namespace BitCoin
         KeyStore mKeyStore;
         Monitor mMonitor;
 
+        NextCash::Mutex mTransmitMutex;
         std::vector<Transaction *> mTransactionsToTransmit;
         bool mTransmittedTransToLastNode;
 
