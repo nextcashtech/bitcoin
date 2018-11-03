@@ -30,7 +30,7 @@ build_secp256k1:
 	@echo ----------------------------------------------------------------------------------------------------
 	@echo "\tBUILDING secp256k1"
 	@echo ----------------------------------------------------------------------------------------------------
-	@cd secp256k1; ./autogen.sh; ./configure; make
+	@cd secp256k1; ./autogen.sh; ./configure --enable-static --disable-shared; make
 	@touch build_secp256k1
 
 test_secp256k1:
