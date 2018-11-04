@@ -116,7 +116,7 @@ namespace BitCoin
 
             ProcessThreadData(Chain *pChain, Block *pBlock, unsigned int pHeight,
               std::vector<Transaction *>::iterator pTransactionsBegin, unsigned int pCount) :
-              mutex("ProcessThreadData"), spentAgeLock("Spent Age")
+              mutex("ProcessThreadData"), spentAgeLock("Spent Age"), timeLock("Time")
             {
                 chain = pChain;
                 block = pBlock;
@@ -127,6 +127,8 @@ namespace BitCoin
                 success = true;
                 complete = new bool[count];
                 std::memset(complete, 0, count);
+                checkDupTime = 0L;
+                fullTime = 0L;
             }
             ~ProcessThreadData()
             {
@@ -142,6 +144,8 @@ namespace BitCoin
             std::vector<unsigned int> spentAges;
             bool success;
             bool *complete;
+            NextCash::Mutex timeLock;
+            milliseconds checkDupTime, fullTime;
 
             Transaction *getNext(unsigned int &pOffset)
             {

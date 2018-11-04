@@ -1145,7 +1145,7 @@ namespace BitCoin
 
     bool Transaction::process(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight,
       bool pCoinBase, int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
-      std::vector<unsigned int> &pSpentAges)
+      std::vector<unsigned int> &pSpentAges, milliseconds &pCheckDupTime)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Transaction Process");
@@ -1172,8 +1172,10 @@ namespace BitCoin
             return false;
         }
 
+        milliseconds startCheckDupTime = getTimeMilliseconds();
         if(!pChain->outputs().checkDuplicate(hash, pHeight, pBlockHash))
             return false;
+        pCheckDupTime += getTimeMilliseconds() - startCheckDupTime;
 
         mFee = 0;
 

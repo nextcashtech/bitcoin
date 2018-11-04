@@ -648,6 +648,9 @@ namespace BitCoin
 
         Transaction *transaction;
         unsigned int offset;
+        milliseconds checkDupTime = 0L;
+        milliseconds fullTime = 0L;
+        milliseconds startTime;
         while(true)
         {
             transaction = data->getNext(offset);
@@ -658,8 +661,10 @@ namespace BitCoin
                 break;
             }
 
+            startTime = getTimeMilliseconds();
             if(transaction->process(data->chain, data->block->header.hash, data->height,
-              offset == 0, data->block->header.version, data->spentAgeLock, data->spentAges))
+              offset == 0, data->block->header.version, data->spentAgeLock, data->spentAges,
+              checkDupTime))
                 data->markComplete(offset, true);
             else
             {
@@ -668,7 +673,13 @@ namespace BitCoin
                 transaction->print(data->chain->forks(), NextCash::Log::WARNING);
                 data->markComplete(offset, false);
             }
+            fullTime += getTimeMilliseconds() - startTime;
         }
+
+        data->timeLock.lock();
+        data->checkDupTime += checkDupTime;
+        data->fullTime += fullTime;
+        data->timeLock.unlock();
     }
 
     bool Block::processMultiThreaded(Chain *pChain, unsigned int pHeight,
@@ -680,9 +691,11 @@ namespace BitCoin
 
         mFees = 0;
 
+        milliseconds startAddTime = getTimeMilliseconds();
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
+        milliseconds addTime = getTimeMilliseconds() - startAddTime;
 
         ProcessThreadData threadData(pChain, this, pHeight, transactions.begin(),
           transactions.size());
@@ -762,6 +775,10 @@ namespace BitCoin
         if(!threadData.success)
             return false;
 
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+          "Multi threaded lock times Threads,%d,Add,%d,Dup,%d,Full%d", pThreadCount, addTime,
+          threadData.checkDupTime, threadData.fullTime);
+
         if(threadData.spentAges.size() > 0)
         {
             unsigned int totalSpentAge = 0;
@@ -805,9 +822,11 @@ namespace BitCoin
           "Processing block %d (%d trans) (%d KB) : %s", pHeight,
           transactions.size(), size() / 1000, header.hash.hex().text());
 
+        milliseconds startAddTime = getTimeMilliseconds();
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
+        milliseconds addTime = getTimeMilliseconds() - startAddTime;
 
         // Validate and process transactions
         mFees = 0;
@@ -815,22 +834,31 @@ namespace BitCoin
         std::vector<unsigned int> spentAges;
         spentAges.reserve(transactions.size() * 2);
         NextCash::Mutex spentAgeLock("Spent Age");
+        milliseconds checkDupTime = 0L;
+        milliseconds startTime;
+        milliseconds fullTime = 0L;
         for(std::vector<Transaction *>::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction, ++transactionOffset)
         {
             // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
               // "Processing transaction %d", transactionOffset);
+            startTime = getTimeMilliseconds();
             if(!(*transaction)->process(pChain, header.hash, pHeight, transactionOffset == 0,
-              header.version, spentAgeLock, spentAges))
+              header.version, spentAgeLock, spentAges, checkDupTime))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Transaction %d failed", transactionOffset);
                 (*transaction)->print(pChain->forks(), NextCash::Log::WARNING);
                 return false;
             }
+            fullTime += getTimeMilliseconds() - startTime;
             if(transactionOffset != 0)
                 mFees += (*transaction)->fee();
         }
+
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+          "Single threaded block times Threads,1,Add,%d,Dup,%d,Full%d", addTime, checkDupTime,
+          fullTime);
 
         if(spentAges.size() > 0)
         {

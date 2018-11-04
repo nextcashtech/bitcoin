@@ -271,7 +271,7 @@ namespace BitCoin
 
         bool process(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight,
           bool pCoinBase, int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
-          std::vector<unsigned int> &pSpentAges);
+          std::vector<unsigned int> &pSpentAges, milliseconds &pCheckDupTime);
 
         // Check validity and return status
         bool check(Chain *pChain, TransactionList &pMemPoolTransactions,
