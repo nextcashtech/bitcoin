@@ -20,7 +20,8 @@ list:
 	@echo Headers : $(HEADER_FILES)
 	@echo Sources : $(SOURCE_FILES)
 	@echo Run Options :
-	@echo "  make build_secp256k1    # Run tests"
+	@echo "  make build_secp256k1 # Build only secp256k1 library"
+	@echo "  make test_secp256k1 # Test secp256k1 library"
 	@echo "  make debug   # Build exe with gdb info"
 	@echo "  make release # Build release exe"
 	@echo "  make test    # Run tests"
