@@ -475,7 +475,7 @@ namespace BitCoin
         saveStatistics();
         saveMonitor();
         saveKeyStore();
-        mChain.save();
+        mChain.save(true);
         mChain.clearInSync();
         Header::clean();
         Block::clean();
@@ -2117,7 +2117,7 @@ namespace BitCoin
             if((time - mLastDataSaveTime > 30 && mChain.saveDataNeeded()) ||
               time - mLastDataSaveTime > 3600)
             {
-                mChain.saveData();
+                mChain.saveData(false);
                 mLastDataSaveTime = getTime();
             }
 
