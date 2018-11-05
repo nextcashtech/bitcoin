@@ -165,7 +165,7 @@ namespace BitCoin
     {
     public:
 
-        static const uint64_t DUST = 546;
+        static const int64_t DUST = 546;
         static const int64_t INVALID_FEE = 0xffffffffffffffff;
 
         // Value below which lock times are considered block heights instead of timestamps
@@ -271,7 +271,7 @@ namespace BitCoin
 
         bool process(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight,
           bool pCoinBase, int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
-          std::vector<unsigned int> &pSpentAges, milliseconds &pCheckDupTime);
+          std::vector<unsigned int> &pSpentAges, Timer &pCheckDupTime);
 
         // Check validity and return status
         bool check(Chain *pChain, TransactionList &pMemPoolTransactions,

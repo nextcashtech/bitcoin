@@ -83,7 +83,7 @@ namespace BitCoin
         bool isInitialized() const { return mIsInitialized; }
         bool isStopped() const { return mStopped; }
         // Versions exchanged and initial ping completed
-        bool isReady() const { return mPingRoundTripTime != -1; }
+        bool isReady() const { return mPingRoundTripTime != 0xffffffffffffffff; }
         milliseconds pingTimeMilliseconds() const { return mPingRoundTripTime; }
         void setPingCutoff(uint32_t pPingCutoff) { mPingCutoff = pPingCutoff; }
 
@@ -209,7 +209,7 @@ namespace BitCoin
         int32_t mLastCheckTime;
         milliseconds mLastPingTime;
         milliseconds mPingRoundTripTime;
-        int32_t mPingCutoff;
+        uint32_t mPingCutoff;
         int32_t mLastBlackListCheck;
         int32_t mLastMerkleCheck, mLastMerkleRequest, mLastMerkleReceive;
 

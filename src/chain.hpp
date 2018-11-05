@@ -322,10 +322,10 @@ namespace BitCoin
         unsigned int heightBefore(int32_t pTime);
 
         bool load();
-        bool save();
+        bool save(bool pFast);
 
         // Save transaction outputs and addresses databases.
-        bool saveData();
+        bool saveData(bool pFast);
 #ifndef DISABLE_ADDRESSES
         bool saveDataNeeded() { return mOutputs.cacheNeedsTrim() || mAddresses.needsPurge(); }
 #else

@@ -145,7 +145,7 @@ namespace BitCoin
             bool success;
             bool *complete;
             NextCash::Mutex timeLock;
-            milliseconds checkDupTime, fullTime;
+            uint64_t checkDupTime, fullTime;
 
             Transaction *getNext(unsigned int &pOffset)
             {

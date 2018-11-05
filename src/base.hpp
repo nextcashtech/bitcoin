@@ -13,7 +13,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <ctime>
 
 // BIP-0014 Specifies User Agent Format
 #ifdef ANDROID
@@ -57,22 +56,89 @@ namespace BitCoin
     enum Network { MAINNET, TESTNET };
 
     Network network();
-    typedef int32_t seconds;
     void setNetwork(Network pNetwork);
 
+    typedef int32_t Time;
+    typedef uint64_t Milliseconds;
+    typedef uint64_t Microseconds;
+
     // Seconds since epoch
-    inline int32_t getTime()
+    inline Time getTime()
     {
-        return std::time(NULL);
+        return (Time)std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::system_clock::now().time_since_epoch()).count();
     }
 
     // Milliseconds since epoch
-    typedef int64_t milliseconds;
-    inline int64_t getTimeMilliseconds()
+    inline Milliseconds getTimeMilliseconds()
     {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(
+        return (Milliseconds)std::chrono::duration_cast<std::chrono::milliseconds>(
           std::chrono::system_clock::now().time_since_epoch()).count();
     }
+
+    class Timer
+    {
+    public:
+
+        Timer(bool pStart = false) : mHits(0), mMicroseconds(0L)
+        {
+            mStarted = false;
+            if(pStart)
+                start();
+        }
+        Timer(Timer &pCopy)
+        {
+            mStart = pCopy.mStart;
+            mStarted = pCopy.mStarted;
+            mHits = pCopy.mHits;
+            mMicroseconds = pCopy.mMicroseconds;
+        }
+        Timer &operator = (const Timer &pRight)
+        {
+            mStart = pRight.mStart;
+            mStarted = pRight.mStarted;
+            mHits = pRight.mHits;
+            mMicroseconds = pRight.mMicroseconds;
+            return *this;
+        }
+
+        void start()
+        {
+            ++mHits;
+            mStart = std::chrono::steady_clock::now();
+            mStarted = true;
+        }
+
+        void stop()
+        {
+            if(!mStarted)
+                return;
+            mMicroseconds += std::chrono::duration_cast<std::chrono::microseconds>(
+              std::chrono::steady_clock::now() - mStart).count();
+            mStarted = false;
+        }
+
+        void clear(bool pStart = false)
+        {
+            mStarted = false;
+            mHits = 0;
+            mMicroseconds = 0L;
+            if(pStart)
+                start();
+        }
+
+        unsigned int hits() const { return mHits; }
+        Milliseconds milliseconds() const { return mMicroseconds / 1000L; }
+        Microseconds microseconds() const { return mMicroseconds; }
+
+    private:
+
+        std::chrono::steady_clock::time_point mStart;
+        bool mStarted;
+        unsigned int mHits;
+        Microseconds mMicroseconds;
+
+    };
 
     // Convert Satoshis to Bitcoins
     inline double bitcoins(int64_t pSatoshis)

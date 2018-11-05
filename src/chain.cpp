@@ -1164,7 +1164,7 @@ namespace BitCoin
 #endif
         mProcessMutex.lock();
 
-        milliseconds startTime = getTimeMilliseconds();
+        Timer timer(true);
         bool success = true, fullyValidated = true;
         if(mApprovedBlockHeight >= mNextBlockHeight) // Just update transaction outputs
         {
@@ -1230,16 +1230,18 @@ namespace BitCoin
 
         mProcessMutex.unlock();
 
+        timer.stop();
+
         if(fullyValidated)
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Added validated block (%d) (%d trans) (%d KB) (%d ms) : %s",
               mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1000,
-              getTimeMilliseconds() - startTime, pBlock.header.hash.hex().text());
+              timer.milliseconds(), pBlock.header.hash.hex().text());
         else
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Added approved block (%d) (%d trans) (%d KB) (%d ms) : %s",
               mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1000,
-              getTimeMilliseconds() - startTime, pBlock.header.hash.hex().text());
+              timer.milliseconds(), pBlock.header.hash.hex().text());
 
         return true;
     }
@@ -1798,19 +1800,19 @@ namespace BitCoin
     bool Chain::updateOutputs()
     {
         Block block;
-        milliseconds startTime;
+        Timer timer;
         if(mOutputs.height() == 0xffffffff)
         {
             // Process genesis block
-            startTime = getTimeMilliseconds();
+            timer.start();
             if(Block::getBlock(0, block))
             {
                 if(block.updateOutputsSingleThreaded(this, 0))
                 {
+                    timer.stop();
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                       "Updated outputs for genesis block (%d trans) (%d KB) (%d ms)",
-                      block.transactions.size(), block.size() / 1000,
-                      getTimeMilliseconds() - startTime);
+                      block.transactions.size(), block.size() / 1000, timer.milliseconds());
                 }
                 else
                 {
@@ -1818,7 +1820,7 @@ namespace BitCoin
                       "Failed to update outputs for genesis block : %s",
                       block.header.hash.hex().text());
                     mOutputs.revert(block.transactions, 0);
-                    mOutputs.save(mInfo.threadCount);
+                    mOutputs.saveFull(mInfo.threadCount);
                     return false;
                 }
             }
@@ -1846,7 +1848,7 @@ namespace BitCoin
         {
             ++currentHeight;
 
-            startTime = getTime();
+            timer.clear(true);
             if(Block::getBlock(currentHeight, block))
             {
                 if(block.size() > 500000) // Enough to cover overhead of creating threads.
@@ -1855,12 +1857,12 @@ namespace BitCoin
                 else
                     success = block.updateOutputsSingleThreaded(this, currentHeight);
 
+                timer.stop();
                 if(success)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                       "Updated outputs for block %d (%d trans) (%d KB) (%d ms)", currentHeight,
-                      block.transactions.size(), block.size() / 1000,
-                      getTimeMilliseconds() - startTime);
+                      block.transactions.size(), block.size() / 1000, timer.milliseconds());
                 }
                 else
                 {
@@ -1868,7 +1870,7 @@ namespace BitCoin
                       "Failed to update outputs for block %d : %s", currentHeight,
                       block.header.hash.hex().text());
                     mOutputs.revert(block.transactions, currentHeight);
-                    mOutputs.save(mInfo.threadCount);
+                    mOutputs.saveFull(mInfo.threadCount);
                     return false;
                 }
             }
@@ -1876,7 +1878,7 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                   "Failed to read block %d from block file", currentHeight);
-                mOutputs.save(mInfo.threadCount);
+                mOutputs.saveFull(mInfo.threadCount);
                 return false;
             }
 
@@ -1884,7 +1886,7 @@ namespace BitCoin
             {
                 if(mOutputs.cacheNeedsTrim())
                 {
-                    if(!mOutputs.save(mInfo.threadCount))
+                    if(!mOutputs.saveFull(mInfo.threadCount))
                         return false;
                 }
                 else
@@ -1896,7 +1898,7 @@ namespace BitCoin
             }
         }
 
-        mOutputs.save(mInfo.threadCount);
+        mOutputs.saveFull(mInfo.threadCount);
         return mOutputs.height() == blockHeight();
     }
 
@@ -2016,7 +2018,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Chain::save()
+    bool Chain::save(bool pFast)
     {
         bool success = true;
 
@@ -2026,12 +2028,12 @@ namespace BitCoin
             success = false;
         if(!savePending())
             success = false;
-        if(!saveData())
+        if(!saveData(pFast))
             success = false;
         return success;
     }
 
-    bool Chain::saveData()
+    bool Chain::saveData(bool pFast)
     {
         if(Info::instance().spvMode)
             return true;
@@ -2041,7 +2043,11 @@ namespace BitCoin
         Header::save();
         Block::save();
 
-        bool succes = mOutputs.save(mInfo.threadCount);
+        bool succes;
+        if(pFast)
+            succes = mOutputs.saveCache();
+        else
+            succes = mOutputs.saveFull(mInfo.threadCount);
 #ifndef DISABLE_ADDRESSES
         if(!mAddresses.save(mInfo.threadCount))
             succes = false;

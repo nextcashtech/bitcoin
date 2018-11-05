@@ -57,7 +57,7 @@ namespace BitCoin
         mLastBlackListCheck = getTime();
         mLastPingNonce = 0;
         mLastPingTime = 0;
-        mPingRoundTripTime = -1;
+        mPingRoundTripTime = 0xffffffffffffffff;
         mPingCutoff = 30;
         mBlockDownloadCount = 0;
         mBlockDownloadSize = 0;
@@ -134,7 +134,7 @@ namespace BitCoin
         mLastBlackListCheck = getTime();
         mLastPingNonce = 0;
         mLastPingTime = 0;
-        mPingRoundTripTime = -1;
+        mPingRoundTripTime = 0xffffffffffffffff;
         mPingCutoff = 30;
         mBlockDownloadCount = 0;
         mBlockDownloadSize = 0;
@@ -337,7 +337,8 @@ namespace BitCoin
             return false;
         }
 
-        if(mPingRoundTripTime == -1 && (time - mConnectedTime) > mPingCutoff)
+        if(mPingRoundTripTime == 0xffffffffffffffff && (time - mConnectedTime) >
+          (int32_t)mPingCutoff)
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
               "Dropping. Not ready within %d seconds of connection.", mPingCutoff);
@@ -1143,8 +1144,8 @@ namespace BitCoin
         }
 
         if(mReceivedVersionData != NULL && mVersionAcknowledged && mLastPingTime != 0 &&
-           mPingRoundTripTime == -1 && mPingCutoff != -1 &&
-           (getTimeMilliseconds() - mLastPingTime) / 1000 > mPingCutoff)
+           mPingRoundTripTime == 0xffffffffffffffff &&
+           (getTimeMilliseconds() - mLastPingTime) / 1000L > mPingCutoff)
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
               "Dropping. Ping not received within cutoff of %ds", mPingCutoff);
@@ -1375,14 +1376,14 @@ namespace BitCoin
                 }
                 else
                 {
-                    if(mPingRoundTripTime == -1)
+                    if(mPingRoundTripTime == 0xffffffffffffffff)
                     {
                         NextCash::Log::add(NextCash::Log::DEBUG, mName,
                           "Received round trip ping");
                         mPingRoundTripTime = getTimeMilliseconds() - mLastPingTime;
-                        if(!isIncoming() && !isSeed() && mPingCutoff != -1)
+                        if(!isIncoming() && !isSeed())
                         {
-                            if(mPingRoundTripTime / 1000 > mPingCutoff)
+                            if(mPingRoundTripTime / 1000L > mPingCutoff)
                             {
                                 NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                                   "Dropping. Ping time %dms not within cutoff of %ds",
