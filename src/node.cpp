@@ -312,7 +312,7 @@ namespace BitCoin
 
     bool Node::check()
     {
-        int32_t time = getTime();
+        Time time = getTime();
         mLastCheckTime = time;
 
         if(!isOpen())
@@ -337,8 +337,7 @@ namespace BitCoin
             return false;
         }
 
-        if(mPingRoundTripTime == 0xffffffffffffffff && (time - mConnectedTime) >
-          (int32_t)mPingCutoff)
+        if(mPingRoundTripTime == 0xffffffffffffffff && (time - mConnectedTime) > mPingCutoff)
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
               "Dropping. Not ready within %d seconds of connection.", mPingCutoff);
@@ -808,7 +807,7 @@ namespace BitCoin
 
     bool Node::sendPing()
     {
-        milliseconds time = getTimeMilliseconds();
+        Milliseconds time = getTimeMilliseconds();
         if(time - mLastPingTime < 60000)
             return true;
         Message::PingData pingData;
@@ -1025,7 +1024,7 @@ namespace BitCoin
             return;
         }
 
-        int32_t time = getTime();
+        Time time = getTime();
         if(time - mConnectedTime > PEER_TIME_LIMIT)
         {
             NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Reached time limit");
@@ -1188,7 +1187,7 @@ namespace BitCoin
         Message::Data *message;
         bool dontDeleteMessage = false;
         bool success = true;
-        int32_t time = getTime();
+        Time time = getTime();
         Info &info = Info::instance();
 
         if(mMessagesReceived == 0 && failedStartBytes())
@@ -1581,11 +1580,12 @@ namespace BitCoin
                     {
                     case Message::InventoryHash::BLOCK:
                     {
-                        int height = mChain->hashHeight((*item)->hash);
+                        unsigned int height = mChain->hashHeight((*item)->hash);
 
-                        if(height == -1)
+                        if(height == 0xffffffff)
                             notFoundData.inventory.push_back(new Message::InventoryHash(**item));
-                        else if(height < mReceivedVersionData->startBlockHeight - 1000)
+                        else if(mReceivedVersionData->startBlockHeight > 1000 &&
+                          height < mReceivedVersionData->startBlockHeight - 1000)
                         {
                             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                               "Not sending block. Block height %d below node's start block height %d : %s",

@@ -35,7 +35,7 @@ namespace BitCoin
             time = pCopy.time;
             targetBits = pCopy.targetBits;
         }
-        BlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits) : accumulatedWork(32)
+        BlockStat(int32_t pVersion, Time pTime, uint32_t pTargetBits) : accumulatedWork(32)
         {
             version = pVersion;
             time = pTime;
@@ -45,7 +45,7 @@ namespace BitCoin
             target.setDifficulty(pTargetBits);
             target.getWork(accumulatedWork);
         }
-        BlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits,
+        BlockStat(int32_t pVersion, Time pTime, uint32_t pTargetBits,
           NextCash::Hash &pPreviousAccumulatedWork) : accumulatedWork(32)
         {
             version = pVersion;
@@ -69,7 +69,7 @@ namespace BitCoin
         }
 
         int32_t        version;
-        int32_t        time;
+        Time           time;
         uint32_t       targetBits;
         NextCash::Hash accumulatedWork;
     };
@@ -132,7 +132,7 @@ namespace BitCoin
         int32_t version;
         NextCash::Hash previousHash;
         NextCash::Hash merkleHash;
-        uint32_t time;
+        Time     time;
         uint32_t targetBits;
         uint32_t nonce;
 

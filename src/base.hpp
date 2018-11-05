@@ -58,7 +58,7 @@ namespace BitCoin
     Network network();
     void setNetwork(Network pNetwork);
 
-    typedef int32_t Time;
+    typedef uint32_t Time;
     typedef uint64_t Milliseconds;
     typedef uint64_t Microseconds;
 
@@ -88,14 +88,14 @@ namespace BitCoin
         }
         Timer(Timer &pCopy)
         {
-            mStart = pCopy.mStart;
+            mStartTime = pCopy.mStartTime;
             mStarted = pCopy.mStarted;
             mHits = pCopy.mHits;
             mMicroseconds = pCopy.mMicroseconds;
         }
         Timer &operator = (const Timer &pRight)
         {
-            mStart = pRight.mStart;
+            mStartTime = pRight.mStartTime;
             mStarted = pRight.mStarted;
             mHits = pRight.mHits;
             mMicroseconds = pRight.mMicroseconds;
@@ -104,8 +104,7 @@ namespace BitCoin
 
         void start()
         {
-            ++mHits;
-            mStart = std::chrono::steady_clock::now();
+            mStartTime = std::chrono::steady_clock::now();
             mStarted = true;
         }
 
@@ -113,8 +112,9 @@ namespace BitCoin
         {
             if(!mStarted)
                 return;
+            ++mHits;
             mMicroseconds += std::chrono::duration_cast<std::chrono::microseconds>(
-              std::chrono::steady_clock::now() - mStart).count();
+              std::chrono::steady_clock::now() - mStartTime).count();
             mStarted = false;
         }
 
@@ -133,7 +133,7 @@ namespace BitCoin
 
     private:
 
-        std::chrono::steady_clock::time_point mStart;
+        std::chrono::steady_clock::time_point mStartTime;
         bool mStarted;
         unsigned int mHits;
         Microseconds mMicroseconds;

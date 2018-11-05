@@ -406,7 +406,7 @@ namespace BitCoin
 
             uint32_t compositeValue = 0;
             int32_t version;
-            int32_t medianTimePast = pChain->getMedianPastTime(pHeight, 11);
+            Time medianTimePast = pChain->getMedianPastTime(pHeight, 11);
             for(std::vector<SoftFork *>::iterator softFork = mForks.begin();
               softFork != mForks.end(); ++softFork)
             {

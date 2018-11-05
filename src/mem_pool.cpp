@@ -109,7 +109,7 @@ namespace BitCoin
     void MemPool::getNeeded(NextCash::HashList &pList)
     {
         mLock.readLock();
-        uint32_t time = getTime();
+        Time time = getTime();
         for(std::list<PendingTransactionData *>::iterator pending = mPending.begin();
           pending != mPending.end();++pending)
             if((*pending)->requestingNode == 0 || time - (*pending)->requestedTime > 2)
@@ -487,7 +487,7 @@ namespace BitCoin
 
     void MemPool::expirePending()
     {
-        int32_t expireTime = getTime() - 60;
+        Time expireTime = getTime() - 60;
         NextCash::String timeString;
 
         for(std::list<PendingTransactionData *>::iterator pending = mPending.begin();
@@ -521,7 +521,7 @@ namespace BitCoin
 
     void MemPool::expire()
     {
-        int32_t expireTime = getTime() - (60 * 60 * 24); // 24 hours
+        Time expireTime = getTime() - (60 * 60 * 24); // 24 hours
         NextCash::String timeString;
 
         for(TransactionList::iterator transaction = mTransactions.begin();

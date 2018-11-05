@@ -698,7 +698,7 @@ namespace BitCoin
         }
 
         SubSet *subSet = mSubSets;
-        uint32_t lastReport = getTime();
+        Time lastReport = getTime();
         bool success = true;
         for(unsigned int i = 0; i < OUTPUTS_SET_COUNT; ++i)
         {
@@ -758,7 +758,7 @@ namespace BitCoin
         }
 
         SubSet *subSet = mSubSets;
-        uint32_t lastReport = getTime();
+        Time lastReport = getTime();
         for(unsigned int i = 0; i < OUTPUTS_SET_COUNT; ++i)
         {
             if(getTime() - lastReport >= 10)
@@ -786,7 +786,7 @@ namespace BitCoin
         }
 
         SubSet *subSet = mSubSets;
-        uint32_t lastReport = getTime();
+        Time lastReport = getTime();
         NextCash::stream_size maxSetCacheDataSize = 0;
         bool success = true;
         if(mTargetCacheSize > 0)
@@ -859,7 +859,7 @@ namespace BitCoin
             maxSetCacheDataSize = mTargetCacheSize / OUTPUTS_SET_COUNT;
         SaveThreadData threadData(mSubSets, maxSetCacheDataSize, pAutoTrimCache);
         NextCash::Thread *threads[pThreadCount];
-        int32_t lastReport = getTime();
+        Time lastReport = getTime();
         unsigned int i;
         NextCash::String threadName;
 
@@ -1869,7 +1869,7 @@ namespace BitCoin
         NextCash::DistributedVector<NextCash::stream_size>::Iterator index;
         int compare;
         bool found;
-        int32_t lastReport = getTime();
+        Time lastReport = getTime();
         unsigned int cacheOffset = 0, initialCacheSize = mCache.size();
         unsigned int begin, end, current;
         unsigned int readHeadersCount = 0;

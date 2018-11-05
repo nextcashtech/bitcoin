@@ -176,7 +176,7 @@ namespace BitCoin
                 return;
 
             // Generate hashes to check
-            uint32_t value = getTime();
+            Time value = getTime();
             value -= value % 10;
             value -= 30;
             NextCash::Hash hashes[5];
@@ -544,7 +544,7 @@ namespace BitCoin
                 }
                 else
                 {
-                    uint32_t stopTime = 0;
+                    Time stopTime = 0;
                     unsigned int blockCount = 0, totalTransactionCount = 0, totalInputCount = 0,
                       totalOutputCount = 0;
                     unsigned int inputCount, outputCount;

@@ -62,7 +62,7 @@ namespace BitCoin
                 delete *trans;
     }
 
-    bool Monitor::MerkleRequestData::addNode(unsigned int pNodeID, int32_t pRequestTime)
+    bool Monitor::MerkleRequestData::addNode(unsigned int pNodeID, Time pRequestTime)
     {
         if(complete || nodes.size() >= requiredNodeCount)
             return false;
@@ -87,7 +87,7 @@ namespace BitCoin
         return false;
     }
 
-    unsigned int Monitor::MerkleRequestData::timedOutNode(int32_t pTime)
+    unsigned int Monitor::MerkleRequestData::timedOutNode(Time pTime)
     {
         unsigned int result = 0;
         for(std::vector<NodeData>::iterator node = nodes.begin(); node != nodes.end(); ++node)
@@ -615,7 +615,7 @@ namespace BitCoin
         }
 
         // Find oldest create date which does not have a pass started.
-        int32_t oldestCreateDate = 0, thisCreateDate;
+        Time oldestCreateDate = 0, thisCreateDate;
         for(unsigned int i = 0; i < mKeyStore->size(); ++i)
             if(!mKeyStore->passStarted(i))
             {
@@ -1091,8 +1091,8 @@ namespace BitCoin
                             pOutputs.emplace_back((*trans)->transaction->hash, *index);
                             pOutputs.back().output =
                               new Output((*trans)->transaction->outputs[*index]);
-                            pOutputs.back().confirmations = (uint32_t)(pChain->headerHeight() -
-                              pChain->hashHeight((*trans)->blockHash) + 1);
+                            pOutputs.back().confirmations = pChain->headerHeight() -
+                              pChain->hashHeight((*trans)->blockHash) + 1;
                             break;
                         }
                 }
@@ -1516,7 +1516,7 @@ namespace BitCoin
         NextCash::HashContainerList<MerkleRequestData *>::Iterator request;
         MerkleRequestData *newMerkleRequest;
         unsigned int blockHeight;
-        int32_t time = getTime();
+        Time time = getTime();
         uint8_t requiredNodeCount = Info::instance().merkleBlockCountRequired;
         bool found;
 
@@ -2190,7 +2190,7 @@ namespace BitCoin
         {
             MerkleRequestData *merkleRequest = *request;
             unsigned int nodeID;
-            int32_t time = getTime();
+            Time time = getTime();
             if(!merkleRequest->isComplete())
             {
                 // Time out requests

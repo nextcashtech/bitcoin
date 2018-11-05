@@ -213,7 +213,7 @@ namespace BitCoin
         uint32_t lockTime; // Time/Block height at or after which a transaction can be confirmed.
 
         unsigned int size() const { return mSize; }
-        int32_t time() const { return mTime; }
+        Time time() const { return mTime; }
         bool feeIsValid() const { return mFee != INVALID_FEE; }
         int64_t fee() const { return mFee; }
         uint64_t feeRate(); // Satoshis per KB
@@ -253,7 +253,7 @@ namespace BitCoin
 
         void calculateSize();
         void calculateHash();
-        void setTime(int32_t pValue) { mTime = pValue; }
+        void setTime(Time pValue) { mTime = pValue; }
 
         // Signs the inputs and adjusts the output amounts to set the fee.
         //
@@ -332,7 +332,7 @@ namespace BitCoin
 
     private:
 
-        int32_t mTime;
+        Time mTime;
         int64_t mFee;
         NextCash::stream_size mSize;
         uint8_t mStatus;

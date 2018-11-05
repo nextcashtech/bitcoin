@@ -43,8 +43,8 @@ namespace BitCoin
         NextCash::Buffer mReceiveBuffer;
         bool mStop, mStopped, mAuthenticated;
 
-        int32_t mLastReceiveTime;
-        int32_t mConnectedTime;
+        Time mLastReceiveTime;
+        Time mConnectedTime;
 
         Chain *mChain;
 

@@ -1260,14 +1260,14 @@ namespace BitCoin
                   pChain->forks().softForkIsActive(pHeight, SoftFork::BIP0068))
                 {
                     // Sequence is an encoded relative time lock
-                    int32_t lock = input->sequence & Input::SEQUENCE_LOCKTIME_MASK;
+                    uint32_t lock = input->sequence & Input::SEQUENCE_LOCKTIME_MASK;
                     if(input->sequence & Input::SEQUENCE_TYPE)
                     {
                         // Seconds since outpoint median past time in units of 512 seconds granularity
                         lock <<= 9;
-                        int32_t currentBlockMedianTime =
+                        Time currentBlockMedianTime =
                           pChain->getMedianPastTime(pHeight - 1, 11);
-                        int32_t spentBlockMedianTime =
+                        Time spentBlockMedianTime =
                           pChain->getMedianPastTime(previousHeight - 1, 11);
                         if(currentBlockMedianTime < spentBlockMedianTime + lock)
                         {
@@ -1396,7 +1396,7 @@ namespace BitCoin
                 // Lock time is a timestamp
                 if(pChain->forks().softForkIsActive(pHeight, SoftFork::BIP0113))
                 {
-                    if((int32_t)lockTime > pChain->getMedianPastTime(pHeight, 11))
+                    if(lockTime > pChain->getMedianPastTime(pHeight, 11))
                     {
                         NextCash::String lockTimeText, blockTimeText;
                         lockTimeText.writeFormattedTime(lockTime);
@@ -1416,7 +1416,7 @@ namespace BitCoin
                     // Add 600 to fake having a "peer time offset" for older blocks
                     //   Block 357903 transaction 98 has a lock time about 3 minutes after the
                     //   block time.
-                    if((int32_t)lockTime > pChain->time(pHeight) + 600)
+                    if(lockTime > pChain->time(pHeight) + 600)
                     {
                         NextCash::String lockTimeText, blockTimeText;
                         lockTimeText.writeFormattedTime(lockTime);

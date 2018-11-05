@@ -96,7 +96,7 @@ namespace BitCoin
 
         void setFinishMode(int pMode);
 
-        void setFinishTime(int32_t pTime); // Set time to stop daemon (zero clears)
+        void setFinishTime(Time pTime); // Set time to stop daemon (zero clears)
         void requestStop()
         {
             mStopRequested = true;
@@ -195,13 +195,13 @@ namespace BitCoin
 #endif
 
         // Timers
-        int32_t mLastHeaderRequestTime;
-        int32_t mLastConnectionActive;
-        int32_t mLastDataSaveTime;
-        int32_t mLastMemPoolCheckPending;
-        int32_t mLastMonitorProcess;
-        int32_t mLastCleanTime, mLastRequestCleanTime;
-        int32_t mFinishTime;
+        Time mLastHeaderRequestTime;
+        Time mLastConnectionActive;
+        Time mLastDataSaveTime;
+        Time mLastMemPoolCheckPending;
+        Time mLastMonitorProcess;
+        Time mLastCleanTime, mLastRequestCleanTime;
+        Time mFinishTime;
 
         NextCash::Hash mLastHeaderHash;
         NextCash::Network::Listener *mNodeListener;

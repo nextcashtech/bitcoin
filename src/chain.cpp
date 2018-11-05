@@ -660,7 +660,7 @@ namespace BitCoin
         mPendingLock.writeUnlock();
     }
 
-    void Chain::addBlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits)
+    void Chain::addBlockStat(int32_t pVersion, Time pTime, uint32_t pTargetBits)
     {
         if(mBlockStats.size() == 0)
             mBlockStats.emplace_back(pVersion, pTime, pTargetBits);
@@ -727,13 +727,13 @@ namespace BitCoin
             if(mForks.cashFork201711IsActive(mNextHeaderHeight))
             {
                 // Get first and last block times and accumulated work
-                int32_t lastTime, firstTime;
+                Time lastTime, firstTime;
                 NextCash::Hash lastWork, firstWork;
 
                 getMedianPastTimeAndWork(headerHeight(), lastTime, lastWork, 3);
                 getMedianPastTimeAndWork(headerHeight() - 144, firstTime, firstWork, 3);
 
-                int32_t timeSpan = lastTime - firstTime;
+                Time timeSpan = lastTime - firstTime;
 
                 // Apply limits
                 if(timeSpan < 72 * 600)
@@ -766,7 +766,7 @@ namespace BitCoin
             else if(mNextHeaderHeight >= 7)
             {
                 // Bitcoin Cash EDA (Emergency Difficulty Adjustment)
-                int32_t mptDiff = getMedianPastTime(mNextHeaderHeight - 1, 11) -
+                Time mptDiff = getMedianPastTime(mNextHeaderHeight - 1, 11) -
                   getMedianPastTime(mNextHeaderHeight - 7, 11);
 
                 // If more than 12 hours on the last 6 blocks then reduce difficulty by 20%
@@ -792,8 +792,8 @@ namespace BitCoin
         if(mNextHeaderHeight % RETARGET_PERIOD != 0) // Not a DAA retarget block
             return lastTargetBits;
 
-        int32_t lastBlockTime      = time(mNextHeaderHeight - 1);
-        int32_t lastAdjustmentTime = time(mNextHeaderHeight - RETARGET_PERIOD);
+        Time lastBlockTime      = time(mNextHeaderHeight - 1);
+        Time lastAdjustmentTime = time(mNextHeaderHeight - RETARGET_PERIOD);
 
         // Calculate percent of time actually taken for the last 2016 blocks by the goal time of 2
         //   weeks.
@@ -1076,7 +1076,7 @@ namespace BitCoin
         return -1;
     }
 
-    void Chain::updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, int32_t pTime)
+    void Chain::updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, Time pTime)
     {
         mPendingLock.readLock();
         for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
@@ -1093,7 +1093,7 @@ namespace BitCoin
     void Chain::markBlocksForNode(NextCash::HashList &pHashes, unsigned int pNodeID)
     {
         mPendingLock.readLock();
-        int32_t time = getTime();
+        Time time = getTime();
         for(NextCash::HashList::iterator hash=pHashes.begin();hash!=pHashes.end();++hash)
             for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
               pending != mPendingBlocks.end(); ++pending)
@@ -1632,7 +1632,7 @@ namespace BitCoin
         return header.version;
     }
 
-    int32_t Chain::time(unsigned int pBlockHeight)
+    Time Chain::time(unsigned int pBlockHeight)
     {
         if(pBlockHeight > mBlockStatHeight)
             return 0;
@@ -1694,12 +1694,12 @@ namespace BitCoin
         return accumulatedWork;
     }
 
-    int32_t Chain::getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount)
+    Time Chain::getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount)
     {
         if(pBlockHeight > mBlockStatHeight || pMedianCount > pBlockHeight)
             return 0;
 
-        std::vector<int32_t> times;
+        std::vector<Time> times;
         for(unsigned int i = pBlockHeight - pMedianCount + 1; i <= pBlockHeight; ++i)
             times.push_back(time(i));
 
@@ -1715,7 +1715,7 @@ namespace BitCoin
         return pLeft->time < pRight->time;
     }
 
-    void Chain::getMedianPastTimeAndWork(unsigned int pBlockHeight, int32_t &pTime,
+    void Chain::getMedianPastTimeAndWork(unsigned int pBlockHeight, Time &pTime,
       NextCash::Hash &pAccumulatedWork, unsigned int pMedianCount)
     {
         if(pBlockHeight > mBlockStatHeight || pMedianCount > pBlockHeight)
@@ -1761,7 +1761,7 @@ namespace BitCoin
             delete *stat;
     }
 
-    unsigned int Chain::heightBefore(int32_t pTime)
+    unsigned int Chain::heightBefore(Time pTime)
     {
         unsigned int beginHeight = 0;
         unsigned int endHeight = headerHeight();
@@ -1774,7 +1774,7 @@ namespace BitCoin
 
         // Binary search
         unsigned int currentHeight = beginHeight + ((endHeight - beginHeight) / 2);
-        int32_t currentTime = time(currentHeight);
+        Time currentTime = time(currentHeight);
 
         while(true)
         {
@@ -1842,7 +1842,7 @@ namespace BitCoin
           "Updating outputs from height %d to %d", currentHeight,
           blockHeight());
 
-        int32_t lastCheckTime = getTime();
+        Time lastCheckTime = getTime();
         bool success;
         while(currentHeight < blockHeight() && !mStopRequested)
         {
@@ -1938,7 +1938,7 @@ namespace BitCoin
 
         Block block;
         Forks emptyForks;
-        int32_t lastPurgeTime = getTime();
+        Time lastPurgeTime = getTime();
         milliseconds startTime;
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Chain Update Addresses", false);
@@ -2491,7 +2491,7 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
                   "Updating forks to height %d", headerHeight());
 
-                int32_t lastReport = getTime();
+                Time lastReport = getTime();
                 for(unsigned int i = mForks.height() + 1; i < mNextHeaderHeight; ++i)
                 {
                     if(getTime() - lastReport > 10)

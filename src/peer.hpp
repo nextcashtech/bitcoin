@@ -46,7 +46,7 @@ namespace BitCoin
             return *this;
         }
 
-        int32_t time;
+        Time time;
         uint64_t services;
         NextCash::String userAgent;
         int32_t rating;

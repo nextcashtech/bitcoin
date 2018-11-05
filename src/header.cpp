@@ -54,7 +54,7 @@ namespace BitCoin
         merkleHash.write(pStream);
 
         // Time
-        pStream->writeInt(time);
+        pStream->writeUnsignedInt(time);
 
         // Encoded version of target threshold
         pStream->writeUnsignedInt(targetBits);
@@ -117,7 +117,7 @@ namespace BitCoin
             merkleHash.write(digest);
 
         // Time
-        time = pStream->readInt();
+        time = pStream->readUnsignedInt();
         if(pCalculateHash)
             digest->writeInt(time);
 
@@ -854,7 +854,8 @@ namespace BitCoin
         // Then backup a full item. + ITEM_SIZE
         // Then skip over hash of previous item. - 32
         NextCash::stream_size backupOffset = 12 + 64 + ITEM_SIZE;
-        uint32_t version, time, targetBits;
+        uint32_t version, targetBits;
+        Time time;
         unsigned int added = 0;
         for(unsigned int i = pOffset; added < pCount; --i, ++added)
         {

@@ -84,13 +84,13 @@ namespace BitCoin
         bool isStopped() const { return mStopped; }
         // Versions exchanged and initial ping completed
         bool isReady() const { return mPingRoundTripTime != 0xffffffffffffffff; }
-        milliseconds pingTimeMilliseconds() const { return mPingRoundTripTime; }
+        Milliseconds pingTimeMilliseconds() const { return mPingRoundTripTime; }
         void setPingCutoff(uint32_t pPingCutoff) { mPingCutoff = pPingCutoff; }
 
         // Time that the node connected
-        int32_t connectedTime() { return mConnectedTime; }
+        Time connectedTime() { return mConnectedTime; }
         // Last time a message was received from this peer
-        int32_t lastReceiveTime() { return mLastReceiveTime; }
+        Time lastReceiveTime() { return mLastReceiveTime; }
 
         unsigned int blockHeight()
         {
@@ -205,13 +205,13 @@ namespace BitCoin
 
         Message::VersionData *mSentVersionData, *mReceivedVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;
-        int32_t mLastReceiveTime;
-        int32_t mLastCheckTime;
-        milliseconds mLastPingTime;
-        milliseconds mPingRoundTripTime;
+        Time mLastReceiveTime;
+        Time mLastCheckTime;
+        Milliseconds mLastPingTime;
+        Milliseconds mPingRoundTripTime;
         uint32_t mPingCutoff;
-        int32_t mLastBlackListCheck;
-        int32_t mLastMerkleCheck, mLastMerkleRequest, mLastMerkleReceive;
+        Time mLastBlackListCheck;
+        Time mLastMerkleCheck, mLastMerkleRequest, mLastMerkleReceive;
 
         BloomFilter mFilter; // Bloom filter received from peer
         uint64_t mMinimumFeeRate;
@@ -223,11 +223,11 @@ namespace BitCoin
         unsigned int mBlockDownloadTime;
 
         NextCash::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested, mLastHeaderHash;
-        int32_t mHeaderRequestTime;
+        Time mHeaderRequestTime;
 
         NextCash::Mutex mBlockRequestMutex;
         NextCash::HashList mBlocksRequested;
-        int32_t mBlockRequestTime, mLastBlockReceiveTime;
+        Time mBlockRequestTime, mLastBlockReceiveTime;
 
         NextCash::Mutex mAnnounceMutex;
         NextCash::HashList mAnnounceBlocks, mAnnounceTransactions, mSentTransactions;
@@ -236,7 +236,7 @@ namespace BitCoin
         bool addAnnouncedTransaction(const NextCash::Hash &pHash);
 
         bool mConnected;
-        int32_t mConnectedTime;
+        Time mConnectedTime;
         unsigned int mMessagesReceived;
         unsigned int mPingCount;
 

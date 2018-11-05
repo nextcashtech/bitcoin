@@ -96,8 +96,8 @@ namespace BitCoin
         NextCash::String name;
         unsigned int id;
         uint8_t bit;
-        int32_t startTime;
-        int32_t timeout;
+        Time startTime;
+        Time timeout;
 
         // Values that change based on chain state
         State state;
@@ -131,9 +131,9 @@ namespace BitCoin
 
         // BitCoin Cash
 #ifdef DISABLE_CASH
-        static const int32_t CASH_ACTIVATION_TIME = 0;
+        static const Time CASH_ACTIVATION_TIME = 0;
 #else
-        static const int32_t CASH_ACTIVATION_TIME = 1501590000; // Block height on mainnet 478558
+        static const Time CASH_ACTIVATION_TIME = 1501590000; // Block height on mainnet 478558
 #endif
         static const unsigned int CASH_START_MAX_BLOCK_SIZE = 8000000;
 
@@ -146,7 +146,7 @@ namespace BitCoin
         unsigned int cashForkBlockHeight() const { return mCashActivationBlockHeight; }
 
         // New Cash DAA (Nov 13th 2018)
-        static const int32_t CASH_FORK_201711_ACTIVATION_TIME = 1510600000;
+        static const Time CASH_FORK_201711_ACTIVATION_TIME = 1510600000;
 
         bool cashFork201711IsActive(unsigned int pHeight) const
         {
@@ -155,7 +155,7 @@ namespace BitCoin
         }
 
         // 2018 May Hard Fork
-        static const int32_t CASH_FORK_201805_ACTIVATION_TIME = 1526400000;
+        static const Time CASH_FORK_201805_ACTIVATION_TIME = 1526400000;
         static const unsigned int FORK_201805_MAX_BLOCK_SIZE = 32000000;
 
         bool cashFork201805IsActive(unsigned int pHeight) const
@@ -165,7 +165,7 @@ namespace BitCoin
         }
 
         // 2018 Nov Hard Fork
-        static const int32_t CASH_FORK_201811_ACTIVATION_TIME = 1542300000;
+        static const Time CASH_FORK_201811_ACTIVATION_TIME = 1542300000;
 
         bool cashFork201811IsActive(unsigned int pHeight) const
         {

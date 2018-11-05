@@ -144,7 +144,7 @@ namespace BitCoin
 
             int32_t version;
             NextCash::Hash pendingBlockHash;
-            int32_t pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
+            Time pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
             unsigned int lastPendingBlockSize;
 
         };
@@ -180,7 +180,7 @@ namespace BitCoin
             uint16_t transmittingPort;
             uint64_t nonce;
             NextCash::String userAgent;
-            int32_t startBlockHeight;
+            uint32_t startBlockHeight;
             uint8_t relay; // Relay all transactions (without bloom filter)
         };
 
@@ -286,7 +286,7 @@ namespace BitCoin
                 return *this;
             }
 
-            uint32_t time;
+            Time time;
             uint64_t services;
             uint8_t ip[16];
             uint16_t port;

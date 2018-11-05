@@ -26,7 +26,7 @@ namespace BitCoin
     {
     public:
 
-        PendingTransactionData(const NextCash::Hash &pHash, unsigned int pNodeID, int32_t pTime)
+        PendingTransactionData(const NextCash::Hash &pHash, unsigned int pNodeID, Time pTime)
         {
             hash = pHash;
             requestedTime = pTime;
@@ -35,9 +35,9 @@ namespace BitCoin
         }
 
         NextCash::Hash hash;
-        int32_t requestedTime;
+        Time requestedTime;
         unsigned int requestingNode;
-        int32_t firstTime;
+        Time firstTime;
 
     private:
         PendingTransactionData(PendingTransactionData &pCopy);

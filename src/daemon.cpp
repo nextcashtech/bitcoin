@@ -184,7 +184,7 @@ namespace BitCoin
         mFinishMode = pMode;
     }
 
-    void Daemon::setFinishTime(int32_t pTime)
+    void Daemon::setFinishTime(Time pTime)
     {
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Finish time set to %d", pTime);
@@ -1863,17 +1863,17 @@ namespace BitCoin
         }
 #endif
 
-        int32_t startTime = getTime();
-        int32_t lastStatReportTime = startTime;
-        int32_t lastSyncCheck = startTime;
-        int32_t lastRequestCheckTime = startTime;
-        int32_t lastInfoSaveTime = startTime;
-        int32_t lastImprovement = startTime;
-        int32_t lastTransactionRequest = startTime;
-        int32_t lastTransactionTransmit = startTime;
-        int32_t time;
+        Time startTime = getTime();
+        Time lastStatReportTime = startTime;
+        Time lastSyncCheck = startTime;
+        Time lastRequestCheckTime = startTime;
+        Time lastInfoSaveTime = startTime;
+        Time lastImprovement = startTime;
+        Time lastTransactionRequest = startTime;
+        Time lastTransactionTransmit = startTime;
+        Time time;
 #ifdef PROFILER_ON
-        uint32_t lastProfilerWrite = startTime;
+        Time lastProfilerWrite = startTime;
         NextCash::String profilerTime;
         NextCash::String profilerFileName;
         NextCash::FileOutputStream *profilerFile;
@@ -2113,7 +2113,7 @@ namespace BitCoin
             if(mStopping)
                 return;
 
-            int32_t time = getTime();
+            Time time = getTime();
             if((time - mLastDataSaveTime > 30 && mChain.saveDataNeeded()) ||
               time - mLastDataSaveTime > 3600)
             {
@@ -2449,7 +2449,7 @@ namespace BitCoin
         NextCash::Network::list(pName, ipList);
         unsigned int result = 0;
 #ifdef SINGLE_THREAD
-        int32_t lastNodeProcess = getTime();
+        Time lastNodeProcess = getTime();
 #endif
 
         if(ipList.size() == 0)
@@ -2514,7 +2514,7 @@ namespace BitCoin
         bool found;
         uint64_t servicesMask = Message::VersionData::FULL_NODE_BIT;
 #ifdef SINGLE_THREAD
-        int32_t lastNodeProcess = getTime();
+        Time lastNodeProcess = getTime();
 #endif
 
         mConnecting = true;
@@ -2615,7 +2615,7 @@ namespace BitCoin
             mInfo.getRandomizedPeers(peers, OKAY_RATING, servicesMask);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Found %d okay peers", peers.size());
-            int32_t startTime = getTime();
+            Time startTime = getTime();
             for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
               !mStopping && allCount < maxOutgoingNodes() - 3; ++peer)
             {
@@ -2689,7 +2689,7 @@ namespace BitCoin
             mInfo.getRandomizedPeers(peers, USABLE_RATING, servicesMask);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Found %d usable peers", peers.size());
-            int32_t startTime = getTime();
+            Time startTime = getTime();
             for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
               !mStopping && allCount < maxOutgoingNodes(); ++peer)
             {

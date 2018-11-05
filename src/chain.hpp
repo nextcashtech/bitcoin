@@ -100,7 +100,7 @@ namespace BitCoin
     {
     public:
 
-        PendingHeaderData(const NextCash::Hash &pHash, unsigned int pNodeID, int32_t pTime)
+        PendingHeaderData(const NextCash::Hash &pHash, unsigned int pNodeID, Time pTime)
         {
             hash = pHash;
             requestedTime = pTime;
@@ -109,8 +109,8 @@ namespace BitCoin
         }
 
         NextCash::Hash hash;
-        int32_t requestedTime;
-        int32_t updateTime;
+        Time requestedTime;
+        Time updateTime;
         unsigned int requestingNode;
 
     private:
@@ -146,8 +146,8 @@ namespace BitCoin
         bool isFull() { return block->transactions.size() > 0; }
 
         Block *block;
-        int32_t requestedTime;
-        int32_t updateTime;
+        Time requestedTime;
+        Time updateTime;
         unsigned int requestingNode;
 
     private:
@@ -271,7 +271,7 @@ namespace BitCoin
         //   specified
         bool getBlocksNeeded(NextCash::HashList &pHashes, unsigned int pCount, bool pReduceOnly);
         // Mark that download progress has increased for this block
-        void updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, int32_t pTime);
+        void updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, Time pTime);
         // Mark blocks as requested by the specified node
         void markBlocksForNode(NextCash::HashList &pHashes, unsigned int pNodeID);
         // Release all blocks requested by a specified node so they will be requested again
@@ -309,17 +309,17 @@ namespace BitCoin
         bool getHeader(const NextCash::Hash &pHash, Header &pHeader);
 
         int32_t version(unsigned int pBlockHeight);
-        int32_t time(unsigned int pBlockHeight);
+        Time time(unsigned int pBlockHeight);
         uint32_t targetBits(unsigned int pBlockHeight);
         NextCash::Hash accumulatedWork(unsigned int pBlockHeight);
 
-        int32_t getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount);
+        Time getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount);
 
-        void getMedianPastTimeAndWork(unsigned int pBlockHeight, int32_t &pTime,
+        void getMedianPastTimeAndWork(unsigned int pBlockHeight, Time &pTime,
           NextCash::Hash &pAccumulatedWork, unsigned int pMedianCount);
 
         // Return height of last block before specified time.
-        unsigned int heightBefore(int32_t pTime);
+        unsigned int heightBefore(Time pTime);
 
         bool load();
         bool save(bool pFast);
@@ -420,7 +420,7 @@ namespace BitCoin
         Forks mForks; // Info about soft and hard fork states.
 
         BlockStat *blockStat(unsigned int pBlockHeight); // Get block stat for height.
-        void addBlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits);
+        void addBlockStat(int32_t pVersion, Time pTime, uint32_t pTargetBits);
         void revertLastBlockStat();
         void clearBlockStats();
         bool saveAccumulatedWork();
