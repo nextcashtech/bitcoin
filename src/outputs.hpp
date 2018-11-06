@@ -8,6 +8,10 @@
 #ifndef BITCOIN_OUTPUTS_HPP
 #define BITCOIN_OUTPUTS_HPP
 
+#ifdef PROFILER_ON
+#include "profiler.hpp"
+#endif
+
 #include "mutex.hpp"
 #include "hash.hpp"
 #include "log.hpp"
@@ -449,10 +453,6 @@ namespace BitCoin
             bool pullHash(NextCash::InputStream *pDataFile, NextCash::stream_size pFileOffset,
               NextCash::Hash &pHash)
             {
-#ifdef PROFILER_ON
-                NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-                  PROFILER_OUTPUTS_PULL_ID, PROFILER_OUTPUTS_PULL_NAME, true));
-#endif
                 if(!pDataFile->setReadOffset(pFileOffset))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,

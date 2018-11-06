@@ -1199,6 +1199,14 @@ namespace BitCoin
         }
         else // Fully validate block
         {
+            if(mNextBlockHeight == mApprovedBlockHeight + 1)
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
+                  "Resetting profilers for block validation mode");
+                NextCash::printProfilerDataToLog(NextCash::Log::VERBOSE);
+                NextCash::resetProfilers();
+            }
+
             if(pBlock.size() > 250000) // Enough to cover overhead of creating threads.
                 success = pBlock.processMultiThreaded(this, mNextBlockHeight, mInfo.threadCount);
             else

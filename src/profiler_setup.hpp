@@ -22,6 +22,8 @@
     static const char *PROFILER_OUTPUTS_WRITE_NAME __attribute__ ((unused)) = "Outputs::write";
     static const unsigned int PROFILER_OUTPUTS_GET_ID = 4;
     static const char *PROFILER_OUTPUTS_GET_NAME __attribute__ ((unused)) = "Outputs::get";
+    static const unsigned int PROFILER_OUTPUTS_CHECK_ID = 4;
+    static const char *PROFILER_OUTPUTS_CHECK_NAME __attribute__ ((unused)) = "Outputs::checkDuplicate";
     static const unsigned int PROFILER_OUTPUTS_GET_OUTPUT_ID = 5;
     static const char *PROFILER_OUTPUTS_GET_OUTPUT_NAME __attribute__ ((unused)) = "Outputs::getOutput";
     static const unsigned int PROFILER_OUTPUTS_IS_UNSPENT_ID = 6;
@@ -44,7 +46,9 @@
     static const unsigned int PROFILER_BLOCK_READ_ID = 13;
     static const char *PROFILER_BLOCK_READ_NAME __attribute__ ((unused)) = "Block::read";
 
-    static const unsigned int PROFILER_KEY_VERIFY_SIG_ID = 14;
+    static const unsigned int PROFILER_KEY_SIGN_ID = 14;
+    static const char *PROFILER_KEY_SIGN_NAME __attribute__ ((unused)) = "Key::sign";
+    static const unsigned int PROFILER_KEY_VERIFY_SIG_ID = 15;
     static const char *PROFILER_KEY_VERIFY_SIG_NAME __attribute__ ((unused)) = "Key::verifySig";
 
 #endif

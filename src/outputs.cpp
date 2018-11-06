@@ -7,10 +7,6 @@
  **************************************************************************/
 #include "outputs.hpp"
 
-#ifdef PROFILER_ON
-#include "profiler.hpp"
-#endif
-
 #include "distributed_vector.hpp"
 #include "info.hpp"
 #include "interpreter.hpp"
@@ -311,6 +307,10 @@ namespace BitCoin
     bool TransactionOutputPool::checkDuplicate(const NextCash::Hash &pTransactionID,
       unsigned int pBlockHeight, const NextCash::Hash &pBlockHash)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_CHECK_ID, PROFILER_OUTPUTS_CHECK_NAME), true);
+#endif
         mLock.readLock();
         SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
         bool result = subSet->checkDuplicate(pTransactionID, pBlockHeight, pBlockHash);
@@ -323,7 +323,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_OUTPUTS_GET_ID, PROFILER_OUTPUTS_GET_NAME, true));
+          PROFILER_OUTPUTS_GET_ID, PROFILER_OUTPUTS_GET_NAME), true);
 #endif
         if(!pLocked)
             mLock.readLock();
@@ -339,7 +339,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_OUTPUTS_ADD_ID, PROFILER_OUTPUTS_ADD_NAME, true));
+          PROFILER_OUTPUTS_ADD_ID, PROFILER_OUTPUTS_ADD_NAME), true);
 #endif
         if(pBlockHeight != mNextBlockHeight)
         {
@@ -537,7 +537,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_OUTPUTS_GET_OUTPUT_ID, PROFILER_OUTPUTS_GET_OUTPUT_NAME, true));
+          PROFILER_OUTPUTS_GET_OUTPUT_ID, PROFILER_OUTPUTS_GET_OUTPUT_NAME), true);
 #endif
         if(!mIsValid)
             return false;
@@ -554,7 +554,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_OUTPUTS_IS_UNSPENT_ID, PROFILER_OUTPUTS_IS_UNSPENT_NAME, true));
+          PROFILER_OUTPUTS_IS_UNSPENT_ID, PROFILER_OUTPUTS_IS_UNSPENT_NAME), true);
 #endif
         if(!mIsValid)
             return false;
@@ -571,7 +571,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_OUTPUTS_SPEND_ID, PROFILER_OUTPUTS_SPEND_NAME, true));
+          PROFILER_OUTPUTS_SPEND_ID, PROFILER_OUTPUTS_SPEND_NAME), true);
 #endif
         if(!mIsValid)
             return false;
@@ -589,7 +589,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_OUTPUTS_HAS_UNSPENT_ID, PROFILER_OUTPUTS_HAS_UNSPENT_NAME, true));
+          PROFILER_OUTPUTS_HAS_UNSPENT_ID, PROFILER_OUTPUTS_HAS_UNSPENT_NAME), true);
 #endif
         if(!mIsValid)
             return false;
@@ -605,7 +605,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_OUTPUTS_EXISTS_ID, PROFILER_OUTPUTS_EXISTS_NAME, true));
+          PROFILER_OUTPUTS_EXISTS_ID, PROFILER_OUTPUTS_EXISTS_NAME), true);
 #endif
         if(!mIsValid)
             return false;
@@ -758,7 +758,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_OUTPUTS_INSERT_ID, PROFILER_OUTPUTS_INSERT_NAME, true));
+          PROFILER_OUTPUTS_INSERT_ID, PROFILER_OUTPUTS_INSERT_NAME), true);
 #endif
         mLock.readLock();
         bool result = mSubSets[subSetOffset(pTransactionID)].insert(pTransactionID, pValue,
@@ -988,7 +988,7 @@ namespace BitCoin
         {
 #ifdef PROFILER_ON
             NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-              PROFILER_OUTPUTS_WRITE_ID, PROFILER_OUTPUTS_WRITE_NAME, true));
+              PROFILER_OUTPUTS_WRITE_ID, PROFILER_OUTPUTS_WRITE_NAME), true);
 #endif
             NextCash::String filePathName;
             filePathName.writeFormatted("%s%s%04x.data", mFilePath, NextCash::PATH_SEPARATOR, mID);
@@ -1194,6 +1194,10 @@ namespace BitCoin
     bool TransactionOutputPool::SubSet::pull(const NextCash::Hash &pTransactionID,
       TransactionReference *pMatching)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_PULL_ID, PROFILER_OUTPUTS_PULL_NAME), true);
+#endif
         if(mIndexSize == 0)
             return false;
 

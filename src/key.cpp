@@ -1815,6 +1815,10 @@ namespace BitCoin
 
     bool Key::sign(const NextCash::Hash &pHash, Signature &pSignature) const
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_KEY_SIGN_ID, PROFILER_KEY_SIGN_NAME), true);
+#endif
         if(!isPrivate())
             return false;
 
@@ -1840,7 +1844,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_KEY_VERIFY_SIG_ID, PROFILER_KEY_VERIFY_SIG_NAME, true));
+          PROFILER_KEY_VERIFY_SIG_ID, PROFILER_KEY_VERIFY_SIG_NAME), true);
 #endif
         if(isPrivate())
         {

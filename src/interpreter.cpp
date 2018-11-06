@@ -1154,7 +1154,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_INTERP_PROCESS_ID, PROFILER_INTERP_PROCESS_NAME, true));
+          PROFILER_INTERP_PROCESS_ID, PROFILER_INTERP_PROCESS_NAME), true);
 #endif
         unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;

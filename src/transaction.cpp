@@ -1663,7 +1663,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_TRANS_WRITE_SIG_ID, PROFILER_TRANS_WRITE_SIG_NAME, true));
+          PROFILER_TRANS_WRITE_SIG_ID, PROFILER_TRANS_WRITE_SIG_NAME), true);
 #endif
         Signature::HashType hashType = pHashType;
         // Extract FORKID (0x40) flag from hash type
@@ -2018,7 +2018,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_TRANS_READ_ID, PROFILER_TRANS_READ_NAME, true));
+          PROFILER_TRANS_READ_ID, PROFILER_TRANS_READ_NAME), true);
 #endif
         clear();
 

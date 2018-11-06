@@ -483,6 +483,7 @@ namespace BitCoin
 
 #ifdef PROFILER_ON
         NextCash::printProfilerDataToLog(NextCash::Log::VERBOSE);
+        NextCash::resetProfilers();
 #endif
 
         mRunning = false;
@@ -2035,6 +2036,7 @@ namespace BitCoin
             if(time - lastProfilerWrite > 3600)
             {
                 NextCash::printProfilerDataToLog(NextCash::Log::VERBOSE);
+                NextCash::resetProfilers();
                 lastProfilerWrite = time;
             }
 #endif

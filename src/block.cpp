@@ -68,7 +68,7 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_BLOCK_READ_ID, PROFILER_BLOCK_READ_NAME, true));
+          PROFILER_BLOCK_READ_ID, PROFILER_BLOCK_READ_NAME), true);
 #endif
         NextCash::stream_size startOffset = pStream->readOffset();
         mSize = 0;
@@ -795,7 +795,7 @@ namespace BitCoin
             return false;
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Multi threaded lock times Threads,%d,Add,%d,Dup,%d,Out,%d,Sig,%d,Full%d", pThreadCount,
+          "Multi threaded lock times Threads,%d,Add,%d,Dup,%d,Out,%d,Sig,%d,Full,%d", pThreadCount,
           addTime.milliseconds(), threadData.checkDupTime / 1000L, threadData.outputsTime / 1000L,
           threadData.sigTime / 1000L, threadData.fullTime / 1000L);
 
@@ -872,7 +872,7 @@ namespace BitCoin
         }
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Single threaded block times Threads,1,Add,%d,Dup,%d,Out,%d,Sig,%d,Full%d",
+          "Single threaded block times Threads,1,Add,%d,Dup,%d,Out,%d,Sig,%d,Full,%d",
           addTime.milliseconds(), checkDupTime.milliseconds(), outputsTime.milliseconds(),
           sigTime.milliseconds(), fullTime.milliseconds());
 
