@@ -7,10 +7,6 @@
  **************************************************************************/
 #include "header.hpp"
 
-#ifdef PROFILER_ON
-#include "profiler.hpp"
-#endif
-
 #include "log.hpp"
 #include "endian.hpp"
 #include "thread.hpp"
@@ -561,10 +557,6 @@ namespace BitCoin
         if(!mModified || !mValid)
             return;
 
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Header Update CRC", false);
-        profiler.start();
-#endif
         if(!openFile())
         {
             mValid = false;
@@ -661,9 +653,6 @@ namespace BitCoin
 
     bool HeaderFile::writeHeader(const Header &pHeader)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Header Add");
-#endif
         if(pHeader.hash.size() != 32)
             return false;
 
@@ -713,9 +702,6 @@ namespace BitCoin
 
     bool HeaderFile::removeHeadersAbove(unsigned int pOffset)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Header Remove Above");
-#endif
         if(pOffset + 1 == MAX_COUNT - 1)
             return false;
 

@@ -1145,13 +1145,9 @@ namespace BitCoin
 
     bool Transaction::process(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight,
       bool pCoinBase, int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
-      std::vector<unsigned int> &pSpentAges, Timer &pCheckDupTime, Timer &pOutputLookupTime,
-      Timer &pSignatureTime)
+      std::vector<unsigned int> &pSpentAges, NextCash::Timer &pCheckDupTime,
+      NextCash::Timer &pOutputLookupTime, NextCash::Timer &pSignatureTime)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Transaction Process");
-        NextCash::Profiler verifyProfiler("Transaction Inputs", false);
-#endif
         mFee = INVALID_FEE;
 
         if(inputs.size() == 0)
@@ -1256,9 +1252,6 @@ namespace BitCoin
                 pSpentAges.push_back(pHeight - previousHeight);
                 pSpentAgeLock.unlock();
 
-#ifdef PROFILER_ON
-                verifyProfiler.start();
-#endif
                 // BIP-0068 Relative time lock sequence
                 if(version >= 2 && !input->sequenceDisabled() &&
                   pChain->forks().softForkIsActive(pHeight, SoftFork::BIP0068))
@@ -1285,9 +1278,6 @@ namespace BitCoin
                             timeText.writeFormattedTime(spentBlockMedianTime + lock);
                             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                               "Not valid until median block time %s", timeText.text());
-#ifdef PROFILER_ON
-                            verifyProfiler.stop();
-#endif
                             mFee = INVALID_FEE;
                             return false;
                         }
@@ -1302,9 +1292,6 @@ namespace BitCoin
                         NextCash::Log::addFormatted(NextCash::Log::WARNING,
                           BITCOIN_TRANSACTION_LOG_NAME, "Not valid until block %d",
                           previousHeight + lock);
-#ifdef PROFILER_ON
-                        verifyProfiler.stop();
-#endif
                         mFee = INVALID_FEE;
                         return false;
                     }
@@ -1324,9 +1311,6 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d signature script failed : ", index);
                     input->print(pChain->forks(), NextCash::Log::WARNING);
-#ifdef PROFILER_ON
-                    verifyProfiler.stop();
-#endif
                     mFee = INVALID_FEE;
                     return false;
                 }
@@ -1345,9 +1329,6 @@ namespace BitCoin
                       "UTXO :");
                     previousOutput.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
                       NextCash::Log::WARNING);
-#ifdef PROFILER_ON
-                    verifyProfiler.stop();
-#endif
                     mFee = INVALID_FEE;
                     return false;
                 }
@@ -1363,9 +1344,6 @@ namespace BitCoin
                       "UTXO :");
                     previousOutput.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
                       NextCash::Log::WARNING);
-#ifdef PROFILER_ON
-                    verifyProfiler.stop();
-#endif
                     mFee = INVALID_FEE;
                     return false;
                 }
@@ -1380,9 +1358,6 @@ namespace BitCoin
                       "UTXO :");
                     previousOutput.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
                       NextCash::Log::WARNING);
-#ifdef PROFILER_ON
-                    verifyProfiler.stop();
-#endif
                     mFee = INVALID_FEE;
                     return false;
                 }
@@ -1390,9 +1365,6 @@ namespace BitCoin
                 mFee += previousOutput.amount;
             }
 
-#ifdef PROFILER_ON
-            verifyProfiler.stop();
-#endif
             ++index;
         }
 
@@ -1454,9 +1426,6 @@ namespace BitCoin
             }
         }
 
-#ifdef PROFILER_ON
-        NextCash::Profiler outputsProfiler("Transaction Outputs");
-#endif
         // Process Outputs
         index = 0;
         for(std::vector<Output>::iterator output = outputs.begin(); output != outputs.end();
@@ -1693,7 +1662,8 @@ namespace BitCoin
       int64_t pOutputAmount, Signature::HashType pHashType)
     {
 #ifdef PROFILER_ON
-        NextCash::Profiler profiler("Transaction Sign Data");
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_TRANS_WRITE_SIG_ID, PROFILER_TRANS_WRITE_SIG_NAME, true));
 #endif
         Signature::HashType hashType = pHashType;
         // Extract FORKID (0x40) flag from hash type
@@ -2047,7 +2017,8 @@ namespace BitCoin
     bool Transaction::read(NextCash::InputStream *pStream, bool pCalculateHash)
     {
 #ifdef PROFILER_ON
-        NextCash::Profiler profiler("Transaction Read");
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_TRANS_READ_ID, PROFILER_TRANS_READ_NAME, true));
 #endif
         clear();
 

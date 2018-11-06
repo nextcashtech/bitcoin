@@ -1159,12 +1159,9 @@ namespace BitCoin
 
     bool Chain::processBlock(Block &pBlock)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler outputsProfiler("Chain Process Block");
-#endif
         mProcessMutex.lock();
 
-        Timer timer(true);
+        NextCash::Timer timer(true);
         bool success = true, fullyValidated = true;
         if(mApprovedBlockHeight >= mNextBlockHeight) // Just update transaction outputs
         {
@@ -1334,9 +1331,6 @@ namespace BitCoin
 
     bool Chain::process()
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler outputsProfiler("Chain Process");
-#endif
         if(mStopRequested || mApprovedBlockHeight == 0xffffffff)
             return false;
 
@@ -1800,7 +1794,7 @@ namespace BitCoin
     bool Chain::updateOutputs()
     {
         Block block;
-        Timer timer;
+        NextCash::Timer timer;
         if(mOutputs.height() == 0xffffffff)
         {
             // Process genesis block
@@ -1940,17 +1934,11 @@ namespace BitCoin
         Forks emptyForks;
         Time lastPurgeTime = getTime();
         milliseconds startTime;
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Chain Update Addresses", false);
-#endif
 
         while(currentHeight <= blockHeight() && !mStopRequested)
         {
             ++currentHeight;
 
-#ifdef PROFILER_ON
-            profiler.start();
-#endif
             if(Block::getBlock(currentHeight, block))
             {
                 // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
@@ -1967,18 +1955,11 @@ namespace BitCoin
             }
             else
             {
-#ifdef PROFILER_ON
-                profiler.stop();
-#endif
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_CHAIN_LOG_NAME,
                   "Failed to get block %d from block file", currentHeight);
                 mAddresses.save(mInfo.threadCount);
                 return false;
             }
-
-#ifdef PROFILER_ON
-            profiler.stop();
-#endif
 
             if(getTime() - lastPurgeTime > 10)
             {
@@ -2964,13 +2945,7 @@ namespace BitCoin
 
 
 #ifdef PROFILER_ON
-        NextCash::String profilerTime;
-        profilerTime.writeFormattedTime(getTime(), "%Y%m%d.%H%M");
-        NextCash::String profilerFileName = "profiler.";
-        profilerFileName += profilerTime;
-        profilerFileName += ".txt";
-        NextCash::FileOutputStream profilerFile(profilerFileName, true);
-        NextCash::ProfilerManager::write(&profilerFile);
+        NextCash::printProfilerDataToLog(NextCash::Log::VERBOSE);
 #endif
     }
 }

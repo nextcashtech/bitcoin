@@ -1,6 +1,6 @@
 
 COMPILER=g++
-COMPILE_FLAGS=-I./.include -I../nextcash/.include -Isecp256k1/include -pthread -std=c++11 -Wall -DDISABLE_ADDRESSES
+COMPILE_FLAGS=-I./.include -I../nextcash/.include -Isecp256k1/include -pthread -std=c++11 -Wall -DDISABLE_ADDRESSES -DPROFILER_ON
 # To Turn profiler on add this to the end of COMPILE_FLAGS : -DPROFILER_ON
 LIBRARY_PATHS=-L../nextcash -Lsecp256k1/.libs
 LIBRARIES=-lnextcash -lsecp256k1

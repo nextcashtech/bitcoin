@@ -66,6 +66,10 @@ namespace BitCoin
 
     bool Block::read(NextCash::InputStream *pStream)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_READ_ID, PROFILER_BLOCK_READ_NAME, true));
+#endif
         NextCash::stream_size startOffset = pStream->readOffset();
         mSize = 0;
 
@@ -388,13 +392,13 @@ namespace BitCoin
             return false;
         }
 
-        Timer addTime(true);
+        NextCash::Timer addTime(true);
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
         addTime.stop();
 
-        Timer fullTime;
+        NextCash::Timer fullTime;
         unsigned int transactionOffset = 0;
         NextCash::Mutex spentAgeLock("Spent Age");
         std::vector<unsigned int> spentAges;
@@ -441,7 +445,7 @@ namespace BitCoin
 
         Transaction *transaction;
         unsigned int offset;
-        Timer fullTime;
+        NextCash::Timer fullTime;
         while(true)
         {
             transaction = data->getNext(offset);
@@ -483,7 +487,7 @@ namespace BitCoin
             return false;
         }
 
-        Timer addTime(true);
+        NextCash::Timer addTime(true);
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
@@ -663,7 +667,7 @@ namespace BitCoin
 
         Transaction *transaction;
         unsigned int offset;
-        Timer checkDupTime, outputsTime, sigTime, fullTime;
+        NextCash::Timer checkDupTime, outputsTime, sigTime, fullTime;
         while(true)
         {
             transaction = data->getNext(offset);
@@ -706,7 +710,7 @@ namespace BitCoin
 
         mFees = 0;
 
-        Timer addTime(true);
+        NextCash::Timer addTime(true);
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
@@ -831,14 +835,11 @@ namespace BitCoin
 
     bool Block::processSingleThreaded(Chain *pChain, unsigned int pHeight)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Block Process");
-#endif
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block %d (%d trans) (%d KB) : %s", pHeight,
           transactions.size(), size() / 1000, header.hash.hex().text());
 
-        Timer addTime(true);
+        NextCash::Timer addTime(true);
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
@@ -850,7 +851,7 @@ namespace BitCoin
         std::vector<unsigned int> spentAges;
         spentAges.reserve(transactions.size() * 2);
         NextCash::Mutex spentAgeLock("Spent Age");
-        Timer checkDupTime, outputsTime, sigTime, fullTime;
+        NextCash::Timer checkDupTime, outputsTime, sigTime, fullTime;
         for(std::vector<Transaction *>::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction, ++transactionOffset)
         {
@@ -1357,10 +1358,6 @@ namespace BitCoin
         if(!mModified || !mValid)
             return;
 
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Block Update CRC", false);
-        profiler.start();
-#endif
         if(!openFile())
         {
             mValid = false;
@@ -1468,9 +1465,6 @@ namespace BitCoin
 
     bool BlockFile::writeBlock(const Block &pBlock)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Block Add");
-#endif
         if(!openFile())
             return false;
 
@@ -1590,9 +1584,6 @@ namespace BitCoin
 
     bool BlockFile::removeBlocksAbove(unsigned int pOffset)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Block Remove Above");
-#endif
         if(!openFile())
             return false;
 

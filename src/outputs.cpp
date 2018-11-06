@@ -321,6 +321,10 @@ namespace BitCoin
     typename TransactionOutputPool::Iterator TransactionOutputPool::get(
       const NextCash::Hash &pTransactionID, bool pLocked)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_GET_ID, PROFILER_OUTPUTS_GET_NAME, true));
+#endif
         if(!pLocked)
             mLock.readLock();
         SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
@@ -334,9 +338,9 @@ namespace BitCoin
       unsigned int pBlockHeight)
     {
 #ifdef PROFILER_ON
-        NextCash::Profiler profiler("Outputs Add Block");
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_ADD_ID, PROFILER_OUTPUTS_ADD_NAME, true));
 #endif
-
         if(pBlockHeight != mNextBlockHeight)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
@@ -531,6 +535,10 @@ namespace BitCoin
     bool TransactionOutputPool::getOutput(const NextCash::Hash &pTransactionID, uint32_t pIndex,
       uint8_t pFlags, uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_GET_OUTPUT_ID, PROFILER_OUTPUTS_GET_OUTPUT_NAME, true));
+#endif
         if(!mIsValid)
             return false;
 
@@ -544,6 +552,10 @@ namespace BitCoin
 
     bool TransactionOutputPool::isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_IS_UNSPENT_ID, PROFILER_OUTPUTS_IS_UNSPENT_NAME, true));
+#endif
         if(!mIsValid)
             return false;
 
@@ -557,6 +569,10 @@ namespace BitCoin
     bool TransactionOutputPool::spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
       uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_SPEND_ID, PROFILER_OUTPUTS_SPEND_NAME, true));
+#endif
         if(!mIsValid)
             return false;
 
@@ -571,6 +587,10 @@ namespace BitCoin
     bool TransactionOutputPool::hasUnspent(const NextCash::Hash &pTransactionID,
       uint32_t pSpentBlockHeight)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_HAS_UNSPENT_ID, PROFILER_OUTPUTS_HAS_UNSPENT_NAME, true));
+#endif
         if(!mIsValid)
             return false;
 
@@ -583,6 +603,10 @@ namespace BitCoin
 
     bool TransactionOutputPool::exists(const NextCash::Hash &pTransactionID)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_EXISTS_ID, PROFILER_OUTPUTS_EXISTS_NAME, true));
+#endif
         if(!mIsValid)
             return false;
 
@@ -733,7 +757,8 @@ namespace BitCoin
       TransactionReference *pValue, Transaction &pTransaction)
     {
 #ifdef PROFILER_ON
-        NextCash::Profiler profiler("Hash Set Insert");
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_INSERT_ID, PROFILER_OUTPUTS_INSERT_NAME, true));
 #endif
         mLock.readLock();
         bool result = mSubSets[subSetOffset(pTransactionID)].insert(pTransactionID, pValue,
@@ -950,9 +975,6 @@ namespace BitCoin
     bool TransactionOutputPool::SubSet::insert(const NextCash::Hash &pTransactionID,
       TransactionReference *pReference, Transaction &pTransaction)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Outputs SubSet Insert");
-#endif
         bool result = false;
         mLock.lock();
 
@@ -964,6 +986,10 @@ namespace BitCoin
 
         if(result)
         {
+#ifdef PROFILER_ON
+            NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+              PROFILER_OUTPUTS_WRITE_ID, PROFILER_OUTPUTS_WRITE_NAME, true));
+#endif
             NextCash::String filePathName;
             filePathName.writeFormatted("%s%s%04x.data", mFilePath, NextCash::PATH_SEPARATOR, mID);
             NextCash::FileOutputStream *dataOutFile = new NextCash::FileOutputStream(filePathName);
@@ -1621,9 +1647,6 @@ namespace BitCoin
     //TODO This operation is expensive. Try to find a better algorithm.
     void TransactionOutputPool::SubSet::markOld(NextCash::stream_size pDataSize)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Outputs SubSet Mark Old");
-#endif
         if(pDataSize == 0)
         {
             for(NextCash::HashContainerList<TransactionReference *>::Iterator item =
@@ -1713,10 +1736,6 @@ namespace BitCoin
     bool TransactionOutputPool::SubSet::trimCache(NextCash::stream_size pMaxCacheDataSize,
       bool pAutoTrimCache)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Outputs SubSet Clean");
-#endif
-
         // Mark items as old to keep cache data size under max.
         if(pAutoTrimCache)
             markOld(pMaxCacheDataSize);
@@ -1741,9 +1760,6 @@ namespace BitCoin
     bool TransactionOutputPool::SubSet::save(NextCash::stream_size pMaxCacheDataSize,
       bool pAutoTrimCache)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Outputs SubSet Save");
-#endif
         mLock.lock();
 
         if(mCache.size() == 0)
@@ -1751,10 +1767,6 @@ namespace BitCoin
             mLock.unlock();
             return true;
         }
-
-#ifdef PROFILER_ON
-        NextCash::Profiler profilerWriteData("Outputs SubSet Save Write Data");
-#endif
 
         // Open data file as an output stream
         NextCash::String filePathName;
@@ -1797,9 +1809,6 @@ namespace BitCoin
         }
 
         delete dataOutFile;
-#ifdef PROFILER_ON
-        profilerWriteData.stop();
-#endif
 
         if(!indexNeedsUpdated)
         {
@@ -1811,9 +1820,6 @@ namespace BitCoin
             return true;
         }
 
-#ifdef PROFILER_ON
-        NextCash::Profiler profilerReadIndex("Outputs SubSet Save Read Index");
-#endif
         // Read entire index file
         filePathName.writeFormatted("%s%s%04x.index", mFilePath, NextCash::PATH_SEPARATOR,
           mID);
@@ -1855,15 +1861,7 @@ namespace BitCoin
         delete indexFile;
         indices.refresh();
         hashes.refresh();
-#ifdef PROFILER_ON
-        profilerReadIndex.stop();
-#endif
 
-#ifdef PROFILER_ON
-        NextCash::Profiler profilerUpdateIndex("Outputs SubSet Save Update Index");
-        NextCash::Profiler profilerIndexInsert("Outputs SubSet Save Index Insert", false);
-        NextCash::Profiler profilerIndexInsertPush("Outputs SubSet Save Index Insert Push", false);
-#endif
         // Update indices
         NextCash::DistributedVector<NextCash::Hash>::Iterator hash;
         NextCash::DistributedVector<NextCash::stream_size>::Iterator index;
@@ -1929,28 +1927,16 @@ namespace BitCoin
             }
             else if((*item)->isNew())
             {
-#ifdef PROFILER_ON
-                profilerIndexInsert.start();
-#endif
                 // For new items perform insert sort into existing indices.
                 // This costs more processor time to do the insert for every new item.
                 // This saves file reads by not requiring a read of every existing indice like a
                 //   merge sort would.
                 if(indices.size () == 0)
                 {
-#ifdef PROFILER_ON
-                    profilerIndexInsertPush.start();
-#endif
                     // Add as only item
                     indices.push_back((*item)->dataOffset());
                     hashes.push_back(item.hash());
-#ifdef PROFILER_ON
-                    profilerIndexInsertPush.stop();
-#endif
                     (*item)->clearNew();
-#ifdef PROFILER_ON
-                    profilerIndexInsert.stop();
-#endif
                     ++item;
                     continue;
                 }
@@ -1964,9 +1950,6 @@ namespace BitCoin
                     if(!pullHash(&dataFile, *index, *hash))
                     {
                         success = false;
-#ifdef PROFILER_ON
-                        profilerIndexInsert.stop();
-#endif
                         break;
                     }
                     ++readHeadersCount;
@@ -1975,17 +1958,10 @@ namespace BitCoin
                 compare = item.hash().compare(*hash);
                 if(compare <= 0)
                 {
-#ifdef PROFILER_ON
-                    profilerIndexInsertPush.start();
-#endif
                     // Insert as first
                     indices.insert(index, (*item)->dataOffset());
                     hashes.insert(hash, item.hash());
                     (*item)->clearNew();
-#ifdef PROFILER_ON
-                    profilerIndexInsertPush.stop();
-                    profilerIndexInsert.stop();
-#endif
                     ++item;
                     continue;
                 }
@@ -1999,9 +1975,6 @@ namespace BitCoin
                     if(!pullHash(&dataFile, *index, *hash))
                     {
                         success = false;
-#ifdef PROFILER_ON
-                        profilerIndexInsert.stop();
-#endif
                         break;
                     }
                     ++readHeadersCount;
@@ -2010,17 +1983,10 @@ namespace BitCoin
                 compare = item.hash().compare(*hash);
                 if(compare >= 0)
                 {
-#ifdef PROFILER_ON
-                    profilerIndexInsertPush.start();
-#endif
                     // Add to end
                     indices.push_back((*item)->dataOffset());
                     hashes.push_back(item.hash());
                     (*item)->clearNew();
-#ifdef PROFILER_ON
-                    profilerIndexInsertPush.stop();
-                    profilerIndexInsert.stop();
-#endif
                     ++item;
                     continue;
                 }
@@ -2050,18 +2016,12 @@ namespace BitCoin
                     compare = item.hash().compare(*hash);
                     if(current == begin || compare == 0)
                     {
-#ifdef PROFILER_ON
-                        profilerIndexInsertPush.start();
-#endif
                         if(compare < 0)
                         {
                             // Insert before current
                             indices.insert(index, (*item)->dataOffset());
                             hashes.insert(hash, item.hash());
                             (*item)->clearNew();
-#ifdef PROFILER_ON
-                            profilerIndexInsertPush.stop();
-#endif
                             break;
                         }
                         else //if(compare >= 0)
@@ -2072,9 +2032,6 @@ namespace BitCoin
                             indices.insert(index, (*item)->dataOffset());
                             hashes.insert(hash, item.hash());
                             (*item)->clearNew();
-#ifdef PROFILER_ON
-                            profilerIndexInsertPush.stop();
-#endif
                             break;
                         }
                     }
@@ -2087,22 +2044,13 @@ namespace BitCoin
 
                 ++item;
 
-#ifdef PROFILER_ON
-                profilerIndexInsert.stop();
-#endif
             }
             else
                 ++item;
         }
-#ifdef PROFILER_ON
-        profilerUpdateIndex.stop();
-#endif
 
         if(success)
         {
-#ifdef PROFILER_ON
-            NextCash::Profiler profilerWriteIndex("Outputs SubSet Save Write Index");
-#endif
             // Open index file as an output stream
             filePathName.writeFormatted("%s%s%04x.index", mFilePath,
               NextCash::PATH_SEPARATOR, mID);
@@ -2123,9 +2071,6 @@ namespace BitCoin
             mNewSize = 0;
 
             delete indexOutFile;
-#ifdef PROFILER_ON
-            profilerWriteIndex.stop();
-#endif
 
             // Open index file
             filePathName.writeFormatted("%s%s%04x.index", mFilePath, NextCash::PATH_SEPARATOR,

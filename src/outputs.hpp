@@ -15,6 +15,7 @@
 #include "file_stream.hpp"
 #include "base.hpp"
 #include "forks.hpp"
+#include "profiler_setup.hpp"
 
 #include <vector>
 #include <stdlib.h>
@@ -449,7 +450,8 @@ namespace BitCoin
               NextCash::Hash &pHash)
             {
 #ifdef PROFILER_ON
-                NextCash::Profiler profiler("Hash SubSet Pull Hash");
+                NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+                  PROFILER_OUTPUTS_PULL_ID, PROFILER_OUTPUTS_PULL_NAME, true));
 #endif
                 if(!pDataFile->setReadOffset(pFileOffset))
                 {

@@ -717,10 +717,6 @@ namespace BitCoin
         pStream->read(input, totalLength);
         mHashType = static_cast<Signature::HashType>(pStream->readByte());
 
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Signature Read");
-#endif
-
         if(!pStrictECDSA_DER_Sigs)
         {
             // Hack badly formatted DER signatures
@@ -1842,6 +1838,10 @@ namespace BitCoin
 
     bool Key::verify(const Signature &pSignature, const NextCash::Hash &pHash) const
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_KEY_VERIFY_SIG_ID, PROFILER_KEY_VERIFY_SIG_NAME, true));
+#endif
         if(isPrivate())
         {
             if(mPublicKey == NULL)
@@ -1865,7 +1865,7 @@ namespace BitCoin
         if(!secp256k1_ec_pubkey_parse(thisContext, &publicKey, mKey, 33))
         {
             NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Failed to parse KeyTree Key public key");
+              "Failed to parse public key");
             return false;
         }
 

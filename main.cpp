@@ -6,10 +6,6 @@
  * file license.txt or http://www.opensource.org/licenses/mit-license.php *
  **************************************************************************/
 
-#ifdef PROFILER_ON
-#include "profiler.hpp"
-#endif
-
 #include "string.hpp"
 #include "math.hpp"
 #include "hash.hpp"
@@ -198,9 +194,6 @@ int main(int pArgumentCount, char **pArguments)
         pidStream.writeByte('\n');
     }
 
-#ifdef PROFILER_ON
-    NextCash::Profiler profiler("Main"); // Attempt to trigger destroy of profiler instance after daemon instance
-#endif
     BitCoin::Daemon *daemon = new BitCoin::Daemon();
 
     daemon->run(!noDaemon);

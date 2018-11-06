@@ -682,7 +682,7 @@ bool chainTest()
         }
 #endif
 
-        if(!chain.save())
+        if(!chain.save(false))
         {
             NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to save chain");
             return false;
@@ -744,7 +744,7 @@ bool chainTest()
 
     NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed reloaded pre branch hash");
 
-    if(!chain2.save())
+    if(!chain2.save(false))
     {
         NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed to save reloaded");
         return false;

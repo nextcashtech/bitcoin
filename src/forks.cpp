@@ -7,10 +7,6 @@
  **************************************************************************/
 #include "forks.hpp"
 
-#ifdef PROFILER_ON
-#include "profiler.hpp"
-#endif
-
 #include "log.hpp"
 #include "file_stream.hpp"
 #include "base.hpp"
@@ -268,10 +264,6 @@ namespace BitCoin
     void Forks::process(Chain *pChain, unsigned int pHeight)
     {
         mMutex.lock();
-
-#ifdef PROFILER_ON
-        NextCash::Profiler outputsProfiler("Forks Process");
-#endif
 
         if(mBlockVersionRequiredHeights[2] == 0)
         {

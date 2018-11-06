@@ -76,9 +76,6 @@ namespace BitCoin
     ScriptInterpreter::ScriptType ScriptInterpreter::parseOutputScript(NextCash::Buffer &pScript,
       NextCash::HashList &pHashes)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Interpreter Parse Output");
-#endif
         uint8_t opCode;
         NextCash::Hash tempHash;
         NextCash::Buffer data;
@@ -1156,7 +1153,8 @@ namespace BitCoin
       unsigned int pBlockHeight)
     {
 #ifdef PROFILER_ON
-        NextCash::Profiler profiler("Interpreter Process");
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_INTERP_PROCESS_ID, PROFILER_INTERP_PROCESS_NAME, true));
 #endif
         unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;
@@ -1202,9 +1200,6 @@ namespace BitCoin
                     return false;
                 }
 
-#ifdef PROFILER_ON
-                NextCash::Profiler profiler("Interpreter Push");
-#endif
                 // Push opCode value bytes onto stack from input
                 if(!ifStackTrue())
                     pScript.setReadOffset(pScript.readOffset() + opCode);
@@ -1362,9 +1357,6 @@ namespace BitCoin
                 }
                 case OP_RIPEMD160:
                 {
-#ifdef PROFILER_ON
-                    NextCash::Profiler profiler("Interpreter RipeMD160");
-#endif
                     if(!ifStackTrue())
                         break;
 
@@ -1389,9 +1381,6 @@ namespace BitCoin
                 }
                 case OP_SHA1:
                 {
-#ifdef PROFILER_ON
-                    NextCash::Profiler profiler("Interpreter SHA1");
-#endif
                     if(!ifStackTrue())
                         break;
 
@@ -1416,9 +1405,6 @@ namespace BitCoin
                 }
                 case OP_SHA256:
                 {
-#ifdef PROFILER_ON
-                    NextCash::Profiler profiler("Interpreter SHA256");
-#endif
                     if(!ifStackTrue())
                         break;
 
@@ -1443,9 +1429,6 @@ namespace BitCoin
                 }
                 case OP_HASH160: // The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
                 {
-#ifdef PROFILER_ON
-                    NextCash::Profiler profiler("Interpreter Hash160");
-#endif
                     if(!ifStackTrue())
                         break;
 
@@ -1469,9 +1452,6 @@ namespace BitCoin
                 }
                 case OP_HASH256: // The input is hashed two times with SHA-256.
                 {
-#ifdef PROFILER_ON
-                    NextCash::Profiler profiler("Interpreter Hash256");
-#endif
                     if(!ifStackTrue())
                         break;
 
@@ -1504,9 +1484,6 @@ namespace BitCoin
                 case OP_CHECKSIG:
                 case OP_CHECKSIGVERIFY: // Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
                 {
-#ifdef PROFILER_ON
-                    NextCash::Profiler profiler("Interpreter CheckSig");
-#endif
                     /* The entire transaction's outputs, inputs, and script (from the most recently-executed OP_CODESEPARATOR
                      *   to the end) are hashed. The signature used by OP_CHECKSIG must be a valid signature for this hash and
                      *   public key. If it is, 1 is returned, 0 otherwise. */
@@ -1570,9 +1547,6 @@ namespace BitCoin
                 case OP_CHECKMULTISIG:
                 case OP_CHECKMULTISIGVERIFY:
                 {
-#ifdef PROFILER_ON
-                    NextCash::Profiler profiler("Interpreter CheckMultiSig");
-#endif
                     /* Compares the first signature against each public key until it finds an ECDSA match. Starting with the
                      *   subsequent public key, it compares the second signature against each remaining public key until it
                      *   finds an ECDSA match. The process is repeated until all signatures have been checked or not enough
@@ -1846,9 +1820,7 @@ namespace BitCoin
                         mValid = false;
                         return false;
                     }
-#ifdef PROFILER_ON
-                    NextCash::Profiler profiler("Interpreter Push");
-#endif
+
                     if(!ifStackTrue())
                         pScript.setReadOffset(pScript.readOffset() + count);
                     else
@@ -1865,9 +1837,7 @@ namespace BitCoin
                         mValid = false;
                         return false;
                     }
-#ifdef PROFILER_ON
-                    NextCash::Profiler profiler("Interpreter Push");
-#endif
+
                     if(!ifStackTrue())
                         pScript.setReadOffset(pScript.readOffset() + count);
                     else
@@ -1884,9 +1854,7 @@ namespace BitCoin
                         mValid = false;
                         return false;
                     }
-#ifdef PROFILER_ON
-                    NextCash::Profiler profiler("Interpreter Push");
-#endif
+
                     if(!ifStackTrue())
                         pScript.setReadOffset(pScript.readOffset() + count);
                     else

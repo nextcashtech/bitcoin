@@ -482,13 +482,7 @@ namespace BitCoin
         mInfo.save();
 
 #ifdef PROFILER_ON
-        NextCash::String profilerTime;
-        profilerTime.writeFormattedTime(getTime(), "%Y%m%d.%H%M");
-        NextCash::String profilerFileName = "profiler.";
-        profilerFileName += profilerTime;
-        profilerFileName += ".txt";
-        NextCash::FileOutputStream profilerFile(profilerFileName, true);
-        NextCash::ProfilerManager::write(&profilerFile);
+        NextCash::printProfilerDataToLog(NextCash::Log::VERBOSE);
 #endif
 
         mRunning = false;
@@ -1874,9 +1868,6 @@ namespace BitCoin
         Time time;
 #ifdef PROFILER_ON
         Time lastProfilerWrite = startTime;
-        NextCash::String profilerTime;
-        NextCash::String profilerFileName;
-        NextCash::FileOutputStream *profilerFile;
 #endif
 
         while(!mStopping)
@@ -2043,12 +2034,7 @@ namespace BitCoin
             time = getTime();
             if(time - lastProfilerWrite > 3600)
             {
-                profilerTime.writeFormattedTime(time, "%Y%m%d.%H%M");
-                profilerFileName.writeFormatted("profiler.%s.txt", profilerTime.text());
-                profilerFile = new NextCash::FileOutputStream(profilerFileName, true);
-                NextCash::ProfilerManager::write(profilerFile);
-                delete profilerFile;
-                NextCash::ProfilerManager::reset();
+                NextCash::printProfilerDataToLog(NextCash::Log::VERBOSE);
                 lastProfilerWrite = time;
             }
 #endif
