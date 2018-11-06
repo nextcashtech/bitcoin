@@ -349,8 +349,10 @@ namespace BitCoin
         }
 
         // Revert the main chain to the before branch height.
+        mProcessMutex.lock();
         if(!revert(longestBranch->height - 1, true))
         {
+            mProcessMutex.unlock();
             delete newBranch;
             mBranchLock.unlock();
             mHeadersLock.writeUnlock();
@@ -363,9 +365,11 @@ namespace BitCoin
         bool success = true;
         for(std::list<PendingBlockData *>::iterator pending = longestBranch->pendingBlocks.begin();
           pending != longestBranch->pendingBlocks.end(); ++pending)
-            if(addHeader((*pending)->block->header, true, true) != 0)
+            if(addHeader((*pending)->block->header, true, true, true) != 0)
             {
                 success = false; // Main branch will be re-activated
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
+                  "Failed to activate branch at height %d", longestBranch->height);
                 break;
             }
 
@@ -396,15 +400,12 @@ namespace BitCoin
 
         longestBranch->pendingBlocks.clear(); // No deletes necessary since they were reused
 
-        if(!success)
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
-              "Failed to activate branch at height %d", longestBranch->height);
-
         delete longestBranch;
 
         // Add the previous main branch as a new branch
         mBranches.push_back(newBranch);
 
+        mProcessMutex.unlock();
         mBranchLock.unlock();
         mHeadersLock.writeUnlock();
         if(!info.spvMode)
@@ -523,6 +524,18 @@ namespace BitCoin
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
           "Reverting from height %d to height %d", headerHeight(), pHeight);
+
+        // Revert pending blocks
+        if(mNextBlockHeight - 1 < pHeight)
+        {
+            mPendingLock.writeLock("Revert");
+            while(mNextBlockHeight + mPendingBlocks.size() - 1 > pHeight)
+            {
+                delete mPendingBlocks.back();
+                mPendingBlocks.pop_back();
+            }
+            mPendingLock.writeUnlock();
+        }
 
         NextCash::Hash hash;
         while(headerHeight() >= pHeight)
@@ -922,7 +935,8 @@ namespace BitCoin
     }
 
     // Add/Verify block header
-    int Chain::addHeader(Header &pHeader, bool pHeadersLocked, bool pBranchesLocked)
+    int Chain::addHeader(Header &pHeader, bool pHeadersLocked, bool pBranchesLocked,
+      bool pMainBranchOnly)
     {
         if(!pHeadersLocked)
             mHeadersLock.writeLock("Add");
@@ -995,6 +1009,9 @@ namespace BitCoin
                 mHeadersLock.writeUnlock();
             return 1;
         }
+
+        if(pMainBranchOnly)
+            return -1;
 
         // Check branches
         unsigned int branchID = 1;
@@ -1252,17 +1269,9 @@ namespace BitCoin
         else if(result == 0)
             updatePendingBlocks();
 
-        if(!pBlock->validate(this, mNextBlockHeight))
+        if(!pBlock->validate(this))
         {
             // Block is incomplete or has the wrong transactions.
-            return -1;
-        }
-
-        if(!pBlock->checkSize(this, mNextBlockHeight))
-        {
-            // Block is an invalid size and headers need to be reverted out.
-            revert(mNextBlockHeight - 1);
-            addBlackListedHash(pBlock->header.hash);
             return -1;
         }
 
@@ -1283,6 +1292,17 @@ namespace BitCoin
                 }
                 else
                 {
+                    if(!pBlock->checkSize(this, mNextBlockHeight + offset))
+                    {
+                        // Block is an invalid size and headers need to be reverted out.
+                        mPendingLock.writeUnlock();
+                        addBlackListedHash(pBlock->header.hash);
+                        mProcessMutex.lock();
+                        revert(mNextBlockHeight + offset);
+                        mProcessMutex.unlock();
+                        return -1;
+                    }
+
                     mPendingSize -= (*pending)->block->size();
                     (*pending)->replace(pBlock);
                     mPendingSize += pBlock->size();
@@ -1298,12 +1318,14 @@ namespace BitCoin
 
         // Check if it is in a branch
         unsigned int branchID = 1;
+        unsigned int height;
         mBranchLock.lock();
-        for(std::vector<Branch *>::iterator branch = mBranches.begin();
-          branch != mBranches.end(); ++branch, ++branchID)
-            for(std::list<PendingBlockData *>::iterator pending =
-              (*branch)->pendingBlocks.begin(); pending != (*branch)->pendingBlocks.end();
-              ++pending)
+        for(std::vector<Branch *>::iterator branch = mBranches.begin(); branch != mBranches.end();
+          ++branch, ++branchID)
+        {
+            height = (*branch)->height;
+            for(std::list<PendingBlockData *>::iterator pending = (*branch)->pendingBlocks.begin();
+              pending != (*branch)->pendingBlocks.end(); ++pending, ++height)
                 if((*pending)->block->header.hash == pBlock->header.hash)
                 {
                     if((*pending)->isFull())
@@ -1316,6 +1338,14 @@ namespace BitCoin
                     }
                     else
                     {
+                        if(!pBlock->checkSize(this, height))
+                        {
+                            // Block is an invalid size and headers need to be reverted out.
+                            addBlackListedHash(pBlock->header.hash);
+                            mPendingLock.writeUnlock();
+                            return -1;
+                        }
+
                         (*pending)->replace(pBlock);
                         mBranchLock.unlock();
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
@@ -1324,6 +1354,7 @@ namespace BitCoin
                         return 0;
                     }
                 }
+        }
 
         mBranchLock.unlock();
         return 1;

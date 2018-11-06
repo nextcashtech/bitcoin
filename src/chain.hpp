@@ -282,7 +282,9 @@ namespace BitCoin
         //      < 0 Invalid/unknown block/header
         //     == 0  Block/header added
         //      > 0  Valid block/header not added (i.e. already have)
-        int addHeader(Header &pHeader, bool pHeadersLocked = false, bool pBranchesLocked = false);
+        //   Parameter pMainBranchOnly : True when no branches should be checked.
+        int addHeader(Header &pHeader, bool pHeadersLocked = false, bool pBranchesLocked = false,
+          bool pMainBranchOnly = false);
         int addBlock(Block *pBlock);
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)

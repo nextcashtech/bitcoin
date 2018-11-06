@@ -629,7 +629,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Block::validate(Chain *pChain, unsigned int pHeight)
+    bool Block::validate(Chain *pChain)
     {
         if(transactions.size() == 0)
         {

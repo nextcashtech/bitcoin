@@ -64,7 +64,7 @@ namespace BitCoin
         bool checkSize(Chain *pChain, unsigned int pHeight);
 
         // Validate anything that doesn't require UTXO.
-        bool validate(Chain *pChain, unsigned int pHeight);
+        bool validate(Chain *pChain);
 
         // Validate transactions and update outputs.
         bool processSingleThreaded(Chain *pChain, unsigned int pHeight);
