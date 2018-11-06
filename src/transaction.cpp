@@ -1145,7 +1145,8 @@ namespace BitCoin
 
     bool Transaction::process(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight,
       bool pCoinBase, int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
-      std::vector<unsigned int> &pSpentAges, Timer &pCheckDupTime)
+      std::vector<unsigned int> &pSpentAges, Timer &pCheckDupTime, Timer &pOutputLookupTime,
+      Timer &pSignatureTime)
     {
 #ifdef PROFILER_ON
         NextCash::Profiler profiler("Transaction Process");
@@ -1235,11 +1236,13 @@ namespace BitCoin
                     return false;
                 }
 
+                pOutputLookupTime.start();
                 if(!pChain->outputs().getOutput(input->outpoint.transactionID,
                   input->outpoint.index,
                   TransactionOutputPool::MARK_SPENT | TransactionOutputPool::REQUIRE_UNSPENT,
                   pHeight, previousOutput, previousHeight))
                 {
+                    pOutputLookupTime.stop();
                     NextCash::Log::addFormatted(NextCash::Log::WARNING,
                       BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d outpoint transaction not found : index %d trans %s", index,
@@ -1247,6 +1250,7 @@ namespace BitCoin
                     mFee = INVALID_FEE;
                     return false;
                 }
+                pOutputLookupTime.stop();
 
                 pSpentAgeLock.lock();
                 pSpentAges.push_back(pHeight - previousHeight);
@@ -1327,10 +1331,12 @@ namespace BitCoin
                     return false;
                 }
 
+                pSignatureTime.start();
                 // Process unspent transaction output script
                 if(!interpreter.process(previousOutput.script, pBlockVersion, pChain->forks(),
                   pHeight))
                 {
+                    pSignatureTime.stop();
                     NextCash::Log::addFormatted(NextCash::Log::WARNING,
                       BITCOIN_TRANSACTION_LOG_NAME,
                       "Input %d unspent transaction output script failed : ", index);
@@ -1345,6 +1351,7 @@ namespace BitCoin
                     mFee = INVALID_FEE;
                     return false;
                 }
+                pSignatureTime.stop();
 
                 if(!interpreter.isValid())
                 {

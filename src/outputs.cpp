@@ -705,7 +705,7 @@ namespace BitCoin
             if(getTime() - lastReport >= 10)
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Save is %2d%% Complete", (int)(((float)i / (float)OUTPUTS_SET_COUNT) * 100.0f));
+                  "Save cache is %2d%% Complete", (int)(((float)i / (float)OUTPUTS_SET_COUNT) * 100.0f));
                 lastReport = getTime();
             }
 
