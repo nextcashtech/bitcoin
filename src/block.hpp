@@ -174,8 +174,8 @@ namespace BitCoin
 
         };
 
-        static void processThreadRun(); // Thread for process tasks
-        static void updateOutputsThreadRun(); // Thread for update outputs tasks
+        static void processThreadRun(void *pParameter); // Thread for process tasks
+        static void updateOutputsThreadRun(void *pParameter); // Thread for update outputs tasks
 
     };
 

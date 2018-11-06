@@ -63,9 +63,9 @@ namespace BitCoin
         mConnectionMutex.unlock();
     }
 
-    void RequestChannel::run()
+    void RequestChannel::run(void *pParameter)
     {
-        RequestChannel *requestChannel = (RequestChannel *)NextCash::Thread::getParameter();
+        RequestChannel *requestChannel = (RequestChannel *)pParameter;
         if(requestChannel == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, "Request", "Thread parameter is null. Stopping");

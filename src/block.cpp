@@ -433,9 +433,9 @@ namespace BitCoin
         return true;
     }
 
-    void Block::updateOutputsThreadRun()
+    void Block::updateOutputsThreadRun(void *pParameter)
     {
-        ProcessThreadData *data = (ProcessThreadData *)NextCash::Thread::getParameter();
+        ProcessThreadData *data = (ProcessThreadData *)pParameter;
         if(data == NULL)
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
@@ -655,9 +655,9 @@ namespace BitCoin
         return true;
     }
 
-    void Block::processThreadRun()
+    void Block::processThreadRun(void *pParameter)
     {
-        ProcessThreadData *data = (ProcessThreadData *)NextCash::Thread::getParameter();
+        ProcessThreadData *data = (ProcessThreadData *)pParameter;
         if(data == NULL)
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,

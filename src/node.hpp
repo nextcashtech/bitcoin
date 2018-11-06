@@ -52,7 +52,7 @@ namespace BitCoin
              uint64_t pServices, Daemon *pDaemon);
         ~Node();
 
-        static void run();
+        static void run(void *pParameter);
         void runInThread();
 
         unsigned int id() { return mID; }

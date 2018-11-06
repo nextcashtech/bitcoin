@@ -25,7 +25,7 @@ namespace BitCoin
         RequestChannel(NextCash::Network::Connection *pConnection, Chain *pChain);
         ~RequestChannel();
 
-        static void run();
+        static void run(void *pParameter);
 
         void requestStop();
 

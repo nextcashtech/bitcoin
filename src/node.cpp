@@ -927,9 +927,9 @@ namespace BitCoin
         release();
     }
 
-    void Node::run()
+    void Node::run(void *pParameter)
     {
-        Node *node = (Node *)NextCash::Thread::getParameter();
+        Node *node = (Node *)pParameter;
         if(node == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_NODE_LOG_NAME,

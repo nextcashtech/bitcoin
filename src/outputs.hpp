@@ -686,7 +686,7 @@ namespace BitCoin
 
         };
 
-        static void saveThreadRun(); // Thread to process save tasks
+        static void saveThreadRun(void *pParameter); // Thread to process save tasks
 
     };
 }

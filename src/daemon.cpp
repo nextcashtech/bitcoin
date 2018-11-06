@@ -1752,9 +1752,9 @@ namespace BitCoin
         }
     }
 
-    void Daemon::runManage()
+    void Daemon::runManage(void *pParameter)
     {
-        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        Daemon *daemon = (Daemon *)pParameter;
         if(daemon == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -2043,9 +2043,9 @@ namespace BitCoin
         }
     }
 
-    void Daemon::runProcess()
+    void Daemon::runProcess(void *pParameter)
     {
-        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        Daemon *daemon = (Daemon *)pParameter;
         if(daemon == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -2114,9 +2114,9 @@ namespace BitCoin
         }
     }
 
-    void Daemon::runScan()
+    void Daemon::runScan(void *pParameter)
     {
-        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        Daemon *daemon = (Daemon *)pParameter;
         if(daemon == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -2175,9 +2175,9 @@ namespace BitCoin
 
     };
 
-    void scanThreadRun()
+    void scanThreadRun(void *pParameter)
     {
-        ScanThreadData *data = (ScanThreadData *)NextCash::Thread::getParameter();
+        ScanThreadData *data = (ScanThreadData *)pParameter;
         if(data == NULL)
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
@@ -2837,9 +2837,9 @@ namespace BitCoin
             delete *requestChannel;
     }
 
-    void Daemon::runConnections()
+    void Daemon::runConnections(void *pParameter)
     {
-        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        Daemon *daemon = (Daemon *)pParameter;
         if(daemon == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -2949,9 +2949,9 @@ namespace BitCoin
         }
     }
 
-    void Daemon::runRequests()
+    void Daemon::runRequests(void *pParameter)
     {
-        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        Daemon *daemon = (Daemon *)pParameter;
         if(daemon == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,

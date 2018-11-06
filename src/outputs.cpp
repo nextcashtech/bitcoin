@@ -838,9 +838,9 @@ namespace BitCoin
         return success;
     }
 
-    void TransactionOutputPool::saveThreadRun()
+    void TransactionOutputPool::saveThreadRun(void *pParameter)
     {
-        SaveThreadData *data = (SaveThreadData *)NextCash::Thread::getParameter();
+        SaveThreadData *data = (SaveThreadData *)pParameter;
         if(data == NULL)
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_OUTPUTS_LOG_NAME,

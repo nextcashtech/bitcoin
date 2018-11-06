@@ -52,15 +52,15 @@ namespace BitCoin
         };
 
         // Threads
-        static void runConnections();
+        static void runConnections(void *pParameter);
 
-        static void runRequests();
+        static void runRequests(void *pParameter);
 
-        static void runManage();
+        static void runManage(void *pParameter);
 
-        static void runProcess();
+        static void runProcess(void *pParameter);
 
-        static void runScan();
+        static void runScan(void *pParameter);
 
         void run(bool pInDaemonMode = true);
 
