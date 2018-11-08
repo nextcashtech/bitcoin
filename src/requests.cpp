@@ -549,12 +549,13 @@ namespace BitCoin
                       totalOutputCount = 0;
                     unsigned int inputCount, outputCount;
                     uint64_t totalBlockSize = 0, totalFees = 0, fee, totalAmountSent = 0,
-                      amountSent;
-                    std::vector<uint64_t> blockSizes, fees, amountsSent;
+                      amountSent, feeRate;
+                    std::vector<uint64_t> blockSizes, fees, amountsSent, feeRates;
                     std::vector<unsigned int> transactionCounts, inputCounts, outputCounts;
                     Block block;
 
                     fees.reserve(256);
+                    feeRates.reserve(256);
                     blockSizes.reserve(256);
                     transactionCounts.reserve(256);
                     inputCounts.reserve(256);
@@ -619,6 +620,9 @@ namespace BitCoin
                             totalFees += fee;
                             fees.push_back(fee);
 
+                            feeRate = (fee * 1000L) / block.size();
+                            feeRates.push_back(feeRate);
+
                             ++blockCount;
                         }
                     }
@@ -629,6 +633,7 @@ namespace BitCoin
                     unsigned int medianOutputCount = 0;
                     uint64_t medianFees = 0;
                     uint64_t medianAmountSent = 0;
+                    uint64_t medianFeeRate = 0;
 
                     if(blockCount > 1)
                     {
@@ -649,6 +654,9 @@ namespace BitCoin
 
                         std::sort(fees.begin(), fees.end());
                         medianFees = fees[fees.size()/2];
+
+                        std::sort(feeRates.begin(), feeRates.end());
+                        medianFeeRate = feeRates[feeRates.size()/2];
                     }
                     else if(blockCount == 1)
                     {
@@ -658,6 +666,7 @@ namespace BitCoin
                         medianOutputCount = totalOutputCount;
                         medianAmountSent = totalAmountSent;
                         medianFees = totalFees;
+                        medianFeeRate = (totalFees * 1000L) / totalBlockSize;
                     }
 
                     sendData.writeString("bkst:");
@@ -680,6 +689,11 @@ namespace BitCoin
 
                     sendData.writeUnsignedLong(totalFees); // Total Fees
                     sendData.writeUnsignedLong(medianFees); // Median Fees
+
+                    // Total Fee Rate
+                    sendData.writeUnsignedLong((totalFees * 1000L) / totalBlockSize);
+                    // Median Fee Rate
+                    sendData.writeUnsignedLong(medianFeeRate);
 
                     // Save result
                     mPreviousStatisticsHeight = height;
