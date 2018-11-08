@@ -235,7 +235,6 @@ namespace BitCoin
         mBlocksRequested.clear();
         mHeaderRequested.clear();
         mBlockRequestMutex.unlock();
-        mChain->memPool().releaseForNode(mID);
         mReleased = true;
     }
 
@@ -566,7 +565,6 @@ namespace BitCoin
         bool success = sendMessage(&message);
         if(success)
         {
-            mChain->memPool().markForNode(pList, mID);
             if(pList.size() == 1)
                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
                   "Sending request for transaction %s", pList.front().hex().text());
@@ -575,8 +573,6 @@ namespace BitCoin
                   "Sending request for %d transactions starting with %s", pList.size(),
                   pList.front().hex().text());
         }
-        else
-            mChain->memPool().releaseForNode(mID);
 
         return success;
     }
@@ -1606,8 +1602,10 @@ namespace BitCoin
                     }
                     case Message::InventoryHash::TRANSACTION:
                     {
+                        // TODO Issue with transaction being deleted before send is complete.
                         Message::TransactionData transactionData;
-                        transactionData.transaction = mChain->memPool().get((*item)->hash);
+                        transactionData.transaction =
+                          mChain->memPool().getTransaction((*item)->hash, mID);
                         if(transactionData.transaction == NULL)
                             notFoundData.inventory.push_back(new Message::InventoryHash(**item));
                         else
@@ -1616,6 +1614,7 @@ namespace BitCoin
                               "Sending Transaction (%d bytes) : %s",
                               transactionData.transaction->size(), (*item)->hash.hex().text());
                             sendMessage(&transactionData);
+                            mChain->memPool().releaseTransaction((*item)->hash, mID);
                         }
                         // Don't delete it. It is still in the mem pool
                         transactionData.transaction = NULL;
@@ -1767,21 +1766,33 @@ namespace BitCoin
 
                             if(!info.spvMode)
                             {
-                                switch(mChain->memPool().addPending((*item)->hash, mChain, mID))
+                                switch(mChain->memPool().hashStatus(mChain, (*item)->hash))
                                 {
-                                    case MemPool::NEED:
-                                        transactionList.push_back((*item)->hash);
-                                        break;
-                                    case MemPool::ALREADY_HAVE:
-                                        break;
-                                    case MemPool::BLACK_LISTED:
-                                        sendReject(Message::nameFor(message->type), Message::RejectData::WRONG_CHAIN,
-                                          "Announced transaction failed verification");
-                                        NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                                          "Dropping. Black listed transaction announced : %s", (*item)->hash.hex().text());
-                                        close();
-                                        success = false;
-                                        break;
+                                case MemPool::HASH_NEED:
+                                    transactionList.push_back((*item)->hash);
+                                    break;
+                                case MemPool::HASH_ALREADY_HAVE:
+                                    break;
+                                case MemPool::HASH_INVALID:
+                                    sendRejectWithHash(Message::nameFor(message->type),
+                                      Message::RejectData::INVALID, "Failed verification",
+                                      (*item)->hash);
+                                    NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                                      "Dropping. Invalid transaction announced : %s",
+                                      (*item)->hash.hex().text());
+                                    info.addPeerFail(mAddress);
+                                    close();
+                                    success = false;
+                                    break;
+                                case MemPool::HASH_LOW_FEE:
+                                    sendRejectWithHash(Message::nameFor(message->type),
+                                      Message::RejectData::LOW_FEE, "Low Fee", (*item)->hash);
+                                    break;
+                                case MemPool::HASH_NON_STANDARD:
+                                    sendRejectWithHash(Message::nameFor(message->type),
+                                      Message::RejectData::NON_STANDARD, "Non Standard",
+                                      (*item)->hash);
+                                    break;
                                 }
                             }
                             break;
@@ -2084,7 +2095,8 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                       "Sending %d mem pool transaction hashes", list.size());
 
-                    for(NextCash::HashList::iterator hash=list.begin();hash!=list.end();++hash)
+                    for(NextCash::HashList::iterator hash = list.begin(); hash != list.end();
+                      ++hash)
                     {
                         if(inventoryMessage.inventory.size() == 10000)
                         {
@@ -2094,9 +2106,8 @@ namespace BitCoin
                             inventoryMessage.inventory.clear();
                         }
 
-                        inventoryMessage.inventory
-                          .push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION,
-                          *hash));
+                        inventoryMessage.inventory.push_back(
+                          new Message::InventoryHash(Message::InventoryHash::TRANSACTION, *hash));
                     }
 
                     if(inventoryMessage.inventory.size() > 0)

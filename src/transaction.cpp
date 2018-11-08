@@ -812,111 +812,75 @@ namespace BitCoin
         return true;
     }
 
-    uint8_t Transaction::checkOutpoints(TransactionOutputPool &pOutputs,
-      TransactionList &pMemPoolTransactions)
+    void Transaction::check(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight,
+      bool pCoinBase, int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
+      std::vector<unsigned int> &pSpentAges, NextCash::Timer &pCheckDupTime,
+      NextCash::Timer &pOutputLookupTime, NextCash::Timer &pSignatureTime)
     {
-        // Reset spent outpoint flag in case there was a reorg
-        if(mStatus & OUTPOINTS_SPENT)
-            mStatus ^= OUTPOINTS_SPENT;
+        mStatus |= WAS_CHECKED;
 
-        Transaction *outpointTransaction;
-        uint32_t previousHeight;
-        unsigned int index = 0;
-        bool outpointsFound = true;
-        for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end(); ++input)
+        bool setIsStandard = true;
+
+        if(!(mStatus & IS_VALID))
         {
-            if(input->outpoint.output == NULL)
+            if(size() > 100000)
             {
-                input->outpoint.output = new Output();
-
-                if(!pOutputs.getOutput(input->outpoint.transactionID, input->outpoint.index,
-                  TransactionOutputPool::REQUIRE_UNSPENT, 0, *input->outpoint.output,
-                  previousHeight))
-                {
-                    // Search mempool
-                    outpointTransaction =
-                      pMemPoolTransactions.getSorted(input->outpoint.transactionID);
-                    if(outpointTransaction != NULL)
-                    {
-                        if(outpointTransaction->outputs.size() <= input->outpoint.index)
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                              BITCOIN_TRANSACTION_LOG_NAME,
-                              "Input %d outpoint index too high : index %d trans %s", index,
-                              input->outpoint.index, input->outpoint.transactionID.hex().text());
-                            return mStatus;
-                        }
-
-                        *input->outpoint.output = outpointTransaction->outputs[input->outpoint.index];
-                    }
-                    else
-                    {
-                        delete input->outpoint.output;
-                        input->outpoint.output = NULL;
-                        input->outpoint.signatureStatus = 0;
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                          BITCOIN_TRANSACTION_LOG_NAME,
-                          "Input %d outpoint not found : index %d trans %s", index,
-                          input->outpoint.index, input->outpoint.transactionID.hex().text());
-                        outpointsFound = false;
-                        continue;
-                    }
-                }
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Transaction over max size of 100000 (%d bytes) : trans %s", size(),
+                  hash.hex().text());
+                return;
             }
-            else if(!(mStatus & OUTPOINTS_SPENT) &&
-              !pOutputs.isUnspent(input->outpoint.transactionID, input->outpoint.index))
-                mStatus |= OUTPOINTS_SPENT;
-            ++index;
+
+            if(inputs.size() == 0)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Zero inputs : trans %s", hash.hex().text());
+                return;
+            }
+
+            if(outputs.size() == 0)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Zero outputs : trans %s", hash.hex().text());
+                return;
+            }
         }
 
-        if(!outpointsFound) // Turn off outpoints found and sigs verified flags
-            mStatus &= ~(OUTPOINTS_FOUND | SIGS_VERIFIED);
-
-        return mStatus;
-    }
-
-    bool Transaction::check(Chain *pChain, TransactionList &pMemPoolTransactions,
-      NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, unsigned int pHeight)
-    {
-        pOutpointsNeeded.clear();
-        mStatus = IS_VALID | IS_STANDARD | WAS_CHECKED;
-        mFee = INVALID_FEE;
-
-        if(size() > 100000)
+        if(!(mStatus & DUP_CHECKED))
         {
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-              "Transaction over standard size of 100000 (%d bytes) : trans %s", size(),
-              hash.hex().text());
-            if(mStatus & IS_STANDARD)
-                mStatus ^= IS_STANDARD;
+            pCheckDupTime.start();
+            if(!pChain->outputs().checkDuplicate(hash, pHeight, pBlockHash))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Zero outputs : trans %s", hash.hex().text());
+                return;
+            }
+            pCheckDupTime.stop();
         }
 
-        if(inputs.size() == 0)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-              "Zero inputs : trans %s", hash.hex().text());
-            mStatus ^= IS_VALID;
-            return true;
-        }
-
-        if(outputs.size() == 0)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-              "Zero outputs : trans %s", hash.hex().text());
-            mStatus ^= IS_VALID;
-            return true;
-        }
+        mStatus |= DUP_CHECKED;
 
         // Check inputs
         unsigned int index = 0;
         for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end(); ++input)
         {
-            if(input->outpoint.index == 0xffffffff)
+            if(pCoinBase)
             {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d has no outpoint transaction : trans %s", index, hash.hex().text());
-                mStatus ^= IS_VALID;
-                return true; // Coinbase transactions not allowed in mempool
+                if(input->outpoint.index != 0xffffffff)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Coinbase input %d has outpoint transaction : trans %s", index, hash.hex().text());
+                    return;
+                }
+            }
+            else
+            {
+                if(input->outpoint.index == 0xffffffff)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d has no outpoint transaction : trans %s", index, hash.hex().text());
+                    return;
+                }
             }
 
             if(input->script.length() > 1650)
@@ -924,22 +888,22 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Input %d script over standard size of 1650 (%d bytes) : trans %s", index,
                   input->script.length(), hash.hex().text());
-                if(mStatus & IS_STANDARD)
-                    mStatus ^= IS_STANDARD;
+                setIsStandard = false;
             }
 
             // Input script only contains data pushes, including hard coded value pushes
-            input->script.setReadOffset(0);
-            if(!ScriptInterpreter::isPushOnly(input->script))
-            {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d script is not push only : trans %s", index, hash.hex().text());
-                input->script.setReadOffset(0);
-                ScriptInterpreter::printScript(input->script, pChain->forks(), pHeight,
-                  NextCash::Log::VERBOSE);
-                if(mStatus & IS_STANDARD)
-                    mStatus ^= IS_STANDARD;
-            }
+            // TODO Decide if this is needed.
+            // input->script.setReadOffset(0);
+            // if(!ScriptInterpreter::isPushOnly(input->script))
+            // {
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  // "Input %d script is not push only : trans %s", index, hash.hex().text());
+                // input->script.setReadOffset(0);
+                // ScriptInterpreter::printScript(input->script, pChain->forks(), pHeight,
+                  // NextCash::Log::VERBOSE);
+                // setIsStandard = false;
+            // }
+
             ++index;
         }
 
@@ -947,7 +911,7 @@ namespace BitCoin
         index = 0;
         ScriptInterpreter::ScriptType scriptType;
         NextCash::HashList hashes;
-        mFee = 0;
+        int64_t newFee = 0;
         for(std::vector<Output>::iterator output = outputs.begin(); output != outputs.end(); ++output)
         {
             if(output->amount < 0)
@@ -958,9 +922,8 @@ namespace BitCoin
                 output->print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
                   NextCash::Log::WARNING);
                 print(pChain->forks(), NextCash::Log::VERBOSE);
-                mStatus ^= IS_VALID;
                 mFee = INVALID_FEE;
-                return true;
+                return;
             }
 
             // Output script matches allowed patterns
@@ -973,231 +936,36 @@ namespace BitCoin
                 ScriptInterpreter::printScript(output->script, pChain->forks(), pHeight,
                   NextCash::Log::VERBOSE);
                 print(pChain->forks(), NextCash::Log::VERBOSE);
-                if(mStatus & IS_STANDARD)
-                    mStatus ^= IS_STANDARD;
+                setIsStandard = false;
             }
-            //TODO Find out why NULL DATA transactions are allowed and what to do with them
-            // else if(scriptType == ScriptInterpreter::NULL_DATA)
-            // {
-                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  // "Output %d is null data", index);
-                // print(pForks, NextCash::Log::VERBOSE);
-                // isStandard = false;
-            // }
             else if(scriptType == ScriptInterpreter::INVALID)
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
                   "Output %d is invalid : trans %s", index, hash.hex().text());
                 print(pChain->forks(), NextCash::Log::VERBOSE);
-                mStatus ^= IS_VALID;
                 mFee = INVALID_FEE;
-                return true;
+                return;
             }
 
-            mFee -= output->amount;
+            newFee -= output->amount;
             ++index;
         }
 
-        if(!(mStatus & IS_STANDARD))
+        if(setIsStandard)
+            mStatus |= IS_STANDARD;
+        else if(pHeight == Chain::INVALID_HEIGHT)
         {
+            if(mStatus & IS_STANDARD)
+                mStatus ^= IS_STANDARD;
             mFee = INVALID_FEE;
-            return true; // Only standard currently supported so don't check signatures
+            return; // Only standard currently supported so don't check signatures
         }
 
-        // Find outpoints and check signatures
-        ScriptInterpreter interpreter;
-        Transaction *outpointTransaction;
-        uint32_t previousHeight;
-        bool sigsVerified = true;
-        index = 0;
-        for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end(); ++input)
+        if(pCoinBase)
         {
-            if(input->outpoint.output == NULL)
-            {
-                input->outpoint.signatureStatus = 0;
-                if(input->outpoint.output == NULL)
-                    input->outpoint.output = new Output();
-
-                if(!pChain->outputs().getOutput(input->outpoint.transactionID,
-                  input->outpoint.index, TransactionOutputPool::REQUIRE_UNSPENT, pHeight,
-                  *input->outpoint.output, previousHeight))
-                {
-                    // Search mempool
-                    outpointTransaction =
-                      pMemPoolTransactions.getSorted(input->outpoint.transactionID);
-                    if(outpointTransaction != NULL)
-                    {
-                        if(outpointTransaction->outputs.size() <= input->outpoint.index)
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE,
-                              BITCOIN_TRANSACTION_LOG_NAME,
-                              "Input %d outpoint index too high : index %d trans %s", index,
-                              input->outpoint.index, input->outpoint.transactionID.hex().text());
-                            mStatus ^= IS_VALID;
-                            mFee = INVALID_FEE;
-                            return true;
-                        }
-
-                        *input->outpoint.output =
-                          outpointTransaction->outputs[input->outpoint.index];
-                    }
-                    else
-                    {
-                        delete input->outpoint.output;
-                        input->outpoint.output = NULL;
-                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE,
-                          BITCOIN_TRANSACTION_LOG_NAME,
-                          "Input %d outpoint transaction not found : index %d trans %s", index,
-                          input->outpoint.index, input->outpoint.transactionID.hex().text());
-                        pOutpointsNeeded.push_back(input->outpoint.transactionID);
-                        continue;
-                    }
-                }
-            }
-
-            interpreter.clear();
-            interpreter.initialize(this, index, input->sequence, input->outpoint.output->amount);
-
-            input->outpoint.signatureStatus = Outpoint::CHECKED;
-
-            // Process signature script
-            input->script.setReadOffset(0);
-            if(!interpreter.process(input->script, pBlockVersion, pChain->forks(), pHeight))
-            {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d signature script is invalid : trans %s", index, hash.hex().text());
-                input->print(pChain->forks(), NextCash::Log::VERBOSE);
-                mStatus ^= IS_VALID;
-                mFee = INVALID_FEE;
-                return true;
-            }
-
-            // Check outpoint script
-            input->outpoint.output->script.setReadOffset(0);
-            if(!interpreter.process(input->outpoint.output->script, pBlockVersion,
-              pChain->forks(), pHeight) || !interpreter.isValid())
-            {
-                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d outpoint script is not valid : trans %s", index, hash.hex().text());
-                input->print(pChain->forks(), NextCash::Log::WARNING);
-                input->outpoint.output->print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
-                  NextCash::Log::WARNING);
-                mStatus ^= IS_VALID;
-                mFee = INVALID_FEE;
-                return true;
-            }
-            else if(!interpreter.isVerified())
-            {
-                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d script did not verify : trans %s", index, hash.hex().text());
-                input->print(pChain->forks(), NextCash::Log::WARNING);
-                interpreter.printStack("After fail verify");
-                input->outpoint.output->print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
-                  NextCash::Log::WARNING);
-                sigsVerified = false;
-            }
-            else
-                input->outpoint.signatureStatus |= Outpoint::VERIFIED;
-
-            mFee += input->outpoint.output->amount;
-            ++index;
-        }
-
-        if(pOutpointsNeeded.size() == 0)
-        {
-            mStatus |= OUTPOINTS_FOUND;
-            if((mStatus & IS_VALID) && sigsVerified)
-                mStatus |= SIGS_VERIFIED;
-
-            if(mFee < 0)
-            {
-                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Outputs amounts are more than inputs amounts");
-                index = 0;
-                for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
-                  ++input)
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                      "    Input %d : %.08f", index, bitcoins(input->outpoint.output->amount));
-                    ++index;
-                }
-                index = 0;
-                for(std::vector<Output>::iterator output = outputs.begin(); output != outputs.end();
-                  ++output)
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                      "    Output %d : %.08f", index, bitcoins(output->amount));
-                    ++index;
-                }
-                print(pChain->forks(), NextCash::Log::VERBOSE);
-                mStatus ^= IS_VALID;
-                mFee = INVALID_FEE;
-                return true;
-            }
-
-            clearCache();
-        }
-        else
-            mFee = INVALID_FEE;
-
-        return true;
-    }
-
-    bool Transaction::process(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight,
-      bool pCoinBase, int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
-      std::vector<unsigned int> &pSpentAges, NextCash::Timer &pCheckDupTime,
-      NextCash::Timer &pOutputLookupTime, NextCash::Timer &pSignatureTime)
-    {
-        mFee = INVALID_FEE;
-
-        if(inputs.size() == 0)
-        {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME, "Zero inputs");
-            return false;
-        }
-        else if(pCoinBase && inputs.size() != 1)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-              "Coinbase has more than one input : %d", inputs.size());
-            return false;
-        }
-
-        if(outputs.size() == 0)
-        {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-              "Zero outputs");
-            return false;
-        }
-
-        pCheckDupTime.start();
-        if(!pChain->outputs().checkDuplicate(hash, pHeight, pBlockHash))
-            return false;
-        pCheckDupTime.stop();
-
-        mFee = 0;
-
-        // Process Inputs
-        ScriptInterpreter interpreter;
-        Output previousOutput;
-        uint32_t previousHeight;
-        unsigned int index = 0;
-        bool sequenceFound = false;
-        for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end(); ++input)
-        {
-            if(pCoinBase)
-            {
-                if(input->outpoint.index != 0xffffffff)
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                      BITCOIN_TRANSACTION_LOG_NAME,
-                      "Coinbase Input %d outpoint index is not 0xffffffff : %08x", index,
-                      input->outpoint.index);
-                    mFee = INVALID_FEE;
-                    return false;
-                }
-
-                // BIP-0034
-                if(pBlockVersion >= 2 && pChain->forks().enabledBlockVersion(pHeight) >= 2)
+            // BIP-0034 Check coinbase input script
+            if(pBlockVersion >= 2 && pChain->forks().enabledBlockVersion(pHeight) >= 2)
+                for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end(); ++input)
                 {
                     // Read block height
                     int64_t blockHeight = 0;
@@ -1207,7 +975,7 @@ namespace BitCoin
                         NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
                           "Coinbase input doesn't start with data push");
                         mFee = INVALID_FEE;
-                        return false;
+                        return;
                     }
 
                     if(blockHeight < 0 || (uint64_t)blockHeight != pHeight)
@@ -1217,268 +985,325 @@ namespace BitCoin
                           "Non matching coinbase block height : actual %d, coinbase %d",
                           pHeight, blockHeight);
                         mFee = INVALID_FEE;
-                        return false;
+                        return;
                     }
+                }
+
+            mFee = newFee;
+        }
+        else
+        {
+            // Find outpoints and check signatures
+            ScriptInterpreter interpreter;
+            uint32_t previousHeight;
+            bool sigsVerified = true;
+            bool sequenceFound = false;
+            Output output;
+            index = 0;
+            if(mStatus & OUTPOINTS_FOUND)
+            {
+                // Verify outpoints are still unspent
+                for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
+                  ++input)
+                {
+                    pOutputLookupTime.start();
+                    if(pHeight != Chain::INVALID_HEIGHT)
+                    {
+                        if(!pChain->outputs().spend(input->outpoint.transactionID,
+                          input->outpoint.index, pHeight, previousHeight, true))
+                        {
+                            if(mStatus & OUTPOINTS_FOUND)
+                                mStatus ^= OUTPOINTS_FOUND;
+                            pOutputLookupTime.stop();
+                            break;
+                        }
+                    }
+                    else if(!pChain->outputs().isUnspent(input->outpoint.transactionID,
+                      input->outpoint.index))
+                    {
+                        if(pHeight == Chain::INVALID_HEIGHT)
+                        {
+                            // Search mempool
+                            if(!pChain->memPool().getOutput(input->outpoint.transactionID,
+                              input->outpoint.index, output))
+                            {
+                                if(mStatus & OUTPOINTS_FOUND)
+                                    mStatus ^= OUTPOINTS_FOUND;
+                                pOutputLookupTime.stop();
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            if(mStatus & OUTPOINTS_FOUND)
+                                mStatus ^= OUTPOINTS_FOUND;
+                            pOutputLookupTime.stop();
+                            break;
+                        }
+                    }
+                    pOutputLookupTime.stop();
                 }
             }
             else
             {
-                if(input->outpoint.index == 0xffffffff)
+                Output output;
+                bool allOutpointsFound = true;
+                uint8_t outputFlag;
+                for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
+                  ++input)
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                      BITCOIN_TRANSACTION_LOG_NAME, "Input %d outpoint index is 0xffffffff : %08x",
-                      index, input->outpoint.index);
-                    mFee = INVALID_FEE;
-                    return false;
-                }
+                    input->signatureStatus = 0;
+                    if(pHeight == Chain::INVALID_HEIGHT)
+                        outputFlag = TransactionOutputPool::REQUIRE_UNSPENT;
+                    else
+                        outputFlag = TransactionOutputPool::REQUIRE_UNSPENT |
+                          TransactionOutputPool::MARK_SPENT;
 
-                pOutputLookupTime.start();
-                if(!pChain->outputs().getOutput(input->outpoint.transactionID,
-                  input->outpoint.index,
-                  TransactionOutputPool::MARK_SPENT | TransactionOutputPool::REQUIRE_UNSPENT,
-                  pHeight, previousOutput, previousHeight))
-                {
-                    pOutputLookupTime.stop();
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                      BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d outpoint transaction not found : index %d trans %s", index,
-                      input->outpoint.index, input->outpoint.transactionID.hex().text());
-                    mFee = INVALID_FEE;
-                    return false;
-                }
-                pOutputLookupTime.stop();
-
-                pSpentAgeLock.lock();
-                pSpentAges.push_back(pHeight - previousHeight);
-                pSpentAgeLock.unlock();
-
-                // BIP-0068 Relative time lock sequence
-                if(version >= 2 && !input->sequenceDisabled() &&
-                  pChain->forks().softForkIsActive(pHeight, SoftFork::BIP0068))
-                {
-                    // Sequence is an encoded relative time lock
-                    uint32_t lock = input->sequence & Input::SEQUENCE_LOCKTIME_MASK;
-                    if(input->sequence & Input::SEQUENCE_TYPE)
+                    pOutputLookupTime.start();
+                    if(pChain->outputs().getOutput(input->outpoint.transactionID,
+                      input->outpoint.index, outputFlag, pHeight, output, previousHeight))
                     {
-                        // Seconds since outpoint median past time in units of 512 seconds granularity
-                        lock <<= 9;
-                        Time currentBlockMedianTime =
-                          pChain->getMedianPastTime(pHeight - 1, 11);
-                        Time spentBlockMedianTime =
-                          pChain->getMedianPastTime(previousHeight - 1, 11);
-                        if(currentBlockMedianTime < spentBlockMedianTime + lock)
+                        pSpentAgeLock.lock();
+                        pSpentAges.push_back(pHeight - previousHeight);
+                        pSpentAgeLock.unlock();
+                    }
+                    else
+                    {
+                        if(pHeight == Chain::INVALID_HEIGHT)
+                        {
+                            // Search mempool
+                            if(!pChain->memPool().getOutput(input->outpoint.transactionID,
+                              input->outpoint.index, output))
+                            {
+                                pOutputLookupTime.stop();
+                                if(mStatus & OUTPOINTS_FOUND)
+                                    mStatus ^= OUTPOINTS_FOUND;
+                                NextCash::Log::addFormatted(NextCash::Log::VERBOSE,
+                                  BITCOIN_TRANSACTION_LOG_NAME,
+                                  "Input %d outpoint transaction not found : index %d trans %s",
+                                  index, input->outpoint.index,
+                                  input->outpoint.transactionID.hex().text());
+                                allOutpointsFound = false;
+                                continue;
+                            }
+
+                            previousHeight = pChain->headerHeight() + 1;
+                        }
+                        else
+                        {
+                            pOutputLookupTime.stop();
+                            if(mStatus & OUTPOINTS_FOUND)
+                                mStatus ^= OUTPOINTS_FOUND;
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE,
+                              BITCOIN_TRANSACTION_LOG_NAME,
+                              "Input %d outpoint transaction not found : index %d trans %s", index,
+                              input->outpoint.index, input->outpoint.transactionID.hex().text());
+                            allOutpointsFound = false;
+                            continue;
+                        }
+                    }
+                    pOutputLookupTime.stop();
+
+                    // BIP-0068 Relative time lock sequence
+                    if(version >= 2 && !input->sequenceDisabled() &&
+                      pChain->forks().softForkIsActive(pHeight, SoftFork::BIP0068))
+                    {
+                        // Sequence is an encoded relative time lock
+                        uint32_t lock = input->sequence & Input::SEQUENCE_LOCKTIME_MASK;
+                        if(input->sequence & Input::SEQUENCE_TYPE)
+                        {
+                            // Seconds since outpoint median past time in units of 512 seconds granularity
+                            lock <<= 9;
+                            Time currentBlockMedianTime = pChain->getMedianPastTime(pHeight - 1, 11);
+                            Time spentBlockMedianTime = pChain->getMedianPastTime(previousHeight - 1, 11);
+                            if(currentBlockMedianTime < spentBlockMedianTime + lock)
+                            {
+                                NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                                  BITCOIN_TRANSACTION_LOG_NAME,
+                                  "Input %d sequence 0x%08x not valid. Required spent block time age %d, actual %d : index %d trans %s",
+                                  index, input->sequence, lock,
+                                  currentBlockMedianTime - spentBlockMedianTime, input->outpoint.index,
+                                  input->outpoint.transactionID.hex().text());
+                                NextCash::String timeText;
+                                timeText.writeFormattedTime(spentBlockMedianTime + lock);
+                                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                                  "Not valid until median block time %s", timeText.text());
+                                mFee = INVALID_FEE;
+                                return;
+                            }
+                        }
+                        else if(pHeight < previousHeight + lock) // Number of blocks since outpoint
                         {
                             NextCash::Log::addFormatted(NextCash::Log::WARNING,
                               BITCOIN_TRANSACTION_LOG_NAME,
-                              "Input %d sequence 0x%08x not valid. Required spent block time age %d, actual %d : index %d trans %s",
-                              index, input->sequence, lock,
-                              currentBlockMedianTime - spentBlockMedianTime, input->outpoint.index,
-                              input->outpoint.transactionID.hex().text());
-                            NextCash::String timeText;
-                            timeText.writeFormattedTime(spentBlockMedianTime + lock);
-                            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                              "Not valid until median block time %s", timeText.text());
+                              "Input %d sequence 0x%08x not valid. Required block height age %d. actual %d : index %d trans %s",
+                              index, input->sequence, lock, pHeight - previousHeight,
+                              input->outpoint.index, input->outpoint.transactionID.hex().text());
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                              BITCOIN_TRANSACTION_LOG_NAME, "Not valid until block %d",
+                              previousHeight + lock);
                             mFee = INVALID_FEE;
-                            return false;
+                            return;
                         }
                     }
-                    else if(pHeight < previousHeight + lock) // Number of blocks since outpoint
+
+                    if(input->sequence != Input::SEQUENCE_NONE)
+                        sequenceFound = true;
+
+                    newFee += output.amount;
+
+                    if(input->signatureStatus & Input::VERIFIED)
+                        continue;
+
+                    interpreter.clear();
+                    interpreter.initialize(this, index, input->sequence, output.amount);
+
+                    input->signatureStatus = Input::CHECKED;
+
+                    // Process signature script
+                    input->script.setReadOffset(0);
+                    if(!interpreter.process(input->script, pBlockVersion, pChain->forks(), pHeight))
                     {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                          BITCOIN_TRANSACTION_LOG_NAME,
-                          "Input %d sequence 0x%08x not valid. Required block height age %d. actual %d : index %d trans %s",
-                          index, input->sequence, lock, pHeight - previousHeight,
-                          input->outpoint.index, input->outpoint.transactionID.hex().text());
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                          BITCOIN_TRANSACTION_LOG_NAME, "Not valid until block %d",
-                          previousHeight + lock);
+                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Input %d signature script is invalid : trans %s", index, hash.hex().text());
+                        input->print(pChain->forks(), NextCash::Log::VERBOSE);
                         mFee = INVALID_FEE;
-                        return false;
+                        return;
                     }
-                }
 
-                if(input->sequence != Input::SEQUENCE_NONE)
-                    sequenceFound = true;
-
-                interpreter.clear();
-                interpreter.initialize(this, index, input->sequence, previousOutput.amount);
-
-                // Process signature script
-                input->script.setReadOffset(0);
-                if(!interpreter.process(input->script, pBlockVersion, pChain->forks(),
-                  pHeight))
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d signature script failed : ", index);
-                    input->print(pChain->forks(), NextCash::Log::WARNING);
-                    mFee = INVALID_FEE;
-                    return false;
-                }
-
-                pSignatureTime.start();
-                // Process unspent transaction output script
-                if(!interpreter.process(previousOutput.script, pBlockVersion, pChain->forks(),
-                  pHeight))
-                {
-                    pSignatureTime.stop();
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                      BITCOIN_TRANSACTION_LOG_NAME,
-                      "Input %d unspent transaction output script failed : ", index);
-                    input->print(pChain->forks(), NextCash::Log::WARNING);
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                      "UTXO :");
-                    previousOutput.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
-                      NextCash::Log::WARNING);
-                    mFee = INVALID_FEE;
-                    return false;
-                }
-                pSignatureTime.stop();
-
-                if(!interpreter.isValid())
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                      BITCOIN_TRANSACTION_LOG_NAME, "Input %d script is not valid : ", index);
-                    input->print(pChain->forks(), NextCash::Log::WARNING);
-                    interpreter.printStack("After fail validate");
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                      "UTXO :");
-                    previousOutput.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
-                      NextCash::Log::WARNING);
-                    mFee = INVALID_FEE;
-                    return false;
-                }
-
-                if(!interpreter.isVerified())
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                      BITCOIN_TRANSACTION_LOG_NAME, "Input %d script did not verify : ", index);
-                    input->print(pChain->forks(), NextCash::Log::WARNING);
-                    interpreter.printStack("After fail verify");
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                      "UTXO :");
-                    previousOutput.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
-                      NextCash::Log::WARNING);
-                    mFee = INVALID_FEE;
-                    return false;
-                }
-
-                mFee += previousOutput.amount;
-            }
-
-            ++index;
-        }
-
-        if(!pCoinBase && sequenceFound)
-        {
-            if(lockTime >= LOCKTIME_THRESHOLD)
-            {
-                // Lock time is a timestamp
-                if(pChain->forks().softForkIsActive(pHeight, SoftFork::BIP0113))
-                {
-                    if(lockTime > pChain->getMedianPastTime(pHeight, 11))
+                    // Check outpoint script
+                    pSignatureTime.start();
+                    output.script.setReadOffset(0);
+                    if(!interpreter.process(output.script, pBlockVersion,
+                      pChain->forks(), pHeight) || !interpreter.isValid())
                     {
-                        NextCash::String lockTimeText, blockTimeText;
-                        lockTimeText.writeFormattedTime(lockTime);
-                        blockTimeText
-                          .writeFormattedTime(pChain->getMedianPastTime(pHeight, 11));
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                          BITCOIN_TRANSACTION_LOG_NAME,
-                          "Lock time 0x%08x time stamp is not valid. Lock time %s > block median time %s",
-                          lockTime, lockTimeText.text(), blockTimeText.text());
+                        pSignatureTime.stop();
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Input %d outpoint script is not valid : trans %s", index, hash.hex().text());
+                        input->print(pChain->forks(), NextCash::Log::WARNING);
+                        output.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
+                          NextCash::Log::WARNING);
+                        mFee = INVALID_FEE;
+                        return;
+                    }
+                    else
+                    {
+                        pSignatureTime.stop();
+                        if(!interpreter.isVerified())
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                              "Input %d script did not verify : trans %s", index, hash.hex().text());
+                            input->print(pChain->forks(), NextCash::Log::WARNING);
+                            interpreter.printStack("After fail verify");
+                            output.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
+                              NextCash::Log::WARNING);
+                            sigsVerified = false;
+                        }
+                        else
+                            input->signatureStatus |= Input::VERIFIED;
+                    }
+
+                    ++index;
+                }
+
+                if(allOutpointsFound)
+                {
+                    mStatus |= OUTPOINTS_FOUND;
+                    if(sigsVerified)
+                        mStatus |= SIGS_VERIFIED;
+
+                    mFee = newFee;
+                    if(mFee < 0)
+                    {
+                        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                          "Outputs amounts are more than inputs amounts");
+                        index = 0;
+                        for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
+                          ++input)
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                              "    Input %d : %.08f", index, bitcoins(output.amount));
+                            ++index;
+                        }
+                        index = 0;
+                        for(std::vector<Output>::iterator outputIter = outputs.begin();
+                          outputIter != outputs.end(); ++outputIter)
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                              "    Output %d : %.08f", index, bitcoins(outputIter->amount));
+                            ++index;
+                        }
                         print(pChain->forks(), NextCash::Log::VERBOSE);
                         mFee = INVALID_FEE;
-                        return false;
+                        return;
+                    }
+
+                    clearCache();
+                }
+                else
+                    mFee = INVALID_FEE;
+            }
+
+            if(sequenceFound)
+            {
+                if(lockTime >= LOCKTIME_THRESHOLD)
+                {
+                    // Lock time is a timestamp
+                    if(pChain->forks().softForkIsActive(pHeight, SoftFork::BIP0113))
+                    {
+                        if(lockTime > pChain->getMedianPastTime(pHeight, 11))
+                        {
+                            NextCash::String lockTimeText, blockTimeText;
+                            lockTimeText.writeFormattedTime(lockTime);
+                            blockTimeText.writeFormattedTime(pChain->getMedianPastTime(pHeight, 11));
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                              BITCOIN_TRANSACTION_LOG_NAME,
+                              "Lock time 0x%08x time stamp is not valid. Lock time %s > block median time %s",
+                              lockTime, lockTimeText.text(), blockTimeText.text());
+                            print(pChain->forks(), NextCash::Log::VERBOSE);
+                            mFee = INVALID_FEE;
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // Add 600 to fake having a "peer time offset" for older blocks
+                        //   Block 357903 transaction 98 has a lock time about 3 minutes after the
+                        //   block time.
+                        if(lockTime > pChain->time(pHeight) + 600)
+                        {
+                            NextCash::String lockTimeText, blockTimeText;
+                            lockTimeText.writeFormattedTime(lockTime);
+                            blockTimeText.writeFormattedTime(pChain->time(pHeight));
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                              BITCOIN_TRANSACTION_LOG_NAME,
+                              "Lock time 0x%08x time stamp is not valid. Lock time %s > block time %s",
+                              lockTime, lockTimeText.text(), blockTimeText.text());
+                            print(pChain->forks(), NextCash::Log::VERBOSE);
+                            mFee = INVALID_FEE;
+                            return;
+                        }
                     }
                 }
                 else
                 {
-                    // Add 600 to fake having a "peer time offset" for older blocks
-                    //   Block 357903 transaction 98 has a lock time about 3 minutes after the
-                    //   block time.
-                    if(lockTime > pChain->time(pHeight) + 600)
+                    // Lock time is a block height
+                    if(lockTime > pHeight)
                     {
-                        NextCash::String lockTimeText, blockTimeText;
-                        lockTimeText.writeFormattedTime(lockTime);
-                        blockTimeText.writeFormattedTime(pChain->time(pHeight));
                         NextCash::Log::addFormatted(NextCash::Log::WARNING,
                           BITCOIN_TRANSACTION_LOG_NAME,
-                          "Lock time 0x%08x time stamp is not valid. Lock time %s > block time %s",
-                          lockTime, lockTimeText.text(), blockTimeText.text());
+                          "Lock time block height is not valid. Lock height %d > block height %d",
+                          lockTime, pHeight);
                         print(pChain->forks(), NextCash::Log::VERBOSE);
                         mFee = INVALID_FEE;
-                        return false;
+                        return;
                     }
                 }
             }
-            else
-            {
-                // Lock time is a block height
-                if(lockTime > pHeight)
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                      BITCOIN_TRANSACTION_LOG_NAME,
-                      "Lock time block height is not valid. Lock height %d > block height %d",
-                      lockTime, pHeight);
-                    print(pChain->forks(), NextCash::Log::VERBOSE);
-                    mFee = INVALID_FEE;
-                    return false;
-                }
-            }
         }
 
-        // Process Outputs
-        index = 0;
-        for(std::vector<Output>::iterator output = outputs.begin(); output != outputs.end();
-          ++output)
-        {
-            if(output->amount < 0)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Output %d amount is negative %d : ", index, output->amount);
-                output->print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
-                  NextCash::Log::WARNING);
-                print(pChain->forks(), NextCash::Log::VERBOSE);
-                mFee = INVALID_FEE;
-                return false;
-            }
-
-            mFee -= output->amount;
-            ++index;
-        }
-
-        if(!pCoinBase && mFee < 0)
-        {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-              "Outputs amounts are more than inputs amounts");
-            index = 0;
-            for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
-              ++input)
-            {
-                if(pChain->outputs().getOutput(input->outpoint.transactionID,
-                  input->outpoint.index,
-                  TransactionOutputPool::MARK_SPENT | TransactionOutputPool::REQUIRE_UNSPENT,
-                  pHeight, previousOutput, previousHeight))
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                      "    Input %d : %.08f", index, bitcoins(previousOutput.amount));
-                else
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                      "    Input %d : unknown", index);
-                ++index;
-            }
-            index = 0;
-            for(std::vector<Output>::iterator output = outputs.begin(); output != outputs.end();
-              ++output)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                  "    Output %d : %.08f", index, bitcoins(output->amount));
-                ++index;
-            }
-            print(pChain->forks(), NextCash::Log::WARNING);
-            return false;
-        }
-
-        clearCache();
-        return true;
+        mStatus |= IS_VALID;
+        return;
     }
 
     void Transaction::calculateSize()
@@ -2389,6 +2214,66 @@ namespace BitCoin
         delete *item;
         erase(item);
         return true;
+    }
+
+    Transaction *TransactionList::getAndRemoveSorted(const NextCash::Hash &pHash)
+    {
+        // Remove sorted
+        if(size() == 0 || back()->hash < pHash)
+            return NULL; // Item would be after end
+
+        if(front()->hash > pHash)
+            return NULL; // Item would be before beginning
+
+        int compare;
+        Transaction **bottom = data();
+        Transaction **top    = data() + size() - 1;
+        Transaction **current;
+
+        while(true)
+        {
+            // Break the set in two halves
+            current = bottom + ((top - bottom) / 2);
+            compare = pHash.compare((*current)->hash);
+
+            if(compare == 0) // Item found
+                break;
+
+            if(current == bottom)
+            {
+                if(current != top && (*top)->hash == pHash)
+                {
+                    current = top; // Item found
+                    break;
+                }
+
+                return NULL;
+            }
+
+            // Determine which half the desired item is in
+            if(compare > 0)
+                bottom = current;
+            else //if(compare < 0)
+                top = current;
+        }
+
+        // Current is the matching item
+        std::vector<Transaction *>::iterator item = begin();
+        item += (current - data());
+        Transaction *result = *item;
+        erase(item);
+        return result;
+    }
+
+    Transaction *TransactionList::getAndRemoveAt(unsigned int pOffset)
+    {
+        if(pOffset >= size())
+            return NULL;
+
+        iterator iter = begin() + pOffset;
+        Transaction *result = *iter;
+        erase(iter);
+        return result;
     }
 
     void TransactionList::clear()

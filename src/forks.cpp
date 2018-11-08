@@ -901,8 +901,7 @@ namespace BitCoin
         // Height at offset 1 represents version 3
         // Height at offset 2 represents version 4
         for(int i = 2; i >= 0; --i)
-            if(mBlockVersionEnabledHeights[i] != 0 &&
-              (unsigned int)mBlockVersionEnabledHeights[i] > pHeight)
+            if(mBlockVersionEnabledHeights[i] != 0 && mBlockVersionEnabledHeights[i] < pHeight)
                 return i + 2;
 
         return 1;
@@ -915,8 +914,7 @@ namespace BitCoin
         // Height at offset 1 represents version 3
         // Height at offset 2 represents version 4
         for(int i = 2; i >= 0; --i)
-            if(mBlockVersionRequiredHeights[i] != 0 &&
-              (unsigned int)mBlockVersionRequiredHeights[i] > pHeight)
+            if(mBlockVersionRequiredHeights[i] != 0 && mBlockVersionRequiredHeights[i] < pHeight)
                 return i + 2;
 
         return 1;

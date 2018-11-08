@@ -8,10 +8,6 @@
 #ifndef BITCOIN_OUTPUTS_HPP
 #define BITCOIN_OUTPUTS_HPP
 
-#ifdef PROFILER_ON
-#include "profiler.hpp"
-#endif
-
 #include "mutex.hpp"
 #include "hash.hpp"
 #include "log.hpp"
@@ -297,12 +293,17 @@ namespace BitCoin
         static const uint8_t REQUIRE_UNSPENT = 0x02;
         bool getOutput(const NextCash::Hash &pTransactionID, uint32_t pIndex, uint8_t pFlags,
           uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight);
+
         bool isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex);
         bool spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
           uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent);
         bool hasUnspent(const NextCash::Hash &pTransactionID,
           uint32_t pSpentBlockHeight = 0xffffffff);
-        bool exists(const NextCash::Hash &pTransactionID);
+        bool exists(const NextCash::Hash &pTransactionID, bool pPullIfNeeded = true);
+
+        static const uint8_t UNSPENT_STATUS_EXISTS  = 0x01; // Transaction output found
+        static const uint8_t UNSPENT_STATUS_UNSPENT = 0x02; // Transaction output is not spent
+        uint8_t unspentStatus(const NextCash::Hash &pTransactionID, uint32_t pIndex);
 
         // BIP-0030 Check if a transaction ID exists with unspent outputs before this block height.
         //   pBlockHash is for exceptions allowed before BIP-0030 was activated.
@@ -428,7 +429,8 @@ namespace BitCoin
             bool spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
               uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent);
             bool hasUnspent(const NextCash::Hash &pTransactionID, uint32_t pSpentBlockHeight);
-            bool exists(const NextCash::Hash &pTransactionID);
+            bool exists(const NextCash::Hash &pTransactionID, bool pPullIfNeeded);
+            uint8_t unspentStatus(const NextCash::Hash &pTransactionID, uint32_t pIndex);
 
             bool checkDuplicate(const NextCash::Hash &pTransactionID, unsigned int pBlockHeight,
               const NextCash::Hash &pBlockHash);

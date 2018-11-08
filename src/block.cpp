@@ -679,9 +679,10 @@ namespace BitCoin
             }
 
             fullTime.start();
-            if(transaction->process(data->chain, data->block->header.hash, data->height,
-              offset == 0, data->block->header.version, data->spentAgeLock, data->spentAges,
-              checkDupTime, outputsTime, sigTime))
+            transaction->check(data->chain, data->block->header.hash, data->height, offset == 0,
+              data->block->header.version, data->spentAgeLock, data->spentAges, checkDupTime,
+              outputsTime, sigTime);
+            if(transaction->isVerified())
                 data->markComplete(offset, true);
             else
             {
@@ -795,7 +796,7 @@ namespace BitCoin
             return false;
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Multi threaded lock times Threads,%d,Add,%d,Dup,%d,Out,%d,Sig,%d,Full,%d", pThreadCount,
+          "Multi threaded block times Threads,%d,Add,%d,Dup,%d,Out,%d,Sig,%d,Full,%d", pThreadCount,
           addTime.milliseconds(), threadData.checkDupTime / 1000L, threadData.outputsTime / 1000L,
           threadData.sigTime / 1000L, threadData.fullTime / 1000L);
 
@@ -858,8 +859,9 @@ namespace BitCoin
             // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
               // "Processing transaction %d", transactionOffset);
             fullTime.start();
-            if(!(*transaction)->process(pChain, header.hash, pHeight, transactionOffset == 0,
-              header.version, spentAgeLock, spentAges, checkDupTime, outputsTime, sigTime))
+            (*transaction)->check(pChain, header.hash, pHeight, transactionOffset == 0,
+              header.version, spentAgeLock, spentAges, checkDupTime, outputsTime, sigTime);
+            if(!(*transaction)->isVerified())
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Transaction %d failed", transactionOffset);

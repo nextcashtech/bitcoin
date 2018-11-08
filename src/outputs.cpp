@@ -7,6 +7,10 @@
  **************************************************************************/
 #include "outputs.hpp"
 
+#ifdef PROFILER_ON
+#include "profiler.hpp"
+#endif
+
 #include "distributed_vector.hpp"
 #include "info.hpp"
 #include "interpreter.hpp"
@@ -566,6 +570,22 @@ namespace BitCoin
         return result;
     }
 
+    uint8_t TransactionOutputPool::unspentStatus(const NextCash::Hash &pTransactionID, uint32_t pIndex)
+    {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_UNSPENT_STATUS_ID, PROFILER_OUTPUTS_UNSPENT_STATUS_NAME), true);
+#endif
+        if(!mIsValid)
+            return 0;
+
+        mLock.readLock();
+        SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
+        uint8_t result = subSet->unspentStatus(pTransactionID, pIndex);
+        mLock.readUnlock();
+        return result;
+    }
+
     bool TransactionOutputPool::spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
       uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent)
     {
@@ -601,7 +621,7 @@ namespace BitCoin
         return result;
     }
 
-    bool TransactionOutputPool::exists(const NextCash::Hash &pTransactionID)
+    bool TransactionOutputPool::exists(const NextCash::Hash &pTransactionID, bool pPullIfNeeded)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -612,7 +632,7 @@ namespace BitCoin
 
         mLock.readLock();
         SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
-        bool result = subSet->exists(pTransactionID);
+        bool result = subSet->exists(pTransactionID, pPullIfNeeded);
         mLock.readUnlock();
         return result;
     }
@@ -1074,6 +1094,33 @@ namespace BitCoin
         return result;
     }
 
+    uint8_t TransactionOutputPool::SubSet::unspentStatus(const NextCash::Hash &pTransactionID,
+      uint32_t pIndex)
+    {
+        mLock.lock();
+
+        uint8_t result = 0;
+        SubSetIterator item = mCache.get(pTransactionID);
+        if(item == mCache.end() && pull(pTransactionID))
+            item = mCache.get(pTransactionID);
+
+        while(item != mCache.end() && item.hash() == pTransactionID)
+        {
+            if(!(*item)->markedRemove())
+            {
+                result |= UNSPENT_STATUS_EXISTS;
+                if((*item)->isUnspent(pIndex))
+                    result |= UNSPENT_STATUS_UNSPENT;
+                break;
+            }
+
+            ++item;
+        }
+
+        mLock.unlock();
+        return result;
+    }
+
     bool TransactionOutputPool::SubSet::spend(const NextCash::Hash &pTransactionID,
       uint32_t pIndex, uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight,
       bool pRequireUnspent)
@@ -1167,13 +1214,13 @@ namespace BitCoin
         return result;
     }
 
-    bool TransactionOutputPool::SubSet::exists(const NextCash::Hash &pTransactionID)
+    bool TransactionOutputPool::SubSet::exists(const NextCash::Hash &pTransactionID, bool pPullIfNeeded)
     {
         mLock.lock();
 
         bool result = false;
         SubSetIterator item = mCache.get(pTransactionID);
-        if(item == mCache.end() && pull(pTransactionID))
+        if(item == mCache.end() && pPullIfNeeded && pull(pTransactionID))
             item = mCache.get(pTransactionID);
 
         while(item != mCache.end() && item.hash() == pTransactionID)
@@ -1391,6 +1438,10 @@ namespace BitCoin
       NextCash::InputStream *pIndexFile, NextCash::InputStream *pDataFile,
       NextCash::stream_size &pBegin, NextCash::stream_size &pEnd)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_OUTPUTS_SAMPLE_ID, PROFILER_OUTPUTS_SAMPLE_NAME), true);
+#endif
         // Check first entry
         SampleEntry *sample = mSamples;
         if(!sample->load(pIndexFile, pDataFile))

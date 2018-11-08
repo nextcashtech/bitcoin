@@ -36,10 +36,10 @@ namespace BitCoin
     class HashInfo
     {
     public:
-        HashInfo(const NextCash::Hash &pHash, int pBlockHeight)
+        HashInfo(const NextCash::Hash &pHash, int pHeight)
         {
             hash   = pHash;
-            height = pBlockHeight;
+            height = pHeight;
         }
 
         NextCash::Hash hash;
@@ -167,8 +167,8 @@ namespace BitCoin
     {
     public:
 
-        Branch(unsigned int pBlockHeight, const NextCash::Hash &pWork) : accumulatedWork(pWork)
-          { height = pBlockHeight; }
+        Branch(unsigned int pHeight, const NextCash::Hash &pWork) : accumulatedWork(pWork)
+          { height = pHeight; }
         ~Branch();
 
         void addBlock(Block *pBlock)
@@ -189,6 +189,8 @@ namespace BitCoin
     class Chain
     {
     public:
+
+        static const uint32_t INVALID_HEIGHT = 0xffffffff;
 
         Chain();
         ~Chain();
@@ -300,24 +302,24 @@ namespace BitCoin
           const NextCash::Hash &pStoppingHash, unsigned int pCount);
 
         // Get block or hash at specific height
-        bool getHash(unsigned int pBlockHeight, NextCash::Hash &pHash);
-        bool getBlock(unsigned int pBlockHeight, Block &pBlock);
-        bool getHeader(unsigned int pBlockHeight, Header &pHeader);
+        bool getHash(unsigned int pHeight, NextCash::Hash &pHash);
+        bool getBlock(unsigned int pHeight, Block &pBlock);
+        bool getHeader(unsigned int pHeight, Header &pHeader);
 
-        // Returns 0xffffffff when hash is not found
+        // Returns INVALID_HEIGHT when hash is not found
         unsigned int hashHeight(const NextCash::Hash &pHash);
 
         bool getBlock(const NextCash::Hash &pHash, Block &pBlock);
         bool getHeader(const NextCash::Hash &pHash, Header &pHeader);
 
-        int32_t version(unsigned int pBlockHeight);
-        Time time(unsigned int pBlockHeight);
-        uint32_t targetBits(unsigned int pBlockHeight);
-        NextCash::Hash accumulatedWork(unsigned int pBlockHeight);
+        int32_t version(unsigned int pHeight);
+        Time time(unsigned int pHeight);
+        uint32_t targetBits(unsigned int pHeight);
+        NextCash::Hash accumulatedWork(unsigned int pHeight);
 
-        Time getMedianPastTime(unsigned int pBlockHeight, unsigned int pMedianCount);
+        Time getMedianPastTime(unsigned int pHeight, unsigned int pMedianCount);
 
-        void getMedianPastTimeAndWork(unsigned int pBlockHeight, Time &pTime,
+        void getMedianPastTimeAndWork(unsigned int pHeight, Time &pTime,
           NextCash::Hash &pAccumulatedWork, unsigned int pMedianCount);
 
         // Return height of last block before specified time.
@@ -421,7 +423,7 @@ namespace BitCoin
 
         Forks mForks; // Info about soft and hard fork states.
 
-        BlockStat *blockStat(unsigned int pBlockHeight); // Get block stat for height.
+        BlockStat *blockStat(unsigned int pHeight); // Get block stat for height.
         void addBlockStat(int32_t pVersion, Time pTime, uint32_t pTargetBits);
         void revertLastBlockStat();
         void clearBlockStats();

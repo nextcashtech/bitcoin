@@ -31,7 +31,6 @@ namespace BitCoin
         {
             index = 0xffffffff;
             output = NULL;
-            signatureStatus = 0;
             confirmations = 0xffffffff;
         }
         Outpoint(const NextCash::Hash &pTransactionID, uint32_t pIndex)
@@ -39,7 +38,6 @@ namespace BitCoin
             transactionID = pTransactionID;
             index = pIndex;
             output = NULL;
-            signatureStatus = 0;
             confirmations = 0xffffffff;
         }
         Outpoint(const Outpoint &pCopy) : transactionID(pCopy.transactionID)
@@ -49,10 +47,10 @@ namespace BitCoin
                 output = NULL;
             else
                 output = new Output(*pCopy.output);
-            signatureStatus = pCopy.signatureStatus;
             confirmations = pCopy.confirmations;
         }
         ~Outpoint() { if(output != NULL) delete output; }
+
         Outpoint &operator = (const Outpoint &pRight)
         {
             transactionID = pRight.transactionID;
@@ -63,7 +61,6 @@ namespace BitCoin
                 output = NULL;
             else
                 output = new Output(*pRight.output);
-            signatureStatus = pRight.signatureStatus;
             confirmations = pRight.confirmations;
             return *this;
         }
@@ -81,12 +78,7 @@ namespace BitCoin
         NextCash::Hash transactionID; // Double SHA256 of signed transaction that paid the input of this transaction.
         uint32_t index;
 
-        // Verification data
         Output *output;
-
-        static const uint8_t CHECKED  = 0x01;
-        static const uint8_t VERIFIED = 0x02;
-        uint8_t signatureStatus;
 
         uint32_t confirmations; // 0xffffffff means not specified
 
@@ -101,16 +93,18 @@ namespace BitCoin
         static const uint32_t SEQUENCE_TYPE          = 1 << 22; // Determines time or block height
         static const uint32_t SEQUENCE_LOCKTIME_MASK = 0x0000ffff;
 
-        Input() { sequence = SEQUENCE_NONE; }
+        Input() { sequence = SEQUENCE_NONE; signatureStatus = 0; }
         Input(const Input &pCopy) : outpoint(pCopy.outpoint), script(pCopy.script)
         {
             sequence = pCopy.sequence;
+            signatureStatus = pCopy.signatureStatus;
         }
         Input &operator = (const Input &pRight)
         {
             outpoint = pRight.outpoint;
             script = pRight.script;
             sequence = pRight.sequence;
+            signatureStatus = pRight.signatureStatus;
             return *this;
         }
 
@@ -139,6 +133,9 @@ namespace BitCoin
         // BIP-0068 Minimum time/blocks since outpoint creation before this transaction is valid
         uint32_t sequence;
 
+        static const uint8_t CHECKED  = 0x01;
+        static const uint8_t VERIFIED = 0x02;
+        uint8_t signatureStatus;
     };
 
     class Transaction;
@@ -152,6 +149,9 @@ namespace BitCoin
         Transaction *getSorted(const NextCash::Hash &pHash);
         bool insertSorted(Transaction *pTransaction);
         bool removeSorted(const NextCash::Hash &pHash);
+
+        Transaction *getAndRemoveSorted(const NextCash::Hash &pHash);
+        Transaction *getAndRemoveAt(unsigned int pOffset);
 
         void clear();
         void clearNoDelete();
@@ -190,15 +190,25 @@ namespace BitCoin
         // pCalculateHash will calculate the hash of the transaction data while it reads it
         bool read(NextCash::InputStream *pStream, bool pCalculateHash = true);
 
-        // Skip over transaction in stream (The input stream's read offset must be at the beginning of a transaction)
+        // Skip over transaction in stream (The input stream's read offset must be at the beginning
+        //   of a transaction)
         static bool skip(NextCash::InputStream *pStream);
 
-        // Read the script of the output at the specified offset (The input stream's read offset must be at the beginning of a transaction)
+        // Read the script of the output at the specified offset (The input stream's read offset
+        //   must be at the beginning of a transaction)
         static bool readOutput(NextCash::InputStream *pStream, unsigned int pOutputIndex,
           NextCash::Hash &pTransactionID, Output &pOutput);
 
         void clear();
         void clearCache();
+
+        // Pull precomputed data from another matching transaction.
+        void pullPrecomputed(Transaction &pMatchingTransaction)
+        {
+            mFee = pMatchingTransaction.mFee;
+            mStatus = pMatchingTransaction.mStatus;
+            mTime = pMatchingTransaction.mTime;
+        }
 
         // Print human readable version to log
         void print(const Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
@@ -235,16 +245,16 @@ namespace BitCoin
         static const uint8_t IS_VALID        = 0x02; // Basic format validity
         static const uint8_t IS_STANDARD     = 0x04; // Is a "standard" transaction
         static const uint8_t OUTPOINTS_FOUND = 0x08; // Has valid outpoints
-        static const uint8_t OUTPOINTS_SPENT = 0x10; // Outpoint already spent
-        static const uint8_t SIGS_VERIFIED   = 0x20; // Has valid signatures
+        static const uint8_t SIGS_VERIFIED   = 0x10; // Has valid signatures
+        static const uint8_t DUP_CHECKED     = 0x20; // Duplicate ID has been checked for
 
         // Flag checking operations
         uint8_t status() const { return mStatus; }
         bool wasChecked() const { return mStatus & WAS_CHECKED; }
         bool isValid() const { return mStatus & IS_VALID; }
         bool isStandard() const { return mStatus & IS_STANDARD; }
-        bool hasOutpoints() const { return mStatus & OUTPOINTS_FOUND; }
-        bool isVerfied() const { return mStatus & SIGS_VERIFIED; }
+        bool outpointsFound() const { return mStatus & OUTPOINTS_FOUND; }
+        bool isVerified() const { return mStatus & (IS_VALID | SIGS_VERIFIED | OUTPOINTS_FOUND); }
 
         // Flag masks
         static const uint8_t STANDARD_VERIFIED_MASK = IS_VALID | IS_STANDARD | SIGS_VERIFIED;
@@ -269,18 +279,11 @@ namespace BitCoin
         int sign(uint64_t pInputAmount, double pFeeRate, uint64_t pSendAmount,
           int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, const Forks &pForks);
 
-        bool process(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight,
-          bool pCoinBase, int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
+        // Check validity
+        void check(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight, bool pCoinBase,
+          int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
           std::vector<unsigned int> &pSpentAges, NextCash::Timer &pCheckDupTime,
           NextCash::Timer &pOutputLookupTime, NextCash::Timer &pSignatureTime);
-
-        // Check validity and return status
-        bool check(Chain *pChain, TransactionList &pMemPoolTransactions,
-          NextCash::HashList &pOutpointsNeeded, int32_t pBlockVersion, unsigned int pHeight);
-
-        // Check that none of the outpoints are spent and return status
-        uint8_t checkOutpoints(TransactionOutputPool &pOutputs,
-          TransactionList &pMemPoolTransactions);
 
         bool updateOutputs(Chain *pChain, uint64_t pHeight, bool pCoinBase,
           NextCash::Mutex &pSpentAgeLock, std::vector<unsigned int> &pSpentAges);

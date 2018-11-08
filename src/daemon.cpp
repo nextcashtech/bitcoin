@@ -790,36 +790,6 @@ namespace BitCoin
         mKeysSynchronized = mKeyStore.allAreSynchronized();
     }
 
-    bool checkSignature(Transaction &pTransaction, Monitor &pMonitor,
-      std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd,
-      Chain *pChain)
-    {
-        std::vector<Monitor::RelatedTransactionData> relatedTransactions;
-        std::vector<unsigned int> spentAges;
-
-        pMonitor.getTransactions(pChainKeyBegin, pChainKeyEnd, relatedTransactions, true);
-
-        std::vector<Transaction *> transactions;
-        for(std::vector<Monitor::RelatedTransactionData>::iterator trans =
-          relatedTransactions.begin(); trans != relatedTransactions.end(); ++trans)
-            transactions.push_back(&trans->transaction);
-
-        pTransaction.clearCache();
-
-        TransactionList tempMemPool;
-        NextCash::HashList outpoints;
-        if(!pTransaction.check(pChain, tempMemPool, outpoints,
-          pChain->forks().requiredBlockVersion(pChain->forks().height()),
-          pChain->forks().height()))
-        {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
-              "Failed to process transaction");
-            return false;
-        }
-
-        return true;
-    }
-
     int estimatedStandardFee(int pInputCount, int pOutputCount, double pFeeRate)
     {
         // P2PKH/P2SH input size
@@ -947,14 +917,7 @@ namespace BitCoin
 
         Transaction *newTransaction = new Transaction(*transaction);
 
-        // Verify Transaction
-        if(!checkSignature(*newTransaction, mMonitor, chainKeys->begin(), chainKeys->end(),
-          &mChain))
-        {
-            delete transaction;
-            delete newTransaction;
-            return 1;
-        }
+        // TODO Add transaction verification
 
         // Add to monitor
         mMonitor.addTransactionAnnouncement(transaction->hash, 0);
@@ -1099,14 +1062,7 @@ namespace BitCoin
 
         Transaction *newTransaction = new Transaction(*transaction);
 
-        // Verify Transaction
-        if(!checkSignature(*newTransaction, mMonitor, chainKeys->begin(), chainKeys->end(),
-          &mChain))
-        {
-            delete transaction;
-            delete newTransaction;
-            return 1;
-        }
+        // TODO Add transaction verification
 
         // Add to monitor
         mMonitor.addTransactionAnnouncement(transaction->hash, 0);
@@ -1343,77 +1299,6 @@ namespace BitCoin
             else
                 ++node;
         std::random_shuffle(pNodeList.begin(), pNodeList.end()); // Sort Randomly
-    }
-
-    void Daemon::sendTransactionRequests()
-    {
-        NextCash::HashList transactionsToRequest;
-
-        mChain.memPool().getNeeded(transactionsToRequest);
-
-        if(transactionsToRequest.size() == 0)
-            return;
-
-        mNodeLock.readLock();
-
-        if(mNodes.size() == 0)
-        {
-            mNodeLock.readUnlock();
-            return;
-        }
-
-        std::vector<Node *> nodes = mNodes; // Copy list of nodes
-        randomizeOutgoing(nodes);
-
-        if(nodes.size() == 0)
-        {
-            mNodeLock.readUnlock();
-            return;
-        }
-
-        NodeRequests *nodeRequests = new NodeRequests[nodes.size()];
-        NodeRequests *nodeRequest;
-        unsigned int i;
-
-        // Assign nodes
-        nodeRequest = nodeRequests;
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if((*node)->isReady())
-            {
-                nodeRequest->node = *node;
-                ++nodeRequest;
-            }
-
-        // Try to find nodes that have the transactions
-        bool found;
-        for(NextCash::HashList::iterator hash=transactionsToRequest.begin();hash!=transactionsToRequest.end();++hash)
-        {
-            found = false;
-            nodeRequest = nodeRequests;
-            for(i=0;i<nodes.size();++i)
-            {
-                if(nodeRequest->node->hasTransaction(*hash))
-                {
-                    nodeRequest->list.push_back(*hash);
-                    found = true;
-                }
-                ++nodeRequest;
-            }
-
-            if(!found) // Add to first node
-                nodeRequests->list.push_back(*hash);
-        }
-
-        // Send requests to nodes
-        nodeRequest = nodeRequests;
-        for(i=0;i<nodes.size();++i)
-        {
-            nodeRequest->node->requestTransactions(nodeRequest->list);
-            ++nodeRequest;
-        }
-
-        delete[] nodeRequests;
-        mNodeLock.readUnlock();
     }
 
     void Daemon::sendHeaderRequest()
@@ -1738,14 +1623,16 @@ namespace BitCoin
         if(transactionList.size() > 0)
         {
             mNodeLock.readLock();
-            for(NextCash::HashList::iterator hash=transactionList.begin();hash!=transactionList.end();++hash)
+            for(NextCash::HashList::iterator hash = transactionList.begin();
+              hash != transactionList.end(); ++hash)
             {
-                transaction = mChain.memPool().get(*hash);
+                transaction = mChain.memPool().getTransaction(*hash, 0);
                 if(transaction != NULL)
                 {
                     // Announce to all nodes
                     for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                         (*node)->announceTransaction(transaction);
+                    mChain.memPool().releaseTransaction(*hash, 0);
                 }
             }
             mNodeLock.readUnlock();
@@ -1864,7 +1751,6 @@ namespace BitCoin
         Time lastRequestCheckTime = startTime;
         Time lastInfoSaveTime = startTime;
         Time lastImprovement = startTime;
-        Time lastTransactionRequest = startTime;
         Time lastTransactionTransmit = startTime;
         Time time;
 #ifdef PROFILER_ON
@@ -1952,15 +1838,6 @@ namespace BitCoin
                     sendHeaderRequest();
                 if(mChain.blocksNeeded())
                     sendRequests();
-                if(!mInfo.spvMode)
-                {
-                    time = getTime();
-                    if(time - lastTransactionRequest > 20)
-                    {
-                        lastTransactionRequest = time;
-                        sendTransactionRequests();
-                    }
-                }
             }
 
             time = getTime();
@@ -2089,7 +1966,7 @@ namespace BitCoin
 
             if(getTime() - mLastMemPoolCheckPending > 20)
             {
-                mChain.memPool().checkPendingTransactions(&mChain, mInfo.minFee);
+                mChain.memPool().checkPending(&mChain, mInfo.minFee);
                 mLastMemPoolCheckPending = getTime();
             }
 
