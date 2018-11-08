@@ -209,7 +209,7 @@ namespace BitCoin
 
                 // Double check outpoints and then insert.
                 // They could have been spent since they were checked without a full lock.
-                inserted = checkOutpoints(transaction, pChain) && insert(transaction, true);
+                inserted = !outpointExists(transaction) && insert(transaction, true);
 
                 mLock.writeUnlock();
 
@@ -237,6 +237,10 @@ namespace BitCoin
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
           PROFILER_MEMPOOL_ADD_ID, PROFILER_MEMPOOL_ADD_NAME), true);
+
+        NextCash::Profiler profilerMB = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_MEMPOOL_ADD_B_ID, PROFILER_MEMPOOL_ADD_B_NAME);
+        profilerMB.addHits(pTransaction->size());
 #endif
         if(pChain->outputs().exists(pTransaction->hash))
         {
@@ -315,16 +319,6 @@ namespace BitCoin
         if(outpointExists(pTransaction))
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
-              "Transaction has double spend from mempool : %s", pTransaction->hash.hex().text());
-            mLock.writeUnlock();
-            return DOUBLE_SPEND;
-        }
-
-        // Double check outpoints.
-        // They could have been spent since they were checked without a full lock.
-        if(!checkOutpoints(pTransaction, pChain))
-        {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
               "Transaction has double spend : %s", pTransaction->hash.hex().text());
             mLock.writeUnlock();
             return DOUBLE_SPEND;
@@ -356,36 +350,14 @@ namespace BitCoin
         return INVALID;
     }
 
-    bool MemPool::checkOutpoints(Transaction *pTransaction, Chain *pChain)
+    unsigned int MemPool::pull(std::vector<Transaction *> &pTransactions)
     {
-        Transaction *outpointTransaction;
-        for(std::vector<Input>::iterator input = pTransaction->inputs.begin();
-          input != pTransaction->inputs.end(); ++input)
-        {
-            if(pChain->outputs().isUnspent(input->outpoint.transactionID, input->outpoint.index))
-                continue;
-
-            outpointTransaction = mTransactions.getSorted(input->outpoint.transactionID);
-            if(outpointTransaction == NULL ||
-              outpointTransaction->outputs.size() <= input->outpoint.index)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Attempted double spend on index %d : %s", input->outpoint.index,
-                  input->outpoint.transactionID.hex().text());
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    void MemPool::pull(std::vector<Transaction *> &pTransactions)
-    {
-        mLock.writeLock("Remove");
+        mLock.writeLock("Pull");
 
         Transaction *matchingTransaction;
         unsigned int previousSize = mSize;
         unsigned int previousCount = mTransactions.size() + mPendingTransactions.size();
+        unsigned int result = 0;
 
         for(std::vector<Transaction *>::const_iterator transaction = pTransactions.begin();
           transaction != pTransactions.end(); ++transaction)
@@ -397,6 +369,7 @@ namespace BitCoin
 
             if(matchingTransaction != NULL)
             {
+                ++result;
                 (*transaction)->pullPrecomputed(*matchingTransaction);
                 mSize -= matchingTransaction->size();
                 if(!addIfLockedByNode(matchingTransaction))
@@ -408,22 +381,27 @@ namespace BitCoin
         {
             if(Info::instance().initialBlockDownloadIsComplete())
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Mem pool not reduced. %d trans, %d KB",
+                  "Not reduced. %d trans, %d KB",
                   mTransactions.size() + mPendingTransactions.size(), mSize / 1000);
         }
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Mem pool reduced by %d trans, %d KB, %d%% to %d trans, %d KB",
+              "Reduced by %d trans, %d KB, %d%% to %d trans, %d KB",
               previousCount - (mTransactions.size() + mPendingTransactions.size()),
               (previousSize - mSize) / 1000, (int)(((float)(previousSize - mSize) /
               (float)previousSize) * 100.0f), mTransactions.size() + mPendingTransactions.size(),
               mSize / 1000);
 
-        mLock.writeUnlock();
+        // Intenionally leave locked while block processes.
+        mLock.writeUnlock(); // TODO Make function to convert write lock to read lock.
+        mLock.readLock();
+        return result;
     }
 
     void MemPool::revert(const std::vector<Transaction *> &pTransactions)
     {
+        // Should already be locked while block was processing.
+        mLock.readUnlock();
         mLock.writeLock("Revert");
 
         unsigned int previousSize = mSize;
@@ -440,17 +418,64 @@ namespace BitCoin
 
         if((mTransactions.size() + mPendingTransactions.size()) == previousCount)
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Mem pool not increased reverting block. %d trans, %d KB",
+              "Not increased reverting block. %d trans, %d KB",
               mTransactions.size() + mPendingTransactions.size(), mSize / 1000);
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Mem pool increased reverting block by %d trans, %d KB, %d%% to %d trans, %d KB",
+              "Increased reverting block by %d trans, %d KB, %d%% to %d trans, %d KB",
               (mTransactions.size() + mPendingTransactions.size()) - previousCount,
               (mSize - previousSize) / 1000, (int)(((float)(mSize - previousSize) /
               (float)mSize) * 100.0f), mTransactions.size() + mPendingTransactions.size(),
               mSize / 1000);
 
         mLock.writeUnlock();
+    }
+
+    void MemPool::finalize(Chain *pChain)
+    {
+        mLock.readUnlock();
+        mLock.writeLock("Finalize");
+
+        bool spentFound;
+        unsigned int index;
+        unsigned int removedCount = 0;
+        uint64_t removedSize = 0L;
+        for(TransactionList::iterator transaction = mTransactions.begin();
+          transaction != mTransactions.end();)
+        {
+            spentFound = false;
+            index = 0;
+            for(std::vector<Input>::iterator input = (*transaction)->inputs.begin();
+              input != (*transaction)->inputs.end(); ++input, ++index)
+                if(!pChain->outputs().isUnspent(input->outpoint.transactionID,
+                  input->outpoint.index) && !outputExists(input->outpoint.transactionID,
+                  input->outpoint.index))
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                      "Removing double spend trans : %s", (*transaction)->hash.hex().text());
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                      "Double spent index %d : %s", index,
+                      input->outpoint.transactionID.hex().text());
+                    spentFound = true;
+                    break;
+                }
+
+            if(spentFound)
+            {
+                ++removedCount;
+                mSize -= (*transaction)->size();
+                removedSize += (*transaction)->size();
+                transaction = mTransactions.erase(transaction);
+            }
+            else
+                ++transaction;
+        }
+
+        mLock.writeUnlock();
+
+        if(removedCount > 0)
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Finalizing removed %d trans, %d KB", removedCount, removedSize / 1000);
     }
 
     bool MemPool::insert(Transaction *pTransaction, bool pAnnounce)
@@ -501,6 +526,16 @@ namespace BitCoin
                   otherInput != pTransaction->inputs.end(); ++otherInput)
                     if(input->outpoint == otherInput->outpoint)
                         return true;
+        return false;
+    }
+
+    bool MemPool::outputExists(const NextCash::Hash &pTransactionID, unsigned int pIndex)
+    {
+        for(TransactionList::iterator trans = mTransactions.begin(); trans != mTransactions.end();
+          ++trans)
+            if(pTransactionID == (*trans)->hash)
+                return pIndex < (*trans)->outputs.size();
+
         return false;
     }
 

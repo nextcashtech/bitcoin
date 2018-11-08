@@ -61,10 +61,16 @@ namespace BitCoin
         AddStatus add(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain);
 
         // Pull transactions that have been added to a block from the mempool.
-        void pull(std::vector<Transaction *> &pTransactions);
+        // Locks mempool while the block is being processed.
+        unsigned int pull(std::vector<Transaction *> &pTransactions);
 
         // Add transactions back in to mempool for a block that is being reverted.
+        // Unlocks the mempool since block is no longer processing.
         void revert(const std::vector<Transaction *> &pTransactions);
+
+        // Remove any transactions whose inputs were spent by the block.
+        // Unlocks the mempool since the block is finished processing.
+        void finalize(Chain *pChain);
 
         Transaction *getTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
         void releaseTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
@@ -104,12 +110,12 @@ namespace BitCoin
         // Checks transaction validity.
         void check(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain);
 
-        // Double check that all outpoints are still unspent.
-        bool checkOutpoints(Transaction *pTransaction, Chain *pChain);
-
         // Return true if any of the transactions outpoints are shared with any transaction in the
         //   mempool
         bool outpointExists(Transaction *pTransaction);
+
+        // Return true if this identifies an output in the mempool.
+        bool outputExists(const NextCash::Hash &pTransactionID, unsigned int pIndex);
 
         NextCash::ReadersLock mLock;
         NextCash::stream_size mSize; // Size in bytes of all transactions in mempool

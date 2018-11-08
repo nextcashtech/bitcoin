@@ -1180,7 +1180,7 @@ namespace BitCoin
 
         // Pull status (precomputed data) from mempool.
         // Remove confirmed transactions from mempool.
-        mMemPool.pull(pBlock.transactions);
+        unsigned int pullCount = mMemPool.pull(pBlock.transactions);
 
         NextCash::Timer timer(true);
         bool success = true, fullyValidated = true;
@@ -1227,15 +1227,12 @@ namespace BitCoin
 
         if(!success)
         {
+            mMemPool.revert(pBlock.transactions);
             mOutputs.revert(pBlock.transactions, mNextBlockHeight);
             revert(mNextBlockHeight - 1);
             mProcessMutex.unlock();
             return false;
         }
-
-#ifndef DISABLE_ADDRESSES
-        mAddresses.add(pBlock.transactions, mNextBlockHeight); // Update address database
-#endif
 
         // Add the block to the chain
         if(!Block::add(mNextBlockHeight, pBlock))
@@ -1250,6 +1247,12 @@ namespace BitCoin
             return false;
         }
 
+        mMemPool.finalize(this);
+
+#ifndef DISABLE_ADDRESSES
+        mAddresses.add(pBlock.transactions, mNextBlockHeight); // Update address database
+#endif
+
         ++mNextBlockHeight;
 
         mProcessMutex.unlock();
@@ -1257,10 +1260,17 @@ namespace BitCoin
         timer.stop();
 
         if(fullyValidated)
+        {
+            unsigned int convertedPercent = 100;
+            if(pBlock.transactions.size() > 1)
+                convertedPercent = (unsigned int)(((double)pullCount /
+                  (double)(pBlock.transactions.size() - 1)) * 100.0);
+
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added validated block (%d) (%d trans) (%d KB) (%d ms) : %s",
+              "Added validated block (%d) (%d trans) (%d KB) (%d ms) (%d%% conv) : %s",
               mNextBlockHeight - 1, pBlock.transactions.size(), pBlock.size() / 1000,
-              timer.milliseconds(), pBlock.header.hash.hex().text());
+              timer.milliseconds(), convertedPercent, pBlock.header.hash.hex().text());
+        }
         else
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Added approved block (%d) (%d trans) (%d KB) (%d ms) : %s",
