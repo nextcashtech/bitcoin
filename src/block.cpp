@@ -657,6 +657,12 @@ namespace BitCoin
 
     void Block::processThreadRun(void *pParameter)
     {
+#ifdef PROFILER_ON
+        NextCash::Profiler &profiler = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_PROCESS_ID, PROFILER_BLOCK_PROCESS_NAME);
+        NextCash::Timer profilerTimer(true);
+#endif
+
         ProcessThreadData *data = (ProcessThreadData *)pParameter;
         if(data == NULL)
         {
@@ -700,11 +706,22 @@ namespace BitCoin
         data->sigTime += sigTime.microseconds();
         data->fullTime += fullTime.microseconds();
         data->timeLock.unlock();
+
+#ifdef PROFILER_ON
+        profilerTimer.stop();
+        profiler.addTime(profilerTimer.microseconds());
+#endif
     }
 
     bool Block::processMultiThreaded(Chain *pChain, unsigned int pHeight,
       unsigned int pThreadCount)
     {
+#ifdef PROFILER_ON
+        NextCash::Profiler &profiler = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_PROCESS_ID, PROFILER_BLOCK_PROCESS_NAME);
+        profiler.addHits(size());
+#endif
+
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block %d (multi-threaded) (%d trans) (%d KB) : %s", pHeight,
           transactions.size(), size() / 1000, header.hash.hex().text());
@@ -836,6 +853,13 @@ namespace BitCoin
 
     bool Block::processSingleThreaded(Chain *pChain, unsigned int pHeight)
     {
+#ifdef PROFILER_ON
+        NextCash::Profiler &profiler = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_PROCESS_ID, PROFILER_BLOCK_PROCESS_NAME);
+        profiler.addHits(size() - 1); // One hit (byte) will be added by reference.
+        NextCash::ProfilerReference profilerRef(profiler, true);
+#endif
+
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block %d (%d trans) (%d KB) : %s", pHeight,
           transactions.size(), size() / 1000, header.hash.hex().text());
