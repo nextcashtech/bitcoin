@@ -1336,6 +1336,31 @@ namespace BitCoin
         mNodeLock.readUnlock();
     }
 
+    void Daemon::sendTransactionRequests()
+    {
+        NextCash::HashList transactionHashes;
+        mChain.memPool().getNeededHashes(transactionHashes, 0);
+
+        if(transactionHashes.size() == 0)
+            return;
+
+        mNodeLock.readLock();
+        std::vector<Node *> nodes = mNodes; // Copy list of nodes
+        randomizeOutgoing(nodes);
+
+        if(nodes.size() == 0)
+        {
+            mNodeLock.readUnlock();
+            return;
+        }
+
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+          "Re-requesting %d transactions", transactionHashes.size());
+        nodes.front()->requestTransactions(transactionHashes);
+
+        mNodeLock.readUnlock();
+    }
+
     void Daemon::checkSync()
     {
         // Latest header older than 3 hours.
@@ -1751,6 +1776,7 @@ namespace BitCoin
         Time lastRequestCheckTime = startTime;
         Time lastInfoSaveTime = startTime;
         Time lastImprovement = startTime;
+        Time lastTransactionRequest = startTime;
         Time lastTransactionTransmit = startTime;
         Time time;
 #ifdef PROFILER_ON
@@ -1838,6 +1864,11 @@ namespace BitCoin
                     sendHeaderRequest();
                 if(mChain.blocksNeeded())
                     sendRequests();
+                if(getTime() - lastTransactionRequest > 2)
+                {
+                    sendTransactionRequests();
+                    lastTransactionRequest = getTime();
+                }
             }
 
             time = getTime();

@@ -232,6 +232,7 @@ namespace BitCoin
             mMonitor->release(mID);
         mBlockRequestMutex.lock();
         mChain->releaseBlocksForNode(mID);
+        mChain->memPool().release(mID);
         mBlocksRequested.clear();
         mHeaderRequested.clear();
         mBlockRequestMutex.unlock();
@@ -1766,7 +1767,7 @@ namespace BitCoin
 
                             if(!info.spvMode)
                             {
-                                switch(mChain->memPool().hashStatus(mChain, (*item)->hash))
+                                switch(mChain->memPool().hashStatus(mChain, (*item)->hash, mID))
                                 {
                                 case MemPool::HASH_NEED:
                                     transactionList.push_back((*item)->hash);

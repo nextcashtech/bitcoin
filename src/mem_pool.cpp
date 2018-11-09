@@ -19,7 +19,8 @@
 
 namespace BitCoin
 {
-    MemPool::MemPool() : mLock("MemPool"), mNodeLock("MemPool Nodes")
+    MemPool::MemPool() : mRequestedHashesLock("RequestedHashes"), mLock("MemPool"),
+      mNodeLock("MemPool Nodes")
     {
         mSize = 0;
     }
@@ -29,7 +30,112 @@ namespace BitCoin
         mLock.writeLock("Destroy");
     }
 
-    MemPool::HashStatus MemPool::hashStatus(Chain *pChain, const NextCash::Hash &pHash)
+    bool MemPool::isRequested(const NextCash::Hash &pHash)
+    {
+        bool result = false;
+        mRequestedHashesLock.lock();
+        for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
+          hash != mRequestedHashes.end(); ++hash)
+            if(std::get<0>(*hash) == pHash)
+            {
+                result = true;
+                break;
+            }
+        mRequestedHashesLock.unlock();
+        return result;
+    }
+
+    bool MemPool::addRequested(const NextCash::Hash &pHash, unsigned int pNodeID)
+    {
+        bool result = false;
+        mRequestedHashesLock.lock();
+        bool found = false;
+        for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
+          hash != mRequestedHashes.end(); ++hash)
+            if(std::get<0>(*hash) == pHash)
+            {
+                if(pNodeID == std::get<1>(*hash))
+                    result = true;
+                else
+                {
+                    Time time = getTime();
+                    if(std::get<1>(*hash) == 0 || time - std::get<2>(*hash) > 1)
+                    {
+                        std::get<1>(*hash) = pNodeID;
+                        std::get<2>(*hash) = time;
+                        ++std::get<3>(*hash);
+                        result = true;
+                    }
+                }
+                found = true;
+                break;
+            }
+
+        if(!found)
+        {
+            mRequestedHashes.emplace_back(pHash, pNodeID, getTime(), 1);
+            result = true;
+        }
+        mRequestedHashesLock.unlock();
+        return result;
+    }
+
+    void MemPool::removeRequested(const NextCash::Hash &pHash)
+    {
+        mRequestedHashesLock.lock();
+        for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
+          hash != mRequestedHashes.end(); ++hash)
+            if(std::get<0>(*hash) == pHash)
+            {
+                mRequestedHashes.erase(hash);
+                break;
+            }
+        mRequestedHashesLock.unlock();
+    }
+
+    void MemPool::getNeededHashes(NextCash::HashList &pList, unsigned int pNodeID)
+    {
+        pList.clear();
+        Time time = getTime();
+        mRequestedHashesLock.lock();
+        for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
+          hash != mRequestedHashes.end();)
+        {
+            if(std::get<1>(*hash) == 0 || time - std::get<2>(*hash) > 2)
+            {
+                if(std::get<3>(*hash) > 2)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                      "Requested transaction failed %d times : %s", std::get<3>(*hash),
+                      std::get<0>(*hash).hex().text());
+                    hash = mRequestedHashes.erase(hash);
+                }
+                else
+                {
+                    std::get<1>(*hash) = pNodeID;
+                    std::get<2>(*hash) = time;
+                    pList.emplace_back(std::get<0>(*hash));
+                    ++hash;
+                }
+            }
+            else
+                ++hash;
+        }
+        mRequestedHashesLock.unlock();
+    }
+
+    void MemPool::release(unsigned int pNodeID)
+    {
+        mRequestedHashesLock.lock();
+        for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
+          hash != mRequestedHashes.end(); ++hash)
+            if(std::get<1>(*hash) == pNodeID)
+                std::get<1>(*hash) = 0;
+        mRequestedHashesLock.unlock();
+    }
+
+    MemPool::HashStatus MemPool::hashStatus(Chain *pChain, const NextCash::Hash &pHash,
+      unsigned int pNodeID)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -63,7 +169,19 @@ namespace BitCoin
             return HASH_ALREADY_HAVE;
         }
 
+        if(isRequested(pHash))
+        {
+            mLock.readUnlock();
+            return HASH_ALREADY_HAVE;
+        }
+
         if(pChain->outputs().exists(pHash, false))
+        {
+            mLock.readUnlock();
+            return HASH_ALREADY_HAVE;
+        }
+
+        if(!addRequested(pHash, pNodeID))
         {
             mLock.readUnlock();
             return HASH_ALREADY_HAVE;
@@ -234,6 +352,8 @@ namespace BitCoin
 
     MemPool::AddStatus MemPool::add(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain)
     {
+        removeRequested(pTransaction->hash);
+
         if(pChain->outputs().exists(pTransaction->hash))
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,

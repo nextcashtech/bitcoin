@@ -51,8 +51,15 @@ namespace BitCoin
         MemPool();
         ~MemPool();
 
-        enum HashStatus { HASH_NEED, HASH_ALREADY_HAVE, HASH_INVALID, HASH_LOW_FEE, HASH_NON_STANDARD };
-        HashStatus hashStatus(Chain *pChain, const NextCash::Hash &pHash);
+        enum HashStatus { HASH_NEED, HASH_ALREADY_HAVE, HASH_INVALID, HASH_LOW_FEE,
+          HASH_NON_STANDARD };
+        HashStatus hashStatus(Chain *pChain, const NextCash::Hash &pHash, unsigned int pNodeID);
+
+        // Return requested hashes that need to be requested again.
+        void getNeededHashes(NextCash::HashList &pList, unsigned int pNodeID);
+
+        // Release any requested hashes for this node.
+        void release(unsigned int pNodeID);
 
         // Add transaction to mem pool. Returns false if it was already in the mem pool or is
         //   invalid
@@ -106,6 +113,20 @@ namespace BitCoin
         void addInvalidHash(const NextCash::Hash &pHash);
         void addLowFeeHash(const NextCash::Hash &pHash);
         void addNonStandardHash(const NextCash::Hash &pHash);
+
+        // Trans ID, Node ID, Last request time, Request attempts
+        typedef std::tuple<NextCash::Hash, unsigned int, Time, unsigned int> RequestedHash;
+        NextCash::Mutex mRequestedHashesLock;
+        std::list<RequestedHash> mRequestedHashes;
+
+        bool isRequested(const NextCash::Hash &pHash);
+
+        // Adds hash to requested list with the node ID.
+        // Returns false if the hash is already in the list.
+        bool addRequested(const NextCash::Hash &pHash, unsigned int pNodeID);
+
+        // Remove hash from requested list.
+        void removeRequested(const NextCash::Hash &pHash);
 
         // Checks transaction validity.
         void check(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain);
