@@ -43,12 +43,12 @@
     static const char *PROFILER_INTERP_PROCESS_NAME __attribute__ ((unused)) = "Interpreter::process";
 
     static const unsigned int PROFILER_TRANS_READ_ID = 14;
-    static const char *PROFILER_TRANS_READ_NAME __attribute__ ((unused)) = "Transaction::read";
+    static const char *PROFILER_TRANS_READ_NAME __attribute__ ((unused)) = "Transaction::read (B)";
     static const unsigned int PROFILER_TRANS_WRITE_SIG_ID = 15;
     static const char *PROFILER_TRANS_WRITE_SIG_NAME __attribute__ ((unused)) = "Transaction::writeSigData";
 
     static const unsigned int PROFILER_BLOCK_READ_ID = 16;
-    static const char *PROFILER_BLOCK_READ_NAME __attribute__ ((unused)) = "Block::read";
+    static const char *PROFILER_BLOCK_READ_NAME __attribute__ ((unused)) = "Block::read (B)";
     static const unsigned int PROFILER_BLOCK_PROCESS_ID = 17;
     static const char *PROFILER_BLOCK_PROCESS_NAME __attribute__ ((unused)) = "Block::process (B)"; // hits are bytes
 

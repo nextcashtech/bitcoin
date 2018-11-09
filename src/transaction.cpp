@@ -1842,9 +1842,11 @@ namespace BitCoin
     bool Transaction::read(NextCash::InputStream *pStream, bool pCalculateHash)
     {
 #ifdef PROFILER_ON
-        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_TRANS_READ_ID, PROFILER_TRANS_READ_NAME), true);
+        NextCash::Profiler &profiler = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_TRANS_READ_ID, PROFILER_TRANS_READ_NAME);
+        NextCash::ProfilerReference profilerRef(profiler, true);
 #endif
+
         clear();
 
         NextCash::stream_size startOffset = pStream->readOffset();
@@ -1961,6 +1963,9 @@ namespace BitCoin
             delete digest;
 
         mSize = pStream->readOffset() - startOffset;
+#ifdef PROFILER_ON
+        profiler.addHits(size() - 1); // One hit (byte) will be added by reference.
+#endif
         return true;
     }
 

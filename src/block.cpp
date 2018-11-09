@@ -67,9 +67,11 @@ namespace BitCoin
     bool Block::read(NextCash::InputStream *pStream)
     {
 #ifdef PROFILER_ON
-        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_BLOCK_READ_ID, PROFILER_BLOCK_READ_NAME), true);
+        NextCash::Profiler &profiler = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_READ_ID, PROFILER_BLOCK_READ_NAME);
+        NextCash::ProfilerReference profilerRef(profiler, true);
 #endif
+
         NextCash::stream_size startOffset = pStream->readOffset();
         mSize = 0;
 
@@ -102,6 +104,9 @@ namespace BitCoin
         }
 
         mSize = pStream->readOffset() - startOffset;
+#ifdef PROFILER_ON
+        profiler.addHits(size() - 1); // One hit (byte) will be added by reference.
+#endif
         return true;
     }
 
