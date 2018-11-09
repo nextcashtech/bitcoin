@@ -234,14 +234,6 @@ namespace BitCoin
 
     MemPool::AddStatus MemPool::add(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain)
     {
-#ifdef PROFILER_ON
-        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_MEMPOOL_ADD_ID, PROFILER_MEMPOOL_ADD_NAME), true);
-
-        NextCash::Profiler profilerMB = NextCash::getProfiler(PROFILER_SET,
-          PROFILER_MEMPOOL_ADD_B_ID, PROFILER_MEMPOOL_ADD_B_NAME);
-        profilerMB.addHits(pTransaction->size());
-#endif
         if(pChain->outputs().exists(pTransaction->hash))
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
@@ -263,6 +255,15 @@ namespace BitCoin
         mValidatingTransactions.insertSorted(pTransaction->hash);
 
         mLock.writeUnlock();
+
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_MEMPOOL_ADD_ID, PROFILER_MEMPOOL_ADD_NAME), true);
+
+        NextCash::Profiler &profilerMB = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_MEMPOOL_ADD_B_ID, PROFILER_MEMPOOL_ADD_B_NAME);
+        profilerMB.addHits(pTransaction->size());
+#endif
 
         // Do this outside the lock because it is time consuming.
         check(pTransaction, pMinFeeRate, pChain);
