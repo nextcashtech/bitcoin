@@ -2148,7 +2148,7 @@ namespace BitCoin
             {
                 Message::NotFoundData *notFoundData = (Message::NotFoundData *)message;
                 for(Message::Inventory::iterator item = notFoundData->inventory.begin();
-                  item != notFoundData->inventory.end(); ++item)
+                  success && item != notFoundData->inventory.end(); ++item)
                 {
                     switch((*item)->type)
                     {
