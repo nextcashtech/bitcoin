@@ -141,6 +141,7 @@ namespace BitCoin
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
           PROFILER_MEMPOOL_STATUS_ID, PROFILER_MEMPOOL_STATUS_NAME), true);
 #endif
+
         mLock.readLock();
 
         if(mInvalidHashes.contains(pHash))
@@ -164,18 +165,6 @@ namespace BitCoin
         if(mTransactions.getSorted(pHash) != NULL ||
           mPendingTransactions.getSorted(pHash) != NULL ||
           mValidatingTransactions.containsSorted(pHash))
-        {
-            mLock.readUnlock();
-            return HASH_ALREADY_HAVE;
-        }
-
-        if(isRequested(pHash))
-        {
-            mLock.readUnlock();
-            return HASH_ALREADY_HAVE;
-        }
-
-        if(pChain->outputs().exists(pHash, false))
         {
             mLock.readUnlock();
             return HASH_ALREADY_HAVE;
@@ -354,27 +343,20 @@ namespace BitCoin
     {
         removeRequested(pTransaction->hash);
 
-        if(pChain->outputs().exists(pTransaction->hash))
-        {
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Transaction already confirmed : %s", pTransaction->hash.hex().text());
-            return ALREADY_HAVE;
-        }
-
-        mLock.writeLock("Add");
+        mLock.readLock();
 
         // Check that the transaction isn't already in the mempool
         if(mTransactions.getSorted(pTransaction->hash) != NULL ||
           mPendingTransactions.getSorted(pTransaction->hash) != NULL ||
           mValidatingTransactions.containsSorted(pTransaction->hash))
         {
-            mLock.writeUnlock();
+            mLock.readUnlock();
             return ALREADY_HAVE;
         }
 
         mValidatingTransactions.insertSorted(pTransaction->hash);
 
-        mLock.writeUnlock();
+        mLock.readUnlock();
 
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
