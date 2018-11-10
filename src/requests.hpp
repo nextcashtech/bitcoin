@@ -48,7 +48,7 @@ namespace BitCoin
 
         Chain *mChain;
 
-        int mPreviousStatisticsHeight;
+        unsigned int mPreviousStatisticsHeight;
         unsigned int mPreviousStatisticsHours;
         NextCash::Buffer mPreviousStatisticsResult;
 

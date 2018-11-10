@@ -779,4 +779,42 @@ namespace BitCoin
         expire();
         mLock.writeUnlock();
     }
+
+    void MemPool::getRequestData(MemPool::RequestData &pData, uint64_t pMinFeeRate)
+    {
+        pData.clear();
+
+        mLock.readLock();
+
+        pData.count = mTransactions.size();
+        pData.size = mSize;
+
+        uint64_t feeRate;
+
+        for(TransactionList::iterator transaction = mTransactions.begin();
+          transaction != mTransactions.end(); ++transaction)
+        {
+            feeRate = (*transaction)->feeRate();
+
+            if(feeRate == 0)
+                pData.zero += (*transaction)->size();
+            else if(feeRate < 1200)
+                pData.one += (*transaction)->size();
+            else if(feeRate < 2200)
+                pData.two += (*transaction)->size();
+            else if(feeRate < 5200)
+                pData.five += (*transaction)->size();
+            else if(feeRate < 10200)
+                pData.ten += (*transaction)->size();
+            else
+            {
+                pData.remainingSize += (*transaction)->size();
+                pData.remainingFee += (*transaction)->fee();
+            }
+        }
+
+        pData.minFee = pMinFeeRate;
+
+        mLock.readUnlock();
+    }
 }

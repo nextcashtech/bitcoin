@@ -96,6 +96,40 @@ namespace BitCoin
         unsigned int count() const { return mTransactions.size(); }
         unsigned int pendingCount() const { return mPendingTransactions.size(); }
 
+        // Request support
+        class RequestData
+        {
+        public:
+
+            unsigned int count; // Number of transactions
+            NextCash::stream_size size; // Size in bytes
+            NextCash::stream_size zero; // Zero fee
+            NextCash::stream_size one; // >0 < 1.2 sat/B
+            NextCash::stream_size two; // 1.2 - 2.2 sat/B
+            NextCash::stream_size five; // 2.2 - 5.2 sat/B
+            NextCash::stream_size ten; // 5.2 - 10.2 sat/B
+            NextCash::stream_size remainingSize; // Total size of remaining transactions
+            uint64_t remainingFee; // Total fee of remaining transactions
+            uint64_t minFee; // The minimum fee supported by the system
+
+            void clear()
+            {
+                count = 0;
+                size = 0L;
+                zero = 0L;
+                one = 0L;
+                two = 0L;
+                five = 0L;
+                ten = 0L;
+                remainingSize = 0L;
+                remainingFee = 0L;
+                minFee = 0L;
+            }
+
+        };
+
+        void getRequestData(RequestData &pData, uint64_t pMinFeeRate);
+
     private:
 
         bool insert(Transaction *pTransaction, bool pAnnounce);
