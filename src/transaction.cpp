@@ -846,6 +846,7 @@ namespace BitCoin
             }
         }
 
+#ifdef TRANS_ID_DUP_CHECK
         if(!(mStatus & DUP_CHECKED))
         {
             pCheckDupTime.start();
@@ -859,6 +860,7 @@ namespace BitCoin
         }
 
         mStatus |= DUP_CHECKED;
+#endif
 
         // Check inputs
         unsigned int index = 0;

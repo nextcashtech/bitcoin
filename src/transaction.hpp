@@ -246,7 +246,9 @@ namespace BitCoin
         static const uint8_t IS_STANDARD     = 0x04; // Is a "standard" transaction
         static const uint8_t OUTPOINTS_FOUND = 0x08; // Has valid outpoints
         static const uint8_t SIGS_VERIFIED   = 0x10; // Has valid signatures
+#ifdef TRANS_ID_DUP_CHECK
         static const uint8_t DUP_CHECKED     = 0x20; // Duplicate ID has been checked for
+#endif
 
         // Flag checking operations
         uint8_t status() const { return mStatus; }

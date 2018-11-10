@@ -1,7 +1,9 @@
 
 COMPILER=g++
 COMPILE_FLAGS=-I./.include -I../nextcash/.include -Isecp256k1/include -pthread -std=c++11 -Wall -DDISABLE_ADDRESSES -DPROFILER_ON
-# To Turn profiler on add this to the end of COMPILE_FLAGS : -DPROFILER_ON
+# To turn profiler on add this to the end of COMPILE_FLAGS : -DPROFILER_ON
+# To disable the address database add this to the end of COMPILE_FLAGS : -DDISABLE_ADDRESSES
+# To turn on transaction duplicate it checking add this to COMPILE_FLAGS : -DTRANS_ID_DUP_CHECK
 LIBRARY_PATHS=-L../nextcash -Lsecp256k1/.libs
 LIBRARIES=-lnextcash -lsecp256k1
 DEBUG_LIBRARIES=-lnextcash.debug -lsecp256k1
