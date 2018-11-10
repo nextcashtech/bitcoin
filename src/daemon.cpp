@@ -1401,7 +1401,7 @@ namespace BitCoin
                 ++count;
         mNodeLock.readUnlock();
 
-        if(count >= 4 && (mInfo.spvMode || mChain.blockHeight() == mChain.headerHeight()))
+        if(count >= 3 && (mInfo.spvMode || mChain.blockHeight() == mChain.headerHeight()))
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
               "Chain is in sync. %d nodes have matching latest header : %s", count,
