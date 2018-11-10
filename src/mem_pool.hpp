@@ -221,6 +221,9 @@ namespace BitCoin
         // Return true if this identifies an output in the mempool.
         bool outputExists(const NextCash::Hash &pTransactionID, unsigned int pIndex);
 
+        // Returns true if this transaction's outputs are spent by any transaction in the mempool.
+        bool isSpent(Transaction *pTransaction);
+
         NextCash::ReadersLock mLock;
         NextCash::stream_size mSize; // Size in bytes of all transactions in mempool
 

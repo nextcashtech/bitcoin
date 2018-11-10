@@ -759,6 +759,17 @@ namespace BitCoin
         return result;
     }
 
+    bool MemPool::isSpent(Transaction *pTransaction)
+    {
+        for(std::vector<Transaction *>::iterator transaction = mTransactions.begin();
+          transaction != mTransactions.end(); ++transaction)
+            for(std::vector<Input>::iterator input = (*transaction)->inputs.begin();
+              input != (*transaction)->inputs.end(); ++input)
+                if(input->outpoint.transactionID == pTransaction->hash)
+                    return true;
+        return false;
+    }
+
     bool MemPool::drop()
     {
         if(mTransactions.size() == 0)
@@ -768,20 +779,26 @@ namespace BitCoin
         if(mSize > mInfo.memPoolLowFeeSize)
             minFee = mInfo.lowFee;
 
-        std::vector<Transaction *>::iterator lowestFeeTransaction = mTransactions.begin();
-        uint64_t lowestFeeRate = (*lowestFeeTransaction)->feeRate();
+        std::vector<Transaction *>::iterator lowestFeeTransaction = mTransactions.end();
+        uint64_t lowestFeeRate;
         uint64_t feeRate;
-        for(std::vector<Transaction *>::iterator transaction = lowestFeeTransaction + 1;
+        for(std::vector<Transaction *>::iterator transaction = mTransactions.begin();
           transaction != mTransactions.end(); ++transaction)
-        {
-            feeRate = (*transaction)->feeRate();
-            if(feeRate < lowestFeeRate || (feeRate == lowestFeeRate &&
-              (*transaction)->time() < (*lowestFeeTransaction)->time()))
+            if(!isSpent(*transaction)) // Don't remove an ancestor
             {
-                lowestFeeRate = feeRate;
-                lowestFeeTransaction = transaction;
+                feeRate = (*transaction)->feeRate();
+                if(lowestFeeTransaction == mTransactions.end())
+                {
+                    lowestFeeRate = feeRate;
+                    lowestFeeTransaction = transaction;
+                }
+                else if(feeRate < lowestFeeRate || (feeRate == lowestFeeRate &&
+                  (*transaction)->time() < (*lowestFeeTransaction)->time()))
+                {
+                    lowestFeeRate = feeRate;
+                    lowestFeeTransaction = transaction;
+                }
             }
-        }
 
         if(lowestFeeTransaction != mTransactions.end() &&
           (lowestFeeRate < minFee || mSize > mInfo.memPoolSize))
