@@ -110,6 +110,7 @@ namespace BitCoin
 
             unsigned int count; // Number of transactions
             NextCash::stream_size size; // Size in bytes
+            uint64_t totalFee; // Total of fees
             NextCash::stream_size zero; // Zero fee
             NextCash::stream_size one; // >0 < 1.2 sat/B
             NextCash::stream_size two; // 1.2 - 2.2 sat/B
@@ -123,6 +124,7 @@ namespace BitCoin
             {
                 count = 0;
                 size = 0L;
+                totalFee = 0L;
                 zero = 0L;
                 one = 0L;
                 two = 0L;

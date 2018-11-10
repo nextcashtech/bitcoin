@@ -725,6 +725,7 @@ namespace BitCoin
 
             sendData.writeString("memp:");
             sendData.writeUnsignedInt(requestData.count); // Number of transactions
+            sendData.writeUnsignedLong(requestData.totalFee); // Total of fees
             sendData.writeUnsignedLong(requestData.size); // Size in bytes
             sendData.writeUnsignedLong(requestData.zero); // Zero fee
             sendData.writeUnsignedLong(requestData.one); // Below 1 sat/B

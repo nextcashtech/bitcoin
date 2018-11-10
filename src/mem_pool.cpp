@@ -847,6 +847,7 @@ namespace BitCoin
           transaction != mTransactions.end(); ++transaction)
         {
             feeRate = (*transaction)->feeRate();
+            pData.totalFee += (uint64_t)(*transaction)->fee();
 
             if(feeRate == 0)
                 pData.zero += (*transaction)->size();
