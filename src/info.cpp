@@ -86,13 +86,15 @@ namespace BitCoin
         spvMode = false;
 #endif
         maxConnections = 64;
-        minFee = 500; // satoshis per KB
         mPeersModified = false;
         pendingSize = 100000000UL; // 100 MB
         pendingBlocks = 256;
         outputsCacheSize = 1000000000UL; // 1 GB
         outputsCacheDelta = 500000000UL; // 500 MB
+        minFee = 0; // satoshis per KB
+        lowFee = 500; // satoshis per KB
         memPoolSize = 500000000UL; // 500 MB
+        memPoolLowFeeSize = 32000000; // 32 MB
         addressesCacheSize = 500000000UL; // 500 MB
         merkleBlockCountRequired = 3;
         spvMemPoolCountRequired = 4;
@@ -173,11 +175,23 @@ namespace BitCoin
         else if(std::strcmp(name, "fee_min") == 0)
         {
             minFee = std::strtol(value, NULL, 0);
-            if(minFee < 1)
-                minFee = 1;
+            if(minFee < 0)
+                minFee = 0;
             else if(minFee > 100000)
                 minFee = 100000;
         }
+        else if(std::strcmp(name, "fee_low") == 0)
+        {
+            lowFee = std::strtol(value, NULL, 0);
+            if(lowFee < 1)
+                lowFee = 1;
+            else if(lowFee > 100000)
+                lowFee = 100000;
+        }
+        else if(std::strcmp(name, "mem_pool_size") == 0)
+            memPoolSize = std::strtol(value, NULL, 0);
+        else if(std::strcmp(name, "mem_pool_low_size") == 0)
+            memPoolLowFeeSize = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "ip") == 0)
         {
             uint8_t *newIP = NextCash::Network::parseIP(value);
@@ -197,8 +211,6 @@ namespace BitCoin
             outputsCacheSize = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "output_cache_delta") == 0)
             outputsCacheDelta = std::strtol(value, NULL, 0);
-        else if(std::strcmp(name, "mem_pool_size") == 0)
-            memPoolSize = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "address_cache_size") == 0)
             addressesCacheSize = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "merkles_per_block") == 0)

@@ -2023,14 +2023,14 @@ namespace BitCoin
 
             if(getTime() - mLastMemPoolCheckPending > 20)
             {
-                mChain.memPool().checkPending(&mChain, mInfo.minFee);
+                mChain.memPool().checkPending(&mChain);
                 mLastMemPoolCheckPending = getTime();
             }
 
             if(mStopping)
                 return;
 
-            mChain.memPool().process(mInfo.memPoolSize);
+            mChain.memPool().process();
 
             if(mStopping)
                 return;

@@ -822,9 +822,11 @@ namespace BitCoin
 
     bool Node::sendFeeFilter()
     {
-        Message::FeeFilterData feeData;
-        feeData.minimumFeeRate = Info::instance().minFee;
-        return sendMessage(&feeData);
+        // Get all fee rates and evaluate whether to keep/propagate them.
+        // Message::FeeFilterData feeData;
+        // feeData.minimumFeeRate = Info::instance().minFee;
+        // return sendMessage(&feeData);
+        return true;
     }
 
     bool Node::sendReject(const char *pCommand, Message::RejectData::Code pCode,
@@ -2030,8 +2032,7 @@ namespace BitCoin
                     {
                         NextCash::HashList unseen;
                         MemPool::AddStatus addStatus =
-                          mChain->memPool().add(transactionData->transaction, info.minFee, mChain,
-                            mID, unseen);
+                          mChain->memPool().add(transactionData->transaction, mChain, mID, unseen);
 
                         switch(addStatus)
                         {

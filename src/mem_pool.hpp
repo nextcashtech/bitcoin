@@ -14,6 +14,7 @@
 #include "transaction.hpp"
 #include "outputs.hpp"
 #include "bloom_filter.hpp"
+#include "info.hpp"
 
 #include <vector>
 
@@ -69,7 +70,7 @@ namespace BitCoin
         //   invalid
         enum AddStatus { ADDED, ALREADY_HAVE, NON_STANDARD, DOUBLE_SPEND, LOW_FEE,
           UNSEEN_OUTPOINTS, INVALID };
-        AddStatus add(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain,
+        AddStatus add(Transaction *pTransaction, Chain *pChain,
           unsigned int pNodeID, NextCash::HashList &pUnseenOutpoints);
 
         // Pull transactions that have been added to a block from the mempool.
@@ -91,13 +92,13 @@ namespace BitCoin
 
         bool getOutput(const NextCash::Hash &pHash, uint32_t pIndex, Output &pOutput);
 
-        void process(unsigned int pMemPoolThreshold);
+        void process();
 
         // Get transaction hashes that should be announced
         void getToAnnounce(NextCash::HashList &pList);
         void getFullList(NextCash::HashList &pList, const BloomFilter &pFilter);
 
-        void checkPending(Chain *pChain, uint64_t pMinFeeRate);
+        void checkPending(Chain *pChain);
 
         NextCash::stream_size size() const { return mSize; }
         unsigned int count() const { return mTransactions.size(); }
@@ -118,7 +119,6 @@ namespace BitCoin
             NextCash::stream_size ten; // 5.2 - 10.2 sat/B
             NextCash::stream_size remainingSize; // Total size of remaining transactions
             uint64_t remainingFee; // Total fee of remaining transactions
-            uint64_t minFee; // The minimum fee supported by the system
 
             void clear()
             {
@@ -132,20 +132,22 @@ namespace BitCoin
                 ten = 0L;
                 remainingSize = 0L;
                 remainingFee = 0L;
-                minFee = 0L;
             }
 
         };
 
-        void getRequestData(RequestData &pData, uint64_t pMinFeeRate);
+        void getRequestData(RequestData &pData);
 
     private:
+
+        Info &mInfo;
 
         bool insert(Transaction *pTransaction, bool pAnnounce);
         bool remove(const NextCash::Hash &pHash);
 
         // Drop the oldest/lowest fee rate transaction
-        void drop();
+        // Returns true if anything was dropped.
+        bool drop();
 
         // Drop pending transactions older than 60 seconds
         void expirePending();
@@ -209,8 +211,8 @@ namespace BitCoin
         void removeRequested(const NextCash::Hash &pHash);
 
         // Checks transaction validity.
-        void check(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain,
-          unsigned int pNodeID, NextCash::HashList &pUnseenOutpoints);
+        void check(Transaction *pTransaction, Chain *pChain, unsigned int pNodeID,
+          NextCash::HashList &pUnseenOutpoints);
 
         // Return true if any of the transactions outpoints are shared with any transaction in the
         //   mempool

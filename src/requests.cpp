@@ -721,7 +721,7 @@ namespace BitCoin
             NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received mempool request");
 
             MemPool::RequestData requestData;
-            mChain->memPool().getRequestData(requestData, Info::instance().minFee);
+            mChain->memPool().getRequestData(requestData);
 
             sendData.writeString("memp:");
             sendData.writeUnsignedInt(requestData.count); // Number of transactions
@@ -734,7 +734,11 @@ namespace BitCoin
             sendData.writeUnsignedLong(requestData.ten); // Below 10 sat/B
             sendData.writeUnsignedLong(requestData.remainingSize); // Total size of remaining
             sendData.writeUnsignedLong(requestData.remainingFee); // Total fee of remaining
-            sendData.writeUnsignedLong(requestData.minFee); // Minimum fee
+
+            Info &info = Info::instance();
+            sendData.writeUnsignedLong(info.minFee); // Minimum fee
+            sendData.writeUnsignedLong(info.lowFee); // Low fee
+            sendData.writeUnsignedLong(info.memPoolLowFeeSize); // Low fee size
 
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
               "Sending mempool data : %d trans (%d KB)", requestData.count, requestData.size / 1000L);
