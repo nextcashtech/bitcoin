@@ -302,7 +302,7 @@ namespace BitCoin
           const NextCash::Hash &pStoppingHash, unsigned int pCount);
 
         // Get block or hash at specific height
-        bool getHash(unsigned int pHeight, NextCash::Hash &pHash);
+        bool getHash(unsigned int pHeight, NextCash::Hash &pHash, bool pHeadersLocked = false);
         bool getBlock(unsigned int pHeight, Block &pBlock);
         bool getHeader(unsigned int pHeight, Header &pHeader);
 

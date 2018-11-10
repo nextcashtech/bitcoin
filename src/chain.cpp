@@ -540,7 +540,7 @@ namespace BitCoin
         NextCash::Hash hash;
         while(headerHeight() >= pHeight)
         {
-            if(!getHash(headerHeight(), hash))
+            if(!getHash(headerHeight(), hash, pHeadersLocked))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
                   "Failed to get hash (%d) to revert", headerHeight());
@@ -637,7 +637,7 @@ namespace BitCoin
         Header header;
         NextCash::Hash previousHash(32);
 
-        if(!getHash(nextHeight - 1, previousHash))
+        if(!getHash(nextHeight - 1, previousHash, false))
         {
             mPendingLock.writeUnlock();
             return;
@@ -1506,7 +1506,7 @@ namespace BitCoin
         while(pHashes.size() < pCount)
         {
 #ifdef LOW_MEM
-            if(!getHash(height, hash))
+            if(!getHash(height, hash, true))
                 break;
             pHashes.push_back(hash);
 #else
@@ -1536,7 +1536,7 @@ namespace BitCoin
         NextCash::Hash hash;
         while(pHashes.size() < pCount)
         {
-            if(!getHash(height, hash))
+            if(!getHash(height, hash, true))
                 break;
             pHashes.emplace_back(hash);
             if(height <= pSpacing)
@@ -1587,10 +1587,13 @@ namespace BitCoin
         return Header::getHeaders(startingHeight + 1, count, pBlockHeaders);
     }
 
-    bool Chain::getHash(unsigned int pHeight, NextCash::Hash &pHash)
+    bool Chain::getHash(unsigned int pHeight, NextCash::Hash &pHash, bool pHeadersLocked)
     {
         if(pHeight > headerHeight())
             return false;
+
+        if(!pHeadersLocked)
+            mHeadersLock.readLock();
 #ifdef LOW_MEM
         unsigned int blocksFromTop = headerHeight() - pHeight;
         if(blocksFromTop < mLastHashes.size())
@@ -1601,10 +1604,14 @@ namespace BitCoin
         if(pHeight >= mHashes.size())
         {
             pHash.clear();
+            if(!pHeadersLocked)
+                mHeadersLock.readUnlock();
             return false;
         }
 
         pHash = mHashes[pHeight];
+        if(!pHeadersLocked)
+            mHeadersLock.readUnlock();
 #endif
         return true;
     }
@@ -2187,7 +2194,7 @@ namespace BitCoin
             }
 
             NextCash::Hash nextHash(32);
-            if(getHash(blockHeight() + mPendingBlocks.size(), nextHash) &&
+            if(getHash(blockHeight() + mPendingBlocks.size(), nextHash, false) &&
               nextHash == newBlock->header.previousHash)
             {
                 mPendingSize += newBlock->size();
