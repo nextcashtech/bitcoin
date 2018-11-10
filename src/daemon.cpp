@@ -1354,9 +1354,35 @@ namespace BitCoin
             return;
         }
 
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-          "Re-requesting %d transactions", transactionHashes.size());
-        nodes.front()->requestTransactions(transactionHashes);
+        if(transactionHashes.size() < 5000)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              "Re-requesting %d transactions from %s", transactionHashes.size(),
+              nodes.front()->name());
+            nodes.front()->requestTransactions(transactionHashes);
+        }
+        else
+        {
+            NextCash::HashList transactionSubList;
+            NextCash::HashList::iterator next = transactionHashes.begin();
+
+            for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+            {
+                transactionSubList.clear();
+                while(next != transactionHashes.end() && transactionSubList.size() < 5000)
+                    transactionSubList.push_back(*next++);
+
+                if(transactionSubList.size() == 0)
+                    break;
+
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                  "Re-requesting %d transactions from %s", transactionSubList.size(), (*node)->name());
+                (*node)->requestTransactions(transactionSubList);
+
+                if(next == transactionHashes.end())
+                    break;
+            }
+        }
 
         mNodeLock.readUnlock();
     }
@@ -1657,7 +1683,7 @@ namespace BitCoin
                     // Announce to all nodes
                     for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                         (*node)->announceTransaction(transaction);
-                    mChain.memPool().releaseTransaction(*hash, 0);
+                    mChain.memPool().freeTransaction(*hash, 0);
                 }
             }
             mNodeLock.readUnlock();

@@ -36,7 +36,7 @@ namespace BitCoin
         mRequestedHashesLock.lock();
         for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
           hash != mRequestedHashes.end(); ++hash)
-            if(std::get<0>(*hash) == pHash)
+            if(hash->hash == pHash)
             {
                 result = true;
                 break;
@@ -45,25 +45,31 @@ namespace BitCoin
         return result;
     }
 
-    bool MemPool::addRequested(const NextCash::Hash &pHash, unsigned int pNodeID)
+    bool MemPool::addRequested(const NextCash::Hash &pHash, unsigned int pNodeID, bool pMissing)
     {
         bool result = false;
-        mRequestedHashesLock.lock();
         bool found = false;
+        Time time = getTime();
+
+        mRequestedHashesLock.lock();
+
         for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
           hash != mRequestedHashes.end(); ++hash)
-            if(std::get<0>(*hash) == pHash)
+            if(hash->hash == pHash)
             {
-                if(pNodeID == std::get<1>(*hash))
+                if(pNodeID == hash->nodeID)
+                {
+                    hash->missing = pMissing;
                     result = true;
+                }
                 else
                 {
-                    Time time = getTime();
-                    if(std::get<1>(*hash) == 0 || time - std::get<2>(*hash) > 1)
+                    if(hash->nodeID == 0 || time - hash->time > 1)
                     {
-                        std::get<1>(*hash) = pNodeID;
-                        std::get<2>(*hash) = time;
-                        ++std::get<3>(*hash);
+                        hash->nodeID = pNodeID;
+                        hash->time = time;
+                        ++hash->requestAttempts;
+                        hash->missing = pMissing;
                         result = true;
                     }
                 }
@@ -73,9 +79,10 @@ namespace BitCoin
 
         if(!found)
         {
-            mRequestedHashes.emplace_back(pHash, pNodeID, getTime(), 1);
+            mRequestedHashes.emplace_back(pHash, pNodeID, time, pMissing);
             result = true;
         }
+
         mRequestedHashesLock.unlock();
         return result;
     }
@@ -85,7 +92,7 @@ namespace BitCoin
         mRequestedHashesLock.lock();
         for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
           hash != mRequestedHashes.end(); ++hash)
-            if(std::get<0>(*hash) == pHash)
+            if(hash->hash == pHash)
             {
                 mRequestedHashes.erase(hash);
                 break;
@@ -101,20 +108,20 @@ namespace BitCoin
         for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
           hash != mRequestedHashes.end();)
         {
-            if(std::get<1>(*hash) == 0 || time - std::get<2>(*hash) > 2)
+            if(hash->nodeID == 0 || time - hash->time > 2)
             {
-                if(std::get<3>(*hash) > 2)
+                if(hash->requestAttempts > 2)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-                      "Requested transaction failed %d times : %s", std::get<3>(*hash),
-                      std::get<0>(*hash).hex().text());
+                      "Requested transaction failed %d times : %s", hash->requestAttempts,
+                      hash->hash.hex().text());
                     hash = mRequestedHashes.erase(hash);
                 }
                 else
                 {
-                    std::get<1>(*hash) = pNodeID;
-                    std::get<2>(*hash) = time;
-                    pList.emplace_back(std::get<0>(*hash));
+                    hash->nodeID = pNodeID;
+                    hash->time = time;
+                    pList.emplace_back(hash->hash);
                     ++hash;
                 }
             }
@@ -129,9 +136,28 @@ namespace BitCoin
         mRequestedHashesLock.lock();
         for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
           hash != mRequestedHashes.end(); ++hash)
-            if(std::get<1>(*hash) == pNodeID)
-                std::get<1>(*hash) = 0;
+            if(hash->nodeID == pNodeID)
+                hash->nodeID = 0;
         mRequestedHashesLock.unlock();
+    }
+
+    bool MemPool::release(const NextCash::Hash &pHash, unsigned int pNodeID)
+    {
+        bool result = false;
+        mRequestedHashesLock.lock();
+        for(std::list<RequestedHash>::iterator hash = mRequestedHashes.begin();
+          hash != mRequestedHashes.end(); ++hash)
+            if(hash->hash == pHash)
+            {
+                if(hash->nodeID == pNodeID)
+                {
+                    result = hash->missing;
+                    hash->nodeID = 0;
+                }
+                break;
+            }
+        mRequestedHashesLock.unlock();
+        return result;
     }
 
     MemPool::HashStatus MemPool::hashStatus(Chain *pChain, const NextCash::Hash &pHash,
@@ -170,7 +196,7 @@ namespace BitCoin
             return HASH_ALREADY_HAVE;
         }
 
-        if(!addRequested(pHash, pNodeID))
+        if(!addRequested(pHash, pNodeID, false))
         {
             mLock.readUnlock();
             return HASH_ALREADY_HAVE;
@@ -225,7 +251,8 @@ namespace BitCoin
         mLock.readUnlock();
     }
 
-    void MemPool::check(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain)
+    void MemPool::check(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain,
+      unsigned int pNodeID, NextCash::HashList &pUnseenOutpoints)
     {
         NextCash::Hash emptyBlockHash;
         NextCash::Mutex spentAgeLock("Spent Age");
@@ -235,6 +262,24 @@ namespace BitCoin
         pTransaction->check(pChain, emptyBlockHash, Chain::INVALID_HEIGHT, false,
           pChain->forks().requiredBlockVersion(Chain::INVALID_HEIGHT), spentAgeLock, spentAges,
           checkDupTime, outputLookupTime, signatureTime);
+
+        if(pTransaction->isValid() && !pTransaction->outpointsFound())
+        {
+            Output output;
+            for(std::vector<Input>::iterator input = pTransaction->inputs.begin();
+              input != pTransaction->inputs.end(); ++ input)
+            {
+                if(!pChain->outputs().isUnspent(input->outpoint.transactionID,
+                  input->outpoint.index) &&
+                  !pChain->memPool().getOutput(input->outpoint.transactionID,
+                  input->outpoint.index, output))
+                {
+                    pUnseenOutpoints.clear();
+                    pUnseenOutpoints.push_back(input->outpoint.transactionID);
+                    addRequested(input->outpoint.transactionID, pNodeID, true);
+                }
+            }
+        }
     }
 
     void MemPool::checkPending(Chain *pChain, uint64_t pMinFeeRate)
@@ -246,6 +291,7 @@ namespace BitCoin
         unsigned int offset = 0;
         Transaction *transaction;
         bool inserted;
+        NextCash::HashList unseen;
 
         while(true)
         {
@@ -255,19 +301,24 @@ namespace BitCoin
             if(transaction != NULL)
             {
                 mSize -= transaction->size();
-                mValidatingTransactions.insertSorted(transaction->hash);
+                if(!mValidatingTransactions.insertSorted(transaction->hash))
+                {
+                    // Already being validated.
+                    delete transaction;
+                    transaction = NULL;
+                }
             }
             mLock.writeUnlock();
 
             if(transaction == NULL)
                 break;
 
-            check(transaction, pMinFeeRate, pChain);
+            check(transaction, pMinFeeRate, pChain, 0, unseen);
 
             if(!transaction->isValid())
             {
                 mLock.writeLock("Invalid Pending");
-                mValidatingTransactions.remove(transaction->hash);
+                mValidatingTransactions.removeSorted(transaction->hash);
                 mLock.writeUnlock();
 
                 if(transaction->feeIsValid())
@@ -289,7 +340,7 @@ namespace BitCoin
                 inserted = mPendingTransactions.insertSorted(transaction);
                 if(inserted)
                     mSize += transaction->size();
-                mValidatingTransactions.remove(transaction->hash);
+                mValidatingTransactions.removeSorted(transaction->hash);
                 mLock.writeUnlock();
 
                 if(!inserted)
@@ -299,7 +350,7 @@ namespace BitCoin
             {
                 mLock.writeLock("Non Standard Pending");
                 addNonStandardHash(transaction->hash);
-                mValidatingTransactions.remove(transaction->hash);
+                mValidatingTransactions.removeSorted(transaction->hash);
                 mLock.writeUnlock();
 
                 // Transaction not standard
@@ -312,7 +363,7 @@ namespace BitCoin
             else if(transaction->isStandardVerified())
             {
                 mLock.writeLock("Verify Pending");
-                mValidatingTransactions.remove(transaction->hash);
+                mValidatingTransactions.removeSorted(transaction->hash);
 
                 // Double check outpoints and then insert.
                 // They could have been spent since they were checked without a full lock.
@@ -330,7 +381,7 @@ namespace BitCoin
             else
             {
                 mLock.writeLock("Unknown Pending");
-                mValidatingTransactions.remove(transaction->hash);
+                mValidatingTransactions.removeSorted(transaction->hash);
                 mLock.writeUnlock();
                 delete transaction;
             }
@@ -339,24 +390,25 @@ namespace BitCoin
         }
     }
 
-    MemPool::AddStatus MemPool::add(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain)
+    MemPool::AddStatus MemPool::add(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain,
+      unsigned int pNodeID, NextCash::HashList &pUnseenOutpoints)
     {
         removeRequested(pTransaction->hash);
 
-        mLock.readLock();
+        mLock.writeLock("Add Check");
 
         // Check that the transaction isn't already in the mempool
         if(mTransactions.getSorted(pTransaction->hash) != NULL ||
           mPendingTransactions.getSorted(pTransaction->hash) != NULL ||
           mValidatingTransactions.containsSorted(pTransaction->hash))
         {
-            mLock.readUnlock();
+            mLock.writeUnlock();
             return ALREADY_HAVE;
         }
 
         mValidatingTransactions.insertSorted(pTransaction->hash);
 
-        mLock.readUnlock();
+        mLock.writeUnlock();
 
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -368,7 +420,7 @@ namespace BitCoin
 #endif
 
         // Do this outside the lock because it is time consuming.
-        check(pTransaction, pMinFeeRate, pChain);
+        check(pTransaction, pMinFeeRate, pChain, pNodeID, pUnseenOutpoints);
 
         if(!pTransaction->isValid())
         {
@@ -376,9 +428,9 @@ namespace BitCoin
               "Failed to check transaction. (%d bytes) : %s", pTransaction->size(),
               pTransaction->hash.hex().text());
 
-            mLock.writeLock("Add");
+            mLock.writeLock("AddInvalid");
             addInvalidHash(pTransaction->hash);
-            mValidatingTransactions.remove(pTransaction->hash);
+            mValidatingTransactions.removeSorted(pTransaction->hash);
             mLock.writeUnlock();
             return INVALID;
         }
@@ -393,9 +445,9 @@ namespace BitCoin
                   pTransaction->size(), pTransaction->hash.hex().text());
                 pTransaction->print(pChain->forks(), NextCash::Log::VERBOSE);
 
-                mLock.writeLock("Add");
+                mLock.writeLock("AddNonStd");
                 addNonStandardHash(pTransaction->hash);
-                mValidatingTransactions.remove(pTransaction->hash);
+                mValidatingTransactions.removeSorted(pTransaction->hash);
                 mLock.writeUnlock();
                 return NON_STANDARD;
             }
@@ -407,9 +459,9 @@ namespace BitCoin
                   pTransaction->feeRate(), pMinFeeRate, pTransaction->fee(), pTransaction->size(),
                   pTransaction->hash.hex().text());
 
-                mLock.writeLock("Add");
+                mLock.writeLock("AddLow");
                 addLowFeeHash(pTransaction->hash);
-                mValidatingTransactions.remove(pTransaction->hash);
+                mValidatingTransactions.removeSorted(pTransaction->hash);
                 mLock.writeUnlock();
                 return LOW_FEE;
             }
@@ -417,7 +469,7 @@ namespace BitCoin
 
         mLock.writeLock("Add");
 
-        mValidatingTransactions.remove(pTransaction->hash);
+        mValidatingTransactions.removeSorted(pTransaction->hash);
 
         if(outpointExists(pTransaction))
         {
@@ -658,7 +710,7 @@ namespace BitCoin
         return result;
     }
 
-    void MemPool::releaseTransaction(const NextCash::Hash &pHash, unsigned int pNodeID)
+    void MemPool::freeTransaction(const NextCash::Hash &pHash, unsigned int pNodeID)
     {
         mNodeLock.lock();
         NextCash::HashContainerList<unsigned int>::Iterator lock;

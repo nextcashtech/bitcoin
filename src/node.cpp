@@ -590,8 +590,10 @@ namespace BitCoin
         if(!isOpen())
             return false;
 
-        NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Sending block (%d) : %s",
-          mChain->hashHeight(pBlock.header.hash), pBlock.header.hash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Sending block (%d) (%d KB) : %s",
+          mChain->hashHeight(pBlock.header.hash), pBlock.size() / 1000,
+          pBlock.header.hash.hex().text());
+
         Message::BlockData blockData;
         blockData.block = &pBlock;
         bool success = sendMessage(&blockData);
@@ -1615,7 +1617,7 @@ namespace BitCoin
                               "Sending Transaction (%d bytes) : %s",
                               transactionData.transaction->size(), (*item)->hash.hex().text());
                             sendMessage(&transactionData);
-                            mChain->memPool().releaseTransaction((*item)->hash, mID);
+                            mChain->memPool().freeTransaction((*item)->hash, mID);
                         }
                         // Don't delete it. It is still in the mem pool
                         transactionData.transaction = NULL;
@@ -2026,13 +2028,25 @@ namespace BitCoin
 
                     if(!info.spvMode)
                     {
+                        NextCash::HashList unseen;
                         MemPool::AddStatus addStatus =
-                          mChain->memPool().add(transactionData->transaction, info.minFee, mChain);
+                          mChain->memPool().add(transactionData->transaction, info.minFee, mChain,
+                            mID, unseen);
 
                         switch(addStatus)
                         {
                             case MemPool::ADDED:
+                                if(mMonitor != NULL)
+                                {
+                                    transactionData->transaction =
+                                      new Transaction(*transactionData->transaction);
+                                    mMonitor->addTransaction(*mChain, transactionData);
+                                }
+                                else // So it won't be deleted with the message
+                                    transactionData->transaction = NULL;
+                                break;
                             case MemPool::UNSEEN_OUTPOINTS: // Added to pending
+                                requestTransactions(unseen);
                                 if(mMonitor != NULL)
                                 {
                                     transactionData->transaction =
@@ -2165,6 +2179,14 @@ namespace BitCoin
                     case Message::InventoryHash::TRANSACTION:
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                           "Transaction hash returned not found : %s", (*item)->hash.hex().text());
+                        if(mChain->memPool().release((*item)->hash, mID))
+                        {
+                            NextCash::Log::add(NextCash::Log::INFO, mName,
+                              "Dropping. Failed to provide outpoint for given transaction");
+                            info.addPeerFail(mAddress);
+                            close();
+                            success = false;
+                        }
                         break;
                     case Message::InventoryHash::FILTERED_BLOCK:
                         NextCash::Log::addFormatted(NextCash::Log::INFO, mName,

@@ -61,11 +61,16 @@ namespace BitCoin
         // Release any requested hashes for this node.
         void release(unsigned int pNodeID);
 
+        // Release the requested hash.
+        // Returns true if it was a missing outpoint given by this node.
+        bool release(const NextCash::Hash &pHash, unsigned int pNodeID);
+
         // Add transaction to mem pool. Returns false if it was already in the mem pool or is
         //   invalid
         enum AddStatus { ADDED, ALREADY_HAVE, NON_STANDARD, DOUBLE_SPEND, LOW_FEE,
           UNSEEN_OUTPOINTS, INVALID };
-        AddStatus add(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain);
+        AddStatus add(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain,
+          unsigned int pNodeID, NextCash::HashList &pUnseenOutpoints);
 
         // Pull transactions that have been added to a block from the mempool.
         // Locks mempool while the block is being processed.
@@ -79,8 +84,10 @@ namespace BitCoin
         // Unlocks the mempool since the block is finished processing.
         void finalize(Chain *pChain);
 
+        // Get the transaction.
         Transaction *getTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
-        void releaseTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
+        // Confirm no longer using transaction from getTransaction.
+        void freeTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
 
         bool getOutput(const NextCash::Hash &pHash, uint32_t pIndex, Output &pOutput);
 
@@ -148,8 +155,45 @@ namespace BitCoin
         void addLowFeeHash(const NextCash::Hash &pHash);
         void addNonStandardHash(const NextCash::Hash &pHash);
 
-        // Trans ID, Node ID, Last request time, Request attempts
-        typedef std::tuple<NextCash::Hash, unsigned int, Time, unsigned int> RequestedHash;
+        class RequestedHash
+        {
+        public:
+
+            NextCash::Hash hash;
+            unsigned int nodeID;
+            Time time;
+            unsigned int requestAttempts;
+            bool missing; // Requested because of missing outpoint in given transaction.
+
+            RequestedHash(const NextCash::Hash &pHash, unsigned int pNodeID, Time pTime, bool pMissing = false)
+            {
+                hash = pHash;
+                nodeID = pNodeID;
+                time = pTime;
+                requestAttempts = 1;
+                missing = pMissing;
+            }
+
+            RequestedHash(const RequestedHash &pCopy)
+            {
+                hash = pCopy.hash;
+                nodeID = pCopy.nodeID;
+                time = pCopy.time;
+                requestAttempts = pCopy.requestAttempts;
+                missing = pCopy.missing;
+            }
+
+            const RequestedHash &operator = (const RequestedHash &pRight)
+            {
+                hash = pRight.hash;
+                nodeID = pRight.nodeID;
+                time = pRight.time;
+                requestAttempts = pRight.requestAttempts;
+                missing = pRight.missing;
+                return *this;
+            }
+        };
+
         NextCash::Mutex mRequestedHashesLock;
         std::list<RequestedHash> mRequestedHashes;
 
@@ -157,13 +201,14 @@ namespace BitCoin
 
         // Adds hash to requested list with the node ID.
         // Returns false if the hash is already in the list.
-        bool addRequested(const NextCash::Hash &pHash, unsigned int pNodeID);
+        bool addRequested(const NextCash::Hash &pHash, unsigned int pNodeID, bool pMissing);
 
         // Remove hash from requested list.
         void removeRequested(const NextCash::Hash &pHash);
 
         // Checks transaction validity.
-        void check(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain);
+        void check(Transaction *pTransaction, uint64_t pMinFeeRate, Chain *pChain,
+          unsigned int pNodeID, NextCash::HashList &pUnseenOutpoints);
 
         // Return true if any of the transactions outpoints are shared with any transaction in the
         //   mempool
