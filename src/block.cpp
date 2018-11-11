@@ -164,7 +164,7 @@ namespace BitCoin
         digest.setOutputEndian(NextCash::Endian::LITTLE);
         pLeft.write(&digest);
         pRight.write(&digest);
-        pResult.setSize(32);
+        pResult.setSize(BLOCK_HASH_SIZE);
         digest.getResult(&pResult);
     }
 
@@ -218,7 +218,7 @@ namespace BitCoin
 
     void Block::calculateMerkleHash(NextCash::Hash &pMerkleHash)
     {
-        pMerkleHash.setSize(32);
+        pMerkleHash.setSize(BLOCK_HASH_SIZE);
         if(transactions.size() == 0)
             pMerkleHash.zeroize();
         else if(transactions.size() == 1)
@@ -240,7 +240,7 @@ namespace BitCoin
     {
         if(left == NULL)
         {
-            hash.setSize(32);
+            hash.setSize(BLOCK_HASH_SIZE);
             hash.zeroize();
             return true;
         }
@@ -252,7 +252,7 @@ namespace BitCoin
         digest.setOutputEndian(NextCash::Endian::LITTLE);
         left->hash.write(&digest);
         right->hash.write(&digest);
-        hash.setSize(32);
+        hash.setSize(BLOCK_HASH_SIZE);
         digest.getResult(&hash);
         return true;
     }
@@ -634,7 +634,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Block::validate(Chain *pChain)
+    bool Block::validate()
     {
         if(transactions.size() == 0)
         {
@@ -1349,7 +1349,7 @@ namespace BitCoin
         // Write empty index entries
         NextCash::Digest digest(NextCash::Digest::CRC32);
         digest.setOutputEndian(NextCash::Endian::LITTLE);
-        NextCash::Hash zeroHash(32);
+        NextCash::Hash zeroHash(BLOCK_HASH_SIZE);
         for(unsigned int i = 0; i < MAX_COUNT; ++i)
         {
             zeroHash.write(outputFile); // Block hash
@@ -1447,14 +1447,187 @@ namespace BitCoin
         uint32_t calculatedCRC = crcBuffer.readUnsignedInt();
 
         // Check CRC
-        if(crc != calculatedCRC)
+        if(crc == calculatedCRC)
+            return true;
+
+        // Attempt to verify the data in the file.
+        mValid = true;
+
+        NextCash::Hash hash(BLOCK_HASH_SIZE);
+        uint32_t dataOffset;
+        Block block;
+        Transaction *transaction;
+        uint32_t transactionCount;
+        unsigned int lastGoodCount = 0;
+        NextCash::stream_size lastGoodOffset = 0;
+        unsigned int previousCount = 0;
+
+        // Find current block count.
+        mInputFile->setReadOffset(HEADER_START_OFFSET);
+        while(previousCount < MAX_COUNT)
+        {
+            if(!hash.read(mInputFile))
+                break;
+
+            if(hash.isZero())
+                break;
+
+            mInputFile->skip(4);
+            ++previousCount;
+        }
+
+        while(lastGoodCount < MAX_COUNT)
+        {
+            mInputFile->setReadOffset(HEADER_START_OFFSET + (lastGoodCount * HEADER_ITEM_SIZE));
+            if(!hash.read(mInputFile))
+            {
+                mValid = false;
+                break;
+            }
+
+            if(mInputFile->remaining() < 4)
+            {
+                mValid = false;
+                break;
+            }
+            dataOffset = mInputFile->readUnsignedInt();
+
+            if(dataOffset + 4 > mInputFile->length())
+            {
+                mValid = false;
+                break;
+            }
+
+            if(!Header::getHeader((mID * MAX_COUNT) + lastGoodCount, block.header))
+            {
+                mValid = false;
+                break;
+            }
+
+            mInputFile->setReadOffset(dataOffset);
+
+            if(mInputFile->remaining() < 4)
+            {
+                mValid = false;
+                break;
+            }
+            transactionCount = mInputFile->readUnsignedInt();
+
+            block.transactions.reserve(transactionCount);
+
+            for(unsigned int i = 0; i < transactionCount; ++i)
+            {
+                transaction = new Transaction();
+                if(transaction->read(mInputFile))
+                    block.transactions.push_back(transaction);
+                else
+                {
+                    delete transaction;
+                    mValid = false;
+                    break;
+                }
+            }
+
+            if(!mValid)
+                break;
+
+            if(!block.validate())
+            {
+                mValid = false;
+                break;
+            }
+
+            block.clear();
+            lastGoodOffset = mInputFile->readOffset();
+            ++lastGoodCount;
+        }
+
+        if(lastGoodOffset == 0)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
-              "Block file %08x has invalid CRC : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
+              "Block file %08x has no good headers : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
             return false;
         }
 
-        return true;
+        NextCash::stream_size truncateSize = mInputFile->length() - lastGoodOffset;
+        if(truncateSize != 0)
+        {
+            // Truncate end of file.
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x reverting to count of %d", mID, lastGoodCount);
+
+            NextCash::String swapFilePathName = mFilePathName + ".swap";
+            NextCash::FileOutputStream *swapFile = new NextCash::FileOutputStream(swapFilePathName,
+              true);
+
+            if(!swapFile->isValid())
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                  "Failed to repair block file %08x. Failed to open swap file", mID);
+                delete swapFile;
+                return false;
+            }
+
+            // Write start string
+            swapFile->writeString(START_STRING);
+
+            // Write empty CRC
+            swapFile->writeUnsignedInt(0);
+
+            mInputFile->setReadOffset(HEADER_START_OFFSET);
+
+            // Transafer block to swap file
+            for(unsigned int i = 0; i <= lastGoodCount; ++i)
+            {
+                if(!hash.read(mInputFile))
+                    return false;
+                hash.write(swapFile);
+                swapFile->writeUnsignedInt(mInputFile->readUnsignedInt());
+            }
+
+            mLastHash = hash;
+
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x new last hash : %s", mID, mLastHash.hex().text());
+
+            // Write the rest of the block as empty
+            hash.zeroize();
+            for(unsigned int i = lastGoodCount + 1; i < MAX_COUNT; ++i)
+            {
+                hash.write(swapFile);
+                swapFile->writeUnsignedInt(0);
+            }
+
+            // Copy block data to swap file
+            mInputFile->setReadOffset(DATA_START_OFFSET);
+            swapFile->writeStream(mInputFile, lastGoodOffset - swapFile->writeOffset());
+
+            delete mInputFile;
+            mInputFile = NULL;
+            delete swapFile;
+
+            if(!NextCash::renameFile(swapFilePathName, mFilePathName))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                  "Failed to repair block file %08x. Failed to rename swap file", mID);
+                return false;
+            }
+        }
+
+        if(mValid)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+              "Repaired block file %08x. Truncated %d blocks", mID, previousCount - lastGoodCount);
+            mModified = true;
+            updateCRC();
+            return true;
+        }
+        else
+        {
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to repair block file %08x : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
+            return false;
+        }
     }
 
     void BlockFile::getLastCount()
@@ -1473,7 +1646,7 @@ namespace BitCoin
 
         // Go to the last data offset in the header
         mInputFile->setReadOffset(HEADER_START_OFFSET + ((MAX_COUNT - 1) * HEADER_ITEM_SIZE) +
-          32);
+          BLOCK_HASH_SIZE);
 
         // Check each data offset until it is not empty
         for(mCount = MAX_COUNT; mCount > 0; --mCount)
@@ -1482,7 +1655,7 @@ namespace BitCoin
             {
                 // Back up to hash for this data offset
                 mInputFile->setReadOffset(mInputFile->readOffset() - HEADER_ITEM_SIZE);
-                if(!mLastHash.read(mInputFile, 32))
+                if(!mLastHash.read(mInputFile, BLOCK_HASH_SIZE))
                 {
                     mLastHash.clear();
                     mValid = false;
@@ -1648,7 +1821,7 @@ namespace BitCoin
         swapFile->writeUnsignedInt(0);
 
         mInputFile->setReadOffset(HEADER_START_OFFSET);
-        NextCash::Hash hash(32);
+        NextCash::Hash hash(BLOCK_HASH_SIZE);
 
         // Transafer block to swap file
         for(unsigned int i = 0; i <= pOffset; ++i)
@@ -1737,7 +1910,7 @@ namespace BitCoin
         }
 
         // Go to location in header where the data offset to the block is
-        mInputFile->setReadOffset(HEADER_START_OFFSET + (pOffset * HEADER_ITEM_SIZE) + 32);
+        mInputFile->setReadOffset(HEADER_START_OFFSET + (pOffset * HEADER_ITEM_SIZE) + BLOCK_HASH_SIZE);
 
         NextCash::stream_size offset = mInputFile->readUnsignedInt();
         if(offset == 0)
@@ -1808,7 +1981,7 @@ namespace BitCoin
         }
 
         // Go to location in header where the data offset to the block is
-        mInputFile->setReadOffset(HEADER_START_OFFSET + (pBlockOffset * HEADER_ITEM_SIZE) + 32);
+        mInputFile->setReadOffset(HEADER_START_OFFSET + (pBlockOffset * HEADER_ITEM_SIZE) + BLOCK_HASH_SIZE);
 
         unsigned int offset = mInputFile->readUnsignedInt();
         if(offset == 0)

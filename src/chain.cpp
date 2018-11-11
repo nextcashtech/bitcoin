@@ -1289,7 +1289,7 @@ namespace BitCoin
         else if(result == 0)
             updatePendingBlocks();
 
-        if(!pBlock->validate(this))
+        if(!pBlock->validate())
         {
             // Block is incomplete or has the wrong transactions.
             return -1;

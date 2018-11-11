@@ -599,9 +599,6 @@ namespace BitCoin
 
     bool HeaderFile::validate()
     {
-        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
-          "Validating header files");
-
         // Read CRC
         mInputFile->setReadOffset(CRC_OFFSET);
         uint32_t crc = mInputFile->readUnsignedInt();
@@ -618,14 +615,103 @@ namespace BitCoin
         uint32_t calculatedCRC = crcBuffer.readUnsignedInt();
 
         // Check CRC
-        if(crc != calculatedCRC)
+        if(crc == calculatedCRC)
+            return true;
+
+        // Attempt to verify the data in the file.
+        mValid = true;
+        mInputFile->setReadOffset(DATA_START_OFFSET);
+
+        NextCash::Hash hash(BLOCK_HASH_SIZE);
+        Header header;
+        NextCash::stream_size lastGoodOffset = DATA_START_OFFSET;
+
+        while(mInputFile->remaining())
+        {
+            if(!hash.read(mInputFile))
+            {
+                mValid = false;
+                break;
+            }
+
+            if(!header.read(mInputFile, false, true))
+            {
+                mValid = false;
+                break;
+            }
+
+            if(mInputFile->remaining() < 4)
+            {
+                mValid = false;
+                break;
+            }
+
+            mInputFile->skip(4);
+
+            if(hash != header.hash)
+            {
+                mValid = false;
+                break;
+            }
+
+            lastGoodOffset = mInputFile->readOffset();
+        }
+
+        if(lastGoodOffset == DATA_START_OFFSET)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_HEADER_LOG_NAME,
-              "Header file %08x has invalid CRC : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
+              "Header file %08x has no good headers : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
             return false;
         }
 
-        return true;
+        NextCash::stream_size truncateSize = mInputFile->length() - lastGoodOffset;
+        if(truncateSize != 0)
+        {
+            // Truncate end of file.
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+              "Header file %08x reverting to count of %d", mID,
+              (lastGoodOffset - DATA_START_OFFSET) / ITEM_SIZE);
+
+            NextCash::String swapFilePathName = mFilePathName + ".swap";
+            NextCash::FileOutputStream *swapFile = new NextCash::FileOutputStream(swapFilePathName,
+              true);
+
+            if(!swapFile->isValid())
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+                  "Failed to repair header file %08x. Failed to open swap file", mID);
+                delete swapFile;
+                return false;
+            }
+
+            mInputFile->setReadOffset(0);
+            swapFile->writeStream(mInputFile, lastGoodOffset);
+            delete mInputFile;
+            mInputFile = NULL;
+            delete swapFile;
+
+            if(!NextCash::renameFile(swapFilePathName, mFilePathName))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+                  "Failed to repair header file %08x. Failed to rename swap file", mID);
+                return false;
+            }
+        }
+
+        if(mValid)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
+              "Repaired header file %08x. Truncated %d headers", mID, truncateSize / ITEM_SIZE);
+            mModified = true;
+            updateCRC();
+            return true;
+        }
+        else
+        {
+            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_HEADER_LOG_NAME,
+              "Failed to repair header file %08x : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
+            return false;
+        }
     }
 
     unsigned int HeaderFile::itemCount()
@@ -640,7 +726,7 @@ namespace BitCoin
 
     NextCash::Hash HeaderFile::lastHash()
     {
-        NextCash::Hash result(32);
+        NextCash::Hash result(BLOCK_HASH_SIZE);
         if(!openFile())
         {
             mValid = false;
@@ -653,7 +739,7 @@ namespace BitCoin
 
     bool HeaderFile::writeHeader(const Header &pHeader)
     {
-        if(pHeader.hash.size() != 32)
+        if(pHeader.hash.size() != BLOCK_HASH_SIZE)
             return false;
 
         if(!openFile())
@@ -765,7 +851,7 @@ namespace BitCoin
           mInputFile->remaining() < ITEM_SIZE)
             return false;
 
-        NextCash::Hash hash(32);
+        NextCash::Hash hash(BLOCK_HASH_SIZE);
         unsigned int count = itemCount();
         unsigned int added = 0;
         for(unsigned int i = pOffset; i < count && added < pCount; ++i, ++added)
@@ -778,7 +864,7 @@ namespace BitCoin
             if(i == count - 1)
                 break;
 
-            if(!mInputFile->skip(ITEM_SIZE - 32))
+            if(!mInputFile->skip(ITEM_SIZE - BLOCK_HASH_SIZE))
                 return false;
         }
 
@@ -832,8 +918,8 @@ namespace BitCoin
             return false;
         }
 
-        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + 32) ||
-          mInputFile->remaining() < ITEM_SIZE - 32)
+        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + BLOCK_HASH_SIZE) ||
+          mInputFile->remaining() < ITEM_SIZE - BLOCK_HASH_SIZE)
             return false;
 
         // 12 bytes read + 64 skipped, plus 32 hash gets to begining of this item. 12 + 32
@@ -870,8 +956,8 @@ namespace BitCoin
             return false;
         }
 
-        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + 32) ||
-          mInputFile->remaining() < ITEM_SIZE - 32)
+        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + BLOCK_HASH_SIZE) ||
+          mInputFile->remaining() < ITEM_SIZE - BLOCK_HASH_SIZE)
             return false;
 
         unsigned int count = itemCount();
@@ -906,7 +992,7 @@ namespace BitCoin
             return false;
         }
 
-        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + 32) ||
+        if(!mInputFile->setReadOffset(DATA_START_OFFSET + (pOffset * ITEM_SIZE) + BLOCK_HASH_SIZE) ||
           mInputFile->remaining() < 80)
             return false;
 
@@ -976,7 +1062,7 @@ namespace BitCoin
           mInputFile->remaining() < ITEM_SIZE)
             return false;
 
-        return pHash.read(mInputFile, 32);
+        return pHash.read(mInputFile, BLOCK_HASH_SIZE);
     }
 
     bool Header::getHash(unsigned int pHeight, NextCash::Hash &pHash)
@@ -1243,6 +1329,9 @@ namespace BitCoin
 
     unsigned int Header::validate(bool &pAbort)
     {
+        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
+          "Validating header files");
+
         unsigned int result = 0;
         unsigned int fileID = 0;
         HeaderFile *file;
