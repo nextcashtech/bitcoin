@@ -2010,7 +2010,10 @@ namespace BitCoin
                 break;
             case Message::TRANSACTION:
             {
-                if(mBloomFilterID == 0 && (mSentVersionData == NULL || mSentVersionData->relay == 0x00))
+                if(!info.spvMode)
+                    --mMessagesReceived; // Don't count towards message limit
+                if(mBloomFilterID == 0 &&
+                  (mSentVersionData == NULL || mSentVersionData->relay == 0x00))
                 {
                     NextCash::Log::add(NextCash::Log::INFO, mName,
                       "Dropping. Received transaction when relay is off and no bloom filter was sent");
