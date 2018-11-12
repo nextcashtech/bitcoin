@@ -194,7 +194,10 @@ namespace BitCoin
         OP_NOP7                = 0xb6, // The word is ignored. Does not mark transaction as invalid.
         OP_NOP8                = 0xb7, // The word is ignored. Does not mark transaction as invalid.
         OP_NOP9                = 0xb8, // The word is ignored. Does not mark transaction as invalid.
-        OP_NOP10               = 0xb9  // The word is ignored. Does not mark transaction as invalid.
+        OP_NOP10               = 0xb9, // The word is ignored. Does not mark transaction as invalid.
+
+        OP_CHECKDATASIG        = 0xba,
+        OP_CHECKDATASIGVERIFY  = 0xbb
     };
 
     class ScriptInterpreter
@@ -258,6 +261,14 @@ namespace BitCoin
             }
             else
                 return false; // Empty stack
+        }
+
+        bool stackIsClean()
+        {
+            if(!mVerified)
+                return false;
+
+            return mStack.size() == 1;
         }
 
         bool isStandard() { return mStandard; }

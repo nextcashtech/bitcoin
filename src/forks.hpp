@@ -166,14 +166,34 @@ namespace BitCoin
 
         // 2018 Nov Hard Fork
         static const Time CASH_FORK_201811_ACTIVATION_TIME = 1542300000;
+        static const unsigned int FORK_201811_MAX_BLOCK_SIZE = 128000000;
 
+        // Enable OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY opcodes
+        // Enforce 100 byte minimum transaction size
+        // Enforce "push only" rule for scriptSig
+        // Enforce "clean stack" rule
         bool cashFork201811IsActive(unsigned int pHeight) const
         {
             return mCashFork201811BlockHeight != 0 &&
               pHeight > mCashFork201811BlockHeight;
         }
 
-        unsigned int blockMaxSize(unsigned int pHeight) const { return mBlockMaxSize; }
+        unsigned int blockMaxSize(unsigned int pHeight) const
+        {
+            if(pHeight >= mHeight)
+                return mBlockMaxSize;
+            else if(mCashFork201811BlockHeight != 0 &&
+              pHeight > mCashFork201811BlockHeight)
+                return FORK_201811_MAX_BLOCK_SIZE;
+            else if(mCashFork201805BlockHeight != 0 &&
+              pHeight > mCashFork201805BlockHeight)
+                return FORK_201805_MAX_BLOCK_SIZE;
+            else if(mCashActivationBlockHeight != 0 &&
+              pHeight > mCashActivationBlockHeight)
+                return CASH_START_MAX_BLOCK_SIZE;
+            else
+                return HARD_MAX_BLOCK_SIZE;
+        }
 
         unsigned int elementMaxSize(unsigned int pHeight) const { return mElementMaxSize; }
 

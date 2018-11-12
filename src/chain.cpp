@@ -1131,7 +1131,8 @@ namespace BitCoin
             if(!(*pending)->isFull() && (*pending)->requestingNode == pNodeID)
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-                  "Releasing block : %s", (*pending)->block->header.hash.hex().text());
+                  "Releasing block (%d) : %s", hashHeight((*pending)->block->header.hash),
+                  (*pending)->block->header.hash.hex().text());
                 (*pending)->requestingNode = 0;
                 (*pending)->requestedTime = 0;
             }

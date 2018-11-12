@@ -196,7 +196,7 @@ namespace BitCoin
 
         // Encode with base 58
         NextCash::String result;
-        result.writeBase58(data.startPointer(), (unsigned int)data.length());
+        result.writeBase58(data.begin(), (unsigned int)data.length());
         return result;
     }
 
@@ -292,7 +292,7 @@ namespace BitCoin
 
         // Encode with base 32
         NextCash::String encodedPayload;
-        encodedPayload.writeBase32(data.startPointer(), (unsigned int)data.length());
+        encodedPayload.writeBase32(data.begin(), (unsigned int)data.length());
 
         // Build check sum data
         NextCash::Buffer checkSumData;
@@ -398,7 +398,7 @@ namespace BitCoin
 
         payload.write(character, remainingLength - 8);
         payload.writeByte(0); // Write null byte for base 32 convert
-        decodedPayload.writeBase32AsBinary((const char *)payload.startPointer());
+        decodedPayload.writeBase32AsBinary((const char *)payload.begin());
 
         while(payload.remaining() > 1) // Don't include null byte
         {
@@ -1308,7 +1308,7 @@ namespace BitCoin
         data.writeStream(&checkSum, 4);
 
         // Convert to base58
-        result.writeBase58(data.startPointer(), data.length());
+        result.writeBase58(data.begin(), data.length());
 
         return result;
     }
@@ -2896,7 +2896,7 @@ namespace BitCoin
 
         initVector.writeHex(sEncryptKeyInitVector);
 
-        encryptor.setup(pKey, pKeyLength, initVector.startPointer(), initVector.length());
+        encryptor.setup(pKey, pKeyLength, initVector.begin(), initVector.length());
 
         // Private Keys
         encryptor.writeUnsignedInt(mPrivateKeys.size());
@@ -2929,7 +2929,7 @@ namespace BitCoin
 
         initVector.writeHex(sEncryptKeyInitVector);
 
-        decryptor.setup(pKey, pKeyLength, initVector.startPointer(), initVector.length());
+        decryptor.setup(pKey, pKeyLength, initVector.begin(), initVector.length());
 
         // Read private keys
         unsigned int count = decryptor.readUnsignedInt();

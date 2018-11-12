@@ -558,7 +558,7 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                       "2018 Nov fork activated at block height %d", pHeight);
                     mCashFork201811BlockHeight = pHeight;
-                    //TODO mCashForkID = 0x00FF0001;
+                    mBlockMaxSize = FORK_201811_MAX_BLOCK_SIZE;
                 }
             }
         }
@@ -586,7 +586,6 @@ namespace BitCoin
             // Undo Nov 2018 fork
             mCashFork201811BlockHeight = 0;
             mBlockMaxSize = FORK_201805_MAX_BLOCK_SIZE;
-            mCashForkID = 0;
         }
 
         if(mCashFork201805BlockHeight != 0 && pHeight <= mCashFork201805BlockHeight)

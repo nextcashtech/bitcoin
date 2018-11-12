@@ -468,6 +468,12 @@ namespace BitCoin
                 case OP_CHECKMULTISIGVERIFY:
                     result += "<OP_CHECKMULTISIGVERIFY>";
                     break;
+                case OP_CHECKDATASIG:
+                    result += "<OP_CHECKDATASIG>";
+                    break;
+                case OP_CHECKDATASIGVERIFY:
+                    result += "<OP_CHECKDATASIGVERIFY>";
+                    break;
                 case OP_CHECKLOCKTIMEVERIFY:
                     result += "<OP_CHECKLOCKTIMEVERIFY>";
                     break;
@@ -594,8 +600,11 @@ namespace BitCoin
                 case OP_SUB: //    a b   out    b is subtracted from a.
                     result += "<OP_SUB>";
                     break;
-                case OP_MUL: //    a b   out    a is multiplied by b. disabled.
-                    result += "<OP_MUL disabled>";
+                case OP_MUL: //    a b   out    a is multiplied by b.
+                    if(pForks.cashFork201811IsActive(pBlockHeight))
+                        result += "<OP_MUL>";
+                    else
+                        result += "<OP_MUL disabled>";
                     break;
                 case OP_DIV: //    a b   out    a is divided by b.
                     if(pForks.cashFork201805IsActive(pBlockHeight))
@@ -609,11 +618,17 @@ namespace BitCoin
                     else
                         result += "<OP_MOD disabled>";
                     break;
-                case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign. disabled.
-                    result += "<OP_LSHIFT disabled>";
+                case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign.
+                    if(pForks.cashFork201811IsActive(pBlockHeight))
+                        result += "<OP_LSHIFT>";
+                    else
+                        result += "<OP_LSHIFT disabled>";
                     break;
-                case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign. disabled.
-                    result += "<OP_RSHIFT disabled>";
+                case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign.
+                    if(pForks.cashFork201811IsActive(pBlockHeight))
+                        result += "<OP_RSHIFT>";
+                    else
+                        result += "<OP_RSHIFT disabled>";
                     break;
                 case OP_BOOLAND: //    a b   out    If both a and b are not 0, the output is 1. Otherwise 0.
                     result += "<OP_BOOLAND>";
@@ -653,7 +668,7 @@ namespace BitCoin
                     break;
 
 
-                    // Stack
+                // Stack
                 case OP_TOALTSTACK:
                     result += "<OP_TOALTSTACK>";
                     break;
@@ -713,7 +728,7 @@ namespace BitCoin
                     break;
 
 
-                    // Splice
+                // Splice
                 case OP_CAT: //  x1 x2  out  Concatenates two strings.
                     if(pForks.cashFork201805IsActive(pBlockHeight))
                         result += "<OP_CAT>";
@@ -743,9 +758,12 @@ namespace BitCoin
                     break;
 
 
-                    // Bitwise logic
-                case OP_INVERT: //  in  out  Flips all of the bits in the input. disabled.
-                    result += "<OP_INVERT disabled>";
+                // Bitwise logic
+                case OP_INVERT: //  in  out  Flips all of the bits in the input.
+                    if(pForks.cashFork201811IsActive(pBlockHeight))
+                        result += "<OP_INVERT>";
+                    else
+                        result += "<OP_INVERT disabled>";
                     break;
                 case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs.
                     if(pForks.cashFork201805IsActive(pBlockHeight))
@@ -1147,6 +1165,58 @@ namespace BitCoin
         //NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
         //  "Arithmetic write : %08x%08x (%d) -> %s", pValue >> 32, pValue, pValue & 0xffffffff,
         //  pBuffer->readHexString(pBuffer->length()).text());
+    }
+
+    void leftShift(NextCash::Buffer &pValue, int pShiftBits)
+    {
+        static uint8_t sShiftMask[] = {0xFF, 0x7F, 0x3F, 0x1F, 0x0F, 0x07, 0x03, 0x01};
+
+        uint8_t original[pValue.length()];
+        uint8_t *result = pValue.begin();
+        int bitShift = pShiftBits % 8;
+        int byteShift = pShiftBits / 8;
+        uint8_t mask = sShiftMask[bitShift];
+        uint8_t overflowMask = ~mask;
+
+        std::memcpy(original, result, pValue.length());
+        std::memset(result, 0x00, pValue.length());
+
+        for(int i = 0; i < (int)pValue.length(); ++i)
+        {
+            int k = i + byteShift;
+
+            if(k < (int)pValue.length())
+                result[k] |= ((original[i] & mask) << bitShift);
+
+            if(k + 1 < (int)pValue.length())
+                result[k + 1] |= ((original[i] & overflowMask) >> (8 - bitShift));
+        }
+    }
+
+    void rightShift(NextCash::Buffer &pValue, int pShiftBits)
+    {
+        static uint8_t sShiftMask[] = {0xFF, 0xFE, 0xFC, 0xF8, 0xF0, 0xE0, 0xC0, 0x80};
+
+        uint8_t original[pValue.length()];
+        uint8_t *result = pValue.begin();
+        int bitShift = pShiftBits % 8;
+        int byteShift = pShiftBits / 8;
+        uint8_t mask = sShiftMask[bitShift];
+        uint8_t overflowMask = ~mask;
+
+        std::memcpy(original, result, pValue.length());
+        std::memset(result, 0x00, pValue.length());
+
+        for(int i = 0; i < (int)pValue.length(); ++i)
+        {
+            int k = i + byteShift;
+
+            if(k < (int)pValue.length())
+                result[k] |= ((original[i] & mask)  << bitShift);
+
+            if (k + 1 < (int)pValue.length())
+                result[k + 1] |= ((original[i] & overflowMask) >> (8 - bitShift));
+        }
     }
 
     bool ScriptInterpreter::process(NextCash::Buffer &pScript, int32_t pBlockVersion, Forks &pForks,
@@ -1667,6 +1737,75 @@ namespace BitCoin
 
                     break;
                 }
+                case OP_CHECKDATASIG:
+                case OP_CHECKDATASIGVERIFY:
+                {
+                    if(!ifStackTrue())
+                        break;
+
+                    if(!pForks.cashFork201811IsActive(pBlockHeight))
+                        break;
+
+                    if(!checkStackSize(3))
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_CHECKDATASIG");
+                        mValid = false;
+                        return false;
+                    }
+
+                    bool failed = false;
+
+                    // Pop the public key
+                    Key publicKey;
+                    top()->setReadOffset(0);
+                    if(!publicKey.readPublic(top()))
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid public key for OP_CHECKDATASIG");
+                        failed = true;
+                    }
+                    pop();
+
+                    // Pop the message
+                    NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+                    NextCash::Hash messageHash;
+                    digest.setOutputEndian(NextCash::Endian::LITTLE);
+                    top()->setReadOffset(0);
+                    digest.writeStream(top(), (unsigned int)top()->length());
+                    digest.getResult(&messageHash);
+                    pop();
+
+                    // Pop the signature
+                    Signature signature;
+                    top()->setReadOffset(0);
+                    if(!signature.read(top(), (unsigned int)top()->length(), true))
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Invalid signature for OP_CHECKDATASIG");
+                        failed = true;
+                    }
+                    pop();
+
+                    // Check the signature with the public key
+                    if(!failed && publicKey.verify(signature, messageHash))
+                    {
+                        if(opCode == OP_CHECKDATASIG)
+                            push()->writeByte(1); // Push true onto the stack
+                    }
+                    else
+                    {
+                        if(opCode == OP_CHECKDATASIG)
+                            push(); // Push false onto the stack
+                        else
+                        {
+                            mVerified = false;
+                            return true;
+                        }
+                    }
+
+                    break;
+                }
                 case OP_CHECKLOCKTIMEVERIFY: // BIP-0065
                 {
                     if(pBlockVersion < 4 || pForks.enabledBlockVersion(pBlockHeight) < 4)
@@ -2166,17 +2305,60 @@ namespace BitCoin
                     arithmeticWrite(top(), a - b);
                     break;
                 }
-                case OP_MUL: //    a b   out    a is multiplied by b. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_MUL is a disabled op code");
-                    mValid = false;
-                    return false;
+                case OP_MUL: //    a b   out    a is multiplied by b.
+                    if(!ifStackTrue())
+                        break;
+
+                    if(pForks.cashFork201811IsActive(pBlockHeight))
+                    {
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_MUL");
+                            mValid = false;
+                            return false;
+                        }
+
+                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Value element longer than max element size for OP_MUL");
+                            mValid = false;
+                            return false;
+                        }
+
+                        int64_t b;
+                        if(!arithmeticRead(top(), b))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+                        pop();
+
+                        int64_t a;
+                        if(!arithmeticRead(top(), a))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+
+                        arithmeticWrite(top(), a * b);
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_MUL is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+
+                    break;
                 case OP_DIV: //    a b   out    a is divided by b.
+                    if(!ifStackTrue())
+                        break;
+
                     if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
-                        if(!ifStackTrue())
-                            break;
-
                         if(!checkStackSize(2))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
@@ -2219,11 +2401,11 @@ namespace BitCoin
                     }
                     break;
                 case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
+                    if(!ifStackTrue())
+                        break;
+
                     if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
-                        if(!ifStackTrue())
-                            break;
-
                         if(!checkStackSize(2))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
@@ -2265,16 +2447,104 @@ namespace BitCoin
                         return false;
                     }
                     break;
-                case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_LSHIFT is a disabled op code");
-                    mValid = false;
-                    return false;
-                case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_RSHIFT is a disabled op code");
-                    mValid = false;
-                    return false;
+                case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign.
+                    if(!ifStackTrue())
+                        break;
+
+                    if(pForks.cashFork201811IsActive(pBlockHeight))
+                    {
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_LSHIFT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Value element longer than max element size for OP_LSHIFT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        int64_t n;
+                        if(!arithmeticRead(top(), n))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+                        pop();
+
+                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Value element longer than max element size for OP_LSHIFT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        leftShift(*top(), n);
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_LSHIFT is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+
+                    break;
+                case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign.
+                    if(!ifStackTrue())
+                        break;
+
+                    if(pForks.cashFork201811IsActive(pBlockHeight))
+                    {
+                        if(!checkStackSize(2))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_RSHIFT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Value element longer than max element size for OP_RSHIFT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        int64_t n;
+                        if(!arithmeticRead(top(), n))
+                        {
+                            mValid = false;
+                            return false;
+                        }
+                        pop();
+
+                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Value element longer than max element size for OP_RSHIFT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        rightShift(*top(), n);
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_RSHIFT is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+
+                    break;
                 case OP_BOOLAND: //    a b   out    If both a and b are not 0, the output is 1. Otherwise 0.
                 {
                     if(!ifStackTrue())
@@ -2695,7 +2965,8 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TOALTSTACK");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_TOALTSTACK");
                         mValid = false;
                         return false;
                     }
@@ -2709,7 +2980,8 @@ namespace BitCoin
 
                     if(!checkAltStackSize(1))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack not large enough for OP_FROMALTSTACK");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Alt Stack not large enough for OP_FROMALTSTACK");
                         mValid = false;
                         return false;
                     }
@@ -2724,7 +2996,8 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DUP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_DUP");
                         mValid = false;
                         return false;
                     }
@@ -2738,7 +3011,8 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IFDUP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_IFDUP");
                         mValid = false;
                         return false;
                     }
@@ -2761,7 +3035,8 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_DROP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_DROP");
                         mValid = false;
                         return false;
                     }
@@ -2775,7 +3050,8 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NIP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_NIP");
                         mValid = false;
                         return false;
                     }
@@ -2794,7 +3070,8 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_OVER");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_OVER");
                         mValid = false;
                         return false;
                     }
@@ -2813,7 +3090,8 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_PICK");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_PICK");
                         mValid = false;
                         return false;
                     }
@@ -2828,7 +3106,8 @@ namespace BitCoin
 
                     if(!checkStackSize(n))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2849,7 +3128,8 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2864,7 +3144,8 @@ namespace BitCoin
 
                     if(!checkStackSize(n))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2886,7 +3167,8 @@ namespace BitCoin
 
                     if(!checkStackSize(3))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROT");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_ROT");
                         mValid = false;
                         return false;
                     }
@@ -2910,7 +3192,8 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_SWAP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_SWAP");
                         mValid = false;
                         return false;
                     }
@@ -2931,7 +3214,8 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_TUCK");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_TUCK");
                         mValid = false;
                         return false;
                     }
@@ -2953,7 +3237,8 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_2DROP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_2DROP");
                         mValid = false;
                         return false;
                     }
@@ -2969,7 +3254,8 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -2990,7 +3276,8 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_3DUP");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_3DUP");
                         mValid = false;
                         return false;
                     }
@@ -3014,7 +3301,8 @@ namespace BitCoin
 
                     if(!checkStackSize(4))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_2OVER");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_2OVER");
                         mValid = false;
                         return false;
                     }
@@ -3037,7 +3325,8 @@ namespace BitCoin
 
                     if(!checkStackSize(6))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -3068,7 +3357,8 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_ROLL");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_ROLL");
                         mValid = false;
                         return false;
                     }
@@ -3094,11 +3384,11 @@ namespace BitCoin
 
                 // Splice
                 case OP_CAT: //  x1 x2  out  Concatenates two strings.
+                    if(!ifStackTrue())
+                        break;
+
                     if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
-                        if(!ifStackTrue())
-                            break;
-
                         if(!checkStackSize(2))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
@@ -3139,11 +3429,11 @@ namespace BitCoin
                     }
                     break;
                 case OP_SPLIT: //  in x n  out x1 x2  Split byte sequence x at position n
+                    if(!ifStackTrue())
+                        break;
+
                     if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
-                        if(!ifStackTrue())
-                            break;
-
                         if(!checkStackSize(2))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
@@ -3216,11 +3506,11 @@ namespace BitCoin
                     }
                     break;
                 case OP_NUM2BIN: // in x1 x2 out  Convert numeric value a into byte sequence of length b
+                    if(!ifStackTrue())
+                        break;
+
                     if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
-                        if(!ifStackTrue())
-                            break;
-
                         if(!checkStackSize(2))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
@@ -3293,11 +3583,11 @@ namespace BitCoin
                     }
                     break;
                 case OP_BIN2NUM: // in x out Convert byte sequence x into a numeric value
+                    if(!ifStackTrue())
+                        break;
+
                     if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
-                        if(!ifStackTrue())
-                            break;
-
                         if(!checkStackSize(1))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
@@ -3382,7 +3672,8 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_SIZE");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_SIZE");
                         mValid = false;
                         return false;
                     }
@@ -3395,17 +3686,48 @@ namespace BitCoin
 
 
                 // Bitwise logic
-                case OP_INVERT: //  in  out  Flips all of the bits in the input. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_RIGHT is a disabled op code");
-                    mValid = false;
-                    return false;
+                case OP_INVERT: //  in  out  Flips all of the bits in the input.
+                    if(!ifStackTrue())
+                        break;
+
+                    if(pForks.cashFork201811IsActive(pBlockHeight))
+                    {
+                        if(!checkStackSize(1))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Stack not large enough for OP_INVERT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
+                        {
+                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                              "Value element longer than max element size for OP_INVERT");
+                            mValid = false;
+                            return false;
+                        }
+
+                        // Invert each byte.
+                        uint8_t *byte = top()->begin();
+                        for(unsigned int i = 0; i < top()->length(); ++i, ++byte)
+                            *byte = ~*byte;
+                    }
+                    else
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "OP_INVERT is a disabled op code");
+                        mValid = false;
+                        return false;
+                    }
+
+                    break;
                 case OP_AND: //  x1 x2  out  Bitwise and between each bit in the inputs.
+                    if(!ifStackTrue())
+                        break;
+
                     if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
-                        if(!ifStackTrue())
-                            break;
-
                         if(!checkStackSize(2))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
@@ -3448,11 +3770,11 @@ namespace BitCoin
                     }
                     break;
                 case OP_OR: //  x1 x2  out  Bitwise or between each bit in the inputs.
+                    if(!ifStackTrue())
+                        break;
+
                     if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
-                        if(!ifStackTrue())
-                            break;
-
                         if(!checkStackSize(2))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
@@ -3494,12 +3816,12 @@ namespace BitCoin
                         return false;
                     }
                     break;
-                case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs. disabled.
+                case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs.
+                    if(!ifStackTrue())
+                        break;
+
                     if(pForks.cashFork201805IsActive(pBlockHeight))
                     {
-                        if(!ifStackTrue())
-                            break;
-
                         if(!checkStackSize(2))
                         {
                             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
@@ -3552,6 +3874,7 @@ namespace BitCoin
                 case OP_RESERVED2: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
                     if(!ifStackTrue())
                         break;
+
                     NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                       "OP_RESERVED op code executed");
                     mValid = false;
@@ -5031,6 +5354,46 @@ namespace BitCoin
             interpreter.printStack("Should be -1236");
             success = false;
         }
+
+        /***********************************************************************************************
+         * TODO OP_CHECKDATASIG
+         ***********************************************************************************************/
+        // interpreter.clear();
+        // testScript.clear();
+
+        // ScriptInterpreter::writePushDataSize(9, &testScript);
+        // testScript.writeByte(0x04);
+        // //TODO Write valid and invalid check data sig.
+
+        // // Add OP_CHECKDATASIG
+        // testScript.writeByte(OP_CHECKDATASIG);
+
+        // if(interpreter.process(testScript, 4, forks, 2) || interpreter.isValid())
+        // {
+            // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_INTERPRETER_LOG_NAME,
+              // "Failed to process OP_CHECKDATASIG");
+            // interpreter.printStack("Should be fail");
+            // success = false;
+        // }
+        // else
+            // NextCash::Log::add(NextCash::Log::INFO, BITCOIN_INTERPRETER_LOG_NAME,
+              // "Passed OP_CHECKDATASIG");
+
+        /***********************************************************************************************
+         * TODO OP_MUL
+         ***********************************************************************************************/
+
+        /***********************************************************************************************
+         * TODO OP_LSHIFT
+         ***********************************************************************************************/
+
+        /***********************************************************************************************
+         * TODO OP_RSHIFT
+         ***********************************************************************************************/
+
+        /***********************************************************************************************
+         * TODO OP_INVERT
+         ***********************************************************************************************/
 
         return success;
     }

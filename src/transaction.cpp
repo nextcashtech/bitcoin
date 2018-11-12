@@ -831,6 +831,14 @@ namespace BitCoin
                 return;
             }
 
+            if(pChain->forks().cashFork201811IsActive(pHeight) && size() < 100)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Transaction below min size of 100 (%d bytes) : trans %s", size(),
+                  hash.hex().text());
+                return;
+            }
+
             if(inputs.size() == 0)
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
@@ -893,18 +901,27 @@ namespace BitCoin
                 setIsStandard = false;
             }
 
+            if(pChain->forks().cashFork201811IsActive(pHeight) && size() < 100)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Transaction below min size of 100 (%d bytes) : trans %s", size(),
+                  hash.hex().text());
+                return;
+            }
+
             // Input script only contains data pushes, including hard coded value pushes
             // TODO Decide if this is needed.
-            // input->script.setReadOffset(0);
-            // if(!ScriptInterpreter::isPushOnly(input->script))
-            // {
-                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  // "Input %d script is not push only : trans %s", index, hash.hex().text());
-                // input->script.setReadOffset(0);
-                // ScriptInterpreter::printScript(input->script, pChain->forks(), pHeight,
-                  // NextCash::Log::VERBOSE);
-                // setIsStandard = false;
-            // }
+            input->script.setReadOffset(0);
+            if(pChain->forks().cashFork201811IsActive(pHeight) &&
+              !ScriptInterpreter::isPushOnly(input->script))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  "Input %d script is not push only : trans %s", index, hash.hex().text());
+                input->script.setReadOffset(0);
+                ScriptInterpreter::printScript(input->script, pChain->forks(), pHeight,
+                  NextCash::Log::VERBOSE);
+                return;
+            }
 
             ++index;
         }
@@ -1180,8 +1197,10 @@ namespace BitCoin
                       pChain->forks(), pHeight) || !interpreter.isValid())
                     {
                         pSignatureTime.stop();
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                          "Input %d outpoint script is not valid : trans %s", index, hash.hex().text());
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                          BITCOIN_TRANSACTION_LOG_NAME,
+                          "Input %d outpoint script is not valid : trans %s", index,
+                          hash.hex().text());
                         input->print(pChain->forks(), NextCash::Log::WARNING);
                         output.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
                           NextCash::Log::WARNING);
@@ -1193,8 +1212,23 @@ namespace BitCoin
                         pSignatureTime.stop();
                         if(!interpreter.isVerified())
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
-                              "Input %d script did not verify : trans %s", index, hash.hex().text());
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                              BITCOIN_TRANSACTION_LOG_NAME,
+                              "Input %d script did not verify : trans %s", index,
+                              hash.hex().text());
+                            input->print(pChain->forks(), NextCash::Log::WARNING);
+                            interpreter.printStack("After fail verify");
+                            output.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
+                              NextCash::Log::WARNING);
+                            sigsVerified = false;
+                        }
+                        else if(pChain->forks().cashFork201811IsActive(pHeight) &&
+                          !interpreter.stackIsClean())
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                              BITCOIN_TRANSACTION_LOG_NAME,
+                              "Input %d script did not leave the stack clean : trans %s", index,
+                              hash.hex().text());
                             input->print(pChain->forks(), NextCash::Log::WARNING);
                             interpreter.printStack("After fail verify");
                             output.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
