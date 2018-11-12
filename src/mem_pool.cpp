@@ -121,6 +121,8 @@ namespace BitCoin
                 {
                     hash->nodeID = pNodeID;
                     hash->time = time;
+                    ++hash->requestAttempts;
+                    hash->missing = false;
                     pList.emplace_back(hash->hash);
                     ++hash;
                 }
@@ -393,7 +395,7 @@ namespace BitCoin
     MemPool::AddStatus MemPool::add(Transaction *pTransaction, Chain *pChain, unsigned int pNodeID,
       NextCash::HashList &pUnseenOutpoints)
     {
-        removeRequested(pTransaction->hash);
+        Timer timer(true);
 
         mLock.writeLock("Add Check");
 
@@ -406,6 +408,7 @@ namespace BitCoin
             return ALREADY_HAVE;
         }
 
+        removeRequested(pTransaction->hash);
         mValidatingTransactions.insertSorted(pTransaction->hash);
 
         mLock.writeUnlock();
@@ -508,9 +511,10 @@ namespace BitCoin
 
         if(pTransaction->isStandardVerified())
         {
+            timer.stop();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Added transaction (%d bytes) (%llu fee rate) : %s", pTransaction->size(),
-              pTransaction->feeRate(), pTransaction->hash.hex().text());
+              "Added transaction (%d bytes) (%llu fee rate) (%llu us) : %s", pTransaction->size(),
+              pTransaction->feeRate(), timer.microseconds(), pTransaction->hash.hex().text());
             insert(pTransaction, true);
             mLock.writeUnlock();
             return ADDED;
