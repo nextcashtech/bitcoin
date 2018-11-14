@@ -10,6 +10,7 @@
 
 #include "mutex.hpp"
 #include "hash.hpp"
+#include "hash_container_list.hpp"
 #include "log.hpp"
 #include "buffer.hpp"
 #include "file_stream.hpp"

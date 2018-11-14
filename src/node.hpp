@@ -114,8 +114,7 @@ namespace BitCoin
         unsigned int blocksDownloadedTime() const { return mBlockDownloadTime; }
         double blockDownloadBytesPerSecond() const;
 
-        bool hasTransaction(const NextCash::Hash &pHash);
-        bool requestTransactions(NextCash::HashList &pList);
+        bool requestTransactions(NextCash::HashList &pList, bool pReMark);
 
         bool requestPeers();
 
@@ -123,7 +122,8 @@ namespace BitCoin
         bool announceBlock(Block *pBlock);
 
         // Send notification of a new transaction in the mempool
-        bool announceTransaction(Transaction *pTransaction);
+        void addTransactionAnnouncements(std::vector<Transaction *> &pTransactions);
+        bool sendAnnouncments();
 
         // Used to send transactions created by this wallet
         bool sendTransaction(Transaction *pTransaction);
@@ -201,6 +201,8 @@ namespace BitCoin
         bool mWasReady;
         bool mReleased;
         bool mMemPoolRequested;
+        Time mMemPoolRequestedTime;
+        bool mMemPoolReceived;
         bool *mStopFlag;
 
         Message::VersionData *mSentVersionData, *mReceivedVersionData;
@@ -212,6 +214,7 @@ namespace BitCoin
         uint32_t mPingCutoff;
         Time mLastBlackListCheck;
         Time mLastMerkleCheck, mLastMerkleRequest, mLastMerkleReceive;
+        Message::InventoryData mInventoryData;
 
         BloomFilter mFilter; // Bloom filter received from peer
         uint64_t mMinimumFeeRate;
@@ -231,6 +234,13 @@ namespace BitCoin
 
         NextCash::Mutex mAnnounceMutex;
         NextCash::HashList mAnnounceBlocks, mAnnounceTransactions, mSentTransactions;
+
+        // Transaction hashes that were already requested, but not received, when announced.
+        // This ensures if one node fails to send a requested transaction, that another can still
+        //   request it.
+        NextCash::HashList mSavedTransactions;
+        Time mLastSavedCheckTime;
+        bool checkSaved();
 
         void addAnnouncedBlock(const NextCash::Hash &pHash);
         bool addAnnouncedTransaction(const NextCash::Hash &pHash);

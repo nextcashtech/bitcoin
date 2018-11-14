@@ -63,11 +63,13 @@
     static const char *PROFILER_MEMPOOL_ADD_NAME __attribute__ ((unused)) = "MemPool::add";
     static const unsigned int PROFILER_MEMPOOL_ADD_B_ID = 22;
     static const char *PROFILER_MEMPOOL_ADD_B_NAME __attribute__ ((unused)) = "MemPool::add (B)"; // hits are bytes
-    static const unsigned int PROFILER_MEMPOOL_PENDING_ID = 23;
+    static const unsigned int PROFILER_MEMPOOL_ADD_DUP_B_ID = 23;
+    static const char *PROFILER_MEMPOOL_ADD_DUP_B_NAME __attribute__ ((unused)) = "MemPool::add (dup B)"; // hits are bytes
+    static const unsigned int PROFILER_MEMPOOL_PENDING_ID = 24;
     static const char *PROFILER_MEMPOOL_PENDING_NAME __attribute__ ((unused)) = "MemPool::checkPending";
-    static const unsigned int PROFILER_MEMPOOL_GET_TRANS_ID = 24;
+    static const unsigned int PROFILER_MEMPOOL_GET_TRANS_ID = 25;
     static const char *PROFILER_MEMPOOL_GET_TRANS_NAME __attribute__ ((unused)) = "MemPool::getTrans";
-    static const unsigned int PROFILER_MEMPOOL_GET_OUTPUT_ID = 25;
+    static const unsigned int PROFILER_MEMPOOL_GET_OUTPUT_ID = 26;
     static const char *PROFILER_MEMPOOL_GET_OUTPUT_NAME __attribute__ ((unused)) = "MemPool::getOutput";
 
 #endif

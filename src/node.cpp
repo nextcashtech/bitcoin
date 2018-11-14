@@ -55,6 +55,7 @@ namespace BitCoin
         mLastReceiveTime = getTime();
         mLastCheckTime = getTime();
         mLastBlackListCheck = getTime();
+        mLastSavedCheckTime = 0;
         mLastPingNonce = 0;
         mLastPingTime = 0;
         mPingRoundTripTime = 0xffffffffffffffff;
@@ -132,6 +133,7 @@ namespace BitCoin
         mLastReceiveTime = getTime();
         mLastCheckTime = getTime();
         mLastBlackListCheck = getTime();
+        mLastSavedCheckTime = 0;
         mLastPingNonce = 0;
         mLastPingTime = 0;
         mPingRoundTripTime = 0xffffffffffffffff;
@@ -295,15 +297,15 @@ namespace BitCoin
                 {
                     Message::Data sendHeadersMessage(Message::SEND_HEADERS);
                     sendMessage(&sendHeadersMessage);
+
+                    if(isGood())
+                        requestPeers();
+                    requestHeaders();
+
+                    if(mReceivedVersionData != NULL)
+                        info.updatePeer(mAddress, mReceivedVersionData->userAgent,
+                          mReceivedVersionData->transmittingServices);
                 }
-
-                if(isGood())
-                    requestPeers();
-                requestHeaders();
-
-                if(mReceivedVersionData != NULL && isOutgoing())
-                    info.updatePeer(mAddress, mReceivedVersionData->userAgent,
-                      mReceivedVersionData->transmittingServices);
             }
 
             mPrepared = true;
@@ -346,15 +348,18 @@ namespace BitCoin
             return false;
         }
 
-        if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > 15 &&
-          time - mLastBlockReceiveTime > 15)
+        uint32_t blockTimeout = 15;
+        if(mChain->isInSync())
+            blockTimeout = 5;
+        if(mBlocksRequested.size() > 0 && time - mBlockRequestTime > blockTimeout &&
+          time - mLastBlockReceiveTime > blockTimeout)
         {
             // Haven't received more of the block in the last 15 seconds
             if(mMessageInterpreter.pendingBlockUpdateTime == 0 ||
-              time - mMessageInterpreter.pendingBlockUpdateTime > 15)
+              time - mMessageInterpreter.pendingBlockUpdateTime > blockTimeout)
             {
-                NextCash::Log::add(NextCash::Log::INFO, mName,
-                  "Dropping. No update on block for 15 seconds");
+                NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                  "Dropping. No update on block for %d seconds", blockTimeout);
                 info.addPeerFail(mAddress);
                 close();
                 return false;
@@ -377,17 +382,28 @@ namespace BitCoin
             return false;
         }
 
-        if(mPrepared && isOutgoing() && !mMemPoolRequested &&
-          (info.spvMode || (info.initialBlockDownloadIsComplete() && mChain->isInSync())) &&
+        if(mMemPoolRequested && !mMemPoolReceived && time - mMemPoolRequestedTime > 15)
+        {
+            NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Didn't provide mempool.");
+            mChain->subtractMemPoolRequest();
+            info.addPeerFail(mAddress);
+            close();
+            return false;
+        }
+
+        if(mPrepared && isOutgoing() && !mMemPoolRequested && (info.spvMode ||
+          (info.initialBlockDownloadIsComplete() && mChain->isInSync())) &&
           mSentVersionData != NULL && (mSentVersionData->relay || mBloomFilterID != 0) &&
           (info.spvMode || mChain->memPoolRequests() < 5))
         {
-            NextCash::Log::add(NextCash::Log::INFO, mName, "Sending request for mem pool");
+            NextCash::Log::add(NextCash::Log::INFO, mName, "Sending request for mempool");
             Message::Data memPoolMessage(Message::MEM_POOL);
             if(sendMessage(&memPoolMessage))
             {
                 mMemPoolRequested = true;
                 mChain->addMemPoolRequest();
+                mMemPoolRequestedTime = getTime();
+                mMemPoolReceived = false;
             }
         }
 
@@ -544,38 +560,25 @@ namespace BitCoin
         return sendMessage(&message);
     }
 
-    bool Node::hasTransaction(const NextCash::Hash &pHash)
-    {
-        mAnnounceMutex.lock();
-        bool result = mAnnounceTransactions.contains(pHash);
-        mAnnounceMutex.unlock();
-        return result;
-    }
-
-    bool Node::requestTransactions(NextCash::HashList &pList)
+    bool Node::requestTransactions(NextCash::HashList &pList, bool pReMark)
     {
         if(pList.size() == 0 || !isReady() || !isOpen() || !isOutgoing())
             return false;
 
+        if(pReMark)
+            mChain->memPool().markTransactions(pList, mID);
+
         // Put transaction hashes into transaction request message
         Message::GetDataData message;
-        for(NextCash::HashList::iterator hash=pList.begin();hash!=pList.end();++hash)
+        for(NextCash::HashList::iterator hash = pList.begin(); hash != pList.end(); ++hash)
+        {
             message.inventory
               .push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION, *hash));
-
-        bool success = sendMessage(&message);
-        if(success)
-        {
-            if(pList.size() == 1)
-                NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
-                  "Sending request for transaction %s", pList.front().hex().text());
-            else
-                NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
-                  "Sending request for %d transactions starting with %s", pList.size(),
-                  pList.front().hex().text());
+            // NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
+              // "Sending request for transaction : %s", hash->hex().text());
         }
 
-        return success;
+        return sendMessage(&message);
     }
 
     bool Node::requestPeers()
@@ -686,78 +689,77 @@ namespace BitCoin
         }
     }
 
-    bool Node::announceTransaction(Transaction *pTransaction)
+    void Node::addTransactionAnnouncements(std::vector<Transaction *> &pTransactions)
     {
-        if(!isOpen() || mReceivedVersionData == NULL)
-            return false;
+        if(!isOpen() || !isReady() || mReceivedVersionData == NULL ||
+          (!mReceivedVersionData->relay && mFilter.isEmpty()))
+            return;
 
-        bool filterContains = mFilter.contains(*pTransaction);
+        mAnnounceMutex.lock();
 
-        if(!mReceivedVersionData->relay && !filterContains)
-            return false;
-
-        if(filterContains)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-              "Bloom filter contains transaction : %s", pTransaction->hash.hex().text());
-
-            // Update filter
-            if(mFilter.flags() & BloomFilter::UPDATE_MASK)
+        for(std::vector<Transaction *>::iterator trans = pTransactions.begin();
+          trans != pTransactions.end(); ++trans)
+            if(!mAnnounceTransactions.contains((*trans)->hash))
             {
-                ScriptInterpreter::ScriptType type;
-                NextCash::HashList hashes;
-                Outpoint outpoint;
+                if(mReceivedVersionData->relay)
+                {
+                    if((*trans)->feeRate() >= mMinimumFeeRate)
+                        mInventoryData.inventory
+                          .push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION,
+                          (*trans)->hash));
+                }
+                else if(mFilter.contains(**trans))
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                      "Bloom filter contains transaction : %s", (*trans)->hash.hex().text());
 
-                outpoint.transactionID = pTransaction->hash;
-                outpoint.index = 0;
-
-                for(std::vector<Output>::iterator output = pTransaction->outputs.begin();
-                  output != pTransaction->outputs.end(); ++output, ++outpoint.index)
-                    if(mFilter.containsScript(output->script))
+                    // Update filter
+                    if(mFilter.flags() & BloomFilter::UPDATE_MASK)
                     {
-                        if(mFilter.flags() & BloomFilter::UPDATE_P2PUBKEY_ONLY)
-                        {
-                            // Don't add unless P2PKH or MultiSig
-                            type = ScriptInterpreter::parseOutputScript(output->script, hashes);
-                            if(type != ScriptInterpreter::P2PKH &&
-                              type != ScriptInterpreter::MULTI_SIG)
-                                continue;
-                        }
+                        ScriptInterpreter::ScriptType type;
+                        NextCash::HashList hashes;
+                        Outpoint outpoint;
 
-                        // Add new UTXO to filter
-                        mFilter.add(outpoint);
+                        outpoint.transactionID = (*trans)->hash;
+                        outpoint.index = 0;
+
+                        for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
+                          output != (*trans)->outputs.end(); ++output, ++outpoint.index)
+                            if(mFilter.containsScript(output->script))
+                            {
+                                if(mFilter.flags() & BloomFilter::UPDATE_P2PUBKEY_ONLY)
+                                {
+                                    // Don't add unless P2PKH or MultiSig
+                                    type = ScriptInterpreter::parseOutputScript(output->script, hashes);
+                                    if(type != ScriptInterpreter::P2PKH &&
+                                      type != ScriptInterpreter::MULTI_SIG)
+                                        continue;
+                                }
+
+                                // Add new UTXO to filter
+                                mFilter.add(outpoint);
+                            }
                     }
-            }
-        }
-        else // Full relay mode
-        {
-            mAnnounceMutex.lock();
-            if(mAnnounceTransactions.contains(pTransaction->hash))
-            {
-                // Don't announce to node that already announced to you
-                mAnnounceMutex.unlock();
-                return false;
-            }
-            mAnnounceMutex.unlock();
 
-            // Check against minimum fee rate
-            if(pTransaction->feeRate() < mMinimumFeeRate)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
-                  "Not announcing transaction fee rate %d below min rate %d : %s",
-                  pTransaction->feeRate(), mMinimumFeeRate, pTransaction->hash.hex().text());
-                return false;
+                    mInventoryData.inventory
+                      .push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION,
+                      (*trans)->hash));
+                }
             }
-        }
 
-        // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-          // "Announcing transaction with fee rate %d above min rate %d : %s", pTransaction->feeRate(),
-          // mMinimumFeeRate, pTransaction->hash.hex().text());
-        Message::InventoryData inventoryData;
-        inventoryData.inventory
-          .push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION,
-          pTransaction->hash));
-        return sendMessage(&inventoryData);
+        mAnnounceMutex.unlock();
+    }
+
+    bool Node::sendAnnouncments()
+    {
+        if(mInventoryData.inventory.size() == 0)
+            return true;
+
+        NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName, "Announcing %d transactions",
+          mInventoryData.inventory.size());
+        bool result = sendMessage(&mInventoryData);
+        mInventoryData.inventory.clear();
+        return result;
     }
 
     bool Node::sendTransaction(Transaction *pTransaction)
@@ -959,14 +961,48 @@ namespace BitCoin
         mAnnounceMutex.lock();
         if(!mAnnounceTransactions.contains(pHash))
         {
-            // Keep list at 1024 or less
-            if(mAnnounceTransactions.size() > 1024)
+            // Keep list at 5000 or less
+            if(mAnnounceTransactions.size() > 5000)
                 mAnnounceTransactions.erase(mAnnounceTransactions.begin());
             mAnnounceTransactions.push_back(pHash);
         }
         mAnnounceMutex.unlock();
 
         return mMonitor != NULL && mMonitor->addTransactionAnnouncement(pHash, mID);
+    }
+
+    bool Node::checkSaved()
+    {
+        if(getTime() - mLastSavedCheckTime < 2)
+            return true;
+
+        NextCash::HashList toRequest;
+        for(NextCash::HashList::iterator hash = mSavedTransactions.begin();
+          hash != mSavedTransactions.end();)
+            switch(mChain->memPool().hashStatus(mChain, *hash, mID, true))
+            {
+            case MemPool::HASH_NEED: // Failed previous request. Try with this node.
+                toRequest.push_back(*hash);
+                hash = mSavedTransactions.erase(hash);
+                break;
+            case MemPool::HASH_REQUESTED: // Still requested by another node.
+                ++hash;
+                break;
+            default: // Already processed.
+                hash = mSavedTransactions.erase(hash);
+                break;
+            }
+
+        if(toRequest.size() > 0)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+              "Re-requested %d transactions", toRequest.size());
+            if(!requestTransactions(toRequest, false))
+                return false;
+        }
+
+        mLastSavedCheckTime = getTime();
+        return true;
     }
 
     void Node::process()
@@ -1059,6 +1095,9 @@ namespace BitCoin
         }
 
         Info &info = Info::instance();
+
+        if(!info.spvMode && !checkSaved())
+            return;
 
 #ifdef SINGLE_THREAD
         if(mMessagesReceived == 0 && time - mConnectedTime > 60)
@@ -1312,11 +1351,11 @@ namespace BitCoin
                     close();
                     success = false;
                 }
-                else if(isOutgoing() && !mChain->isInSync() &&
-                  (mReceivedVersionData->startBlockHeight < 0 ||
-                  (unsigned int)mReceivedVersionData->startBlockHeight < mChain->headerHeight()))
+                else if(isOutgoing() &&
+                  mReceivedVersionData->startBlockHeight < mChain->headerHeight())
                 {
-                    NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Low block height");
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                      "Dropping. Low block height (%d)", mReceivedVersionData->startBlockHeight);
                     info.addPeerFail(mAddress);
                     close();
                     success = false;
@@ -1462,28 +1501,29 @@ namespace BitCoin
                 break;
             }
             case Message::ADDRESSES:
-            {
-                Message::AddressesData *addressesData = (Message::AddressesData *)message;
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                  "Received %d peer addresses", addressesData->addresses.size());
-                NextCash::IPAddress ip;
-
-                for(std::vector<Message::Address>::iterator address =
-                  addressesData->addresses.begin(); address != addressesData->addresses.end() &&
-                  !mStopRequested; ++address)
+                if(isSeed() || isOutgoing())
                 {
-                    ip.set(address->ip, address->port);
-                    info.addPeer(ip, address->services);
-                }
+                    Message::AddressesData *addressesData = (Message::AddressesData *)message;
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                      "Received %d peer addresses", addressesData->addresses.size());
+                    NextCash::IPAddress ip;
 
-                if(isSeed())
-                {
-                    NextCash::Log::add(NextCash::Log::VERBOSE, mName,
-                      "Closing seed because it gave addresses");
-                    close(); // Disconnect from seed node because it has done its job
+                    for(std::vector<Message::Address>::iterator address =
+                      addressesData->addresses.begin(); address != addressesData->addresses.end() &&
+                      !mStopRequested; ++address)
+                    {
+                        ip.set(address->ip, address->port);
+                        info.addPeer(ip, address->services);
+                    }
+
+                    if(isSeed())
+                    {
+                        NextCash::Log::add(NextCash::Log::VERBOSE, mName,
+                          "Closing seed because it gave addresses");
+                        close(); // Disconnect from seed node because it has done its job
+                    }
                 }
                 break;
-            }
             case Message::ALERT:
                 //TODO Determine if anything needs to be done for alerts
                 break;
@@ -1725,6 +1765,9 @@ namespace BitCoin
                     NextCash::HashList blockList, transactionList;
                     Message::NotFoundData notFound;
 
+                    if(mMemPoolRequested)
+                        mMemPoolReceived = true;
+
                     for(Message::Inventory::iterator item = inventoryData->inventory.begin();
                       item != inventoryData->inventory.end() && !mStopRequested; ++item)
                     {
@@ -1763,18 +1806,21 @@ namespace BitCoin
                             }
                             break;
                         case Message::InventoryHash::TRANSACTION:
-                            NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
-                              "Transaction Inventory : %s", (*item)->hash.hex().text());
+                            // NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
+                              // "Transaction announced : %s", (*item)->hash.hex().text());
 
                             if(addAnnouncedTransaction((*item)->hash) && info.spvMode)
                                 transactionList.push_back((*item)->hash);
 
                             if(!info.spvMode)
                             {
-                                switch(mChain->memPool().hashStatus(mChain, (*item)->hash, mID))
+                                switch(mChain->memPool().hashStatus(mChain, (*item)->hash, mID, false))
                                 {
                                 case MemPool::HASH_NEED:
                                     transactionList.push_back((*item)->hash);
+                                    break;
+                                case MemPool::HASH_REQUESTED:
+                                    mSavedTransactions.push_back((*item)->hash);
                                     break;
                                 case MemPool::HASH_ALREADY_HAVE:
                                     break;
@@ -1826,7 +1872,7 @@ namespace BitCoin
                         requestBlocks(blockList);
 
                     if(transactionList.size() > 0)
-                        requestTransactions(transactionList);
+                        requestTransactions(transactionList, false);
 
                     if(notFound.inventory.size() > 0)
                         sendMessage(&notFound);
@@ -2023,77 +2069,76 @@ namespace BitCoin
                     break;
                 }
 
-                // Verify and add to mem pool
+                // Verify and add to mem pool or monitor.
                 Message::TransactionData *transactionData = (Message::TransactionData *)message;
                 if(transactionData->transaction != NULL)
                 {
-                    NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
-                      "Received transaction (%d bytes) : %s", transactionData->transaction->size(),
-                      transactionData->transaction->hash.hex().text());
+                    // NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
+                      // "Received transaction (%d bytes) : %s", transactionData->transaction->size(),
+                      // transactionData->transaction->hash.hex().text());
 
                     if(!info.spvMode)
                     {
                         NextCash::HashList unseen;
-                        MemPool::AddStatus addStatus =
-                          mChain->memPool().add(transactionData->transaction, mChain, mID, unseen);
-
-                        switch(addStatus)
+                        switch(mChain->memPool().add(transactionData->transaction, mChain, mID,
+                          unseen))
                         {
-                            case MemPool::ADDED:
-                                if(mMonitor != NULL)
-                                {
-                                    transactionData->transaction =
-                                      new Transaction(*transactionData->transaction);
-                                    mMonitor->addTransaction(*mChain, transactionData);
-                                }
-                                else // So it won't be deleted with the message
-                                    transactionData->transaction = NULL;
-                                break;
-                            case MemPool::UNSEEN_OUTPOINTS: // Added to pending
-                                requestTransactions(unseen);
-                                if(mMonitor != NULL)
-                                {
-                                    transactionData->transaction =
-                                      new Transaction(*transactionData->transaction);
-                                    mMonitor->addTransaction(*mChain, transactionData);
-                                }
-                                else // So it won't be deleted with the message
-                                    transactionData->transaction = NULL;
-                                break;
+                        case MemPool::ADDED:
+                            if(mMonitor != NULL)
+                            {
+                                transactionData->transaction =
+                                  new Transaction(*transactionData->transaction);
+                                mMonitor->addTransaction(*mChain, transactionData);
+                            }
+                            else // So it won't be deleted with the message
+                                transactionData->transaction = NULL;
+                            break;
 
-                            case MemPool::NON_STANDARD:
-                                sendRejectWithHash(Message::nameFor(message->type),
-                                  Message::RejectData::NON_STANDARD, "Non standard",
-                                  transactionData->transaction->hash);
-                                break;
+                        case MemPool::UNSEEN_OUTPOINTS: // Added to pending
+                            requestTransactions(unseen, false);
+                            if(mMonitor != NULL)
+                            {
+                                transactionData->transaction =
+                                  new Transaction(*transactionData->transaction);
+                                mMonitor->addTransaction(*mChain, transactionData);
+                            }
+                            else // So it won't be deleted with the message
+                                transactionData->transaction = NULL;
+                            break;
 
-                            case MemPool::DOUBLE_SPEND:
-                                sendRejectWithHash(Message::nameFor(message->type),
-                                  Message::RejectData::DUPLICATE, "Double spend",
-                                  transactionData->transaction->hash);
-                                break;
+                        case MemPool::NON_STANDARD:
+                            sendRejectWithHash(Message::nameFor(message->type),
+                              Message::RejectData::NON_STANDARD, "Non standard",
+                              transactionData->transaction->hash);
+                            break;
 
-                            case MemPool::LOW_FEE:
-                                sendRejectWithHash(Message::nameFor(message->type),
-                                  Message::RejectData::LOW_FEE, "Fee below minimum",
-                                  transactionData->transaction->hash);
-                                break;
+                        case MemPool::DOUBLE_SPEND:
+                            sendRejectWithHash(Message::nameFor(message->type),
+                              Message::RejectData::DUPLICATE, "Double spend",
+                              transactionData->transaction->hash);
+                            break;
 
-                            case MemPool::INVALID:
-                                sendRejectWithHash(Message::nameFor(message->type),
-                                  Message::RejectData::INVALID, "Invalid transaction",
-                                  transactionData->transaction->hash);
+                        case MemPool::LOW_FEE:
+                            sendRejectWithHash(Message::nameFor(message->type),
+                              Message::RejectData::LOW_FEE, "Fee below minimum",
+                              transactionData->transaction->hash);
+                            break;
 
-                                NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                                  "Dropping. Sent invalid transaction : %s",
-                                  transactionData->transaction->hash.hex().text());
-                                info.addPeerFail(mAddress);
-                                close();
-                                success = false;
-                                break;
+                        case MemPool::INVALID:
+                            sendRejectWithHash(Message::nameFor(message->type),
+                              Message::RejectData::INVALID, "Invalid transaction",
+                              transactionData->transaction->hash);
 
-                            default:
-                                break;
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                              "Dropping. Sent invalid transaction : %s",
+                              transactionData->transaction->hash.hex().text());
+                            info.addPeerFail(mAddress);
+                            close();
+                            success = false;
+                            break;
+
+                        default:
+                            break;
                         }
 
                     }
@@ -2112,7 +2157,7 @@ namespace BitCoin
                     mChain->memPool().getFullList(list, mFilter);
 
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                      "Sending %d mem pool transaction hashes", list.size());
+                      "Sending %d mempool transaction hashes", list.size());
 
                     for(NextCash::HashList::iterator hash = list.begin(); hash != list.end();
                       ++hash)

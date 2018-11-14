@@ -228,6 +228,7 @@ namespace BitCoin
 
         unsigned int memPoolRequests() const { return mMemPoolRequests; }
         void addMemPoolRequest() { ++mMemPoolRequests; }
+        void subtractMemPoolRequest() { --mMemPoolRequests; }
 
         unsigned int branchCount() const { return mBranches.size(); }
         const Branch *branchAt(unsigned int pOffset) const

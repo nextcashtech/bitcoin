@@ -9,6 +9,7 @@
 #define BITCOIN_TRANSACTION_HPP
 
 #include "log.hpp"
+#include "digest.hpp"
 #include "hash.hpp"
 #include "stream.hpp"
 #include "buffer.hpp"
@@ -33,9 +34,8 @@ namespace BitCoin
             output = NULL;
             confirmations = 0xffffffff;
         }
-        Outpoint(const NextCash::Hash &pTransactionID, uint32_t pIndex)
+        Outpoint(const NextCash::Hash &pTransactionID, uint32_t pIndex) : transactionID(pTransactionID)
         {
-            transactionID = pTransactionID;
             index = pIndex;
             output = NULL;
             confirmations = 0xffffffff;
@@ -161,7 +161,7 @@ namespace BitCoin
 
     };
 
-    class Transaction
+    class Transaction : public NextCash::HashObject
     {
     public:
 
@@ -184,6 +184,9 @@ namespace BitCoin
         Transaction(const Transaction &pCopy);
 
         Transaction &operator = (const Transaction &pRight);
+
+        // HashObject virtual function
+        const NextCash::Hash &getHash() const { return hash; }
 
         void write(NextCash::OutputStream *pStream);
 
@@ -286,6 +289,9 @@ namespace BitCoin
           int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
           std::vector<unsigned int> &pSpentAges, NextCash::Timer &pCheckDupTime,
           NextCash::Timer &pOutputLookupTime, NextCash::Timer &pSignatureTime);
+
+        // Re-check that outpoints are unspent.
+        bool checkOutpoints(Chain *pChain, bool pMemPoolIsLocked);
 
         bool updateOutputs(Chain *pChain, uint64_t pHeight, bool pCoinBase,
           NextCash::Mutex &pSpentAgeLock, std::vector<unsigned int> &pSpentAges);

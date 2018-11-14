@@ -198,10 +198,10 @@ namespace BitCoin
         Time mLastHeaderRequestTime;
         Time mLastConnectionActive;
         Time mLastDataSaveTime;
-        Time mLastMemPoolCheckPending;
         Time mLastMonitorProcess;
         Time mLastCleanTime, mLastRequestCleanTime;
         Time mFinishTime;
+        Time mLastMemPoolProcessTime;
 
         NextCash::Hash mLastHeaderHash;
         NextCash::Network::Listener *mNodeListener;

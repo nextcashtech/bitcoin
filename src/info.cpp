@@ -94,7 +94,7 @@ namespace BitCoin
         minFee = 0; // satoshis per KB
         lowFee = 500; // satoshis per KB
         memPoolSize = 500000000UL; // 500 MB
-        memPoolLowFeeSize = 32000000; // 32 MB
+        memPoolLowFeeSize = 32000000UL; // 32 MB
         addressesCacheSize = 500000000UL; // 500 MB
         merkleBlockCountRequired = 3;
         spvMemPoolCountRequired = 4;
