@@ -116,6 +116,7 @@ namespace BitCoin
         void getFullList(NextCash::HashList &pList, const BloomFilter &pFilter);
 
         NextCash::stream_size size() const { return mSize; }
+        NextCash::stream_size pendingSize() const { return mPendingSize; }
         unsigned int count() const { return mTransactions.size(); }
         unsigned int pendingCount() const { return mPendingTransactions.size(); }
 
@@ -134,6 +135,8 @@ namespace BitCoin
             NextCash::stream_size ten; // 5.2 - 10.2 sat/B
             NextCash::stream_size remainingSize; // Total size of remaining transactions
             uint64_t remainingFee; // Total fee of remaining transactions
+            unsigned int pendingCount; // Number of pending transactions
+            NextCash::stream_size pendingSize; // Pending size in bytes
 
             void clear()
             {
@@ -147,6 +150,8 @@ namespace BitCoin
                 ten = 0L;
                 remainingSize = 0L;
                 remainingFee = 0L;
+                pendingCount = 0;
+                pendingSize = 0L;
             }
 
         };
@@ -166,6 +171,7 @@ namespace BitCoin
         void drop();
 
         // Drop verified transactions older than 24 hours
+        // Drop pending transactions older than 5 minutes.
         void expire();
 
         void addInvalidHash(const NextCash::Hash &pHash);
@@ -234,7 +240,9 @@ namespace BitCoin
 
         bool checkPendingTransaction(Chain *pChain, Transaction *pTransaction,
           unsigned int pDepth);
-        void checkPending(Chain *pChain);
+
+        void checkPendingForNewTransaction(Chain *pChain, const NextCash::Hash &pHash,
+          unsigned int pDepth);
 
         class OutpointHash : public NextCash::HashObject
         {
