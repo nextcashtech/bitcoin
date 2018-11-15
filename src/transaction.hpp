@@ -342,12 +342,17 @@ namespace BitCoin
         // Run unit tests
         static bool test();
 
+        // Track if mempool is responsible for delete.
+        bool isInMemPool() const { return mIsInMemPool; }
+        void setInMemPool(bool pValue) { mIsInMemPool = pValue; }
+
     private:
 
         Time mTime;
         int64_t mFee;
         NextCash::stream_size mSize;
         uint8_t mStatus;
+        bool mIsInMemPool;
 
         NextCash::Hash mOutpointHash, mSequenceHash, mOutputHash;
 

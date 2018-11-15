@@ -12,6 +12,7 @@
 #include "hash.hpp"
 #include "hash_set.hpp"
 #include "base.hpp"
+#include "message.hpp"
 #include "transaction.hpp"
 #include "outputs.hpp"
 #include "bloom_filter.hpp"
@@ -96,6 +97,9 @@ namespace BitCoin
 
         // Get the transaction.
         Transaction *getTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
+        Transaction *getWithShortID(uint64_t pShortID, Message::CompactBlockData *pCompactBlock,
+          unsigned int pNodeID);
+
         // Confirm no longer using transaction from getTransaction.
         void freeTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
 
@@ -154,7 +158,9 @@ namespace BitCoin
         Info &mInfo;
 
         bool insert(Transaction *pTransaction, bool pAnnounce);
-        void removeInternal(Transaction *pTransaction);
+
+        // Returns true if the transaction is locked by a node.
+        bool removeInternal(Transaction *pTransaction, bool pDelete = true);
 
         // Drop all the oldest/lowest fee rate transactions.
         void drop();

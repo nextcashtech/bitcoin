@@ -46,10 +46,10 @@ namespace BitCoin
         static const uint32_t NOT_OUTGOING = SEED | INCOMING | SCAN;
 
         Node(NextCash::Network::Connection *pConnection, uint32_t pConnectionType,
-          uint64_t pServices, Daemon *pDaemon, bool *pStopFlag = NULL);
+          uint64_t pServices, Daemon *pDaemon, bool *pStopFlag, bool pAnnounceCompact);
 
         Node(NextCash::IPAddress &pIPAddress, uint32_t pConnectionType,
-             uint64_t pServices, Daemon *pDaemon);
+             uint64_t pServices, Daemon *pDaemon, bool pAnnounceCompact);
         ~Node();
 
         static void run(void *pParameter);
@@ -128,6 +128,9 @@ namespace BitCoin
         // Used to send transactions created by this wallet
         bool sendTransaction(Transaction *pTransaction);
 
+        bool compactBlocksEnabled() const { return mSendCompactBlocksVersion != 0L; }
+        bool announceBlocksCompact() const { return mAnnounceBlocksCompact; }
+
         bool isNewlyReady()
         {
             if(!mWasReady && isReady())
@@ -166,6 +169,15 @@ namespace BitCoin
         // Release anything (i.e requests) associated with this node
         void release();
 
+        // Attempt to fill block from compact block.
+        // Returns true if the block has all the transactions.
+        bool fillCompactBlock(Message::CompactBlockData *pData);
+
+        // Adds transactions to the compact block.
+        // Returns true if any transactions were added.
+        bool addTransactionsToCompactBlock(Message::CompactBlockData *pData,
+          Message::CompactTransData *pTransData);
+
         unsigned int mActiveMerkleRequests;
         bool requestMerkleBlock(NextCash::Hash &pHash);
 
@@ -196,7 +208,9 @@ namespace BitCoin
         bool mStarted, mIsInitialized, mStopRequested, mStopped;
         uint32_t mConnectionType;
         bool mIsGood;
-        bool mSendBlocksCompact;
+        bool mAnnounceBlocksCompact, mRequestAnnounceCompact;
+        uint64_t mSendCompactBlocksVersion;
+        bool mSendCompactSent;
         bool mRejected;
         bool mWasReady;
         bool mReleased;
@@ -215,6 +229,7 @@ namespace BitCoin
         Time mLastBlackListCheck;
         Time mLastMerkleCheck, mLastMerkleRequest, mLastMerkleReceive;
         Message::InventoryData mInventoryData;
+        std::vector<Message::CompactBlockData *> mIncomingCompactBlocks, mOutgoingCompactBlocks;
 
         BloomFilter mFilter; // Bloom filter received from peer
         uint64_t mMinimumFeeRate;

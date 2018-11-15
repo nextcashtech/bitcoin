@@ -56,8 +56,8 @@ namespace BitCoin
             ++failed;
 
 #ifndef ANDROID
-        if(!BitCoin::Chain::test())
-            ++failed;
+        // if(!BitCoin::Chain::test())
+            // ++failed;
 
         // if(!merkleTest1())
             // failed++;

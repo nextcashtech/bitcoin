@@ -30,7 +30,8 @@ namespace BitCoin
     NextCash::Hash Chain::sBTCForkBlockHash("00000000000000000019f112ec0a9982926f1258cdcc558dd7c3b7e5dc7fa148");
 
     Chain::Chain() : mInfo(Info::instance()), mPendingLock("Chain Pending"),
-      mProcessMutex("Chain Process"), mHeadersLock("Chain Headers"), mBranchLock("Chain Branches")
+      mProcessMutex("Chain Process"), mHeadersLock("Chain Headers"), mBlockMutex("Blocks"),
+      mBranchLock("Chain Branches")
     {
         mNextHeaderHeight = 0;
         mNextBlockHeight = 0;
@@ -68,6 +69,11 @@ namespace BitCoin
         if(mAnnounceBlock != NULL)
             delete mAnnounceBlock;
         mPendingLock.writeUnlock();
+        mBlockMutex.lock();
+        for(std::vector<Block *>::iterator block = mBlocksBeingSent.begin();
+          block != mBlocksBeingSent.end(); ++block)
+            delete *block;
+        mBlockMutex.unlock();
     }
 
     Branch::~Branch()
@@ -188,6 +194,54 @@ namespace BitCoin
         }
         mPendingLock.writeUnlock();
         return result;
+    }
+
+    void Chain::lockBlock(unsigned int pNodeID, const NextCash::Hash &pHash)
+    {
+        mBlockMutex.lock();
+        mBlockLocks.emplace_back(pNodeID, pHash);
+        mBlockMutex.unlock();
+    }
+
+    bool Chain::unlockBlock(unsigned int pNodeID, const NextCash::Hash &pHash)
+    {
+        mBlockMutex.lock();
+        bool found = false;
+        for(std::vector<BlockLock>::iterator lock = mBlockLocks.begin(); lock != mBlockLocks.end();
+          ++lock)
+            if(lock->nodeID == pNodeID && lock->hash == pHash)
+            {
+                found = true;
+                mBlockLocks.erase(lock);
+            }
+
+        if(found)
+        {
+            // Free if there are no more locks on that block.
+            found = false;
+            for(std::vector<BlockLock>::iterator lock = mBlockLocks.begin();
+              lock != mBlockLocks.end(); ++lock)
+                if(lock->hash == pHash)
+                {
+                    found = true;
+                    break;
+                }
+
+            if(!found)
+            {
+                for(std::vector<Block *>::iterator block = mBlocksBeingSent.begin();
+                  block != mBlocksBeingSent.end(); ++block)
+                    if((*block)->header.hash == pHash)
+                    {
+                        delete *block;
+                        mBlocksBeingSent.erase(block);
+                        break;
+                    }
+            }
+        }
+
+        mBlockMutex.unlock();
+        return found;
     }
 
     bool Chain::blocksNeeded()
@@ -1144,6 +1198,23 @@ namespace BitCoin
                 (*pendingHeader)->requestedTime = 0;
             }
         mPendingLock.readUnlock();
+    }
+
+    bool Chain::needBlock(const NextCash::Hash &pHash)
+    {
+        mPendingLock.readLock();
+        bool result = false;
+        for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
+          pending != mPendingBlocks.end(); ++pending)
+        {
+            if((*pending)->block->header.hash == pHash)
+            {
+                result = true;
+                break;
+            }
+        }
+        mPendingLock.readUnlock();
+        return result;
     }
 
     bool Chain::getBlocksNeeded(NextCash::HashList &pHashes, unsigned int pCount, bool pReduceOnly)

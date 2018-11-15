@@ -255,14 +255,15 @@ namespace BitCoin
         void addRejectedIP(const uint8_t *pIP);
         bool isRejectedIP(const uint8_t *pIP);
 
-        bool addNode(NextCash::IPAddress &pIPAddress, uint32_t pType, uint64_t pServices);
+        bool addNode(NextCash::IPAddress &pIPAddress, uint32_t pType, uint64_t pServices,
+          bool pAnnounceCompact);
         bool addNode(NextCash::Network::Connection *pConnection, uint32_t pType,
-          uint64_t pServices);
+          uint64_t pServices, bool pAnnounceCompact);
         unsigned int recruitPeers();
         void cleanNodes();
 
         void checkSync();
-        void sendRequests();
+        void sendBlockRequests();
         void sendHeaderRequest();
         void sendTransactionRequests();
         void improvePing();

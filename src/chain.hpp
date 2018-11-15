@@ -244,7 +244,11 @@ namespace BitCoin
         void setInSync();
         void clearInSync() { mIsInSync = false; }
         bool wasInSync() { return mWasInSync; }
+
         Block *blockToAnnounce();
+        void lockBlock(unsigned int pNodeID, const NextCash::Hash &pHash);
+        // Returns true if the block was unlocked. False if it was never locked.
+        bool unlockBlock(unsigned int pNodeID, const NextCash::Hash &pHash);
 
         // Check if a block is already in the chain
         bool blockAvailable(const NextCash::Hash &pHash);
@@ -270,6 +274,7 @@ namespace BitCoin
         // Return the status of the specified block hash
         HashStatus addPendingHash(const NextCash::Hash &pHash, unsigned int pNodeID);
 
+        bool needBlock(const NextCash::Hash &pHash);
         // Builds a list of blocks that need to be requested and marks them as requested by the node
         //   specified
         bool getBlocksNeeded(NextCash::HashList &pHashes, unsigned int pCount, bool pReduceOnly);
@@ -439,6 +444,25 @@ namespace BitCoin
 
         NextCash::HashList mBlocksToAnnounce;
         Block *mAnnounceBlock;
+
+        NextCash::Mutex mBlockMutex;
+        class BlockLock
+        {
+        public:
+            BlockLock(unsigned int pNodeID, const NextCash::Hash &pHash) : hash(pHash)
+            {
+                nodeID = pNodeID;
+            }
+            BlockLock(const BlockLock &pCopy) : hash(pCopy.hash)
+            {
+                nodeID = pCopy.nodeID;
+            }
+
+            unsigned int nodeID;
+            NextCash::Hash hash;
+        };
+        std::vector<BlockLock> mBlockLocks;
+        std::vector<Block *> mBlocksBeingSent;
 
         // Block header hashes that have been proven invalid.
         NextCash::HashList mBlackListHashes;

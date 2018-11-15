@@ -1195,7 +1195,7 @@ namespace BitCoin
         NextCash::HashList list;
     };
 
-    void Daemon::sendRequests()
+    void Daemon::sendBlockRequests()
     {
         if(mInfo.spvMode)
             return;
@@ -1252,6 +1252,34 @@ namespace BitCoin
 
         if(blocksToRequest.size() == 0)
         {
+            mNodeLock.readUnlock();
+            return;
+        }
+
+        if(blocksToRequest.size() == 1)
+        {
+            if(mChain.isInSync() && mChain.lastHeaderHash() == blocksToRequest.front())
+            {
+                for(std::vector<Node *>::iterator node = requestNodes.begin();
+                  node != requestNodes.end(); ++node)
+                    if((*node)->compactBlocksEnabled() && (*node)->requestBlocks(blocksToRequest))
+                    {
+                        mNodeLock.readUnlock();
+                        return;
+                    }
+
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                  "No nodes with compact blocks enabled to request block from");
+            }
+
+            for(std::vector<Node *>::iterator node = requestNodes.begin();
+              node != requestNodes.end(); ++node)
+                if((*node)->requestBlocks(blocksToRequest))
+                {
+                    mNodeLock.readUnlock();
+                    return;
+                }
+
             mNodeLock.readUnlock();
             return;
         }
@@ -1661,6 +1689,9 @@ namespace BitCoin
         Block *block = mChain.blockToAnnounce();
         if(block != NULL)
         {
+            // Add daemon lock on block
+            mChain.lockBlock(0, block->header.hash);
+
             // Announce to all nodes
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
               "Announcing block : %s", block->header.hash.hex().text());
@@ -1668,7 +1699,8 @@ namespace BitCoin
             for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                 (*node)->announceBlock(block);
             mNodeLock.readUnlock();
-            delete block;
+
+            mChain.lockBlock(0, block->header.hash);
         }
 
         std::vector<Transaction *> transactionList;
@@ -1870,7 +1902,7 @@ namespace BitCoin
                   (mChain.pendingBlockCount() == 0 && time - lastRequestCheckTime > 10))
                 {
                     lastRequestCheckTime = time;
-                    sendRequests();
+                    sendBlockRequests();
                 }
 
                 if(time - lastSyncCheck > 10)
@@ -1887,7 +1919,7 @@ namespace BitCoin
                 if(mChain.headersNeeded() || getTime() - mLastHeaderRequestTime > 120)
                     sendHeaderRequest();
                 if(mChain.blocksNeeded())
-                    sendRequests();
+                    sendBlockRequests();
                 if(getTime() - lastTransactionRequest > 2)
                 {
                     sendTransactionRequests();
@@ -2175,7 +2207,7 @@ namespace BitCoin
                 try
                 {
                     scanNode = new Node(connection, Node::SCAN, peer->services, data->daemon,
-                      &data->stop);
+                      &data->stop, false);
                 }
                 catch(std::bad_alloc &pBadAlloc)
                 {
@@ -2239,7 +2271,7 @@ namespace BitCoin
     }
 
     bool Daemon::addNode(NextCash::Network::Connection *pConnection, uint32_t pType,
-      uint64_t pServices)
+      uint64_t pServices, bool pAnnounceCompact)
     {
         mLastConnectionActive = getTime();
 
@@ -2255,7 +2287,7 @@ namespace BitCoin
         Node *node;
         try
         {
-            node = new Node(pConnection, pType, pServices, this);
+            node = new Node(pConnection, pType, pServices, this, NULL, pAnnounceCompact);
         }
         catch(std::bad_alloc &pBadAlloc)
         {
@@ -2290,12 +2322,12 @@ namespace BitCoin
     }
 
     bool Daemon::addNode(NextCash::IPAddress &pIPAddress, uint32_t pType,
-      uint64_t pServices)
+      uint64_t pServices, bool pAnnounceCompact)
     {
         Node *node;
         try
         {
-            node = new Node(pIPAddress, pType, pServices, this);
+            node = new Node(pIPAddress, pType, pServices, this, pAnnounceCompact);
         }
         catch(std::bad_alloc &pBadAlloc)
         {
@@ -2395,7 +2427,7 @@ namespace BitCoin
             {
                 if(ipAddress.setText(*ip))
                 {
-                    addNode(ipAddress, Node::SEED, 0);
+                    addNode(ipAddress, Node::SEED, 0, false);
                     ++result;
                 }
             }
@@ -2437,13 +2469,18 @@ namespace BitCoin
         mNodeLock.readLock();
         unsigned int goodCount = 0;
         unsigned int allCount = 0;
+        unsigned int compactCount = 0;
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
+        {
             if((*node)->isOutgoing())
             {
                 if((*node)->isGood())
                     ++goodCount;
                 ++allCount;
             }
+            if((*node)->announceBlocksCompact())
+                ++compactCount;
+        }
         mNodeLock.readUnlock();
 
         if(mInfo.spvMode)
@@ -2495,8 +2532,10 @@ namespace BitCoin
 
                 mNodeLock.readUnlock();
 
-                if(addNode((*peer)->address, Node::GOOD, (*peer)->services))
+                if(addNode((*peer)->address, Node::GOOD, (*peer)->services, compactCount < 3))
                 {
+                    if(compactCount < 3)
+                        ++compactCount;
                     ++goodCount;
                     ++allCount;
                     ++newCount;
@@ -2569,8 +2608,10 @@ namespace BitCoin
                 while(mRecentIPs.size() > RECENT_IP_COUNT)
                     mRecentIPs.erase(mRecentIPs.begin());
 
-                if(addNode((*peer)->address, Node::NONE, (*peer)->services))
+                if(addNode((*peer)->address, Node::NONE, (*peer)->services, compactCount < 3))
                 {
+                    if(compactCount < 3)
+                        ++compactCount;
                     ++allCount;
                     ++newCount;
 #ifdef SINGLE_THREAD
@@ -2643,8 +2684,10 @@ namespace BitCoin
                 while(mRecentIPs.size() > RECENT_IP_COUNT)
                     mRecentIPs.pop_front();
 
-                if(addNode((*peer)->address, Node::NONE, 0))
+                if(addNode((*peer)->address, Node::NONE, 0, compactCount < 3))
                 {
+                    if(compactCount < 3)
+                        ++compactCount;
                     ++allCount;
                     ++newCount;
 #ifdef SINGLE_THREAD
@@ -2859,7 +2902,7 @@ namespace BitCoin
                     }
                     else if(newConnection->isOpen())
                     {
-                        if(addNode(newConnection, Node::INCOMING, 0) &&
+                        if(addNode(newConnection, Node::INCOMING, 0, false) &&
                           mIncomingNodes >= mMaxIncoming)
                         {
                             delete mNodeListener;

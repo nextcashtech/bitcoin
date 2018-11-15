@@ -252,18 +252,31 @@ namespace BitCoin
     {
         mNodeLock.lock();
         NextCash::HashContainerList<unsigned int>::Iterator lock;
+        Transaction *transaction;
+        bool found;
         for(std::vector<Transaction *>::iterator trans = pList.begin(); trans != pList.end();
           ++trans)
+        {
+            found = false;
             for(lock = mNodeLocks.get((*trans)->hash); lock != mNodeLocks.end() &&
               lock.hash() == (*trans)->hash; ++lock)
             {
                 if(*lock == pNodeID)
                 {
-                    mNodeLockedTransactions.remove((*trans)->hash);
+                    found = true;
                     mNodeLocks.erase(lock);
                     break;
                 }
             }
+
+            if(found && mNodeLocks.get((*trans)->hash) == mNodeLocks.end())
+            {
+                // No locks left on this transaction.
+                transaction = (Transaction *)mNodeLockedTransactions.getAndRemove((*trans)->hash);
+                if(transaction != NULL)
+                    delete transaction;
+            }
+        }
         mNodeLock.unlock();
     }
 
@@ -718,15 +731,18 @@ namespace BitCoin
         unsigned int previousCount = mTransactions.size() + mPendingTransactions.size();
         unsigned int result = 0;
 
-        for(std::vector<Transaction *>::const_iterator transaction = pTransactions.begin();
+        for(std::vector<Transaction *>::iterator transaction = pTransactions.begin();
           transaction != pTransactions.end(); ++transaction)
         {
             matchingTransaction = (Transaction *)mTransactions.getAndRemove((*transaction)->hash);
             if(matchingTransaction != NULL)
             {
                 ++result;
-                (*transaction)->pullPrecomputed(*matchingTransaction);
-                removeInternal(matchingTransaction);
+                if(matchingTransaction != *transaction)
+                    (*transaction)->pullPrecomputed(*matchingTransaction);
+                if(removeInternal(matchingTransaction, matchingTransaction != *transaction) &&
+                  matchingTransaction == *transaction)
+                    *transaction = new Transaction(*matchingTransaction);
             }
             else
             {
@@ -735,9 +751,12 @@ namespace BitCoin
                 if(matchingTransaction != NULL)
                 {
                     ++result;
-                    (*transaction)->pullPrecomputed(*matchingTransaction);
                     mPendingSize -= matchingTransaction->size();
-                    delete matchingTransaction;
+                    if(matchingTransaction != *transaction)
+                    {
+                        (*transaction)->pullPrecomputed(*matchingTransaction);
+                        delete matchingTransaction;
+                    }
                 }
             }
         }
@@ -851,6 +870,7 @@ namespace BitCoin
         if(mTransactions.insert(pTransaction))
         {
             mSize += pTransaction->size();
+            pTransaction->setInMemPool(true);
 
             if(pAnnounce)
                 mToAnnounce.push_back(pTransaction->hash);
@@ -873,7 +893,7 @@ namespace BitCoin
         digest.getResult(&pHash);
     }
 
-    void MemPool::removeInternal(Transaction *pTransaction)
+    bool MemPool::removeInternal(Transaction *pTransaction, bool pDelete)
     {
         // Remove outpoints
         NextCash::Hash hash(32);
@@ -885,8 +905,15 @@ namespace BitCoin
         }
 
         mSize -= pTransaction->size();
-        if(!addIfLockedByNode(pTransaction))
-            delete pTransaction;
+        if(addIfLockedByNode(pTransaction))
+            return true;
+        else
+        {
+            pTransaction->setInMemPool(false);
+            if(pDelete)
+                delete pTransaction;
+            return false;
+        }
     }
 
     bool MemPool::outpointExists(Transaction *pTransaction)
@@ -927,18 +954,62 @@ namespace BitCoin
         return result;
     }
 
+    Transaction *MemPool::getWithShortID(uint64_t pShortID,
+      Message::CompactBlockData *pCompactBlock, unsigned int pNodeID)
+    {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_MEMPOOL_GET_TRANS_SHORT_ID, PROFILER_MEMPOOL_GET_TRANS_SHORT_NAME), true);
+#endif
+        mLock.readLock();
+
+        Transaction *result = NULL;
+        for(NextCash::HashSet::Iterator trans = mTransactions.begin();
+          trans != mTransactions.end(); ++trans)
+            if(pCompactBlock->calculateShortID((*trans)->getHash()) == pShortID)
+            {
+                result = (Transaction *)*trans;
+                break;
+            }
+
+        if(result != NULL)
+        {
+            mNodeLock.lock();
+            mNodeLocks.insert(result->hash, pNodeID);
+            mNodeLock.unlock();
+        }
+        else
+        {
+            for(NextCash::HashSet::Iterator trans = mPendingTransactions.begin();
+              trans != mPendingTransactions.end(); ++trans)
+                if(pCompactBlock->calculateShortID((*trans)->getHash()) == pShortID)
+                {
+                    result = new Transaction(*((Transaction *)*trans));
+                    break;
+                }
+        }
+
+        mLock.readUnlock();
+        return result;
+    }
+
     void MemPool::freeTransaction(const NextCash::Hash &pHash, unsigned int pNodeID)
     {
         mNodeLock.lock();
         NextCash::HashContainerList<unsigned int>::Iterator lock;
+        bool found = false;
         for(lock = mNodeLocks.get(pHash); lock != mNodeLocks.end() && lock.hash() == pHash; ++lock)
-        {
             if(*lock == pNodeID)
             {
-                mNodeLockedTransactions.remove(pHash);
+                found = true;
                 mNodeLocks.erase(lock);
                 break;
             }
+        if(found && mNodeLocks.get(pHash) == mNodeLocks.end())
+        {
+            Transaction *transaction = (Transaction *)mNodeLockedTransactions.getAndRemove(pHash);
+            if(transaction != NULL)
+                delete transaction;
         }
         mNodeLock.unlock();
     }
