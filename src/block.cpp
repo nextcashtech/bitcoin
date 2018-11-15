@@ -642,6 +642,10 @@ namespace BitCoin
               "No transactions. At least a coin base is required");
             return false;
         }
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_MERKLE_CALC_ID, PROFILER_BLOCK_MERKLE_CALC_NAME), true);
+#endif
 
         // Validate Merkle Hash
         NextCash::Hash calculatedMerkleHash;

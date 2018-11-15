@@ -106,7 +106,7 @@ namespace BitCoin
         const NextCash::Hash &lastHeaderHash() const { return mLastHeaderHash; }
 
         // Block requests
-        bool requestBlocks(NextCash::HashList &pList);
+        bool requestBlocks(NextCash::HashList &pList, bool pForceFull = false);
         bool waitingForBlockRequests();
         unsigned int blocksRequestedCount() { return (unsigned int)mBlocksRequested.size(); }
         unsigned int blocksDownloadedCount() const { return mBlockDownloadCount; }
@@ -169,13 +169,19 @@ namespace BitCoin
         // Release anything (i.e requests) associated with this node
         void release();
 
+        enum FillResult
+        {
+            FILL_COMPLETE   = 0x00, // Block is now complete.
+            FILL_INCOMPLETE = 0x01, // Request sent for missing data.
+            FILL_FAILED     = 0x02  // Failed. New request required.
+        };
+
         // Attempt to fill block from compact block.
-        // Returns true if the block has all the transactions.
-        bool fillCompactBlock(Message::CompactBlockData *pData);
+        FillResult fillCompactBlock(Message::CompactBlockData *pCompactBlock);
 
         // Adds transactions to the compact block.
         // Returns true if any transactions were added.
-        bool addTransactionsToCompactBlock(Message::CompactBlockData *pData,
+        bool addTransactionsToCompactBlock(Message::CompactBlockData *pCompactBlock,
           Message::CompactTransData *pTransData);
 
         unsigned int mActiveMerkleRequests;
@@ -217,6 +223,7 @@ namespace BitCoin
         bool mMemPoolRequested;
         Time mMemPoolRequestedTime;
         bool mMemPoolReceived;
+        bool mProcessingCompactTransactions;
         bool *mStopFlag;
 
         Message::VersionData *mSentVersionData, *mReceivedVersionData;

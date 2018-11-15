@@ -51,28 +51,35 @@
     static const char *PROFILER_BLOCK_READ_NAME __attribute__ ((unused)) = "Block::read (B)";
     static const unsigned int PROFILER_BLOCK_PROCESS_ID = 17;
     static const char *PROFILER_BLOCK_PROCESS_NAME __attribute__ ((unused)) = "Block::process (B)"; // hits are bytes
+    static const unsigned int PROFILER_BLOCK_MERKLE_CALC_ID = 18;
+    static const char *PROFILER_BLOCK_MERKLE_CALC_NAME __attribute__ ((unused)) = "Block::merkleCalc";
 
-    static const unsigned int PROFILER_KEY_SIGN_ID = 18;
+    static const unsigned int PROFILER_KEY_SIGN_ID = 19;
     static const char *PROFILER_KEY_SIGN_NAME __attribute__ ((unused)) = "Key::sign";
-    static const unsigned int PROFILER_KEY_VERIFY_SIG_ID = 19;
+    static const unsigned int PROFILER_KEY_VERIFY_SIG_ID = 20;
     static const char *PROFILER_KEY_VERIFY_SIG_NAME __attribute__ ((unused)) = "Key::verifySig";
 
-    static const unsigned int PROFILER_MEMPOOL_STATUS_ID = 20;
+    static const unsigned int PROFILER_MEMPOOL_STATUS_ID = 21;
     static const char *PROFILER_MEMPOOL_STATUS_NAME __attribute__ ((unused)) = "MemPool::status";
-    static const unsigned int PROFILER_MEMPOOL_ADD_ID = 21;
+    static const unsigned int PROFILER_MEMPOOL_ADD_ID = 22;
     static const char *PROFILER_MEMPOOL_ADD_NAME __attribute__ ((unused)) = "MemPool::add";
-    static const unsigned int PROFILER_MEMPOOL_ADD_B_ID = 22;
+    static const unsigned int PROFILER_MEMPOOL_ADD_B_ID = 23;
     static const char *PROFILER_MEMPOOL_ADD_B_NAME __attribute__ ((unused)) = "MemPool::add (B)"; // hits are bytes
-    static const unsigned int PROFILER_MEMPOOL_ADD_DUP_B_ID = 23;
+    static const unsigned int PROFILER_MEMPOOL_ADD_DUP_B_ID = 24;
     static const char *PROFILER_MEMPOOL_ADD_DUP_B_NAME __attribute__ ((unused)) = "MemPool::add (dup B)"; // hits are bytes
-    static const unsigned int PROFILER_MEMPOOL_PENDING_ID = 24;
+    static const unsigned int PROFILER_MEMPOOL_PENDING_ID = 25;
     static const char *PROFILER_MEMPOOL_PENDING_NAME __attribute__ ((unused)) = "MemPool::checkPending";
-    static const unsigned int PROFILER_MEMPOOL_GET_TRANS_ID = 25;
+    static const unsigned int PROFILER_MEMPOOL_GET_TRANS_ID = 26;
     static const char *PROFILER_MEMPOOL_GET_TRANS_NAME __attribute__ ((unused)) = "MemPool::getTrans";
-    static const unsigned int PROFILER_MEMPOOL_GET_TRANS_SHORT_ID = 26;
-    static const char *PROFILER_MEMPOOL_GET_TRANS_SHORT_NAME __attribute__ ((unused)) = "MemPool::getTransShort";
-    static const unsigned int PROFILER_MEMPOOL_GET_OUTPUT_ID = 27;
+    static const unsigned int PROFILER_MEMPOOL_GET_TRANS_COPY_ID = 27;
+    static const char *PROFILER_MEMPOOL_GET_TRANS_COPY_NAME __attribute__ ((unused)) = "MemPool::getTransCopy";
+    static const unsigned int PROFILER_MEMPOOL_GET_COMPACT_TRANS_CALC_ID = 28;
+    static const char *PROFILER_MEMPOOL_GET_COMPACT_TRANS_CALC_NAME __attribute__ ((unused)) = "MemPool::calcShortIDs";
+    static const unsigned int PROFILER_MEMPOOL_GET_OUTPUT_ID = 29;
     static const char *PROFILER_MEMPOOL_GET_OUTPUT_NAME __attribute__ ((unused)) = "MemPool::getOutput";
+
+    static const unsigned int PROFILER_NODE_FILL_COMPACT_ID = 30;
+    static const char *PROFILER_NODE_FILL_COMPACT_NAME __attribute__ ((unused)) = "Node::fillCompactBlock";
 
 #endif
 

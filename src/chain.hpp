@@ -269,7 +269,8 @@ namespace BitCoin
 
         bool getPendingHeaderHashes(NextCash::HashList &pList);
 
-        enum HashStatus { ALREADY_HAVE, NEED_HEADER, NEED_BLOCK, BLACK_LISTED };
+        enum HashStatus { ALREADY_HAVE, HEADER_NEEDED, HEADER_ADDED, BLOCK_NEEDED, BLOCK_ADDED,
+          SHORT_CHAIN, INVALID, UNKNOWN };
 
         // Return the status of the specified block hash
         HashStatus addPendingHash(const NextCash::Hash &pHash, unsigned int pNodeID);
@@ -282,18 +283,17 @@ namespace BitCoin
         void updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, Time pTime);
         // Mark blocks as requested by the specified node
         void markBlocksForNode(NextCash::HashList &pHashes, unsigned int pNodeID);
+        bool markBlockForNode(NextCash::Hash &pHash, unsigned int pNodeID);
         // Release all blocks requested by a specified node so they will be requested again
         void releaseBlocksForNode(unsigned int pNodeID);
+        void releaseBlockForNode(const NextCash::Hash &pHash, unsigned int pNodeID);
 
         // Add header/block to queue to be processed and added to top of chain
-        //   Returns:
-        //      < 0 Invalid/unknown block/header
-        //     == 0  Block/header added
-        //      > 0  Valid block/header not added (i.e. already have)
         //   Parameter pMainBranchOnly : True when no branches should be checked.
-        int addHeader(Header &pHeader, bool pHeadersLocked = false, bool pBranchesLocked = false,
-          bool pMainBranchOnly = false);
-        int addBlock(Block *pBlock);
+        //   pMarkNodeID will be marked on the pending block if NEED_BLOCK is returned.
+        HashStatus addHeader(Header &pHeader, unsigned int pMarkNodeID = 0, bool pHeadersLocked = false,
+          bool pBranchesLocked = false, bool pMainBranchOnly = false);
+        HashStatus addBlock(Block *pBlock);
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
         bool getHashes(NextCash::HashList &pHashes, const NextCash::Hash &pStartingHash,

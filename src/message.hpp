@@ -593,7 +593,7 @@ namespace BitCoin
             Block *block;
             uint64_t nonce;
             std::vector<uint64_t> shortIDs;
-            std::vector<PrefilledTransaction> prefilledTransactionIDs;
+            std::vector<PrefilledTransaction> prefilled;
 
             // Return the short ID for the specified transaction ID.
             uint64_t calculateShortID(const NextCash::Hash &pTransactionID);

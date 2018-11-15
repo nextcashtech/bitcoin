@@ -1410,8 +1410,8 @@ namespace BitCoin
             shortIDs.reserve(block->transactions.size());
 
             // Add Coinbase to prefilled automatically
-            prefilledTransactionIDs.clear();
-            prefilledTransactionIDs.push_back(PrefilledTransaction(0,
+            prefilled.clear();
+            prefilled.push_back(PrefilledTransaction(0,
               pBlock->transactions.front()));
 
             Time time = getTime();
@@ -1421,7 +1421,7 @@ namespace BitCoin
             {
                 if(time - (*trans)->time() < 10)
                 {
-                    prefilledTransactionIDs.push_back(PrefilledTransaction(offset, *trans));
+                    prefilled.push_back(PrefilledTransaction(offset, *trans));
                     offset = 0;
                 }
                 else
@@ -1492,11 +1492,11 @@ namespace BitCoin
                 pStream->writeUnsignedInt6(*shortID);
 
             // Number of prefilled transactions
-            writeCompactInteger(pStream, prefilledTransactionIDs.size());
+            writeCompactInteger(pStream, prefilled.size());
 
             // Prefilled transactions
-            for(std::vector<PrefilledTransaction>::iterator trans = prefilledTransactionIDs.begin();
-              trans != prefilledTransactionIDs.end(); ++trans)
+            for(std::vector<PrefilledTransaction>::iterator trans = prefilled.begin();
+              trans != prefilled.end(); ++trans)
                 trans->write(pStream);
         }
 
@@ -1561,12 +1561,12 @@ namespace BitCoin
             }
 
             // Prefilled transactions
-            prefilledTransactionIDs.clear();
-            prefilledTransactionIDs.reserve(count);
+            prefilled.clear();
+            prefilled.reserve(count);
             for(unsigned int i = 0; i < count; ++i)
             {
-                prefilledTransactionIDs.emplace_back();
-                if(!prefilledTransactionIDs.back().read(pStream,
+                prefilled.emplace_back();
+                if(!prefilled.back().read(pStream,
                   pSize - pStream->readOffset() - startOffset))
                 {
                     NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
@@ -1575,7 +1575,7 @@ namespace BitCoin
                 }
             }
 
-            block->setSize(80 + compactIntegerSize(shortIDs.size() + prefilledTransactionIDs.size()));
+            block->setSize(80 + compactIntegerSize(shortIDs.size() + prefilled.size()));
             mSize = pStream->readOffset() - startOffset;
             return true;
         }

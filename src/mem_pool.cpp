@@ -502,7 +502,7 @@ namespace BitCoin
     void MemPool::checkPendingForNewTransaction(Chain *pChain, const NextCash::Hash &pHash,
       unsigned int pDepth)
     {
-        if(pDepth > 10)
+        if(pDepth > 100)
             return;
 
         NextCash::HashList pendingToCheck;
@@ -934,37 +934,46 @@ namespace BitCoin
         return result;
     }
 
-    Transaction *MemPool::getWithShortID(uint64_t pShortID,
-      Message::CompactBlockData *pCompactBlock, unsigned int pNodeID)
+    Transaction *MemPool::getTransactionCopy(const NextCash::Hash &pHash)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_MEMPOOL_GET_TRANS_SHORT_ID, PROFILER_MEMPOOL_GET_TRANS_SHORT_NAME), true);
+          PROFILER_MEMPOOL_GET_TRANS_COPY_ID, PROFILER_MEMPOOL_GET_TRANS_COPY_NAME), true);
+#endif
+        mLock.readLock();
+        Transaction *result = (Transaction *)mTransactions.get(pHash);
+        if(result == NULL)
+            result = (Transaction *)mPendingTransactions.get(pHash);
+        if(result != NULL)
+            result = new Transaction(*result); // Make copy
+        mLock.readUnlock();
+        return result;
+    }
+
+    void MemPool::calculateShortIDs(Message::CompactBlockData *pCompactBlock,
+      std::vector<ShortIDHash> &pShortIDs)
+    {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_MEMPOOL_GET_COMPACT_TRANS_CALC_ID,
+          PROFILER_MEMPOOL_GET_COMPACT_TRANS_CALC_NAME), true);
 #endif
         mLock.readLock();
 
-        Transaction *result = NULL;
+        pShortIDs.clear();
+        pShortIDs.reserve(mTransactions.size() + mPendingTransactions.size());
+
         for(NextCash::HashSet::Iterator trans = mTransactions.begin();
           trans != mTransactions.end(); ++trans)
-            if(pCompactBlock->calculateShortID((*trans)->getHash()) == pShortID)
-            {
-                result = new Transaction(*(Transaction *)*trans);
-                break;
-            }
+            pShortIDs.emplace_back((*trans)->getHash(),
+              pCompactBlock->calculateShortID((*trans)->getHash()));
 
-        if(result == NULL)
-        {
-            for(NextCash::HashSet::Iterator trans = mPendingTransactions.begin();
-              trans != mPendingTransactions.end(); ++trans)
-                if(pCompactBlock->calculateShortID((*trans)->getHash()) == pShortID)
-                {
-                    result = new Transaction(*((Transaction *)*trans));
-                    break;
-                }
-        }
+        for(NextCash::HashSet::Iterator trans = mPendingTransactions.begin();
+          trans != mPendingTransactions.end(); ++trans)
+            pShortIDs.emplace_back((*trans)->getHash(),
+              pCompactBlock->calculateShortID((*trans)->getHash()));
 
         mLock.readUnlock();
-        return result;
     }
 
     void MemPool::freeTransaction(const NextCash::Hash &pHash, unsigned int pNodeID)
@@ -1103,6 +1112,7 @@ namespace BitCoin
                   "Expiring pending transaction (time %d) %s (%d bytes) : %s",
                   ((Transaction *)*trans)->time(), timeString.text(),
                   ((Transaction *)*trans)->size(), ((Transaction *)*trans)->hash.hex().text());
+                mPendingSize -= ((Transaction *)*trans)->size();
                 trans = mPendingTransactions.eraseDelete(trans);
             }
             else

@@ -379,9 +379,11 @@ namespace BitCoin
                 sendData.writeByte(-1);
             else
                 sendData.writeByte(0);
-            sendData.writeUnsignedInt(mChain->memPool().count());
-            sendData.writeUnsignedInt(mChain->memPool().size());
             sendData.writeUnsignedLong(currentSupply(mChain->headerHeight()));
+            sendData.writeUnsignedInt(mChain->memPool().count());
+            sendData.writeUnsignedLong(mChain->memPool().size());
+            sendData.writeUnsignedInt(mChain->memPool().pendingCount());
+            sendData.writeUnsignedLong(mChain->memPool().pendingSize());
 
             NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Sending status");
         }
@@ -734,6 +736,8 @@ namespace BitCoin
             sendData.writeUnsignedLong(requestData.ten); // Below 10 sat/B
             sendData.writeUnsignedLong(requestData.remainingSize); // Total size of remaining
             sendData.writeUnsignedLong(requestData.remainingFee); // Total fee of remaining
+            sendData.writeUnsignedInt(requestData.pendingCount); // Number of pending transactions
+            sendData.writeUnsignedLong(requestData.pendingSize); // Pending size in bytes
 
             Info &info = Info::instance();
             sendData.writeUnsignedLong(info.minFee); // Minimum fee

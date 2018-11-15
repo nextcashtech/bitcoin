@@ -586,8 +586,9 @@ namespace BitCoin
               mChain.addresses().cacheDataSize() / 1000);
 #endif
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Mem Pool : %d/%d trans/pending (%d KB)", mChain.memPool().count(),
-              mChain.memPool().pendingCount(), mChain.memPool().size() / 1000);
+              "Mem Pool : %d/%d trans/pending (%d/%d KB)", mChain.memPool().count(),
+              mChain.memPool().pendingCount(), mChain.memPool().size() / 1000,
+              mChain.memPool().pendingSize() / 1000);
 
             if(!mChain.isInSync())
             {
@@ -1916,7 +1917,7 @@ namespace BitCoin
             }
             else
             {
-                if(mChain.headersNeeded() || getTime() - mLastHeaderRequestTime > 120)
+                if(mChain.headersNeeded())
                     sendHeaderRequest();
                 if(mChain.blocksNeeded())
                     sendBlockRequests();
@@ -2051,7 +2052,7 @@ namespace BitCoin
             if(mStopping)
                 return;
 
-            if(getTime() - mLastMemPoolProcessTime > 2)
+            if(getTime() - mLastMemPoolProcessTime > 30)
             {
                 mChain.memPool().process(&mChain);
                 mLastMemPoolProcessTime = getTime();

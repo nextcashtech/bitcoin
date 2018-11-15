@@ -91,6 +91,7 @@ namespace BitCoin
         void updatePeer(const NextCash::IPAddress &pAddress, const char *pUserAgent, uint64_t pServices);
         void addPeerSuccess(const NextCash::IPAddress &pAddress, int pCount = 1);
         void addPeerFail(const NextCash::IPAddress &pAddress, int pCount = 1, int pMinimum = -500);
+        unsigned int peerCount() const { return mPeers.size(); }
 
         bool initialBlockDownloadIsComplete() { return mInitialBlockDownloadComplete; }
         void setInitialBlockDownloadComplete()

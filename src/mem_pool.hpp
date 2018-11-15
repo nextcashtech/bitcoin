@@ -47,6 +47,25 @@ namespace BitCoin
         PendingTransactionData &operator = (PendingTransactionData &pRight);
     };
 
+    class ShortIDHash
+    {
+    public:
+
+        ShortIDHash(const NextCash::Hash &pHash, uint64_t pShortID) : hash(pHash)
+        {
+            shortID = pShortID;
+        }
+        ShortIDHash(const ShortIDHash &pCopy) : hash(pCopy.hash)
+        {
+            shortID = pCopy.shortID;
+        }
+        ~ShortIDHash() {}
+
+        NextCash::Hash hash;
+        uint64_t shortID;
+
+    };
+
     class MemPool
     {
     public:
@@ -95,10 +114,15 @@ namespace BitCoin
         // Unlocks the mempool since the block is finished processing.
         void finalize(Chain *pChain);
 
+        // Calculate short IDs for all transaction hashes.
+        void calculateShortIDs(Message::CompactBlockData *pCompactBlock,
+          std::vector<ShortIDHash> &pShortIDs);
+
         // Get the transaction.
         Transaction *getTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
-        Transaction *getWithShortID(uint64_t pShortID, Message::CompactBlockData *pCompactBlock,
-          unsigned int pNodeID);
+
+        // Get a copy of a transaction. Receiver is responsible for delete.
+        Transaction *getTransactionCopy(const NextCash::Hash &pHash);
 
         // Confirm no longer using transaction from getTransaction.
         void freeTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
