@@ -459,13 +459,13 @@ namespace BitCoin
                         ++reference;
                     }
 
-                    if(!found)
-                    {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                          BITCOIN_OUTPUTS_LOG_NAME,
-                          "Input transaction not found to revert spend : %s index %d",
-                          input->outpoint.transactionID.hex().text(), input->outpoint.index);
-                    }
+                    // if(!found)
+                    // {
+                        // NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                          // BITCOIN_OUTPUTS_LOG_NAME,
+                          // "Input transaction not found to revert spend : %s index %d",
+                          // input->outpoint.transactionID.hex().text(), input->outpoint.index);
+                    // }
                 }
 
             // Remove transaction

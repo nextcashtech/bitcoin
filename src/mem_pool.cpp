@@ -64,7 +64,7 @@ namespace BitCoin
                 mRequestedHashes.remove(pHash);
             }
             else if(requestedHash->nodeID != pNodeID &&
-              (requestedHash->time == 0 || time - requestedHash->time > 2))
+              (requestedHash->time == 0 || time - requestedHash->time > 4))
             {
                 requestedHash->nodeID = pNodeID;
                 requestedHash->time = time;
@@ -355,18 +355,18 @@ namespace BitCoin
     bool MemPool::checkPendingTransaction(Chain *pChain, Transaction *pTransaction,
       unsigned int pDepth)
     {
-        if(pDepth == 100)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Re-checking pending transaction. (%d bytes) : %s", pTransaction->size(),
-              pTransaction->hash.hex().text());
-        else if(pDepth > 0)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Checking descendent %d pending transaction. (%d bytes) : %s", pDepth,
-              pTransaction->size(), pTransaction->hash.hex().text());
-        else
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Checking pending transaction. (%d bytes) : %s", pTransaction->size(),
-              pTransaction->hash.hex().text());
+        // if(pDepth == 100)
+            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              // "Re-checking pending transaction. (%d bytes) : %s", pTransaction->size(),
+              // pTransaction->hash.hex().text());
+        // else if(pDepth > 0)
+            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              // "Checking descendent %d pending transaction. (%d bytes) : %s", pDepth,
+              // pTransaction->size(), pTransaction->hash.hex().text());
+        // else
+            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              // "Checking pending transaction. (%d bytes) : %s", pTransaction->size(),
+              // pTransaction->hash.hex().text());
 
         bool inserted;
         NextCash::HashList unseen;
@@ -436,7 +436,7 @@ namespace BitCoin
                 }
 
                 if(descendentVerified) // Re-check this transaction.
-                    return checkPendingTransaction(pChain, pTransaction, 100);
+                    return checkPendingTransaction(pChain, pTransaction, 100 + pDepth);
             }
 
             // Not ready yet.
@@ -500,9 +500,22 @@ namespace BitCoin
             mLock.writeUnlock();
 
             if(inserted)
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Added pending transaction. (%d bytes) (%llu fee rate) : %s",
-                  pTransaction->size(), pTransaction->feeRate(), pTransaction->hash.hex().text());
+            {
+                if(pDepth > 100)
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                      "Added child %d pending transaction. (%d bytes) (%llu fee rate) : %s",
+                      pDepth - 100, pTransaction->size(), pTransaction->feeRate(),
+                      pTransaction->hash.hex().text());
+                else if(pDepth > 0)
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                      "Added descendent %d pending transaction. (%d bytes) (%llu fee rate) : %s",
+                      pDepth, pTransaction->size(), pTransaction->feeRate(),
+                      pTransaction->hash.hex().text());
+                else
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+                      "Added pending transaction. (%d bytes) (%llu fee rate) : %s",
+                      pTransaction->size(), pTransaction->feeRate(), pTransaction->hash.hex().text());
+            }
             else
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
@@ -782,37 +795,39 @@ namespace BitCoin
         return result;
     }
 
-    void MemPool::revert(const std::vector<Transaction *> &pTransactions)
+    void MemPool::revert(const std::vector<Transaction *> &pTransactions, bool pFollowingPull)
     {
         // Should already be locked while block was processing.
-        mLock.readUnlock();
-        mLock.writeLock("Revert");
+        if(pFollowingPull)
+            mLock.readUnlock();
+        // mLock.writeLock("Revert");
 
-        unsigned int previousSize = mSize;
-        unsigned int previousCount = mTransactions.size() + mPendingTransactions.size();
-        Transaction *newTransaction;
+        // unsigned int previousSize = mSize;
+        // unsigned int previousCount = mTransactions.size() + mPendingTransactions.size();
+        // Transaction *newTransaction;
 
-        for(std::vector<Transaction *>::const_iterator transaction = pTransactions.begin() + 1;
-          transaction != pTransactions.end(); ++transaction)
-        {
-            newTransaction = new Transaction(**transaction);
-            if(!insert(newTransaction, false))
-                delete newTransaction;
-        }
+        // for(std::vector<Transaction *>::const_iterator transaction = pTransactions.begin() + 1;
+          // transaction != pTransactions.end(); ++transaction)
+        // {
+            // // TODO Only accept valid transactions.
+            // newTransaction = new Transaction(**transaction);
+            // if(!insert(newTransaction, false))
+                // delete newTransaction;
+        // }
 
-        if((mTransactions.size() + mPendingTransactions.size()) == previousCount)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Not increased reverting block. %d trans, %d KB",
-              mTransactions.size() + mPendingTransactions.size(), mSize / 1000);
-        else
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Increased reverting block by %d trans, %d KB, %d%% to %d trans, %d KB",
-              (mTransactions.size() + mPendingTransactions.size()) - previousCount,
-              (mSize - previousSize) / 1000, (int)(((float)(mSize - previousSize) /
-              (float)mSize) * 100.0f), mTransactions.size() + mPendingTransactions.size(),
-              mSize / 1000);
+        // if((mTransactions.size() + mPendingTransactions.size()) == previousCount)
+            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              // "Not increased reverting block. %d trans, %d KB",
+              // mTransactions.size() + mPendingTransactions.size(), mSize / 1000);
+        // else
+            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              // "Increased reverting block by %d trans, %d KB, %d%% to %d trans, %d KB",
+              // (mTransactions.size() + mPendingTransactions.size()) - previousCount,
+              // (mSize - previousSize) / 1000, (int)(((float)(mSize - previousSize) /
+              // (float)mSize) * 100.0f), mTransactions.size() + mPendingTransactions.size(),
+              // mSize / 1000);
 
-        mLock.writeUnlock();
+        // mLock.writeUnlock();
     }
 
     void MemPool::finalize(Chain *pChain)
@@ -968,17 +983,11 @@ namespace BitCoin
           trans != mTransactions.end(); ++trans)
             if(pCompactBlock->calculateShortID((*trans)->getHash()) == pShortID)
             {
-                result = (Transaction *)*trans;
+                result = new Transaction(*(Transaction *)*trans);
                 break;
             }
 
-        if(result != NULL)
-        {
-            mNodeLock.lock();
-            mNodeLocks.insert(result->hash, pNodeID);
-            mNodeLock.unlock();
-        }
-        else
+        if(result == NULL)
         {
             for(NextCash::HashSet::Iterator trans = mPendingTransactions.begin();
               trans != mPendingTransactions.end(); ++trans)

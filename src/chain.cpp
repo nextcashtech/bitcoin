@@ -627,7 +627,7 @@ namespace BitCoin
                     return false;
                 }
 
-                mMemPool.revert(block.transactions);
+                mMemPool.revert(block.transactions, false);
 
 #ifndef DISABLE_ADDRESSES
                 mAddresses.remove(block.transactions, blockHeight());
@@ -1082,6 +1082,9 @@ namespace BitCoin
                     mBranchLock.unlock();
                 if(!pHeadersLocked)
                     mHeadersLock.writeUnlock();
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+                  "Added header to branch %d (%d blocks) : %s", branchID,
+                  (*branch)->pendingBlocks.size(), pHeader.hash.hex().text());
                 checkBranches();
                 return 0;
             }
@@ -1299,7 +1302,7 @@ namespace BitCoin
 
         if(!success)
         {
-            mMemPool.revert(pBlock.transactions);
+            mMemPool.revert(pBlock.transactions, true);
             mOutputs.revert(pBlock.transactions, mNextBlockHeight);
             revert(mNextBlockHeight - 1);
             mProcessMutex.unlock();
@@ -1309,7 +1312,7 @@ namespace BitCoin
         // Add the block to the chain
         if(!Block::add(mNextBlockHeight, pBlock))
         {
-            mMemPool.revert(pBlock.transactions);
+            mMemPool.revert(pBlock.transactions, true);
             mOutputs.revert(pBlock.transactions, mNextBlockHeight);
 #ifndef DISABLE_ADDRESSES
             mAddresses.remove(pBlock.transactions, mNextBlockHeight);

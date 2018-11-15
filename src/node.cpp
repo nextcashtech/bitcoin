@@ -302,7 +302,7 @@ namespace BitCoin
         if(isOutgoing() && mReceivedVersionData->version >= 70014 && !mSendCompactSent)
         {
             // Send compact block configuration.
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
               "Sending compact configuration");
             Message::SendCompactData sendCompactBlocks(mRequestAnnounceCompact, 1L);
             sendMessage(&sendCompactBlocks);
@@ -1136,6 +1136,9 @@ namespace BitCoin
                 *trans = mChain->memPool().getWithShortID(*shortID, pData, mID);
                 if(*trans == NULL)
                 {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                      "Compact block missing transaction 0x%04x%08x", *shortID >> 32,
+                      *shortID & 0x00000000ffffffff);
                     getTransactions.offsets.emplace_back(offset - previousOffset - 1);
                     previousOffset = offset;
                 }
@@ -1164,6 +1167,9 @@ namespace BitCoin
             *trans = mChain->memPool().getWithShortID(*shortID, pData, mID);
             if(*trans == NULL)
             {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                  "Compact block missing transaction 0x%04x%08x", *shortID >> 32,
+                  *shortID & 0x00000000ffffffff);
                 getTransactions.offsets.emplace_back(offset - previousOffset - 1);
                 previousOffset = offset;
             }
@@ -1191,6 +1197,18 @@ namespace BitCoin
     bool Node::addTransactionsToCompactBlock(Message::CompactBlockData *pData,
       Message::CompactTransData *pTransData)
     {
+        std::vector<uint64_t> givenShortIDs;
+        std::vector<Transaction *>::iterator givenTrans;
+        givenShortIDs.reserve(pTransData->transactions.size());
+        for(givenTrans = pTransData->transactions.begin();
+          givenTrans != pTransData->transactions.end(); ++givenTrans)
+        {
+            givenShortIDs.emplace_back(pData->calculateShortID((*givenTrans)->hash));
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+              "Compact block transaction given 0x%04x%08x : %s", givenShortIDs.back() >> 32,
+              givenShortIDs.back() & 0x00000000ffffffff, (*givenTrans)->hash.hex().text());
+        }
+
         bool found;
         unsigned int i;
         NextCash::stream_size increasedSize = 0L;
@@ -1208,22 +1226,36 @@ namespace BitCoin
                 {
                     // Find short ID in given transactions.
                     found = false;
-                    for(std::vector<Transaction *>::iterator givenTrans =
-                      pTransData->transactions.begin(); givenTrans != pTransData->transactions.end();
-                      ++givenTrans)
-                        if(*givenTrans != NULL &&
-                          pData->calculateShortID((*givenTrans)->hash) == *shortID)
+                    for(std::vector<uint64_t>::iterator givenShortID = givenShortIDs.begin();
+                      givenShortID != givenShortIDs.end(); ++givenShortID)
+                        if(*givenShortID == *shortID)
                         {
-                            *trans = *givenTrans;
-                            *givenTrans = NULL;
-                            increasedSize += (*trans)->size();
-                            found = true;
+                            givenTrans = pData->block->transactions.begin() +
+                              (givenShortID - givenShortIDs.begin());
+
+                            if(*givenTrans == NULL)
+                            {
+                                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                                  "Compact block transaction not found 0x%04x%08x",
+                                  *givenShortID >> 32, *givenShortID & 0x00000000ffffffff);
+                            }
+                            else
+                            {
+                                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                                  "Compact block transaction found 0x%04x%08x : %s",
+                                  *givenShortID >> 32, *givenShortID & 0x00000000ffffffff,
+                                  (*givenTrans)->hash.hex().text());
+                                *trans = *givenTrans;
+                                *givenTrans = NULL;
+                                increasedSize += (*trans)->size();
+                                found = true;
+                            }
                             break;
                         }
 
                     if(!found)
                     {
-                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                        NextCash::Log::add(NextCash::Log::VERBOSE, mName,
                           "Compact block transaction not found");
                         pData->block->setSize(pData->block->size() + increasedSize);
                         return false;
@@ -1244,16 +1276,30 @@ namespace BitCoin
             {
                 // Find short ID in given transactions.
                 found = false;
-                for(std::vector<Transaction *>::iterator givenTrans =
-                  pTransData->transactions.begin(); givenTrans != pTransData->transactions.end();
-                  ++givenTrans)
-                    if(*givenTrans != NULL &&
-                      pData->calculateShortID((*givenTrans)->hash) == *shortID)
+                for(std::vector<uint64_t>::iterator givenShortID = givenShortIDs.begin();
+                  givenShortID != givenShortIDs.end(); ++givenShortID)
+                    if(*givenShortID == *shortID)
                     {
-                        *trans = *givenTrans;
-                        *givenTrans = NULL;
-                        increasedSize += (*trans)->size();
-                        found = true;
+                        givenTrans = pData->block->transactions.begin() +
+                          (givenShortID - givenShortIDs.begin());
+
+                        if(*givenTrans == NULL)
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                              "Compact block transaction not found 0x%04x%08x",
+                              *givenShortID >> 32, *givenShortID & 0x00000000ffffffff);
+                        }
+                        else
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                              "Compact block transaction found 0x%04x%08x : %s",
+                              *givenShortID >> 32, *givenShortID & 0x00000000ffffffff,
+                              (*givenTrans)->hash.hex().text());
+                            *trans = *givenTrans;
+                            *givenTrans = NULL;
+                            increasedSize += (*trans)->size();
+                            found = true;
+                        }
                         break;
                     }
 
@@ -2630,7 +2676,7 @@ namespace BitCoin
                 if(!mSendCompactSent)
                 {
                     // Send compact block configuration.
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                    NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
                       "Sending compact configuration");
                     Message::SendCompactData sendCompactBlocks(mRequestAnnounceCompact, 1L);
                     sendMessage(&sendCompactBlocks);
@@ -2702,7 +2748,7 @@ namespace BitCoin
                     }
 
                     bool added = mChain->addBlock(compactBlockData->block) == 0;
-                    mChain->memPool().freeTransactions(compactBlockData->block->transactions, mID);
+                    // mChain->memPool().freeTransactions(compactBlockData->block->transactions, mID);
                     if(added)
                         compactBlockData->block = NULL;
                 }
@@ -2772,7 +2818,7 @@ namespace BitCoin
                         if(addTransactionsToCompactBlock(*block, compactTransData) &&
                           mChain->addBlock((*block)->block) == 0)
                             (*block)->block = NULL;
-                        mChain->memPool().freeTransactions((*block)->block->transactions, mID);
+                        // mChain->memPool().freeTransactions((*block)->block->transactions, mID);
                         delete *block;
                         mIncomingCompactBlocks.erase(block);
                         break;

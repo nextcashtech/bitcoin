@@ -89,7 +89,7 @@ namespace BitCoin
 
         // Add transactions back in to mempool for a block that is being reverted.
         // Unlocks the mempool since block is no longer processing.
-        void revert(const std::vector<Transaction *> &pTransactions);
+        void revert(const std::vector<Transaction *> &pTransactions, bool pFollowingPull);
 
         // Remove any transactions whose inputs were spent by the block.
         // Unlocks the mempool since the block is finished processing.

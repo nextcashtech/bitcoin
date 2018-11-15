@@ -909,6 +909,20 @@ namespace BitCoin
                       "Input %d has no outpoint transaction : trans %s", index, hash.hex().text());
                     return;
                 }
+
+                // Input script only contains data pushes, including hard coded value pushes
+                // TODO Decide if this is needed.
+                input->script.setReadOffset(0);
+                if(pChain->forks().cashFork201811IsActive(pHeight) &&
+                  !ScriptInterpreter::isPushOnly(input->script))
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                      "Input %d script is not push only : trans %s", index, hash.hex().text());
+                    input->script.setReadOffset(0);
+                    ScriptInterpreter::printScript(input->script, pChain->forks(), pHeight,
+                      NextCash::Log::VERBOSE);
+                    return;
+                }
             }
 
             if(input->script.length() > 1650)
@@ -917,28 +931,6 @@ namespace BitCoin
                   "Input %d script over standard size of 1650 (%d bytes) : trans %s", index,
                   input->script.length(), hash.hex().text());
                 setIsStandard = false;
-            }
-
-            if(pChain->forks().cashFork201811IsActive(pHeight) && size() < 100)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Transaction below min size of 100 (%d bytes) : trans %s", size(),
-                  hash.hex().text());
-                return;
-            }
-
-            // Input script only contains data pushes, including hard coded value pushes
-            // TODO Decide if this is needed.
-            input->script.setReadOffset(0);
-            if(pChain->forks().cashFork201811IsActive(pHeight) &&
-              !ScriptInterpreter::isPushOnly(input->script))
-            {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Input %d script is not push only : trans %s", index, hash.hex().text());
-                input->script.setReadOffset(0);
-                ScriptInterpreter::printScript(input->script, pChain->forks(), pHeight,
-                  NextCash::Log::VERBOSE);
-                return;
             }
 
             ++index;
@@ -1242,20 +1234,20 @@ namespace BitCoin
                             sigFailed = true;
                             continue;
                         }
-                        else if(pChain->forks().cashFork201811IsActive(pHeight) &&
-                          !interpreter.stackIsClean())
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::WARNING,
-                              BITCOIN_TRANSACTION_LOG_NAME,
-                              "Input %d script did not leave the stack clean : trans %s", index,
-                              hash.hex().text());
-                            input->print(pChain->forks(), NextCash::Log::WARNING);
-                            interpreter.printStack("After fail clean stack");
-                            output.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
-                              NextCash::Log::WARNING);
-                            sigFailed = true;
-                            continue;
-                        }
+                        // else if(pChain->forks().cashFork201811IsActive(pHeight) &&
+                          // !interpreter.stackIsClean())
+                        // {
+                            // NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                              // BITCOIN_TRANSACTION_LOG_NAME,
+                              // "Input %d script did not leave the stack clean : trans %s", index,
+                              // hash.hex().text());
+                            // input->print(pChain->forks(), NextCash::Log::WARNING);
+                            // interpreter.printStack("After fail clean stack");
+                            // output.print(pChain->forks(), BITCOIN_TRANSACTION_LOG_NAME,
+                              // NextCash::Log::WARNING);
+                            // sigFailed = true;
+                            // continue;
+                        // }
                         else
                             input->signatureStatus |= Input::VERIFIED;
                     }
