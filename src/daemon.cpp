@@ -1261,16 +1261,26 @@ namespace BitCoin
         {
             if(mChain.isInSync() && mChain.lastHeaderHash() == blocksToRequest.front())
             {
+                unsigned int compactsAvailable = 0;
                 for(std::vector<Node *>::iterator node = requestNodes.begin();
                   node != requestNodes.end(); ++node)
-                    if((*node)->compactBlocksEnabled() && (*node)->requestBlocks(blocksToRequest))
+                    if((*node)->compactBlocksEnabled())
                     {
-                        mNodeLock.readUnlock();
-                        return;
+                        ++compactsAvailable;
+                        if((*node)->requestBlocks(blocksToRequest))
+                        {
+                            mNodeLock.readUnlock();
+                            return;
+                        }
                     }
 
-                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-                  "No nodes with compact blocks enabled to request block from");
+                if(compactsAvailable == 0)
+                    NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                      "No nodes with compact blocks enabled to request block from");
+                else
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                      "None of the %d compact block nodes had the block to request",
+                      compactsAvailable);
             }
 
             for(std::vector<Node *>::iterator node = requestNodes.begin();
@@ -1281,6 +1291,8 @@ namespace BitCoin
                     return;
                 }
 
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              "No nodes had the block to request");
             mNodeLock.readUnlock();
             return;
         }

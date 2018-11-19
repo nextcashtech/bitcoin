@@ -98,7 +98,7 @@ namespace BitCoin
         // Add transaction to mem pool. Returns false if it was already in the mem pool or is
         //   invalid
         enum AddStatus { ADDED, ALREADY_HAVE, NON_STANDARD, DOUBLE_SPEND, LOW_FEE,
-          UNSEEN_OUTPOINTS, INVALID };
+          UNSEEN_OUTPOINTS, IN_CHAIN, INVALID };
         AddStatus add(Transaction *pTransaction, Chain *pChain,
           unsigned int pNodeID, NextCash::HashList &pUnseenOutpoints);
 
@@ -112,7 +112,7 @@ namespace BitCoin
 
         // Remove any transactions whose inputs were spent by the block.
         // Unlocks the mempool since the block is finished processing.
-        void finalize(Chain *pChain);
+        void finalize(std::vector<Transaction *> &pTransactions);
 
         // Calculate short IDs for all transaction hashes.
         void calculateShortIDs(Message::CompactBlockData *pCompactBlock,

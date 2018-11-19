@@ -29,7 +29,7 @@ namespace BitCoin
     {
         for(std::vector<Transaction *>::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction)
-            if(*transaction != NULL && !(*transaction)->isInMemPool())
+            if(*transaction != NULL)
                 delete *transaction;
     }
 

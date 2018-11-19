@@ -121,12 +121,13 @@ namespace BitCoin
             {
                 if(pStream->remaining() < pSize)
                     return false;
-                for(unsigned int i=0;i<pSize;i++)
+                for(unsigned int i = 0; i < pSize; i++)
                     pStream->readByte();
                 return true;
             }
 
             Type type;
+            NextCash::stream_size size;
 
         };
 
@@ -598,8 +599,6 @@ namespace BitCoin
             // Return the short ID for the specified transaction ID.
             uint64_t calculateShortID(const NextCash::Hash &pTransactionID);
 
-            NextCash::stream_size size() const { return mSize; }
-
             Time time;
             bool deleteBlock;
 
@@ -608,7 +607,6 @@ namespace BitCoin
 
         private:
 
-            NextCash::stream_size mSize;
             uint64_t mKey0 = 0;
             uint64_t mKey1 = 0;
 

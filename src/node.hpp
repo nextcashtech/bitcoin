@@ -247,12 +247,16 @@ namespace BitCoin
         unsigned int mBlockDownloadSize;
         unsigned int mBlockDownloadTime;
 
-        NextCash::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested, mLastHeaderHash;
+        NextCash::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested,
+          mLastHeaderHash;
         Time mHeaderRequestTime;
 
         NextCash::Mutex mBlockRequestMutex;
         NextCash::HashList mBlocksRequested;
         Time mBlockRequestTime, mLastBlockReceiveTime;
+
+        bool updateBlockRequest(const NextCash::Hash &pHash, Message::Data *pMessage,
+          bool pComplete);
 
         NextCash::Mutex mAnnounceMutex;
         NextCash::HashList mAnnounceBlocks, mAnnounceTransactions, mSentTransactions;
@@ -270,6 +274,7 @@ namespace BitCoin
         bool mConnected;
         Time mConnectedTime;
         unsigned int mMessagesReceived;
+        unsigned int mOldTransactionCount;
         unsigned int mPingCount;
 
         uint64_t mServices;

@@ -211,6 +211,7 @@ namespace BitCoin
             mFee = pMatchingTransaction.mFee;
             mStatus = pMatchingTransaction.mStatus;
             mTime = pMatchingTransaction.mTime;
+            mStatus |= WAS_IN_MEMPOOL;
         }
 
         // Print human readable version to log
@@ -252,6 +253,7 @@ namespace BitCoin
 #ifdef TRANS_ID_DUP_CHECK
         static const uint8_t DUP_CHECKED     = 0x20; // Duplicate ID has been checked for
 #endif
+        static const uint8_t WAS_IN_MEMPOOL  = 0x40; // Was in the mempool during block validation
 
         // Flag checking operations
         uint8_t status() const { return mStatus; }
@@ -342,9 +344,8 @@ namespace BitCoin
         // Run unit tests
         static bool test();
 
-        // Track if mempool is responsible for delete.
-        bool isInMemPool() const { return mIsInMemPool; }
-        void setInMemPool(bool pValue) { mIsInMemPool = pValue; }
+        void setWasInMemPool() { mStatus |= WAS_IN_MEMPOOL; }
+        bool wasInMemPool() const { return mStatus & WAS_IN_MEMPOOL; }
 
     private:
 
@@ -352,7 +353,6 @@ namespace BitCoin
         int64_t mFee;
         NextCash::stream_size mSize;
         uint8_t mStatus;
-        bool mIsInMemPool;
 
         NextCash::Hash mOutpointHash, mSequenceHash, mOutputHash;
 

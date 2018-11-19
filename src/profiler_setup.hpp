@@ -77,8 +77,12 @@
     static const char *PROFILER_MEMPOOL_GET_COMPACT_TRANS_CALC_NAME __attribute__ ((unused)) = "MemPool::calcShortIDs";
     static const unsigned int PROFILER_MEMPOOL_GET_OUTPUT_ID = 29;
     static const char *PROFILER_MEMPOOL_GET_OUTPUT_NAME __attribute__ ((unused)) = "MemPool::getOutput";
+    static const unsigned int PROFILER_MEMPOOL_PULL_ID = 30;
+    static const char *PROFILER_MEMPOOL_PULL_NAME __attribute__ ((unused)) = "MemPool::pull";
+    static const unsigned int PROFILER_MEMPOOL_FINALIZE_ID = 31;
+    static const char *PROFILER_MEMPOOL_FINALIZE_NAME __attribute__ ((unused)) = "MemPool::finalize";
 
-    static const unsigned int PROFILER_NODE_FILL_COMPACT_ID = 30;
+    static const unsigned int PROFILER_NODE_FILL_COMPACT_ID = 32;
     static const char *PROFILER_NODE_FILL_COMPACT_NAME __attribute__ ((unused)) = "Node::fillCompactBlock";
 
 #endif

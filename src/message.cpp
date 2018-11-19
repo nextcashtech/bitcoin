@@ -454,6 +454,9 @@ namespace BitCoin
                     break;
             }
 
+            if(result != NULL)
+                result->size = payloadSize;
+
             if(result != NULL && !result->read(pInput, payloadSize, version))
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MESSAGE_LOG_NAME,
@@ -462,7 +465,8 @@ namespace BitCoin
                 result = NULL;
             }
 
-            if(result != NULL && result->type == BLOCK)
+            if(result != NULL && (result->type == BLOCK || result->type == COMPACT_BLOCK ||
+              result->type == COMPACT_TRANS))
             {
                 // Block downloaded completely before first parsing of incoming data
                 if(pendingBlockHash != ((BlockData *)result)->block->header.hash)
@@ -1575,8 +1579,8 @@ namespace BitCoin
                 }
             }
 
-            block->setSize(80 + compactIntegerSize(shortIDs.size() + prefilled.size()));
-            mSize = pStream->readOffset() - startOffset;
+            block->header.transactionCount = shortIDs.size() + prefilled.size();
+            block->setSize(80 + compactIntegerSize(block->header.transactionCount));
             return true;
         }
 

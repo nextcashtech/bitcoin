@@ -182,7 +182,7 @@ namespace BitCoin
         }
 
         unsigned int height; // The chain height of the first block in the branch
-        std::list<PendingBlockData *> pendingBlocks;
+        std::vector<PendingBlockData *> pendingBlocks;
         NextCash::Hash accumulatedWork;
     };
 
