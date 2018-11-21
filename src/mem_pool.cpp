@@ -196,23 +196,23 @@ namespace BitCoin
 
     void MemPool::addInvalidHash(const NextCash::Hash &pHash)
     {
-        mInvalidHashes.push_back(pHash);
-        while(mInvalidHashes.size() > 1024)
-            mInvalidHashes.erase(mInvalidHashes.begin());
+        HashTime *newHashTime = new HashTime(pHash);
+        if(!mInvalidHashes.insert(newHashTime))
+            delete newHashTime;
     }
 
     void MemPool::addLowFeeHash(const NextCash::Hash &pHash)
     {
-        mLowFeeHashes.push_back(pHash);
-        while(mLowFeeHashes.size() > 1024)
-            mLowFeeHashes.erase(mLowFeeHashes.begin());
+        HashTime *newHashTime = new HashTime(pHash);
+        if(!mLowFeeHashes.insert(newHashTime))
+            delete newHashTime;
     }
 
     void MemPool::addNonStandardHash(const NextCash::Hash &pHash)
     {
-        mNonStandardHashes.push_back(pHash);
-        while(mNonStandardHashes.size() > 1024)
-            mNonStandardHashes.erase(mNonStandardHashes.begin());
+        HashTime *newHashTime = new HashTime(pHash);
+        if(!mNonStandardHashes.insert(newHashTime))
+            delete newHashTime;
     }
 
     void MemPool::getToAnnounce(std::vector<Transaction *> &pList, unsigned int pNodeID)
@@ -1119,6 +1119,66 @@ namespace BitCoin
             else
                 ++trans;
         }
+
+        // Expire invalid hashes
+        expireTime = getTime() - (60 * 60); // 1 hour
+        unsigned int count = 0;
+        for(NextCash::HashSet::Iterator hash = mInvalidHashes.begin();
+          hash != mInvalidHashes.end();)
+        {
+            if(((HashTime *)*hash)->time < expireTime)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MEM_POOL_LOG_NAME,
+                  "Expiring invalid hash : %s", (*hash)->getHash().hex().text());
+                hash = mInvalidHashes.eraseDelete(hash);
+                ++count;
+            }
+            else
+                ++hash;
+        }
+
+        if(count > 0)
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Expired %d invalid hashes", count);
+
+        // Expire low fee hashes
+        count = 0;
+        for(NextCash::HashSet::Iterator hash = mLowFeeHashes.begin(); hash != mLowFeeHashes.end();)
+        {
+            if(((HashTime *)*hash)->time < expireTime)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MEM_POOL_LOG_NAME,
+                  "Expiring low fee hash : %s", (*hash)->getHash().hex().text());
+                hash = mLowFeeHashes.eraseDelete(hash);
+                ++count;
+            }
+            else
+                ++hash;
+        }
+
+        if(count > 0)
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Expired %d low fee hashes", count);
+
+        // Expire non-standard hashes
+        count = 0;
+        for(NextCash::HashSet::Iterator hash = mNonStandardHashes.begin();
+          hash != mNonStandardHashes.end();)
+        {
+            if(((HashTime *)*hash)->time < expireTime)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MEM_POOL_LOG_NAME,
+                  "Expiring non-standard hash : %s", (*hash)->getHash().hex().text());
+                hash = mNonStandardHashes.eraseDelete(hash);
+                ++count;
+            }
+            else
+                ++hash;
+        }
+
+        if(count > 0)
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
+              "Expired %d non-standard hashes", count);
 
         mLock.writeUnlock();
     }

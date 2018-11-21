@@ -336,8 +336,25 @@ namespace BitCoin
         NextCash::HashSet mTransactions; // Verified transactions.
         NextCash::HashSet mPendingTransactions; // Transactions waiting for unseen outpoints.
 
-        // Transactions that failed to verify.
-        NextCash::HashList mInvalidHashes, mLowFeeHashes, mNonStandardHashes;
+
+        class HashTime : public NextCash::HashObject
+        {
+        public:
+
+            HashTime(const NextCash::Hash &pHash) { time = getTime(); }
+            ~HashTime() {}
+
+            Time time;
+
+            const NextCash::Hash &getHash() const { return mHash; }
+
+        private:
+
+            NextCash::Hash mHash;
+
+        };
+        // Transactions that failed to verify, had a low fee, or are non-standard.
+        NextCash::HashSet mInvalidHashes, mLowFeeHashes, mNonStandardHashes;
 
         NextCash::HashList mToAnnounce; // Transactions that need to be announced to peers.
 
