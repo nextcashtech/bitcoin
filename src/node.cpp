@@ -1142,15 +1142,15 @@ namespace BitCoin
         pCompactBlock->block->transactions.resize(pCompactBlock->block->header.transactionCount,
           NULL);
 
-        std::vector<ShortIDHash> memPoolShortIDs;
-        std::vector<ShortIDHash>::iterator memPoolShortID;
+        NextCash::SortedSet memPoolShortIDs;
+        ShortIDHash *memPoolShortID, shortIDLookup;
         mChain->memPool().calculateShortIDs(pCompactBlock, memPoolShortIDs);
 
         unsigned int encodedOffset = 1; // First offset will subtract 1 to zero
         unsigned int offset = 0;
         unsigned int i;
         NextCash::stream_size increasedSize = 0L;
-        NextCash::HashSet shortIDs;
+        NextCash::SortedSet shortIDs;
         std::vector<uint64_t>::iterator shortID = pCompactBlock->shortIDs.begin();
         std::vector<Transaction *>::iterator trans = pCompactBlock->block->transactions.begin();
 
@@ -1163,14 +1163,13 @@ namespace BitCoin
                 // Use short IDs to fill the gap between prefilled.
                 // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   // "Short ID %d 0x%08x%08x", offset, *shortID >> 32, *shortID & 0xffffffff);
-                for(memPoolShortID = memPoolShortIDs.begin();
-                  memPoolShortID != memPoolShortIDs.end(); ++memPoolShortID)
-                    if(memPoolShortID->shortID == *shortID)
-                    {
-                        *trans = mChain->memPool().getTransactionCopy(memPoolShortID->hash);
-                        memPoolShortIDs.erase(memPoolShortID);
-                        break;
-                    }
+                shortIDLookup.shortID = *shortID;
+                memPoolShortID = (ShortIDHash *)memPoolShortIDs.getAndRemove(shortIDLookup);
+                if(memPoolShortID != NULL)
+                {
+                    *trans = mChain->memPool().getTransactionCopy(memPoolShortID->hash);
+                    delete memPoolShortID;
+                }
 
                 if(*trans == NULL)
                 {
@@ -1214,14 +1213,13 @@ namespace BitCoin
             // Use short IDs to finish.
             // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
               // "Short ID %d 0x%08x%08x", offset, *shortID >> 32, *shortID & 0xffffffff);
-            for(memPoolShortID = memPoolShortIDs.begin();
-              memPoolShortID != memPoolShortIDs.end(); ++memPoolShortID)
-                if(memPoolShortID->shortID == *shortID)
-                {
-                    *trans = mChain->memPool().getTransactionCopy(memPoolShortID->hash);
-                    memPoolShortIDs.erase(memPoolShortID);
-                    break;
-                }
+            shortIDLookup.shortID = *shortID;
+            memPoolShortID = (ShortIDHash *)memPoolShortIDs.getAndRemove(shortIDLookup);
+            if(memPoolShortID != NULL)
+            {
+                *trans = mChain->memPool().getTransactionCopy(memPoolShortID->hash);
+                delete memPoolShortID;
+            }
 
             if(*trans == NULL)
             {

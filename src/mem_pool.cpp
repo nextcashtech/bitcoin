@@ -838,11 +838,14 @@ namespace BitCoin
 
         mLock.writeUnlock();
 
+        int percent = 0;
+        if(removedSize > 0)
+            percent = (int)(((float)removedSize /
+              (float)(removedSize + mSize + mPendingSize)) * 100.0f);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-          "Reduced by %d trans, %d KB, %d%% to %d trans, %d KB",
-          removedCount, removedSize / 1000, (int)(((float)removedSize /
-          (float)(removedSize + mSize + mPendingSize)) * 100.0f),
-          mTransactions.size() + mPendingTransactions.size(), (mSize + mPendingSize) / 1000);
+          "Reduced by %d trans, %d KB, %d%% to %d trans, %d KB", removedCount,
+          removedSize / 1000, percent, mTransactions.size() + mPendingTransactions.size(),
+          (mSize + mPendingSize) / 1000);
     }
 
     bool MemPool::insert(Transaction *pTransaction, bool pAnnounce)
@@ -949,7 +952,7 @@ namespace BitCoin
     }
 
     void MemPool::calculateShortIDs(Message::CompactBlockData *pCompactBlock,
-      std::vector<ShortIDHash> &pShortIDs)
+      NextCash::SortedSet &pShortIDs)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -963,13 +966,13 @@ namespace BitCoin
 
         for(NextCash::HashSet::Iterator trans = mTransactions.begin();
           trans != mTransactions.end(); ++trans)
-            pShortIDs.emplace_back((*trans)->getHash(),
-              pCompactBlock->calculateShortID((*trans)->getHash()));
+            pShortIDs.insert(new ShortIDHash((*trans)->getHash(),
+              pCompactBlock->calculateShortID((*trans)->getHash())));
 
         for(NextCash::HashSet::Iterator trans = mPendingTransactions.begin();
           trans != mPendingTransactions.end(); ++trans)
-            pShortIDs.emplace_back((*trans)->getHash(),
-              pCompactBlock->calculateShortID((*trans)->getHash()));
+            pShortIDs.insert(new ShortIDHash((*trans)->getHash(),
+              pCompactBlock->calculateShortID((*trans)->getHash())));
 
         mLock.readUnlock();
     }

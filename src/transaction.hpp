@@ -11,6 +11,7 @@
 #include "log.hpp"
 #include "digest.hpp"
 #include "hash.hpp"
+#include "hash_set.hpp"
 #include "stream.hpp"
 #include "buffer.hpp"
 #include "base.hpp"

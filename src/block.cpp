@@ -1069,7 +1069,7 @@ namespace BitCoin
 
         // Read block at specified offset in file. Return false if the offset is too high.
         bool readTransactions(unsigned int pOffset, std::vector<Transaction *> &pTransactions,
-          NextCash::stream_size *pDataSize = NULL);
+          Time pBlockTime, NextCash::stream_size *pDataSize = NULL);
 
         bool readOutput(unsigned int pBlockOffset, unsigned int pTransactionOffset,
           unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput);
@@ -1905,7 +1905,7 @@ namespace BitCoin
     }
 
     bool BlockFile::readTransactions(unsigned int pOffset,
-      std::vector<Transaction *> &pTransactions, NextCash::stream_size *pDataSize)
+      std::vector<Transaction *> &pTransactions, Time pBlockTime, NextCash::stream_size *pDataSize)
     {
         if(!openFile())
         {
@@ -1935,6 +1935,7 @@ namespace BitCoin
         for(unsigned int i = 0; i < transactionCount; ++i)
         {
             transaction = new Transaction();
+            transaction->setTime(pBlockTime);
             if(transaction->read(mInputFile, true))
                 pTransactions.push_back(transaction);
             else
@@ -1963,7 +1964,7 @@ namespace BitCoin
 
         NextCash::stream_size dataSize = 0;
         bool success = file->readTransactions(BlockFile::fileOffset(pHeight),
-          pBlock.transactions, &dataSize);
+          pBlock.transactions, pBlock.header.time, &dataSize);
         file->unlock(false);
 
         pBlock.header.transactionCount = pBlock.transactions.size();

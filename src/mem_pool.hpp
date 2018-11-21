@@ -11,6 +11,7 @@
 #include "mutex.hpp"
 #include "hash.hpp"
 #include "hash_set.hpp"
+#include "sorted_set.hpp"
 #include "base.hpp"
 #include "message.hpp"
 #include "transaction.hpp"
@@ -47,10 +48,18 @@ namespace BitCoin
         PendingTransactionData &operator = (PendingTransactionData &pRight);
     };
 
-    class ShortIDHash
+    class ShortIDHash : public NextCash::SortedObject
     {
     public:
 
+        ShortIDHash()
+        {
+            shortID = 0;
+        }
+        ShortIDHash(uint64_t pShortID)
+        {
+            shortID = pShortID;
+        }
         ShortIDHash(const NextCash::Hash &pHash, uint64_t pShortID) : hash(pHash)
         {
             shortID = pShortID;
@@ -60,6 +69,16 @@ namespace BitCoin
             shortID = pCopy.shortID;
         }
         ~ShortIDHash() {}
+
+        int compare(const SortedObject *pRight) const
+        {
+            if(shortID < ((ShortIDHash *)pRight)->shortID)
+                return -1;
+            else if(shortID > ((ShortIDHash *)pRight)->shortID)
+                return 1;
+            else
+                return 0;
+        }
 
         NextCash::Hash hash;
         uint64_t shortID;
@@ -116,7 +135,7 @@ namespace BitCoin
 
         // Calculate short IDs for all transaction hashes.
         void calculateShortIDs(Message::CompactBlockData *pCompactBlock,
-          std::vector<ShortIDHash> &pShortIDs);
+          NextCash::SortedSet &pShortIDs);
 
         // Get the transaction.
         Transaction *getTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
