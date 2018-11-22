@@ -229,7 +229,7 @@ namespace BitCoin
             transaction = (Transaction *)mTransactions.get(*hash);
             if(transaction != NULL)
             {
-                mNodeLocks.insert(*hash, pNodeID);
+                mNodeLocks.insert(new HashNodeID(*hash, pNodeID), true);
                 pList.push_back(transaction);
             }
         }
@@ -243,25 +243,25 @@ namespace BitCoin
     void MemPool::freeTransactions(std::vector<Transaction *> &pList, unsigned int pNodeID)
     {
         mNodeLock.lock();
-        NextCash::HashContainerList<unsigned int>::Iterator lock;
+        NextCash::HashSet::Iterator lock;
         Transaction *transaction;
         bool found;
         for(std::vector<Transaction *>::iterator trans = pList.begin(); trans != pList.end();
           ++trans)
         {
             found = false;
-            for(lock = mNodeLocks.get((*trans)->hash); lock != mNodeLocks.end() &&
-              lock.hash() == (*trans)->hash; ++lock)
+            for(lock = mNodeLocks.find((*trans)->hash); lock != mNodeLocks.end() &&
+              (*lock)->getHash() == (*trans)->hash; ++lock)
             {
-                if(*lock == pNodeID)
+                if(((HashNodeID *)*lock)->nodeID == pNodeID)
                 {
                     found = true;
-                    mNodeLocks.erase(lock);
+                    mNodeLocks.eraseDelete(lock);
                     break;
                 }
             }
 
-            if(found && mNodeLocks.get((*trans)->hash) == mNodeLocks.end())
+            if(found && !mNodeLocks.contains((*trans)->hash))
             {
                 // No locks left on this transaction.
                 transaction = (Transaction *)mNodeLockedTransactions.getAndRemove((*trans)->hash);
@@ -929,7 +929,7 @@ namespace BitCoin
         Transaction *result = (Transaction *)mTransactions.get(pHash);
         mNodeLock.lock();
         if(result != NULL)
-            mNodeLocks.insert(pHash, pNodeID);
+            mNodeLocks.insert(new HashNodeID(pHash, pNodeID), true);
         mNodeLock.unlock();
         mLock.readUnlock();
         return result;
@@ -980,16 +980,17 @@ namespace BitCoin
     void MemPool::freeTransaction(const NextCash::Hash &pHash, unsigned int pNodeID)
     {
         mNodeLock.lock();
-        NextCash::HashContainerList<unsigned int>::Iterator lock;
+        NextCash::HashSet::Iterator lock;
         bool found = false;
-        for(lock = mNodeLocks.get(pHash); lock != mNodeLocks.end() && lock.hash() == pHash; ++lock)
-            if(*lock == pNodeID)
+        for(lock = mNodeLocks.find(pHash); lock != mNodeLocks.end() && (*lock)->getHash() == pHash;
+          ++lock)
+            if(((HashNodeID *)*lock)->nodeID == pNodeID)
             {
                 found = true;
-                mNodeLocks.erase(lock);
+                mNodeLocks.eraseDelete(lock);
                 break;
             }
-        if(found && mNodeLocks.get(pHash) == mNodeLocks.end())
+        if(found && !mNodeLocks.contains(pHash))
         {
             Transaction *transaction = (Transaction *)mNodeLockedTransactions.getAndRemove(pHash);
             if(transaction != NULL)

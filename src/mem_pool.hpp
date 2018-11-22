@@ -336,12 +336,11 @@ namespace BitCoin
         NextCash::HashSet mTransactions; // Verified transactions.
         NextCash::HashSet mPendingTransactions; // Transactions waiting for unseen outpoints.
 
-
         class HashTime : public NextCash::HashObject
         {
         public:
 
-            HashTime(const NextCash::Hash &pHash) { time = getTime(); }
+            HashTime(const NextCash::Hash &pHash) : mHash(pHash) { time = getTime(); }
             ~HashTime() {}
 
             Time time;
@@ -353,21 +352,40 @@ namespace BitCoin
             NextCash::Hash mHash;
 
         };
+
         // Transactions that failed to verify, had a low fee, or are non-standard.
         NextCash::HashSet mInvalidHashes, mLowFeeHashes, mNonStandardHashes;
 
         NextCash::HashList mToAnnounce; // Transactions that need to be announced to peers.
 
+        class HashNodeID : public NextCash::HashObject
+        {
+        public:
+
+            HashNodeID(const NextCash::Hash &pHash, unsigned int pNodeID) : mHash(pHash)
+              { nodeID = pNodeID; }
+            ~HashNodeID() {}
+
+            unsigned int nodeID;
+
+            const NextCash::Hash &getHash() const { return mHash; }
+
+        private:
+
+            NextCash::Hash mHash;
+
+        };
+
         // Hold removed transactions here, while a node is sending it, until the node releases it
         //   and it can be deleted.
         NextCash::Mutex mNodeLock;
-        NextCash::HashContainerList<unsigned int> mNodeLocks;
+        NextCash::HashSet mNodeLocks;
         NextCash::HashSet mNodeLockedTransactions;
 
         bool addIfLockedByNode(Transaction *pTransaction)
         {
             mNodeLock.lock();
-            bool result = mNodeLocks.get(pTransaction->hash) != mNodeLocks.end();
+            bool result = mNodeLocks.contains(pTransaction->hash);
             if(result)
                 mNodeLockedTransactions.insert(pTransaction);
             mNodeLock.unlock();
