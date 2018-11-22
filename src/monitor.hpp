@@ -9,6 +9,7 @@
 #define BITCOIN_ADDRESS_BLOCK_HPP
 
 #include "hash.hpp"
+#include "hash_container_list.hpp"
 #include "stream.hpp"
 #include "block.hpp"
 #include "transaction.hpp"

@@ -52,7 +52,7 @@ namespace BitCoin
         if(!BitCoin::BloomFilter::test())
             ++failed;
 
-        if(!BitCoin::TransactionOutputPool::test())
+        if(!BitCoin::Outputs::test())
             ++failed;
 
 #ifndef ANDROID

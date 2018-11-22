@@ -125,7 +125,7 @@ test.debug: headers ${OBJECT_DIRECTORY}/.debug_headers build_secp256k1 ${DEBUG_O
 	@echo "\t\033[0;33mBUILDING DEBUG TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	${COMPILER} -c -ggdb -o ${OBJECT_DIRECTORY}/test.o.debug bitcoin_test.cpp ${COMPILE_FLAGS}
-	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/test.o.debug ${LIBRARY_PATHS} ${LIBRARIES} -o test.debug ${LINK_FLAGS}
+	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/test.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o test.debug ${LINK_FLAGS}
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 
 clean:

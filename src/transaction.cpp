@@ -1083,10 +1083,10 @@ namespace BitCoin
                   input != inputs.end() && !sigFailed; ++input, ++index)
                 {
                     if(pHeight == Chain::INVALID_HEIGHT)
-                        outputFlag = TransactionOutputPool::REQUIRE_UNSPENT;
+                        outputFlag = Outputs::REQUIRE_UNSPENT;
                     else
-                        outputFlag = TransactionOutputPool::REQUIRE_UNSPENT |
-                          TransactionOutputPool::MARK_SPENT;
+                        outputFlag = Outputs::REQUIRE_UNSPENT |
+                          Outputs::MARK_SPENT;
 
                     pOutputLookupTime.start();
                     if(pHeight == Chain::INVALID_HEIGHT)

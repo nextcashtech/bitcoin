@@ -3010,7 +3010,7 @@ namespace BitCoin
         NextCash::FileInputStream readFile("tests/06128e87be8b1b4dea47a7247d5528d2702c96826c7a648497e773b800000000.pending_block");
         NextCash::removeDirectory("chain_test");
         Info::setPath("./chain_test");
-        TransactionOutputPool outputs;
+        Outputs outputs;
         Forks softForks;
 
         outputs.load(Info::instance().path(), Info::instance().outputsCacheSize,
@@ -3118,7 +3118,7 @@ namespace BitCoin
         // chain.load();
 
         // Info::instance().setPath("/var/bitcoin/mainnet");
-        // TransactionOutputPool outputs;
+        // Outputs outputs;
 
         // outputs.load(Info::instance().path(), Info::instance().outputsCacheAge, true);
 

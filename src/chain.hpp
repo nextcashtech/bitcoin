@@ -219,7 +219,7 @@ namespace BitCoin
         unsigned int highestFullPendingHeight() const
           { return mLastFullPendingOffset + mNextBlockHeight - 1; }
 
-        TransactionOutputPool &outputs() { return mOutputs; }
+        Outputs &outputs() { return mOutputs; }
         Forks &forks() { return mForks; }
         MemPool &memPool() { return mMemPool; }
 #ifndef DISABLE_ADDRESSES
@@ -363,7 +363,7 @@ namespace BitCoin
 
         static NextCash::Hash sBTCForkBlockHash;
 
-        TransactionOutputPool mOutputs;
+        Outputs mOutputs;
 #ifndef DISABLE_ADDRESSES
         Addresses mAddresses;
 #endif
