@@ -172,10 +172,10 @@ namespace BitCoin
             NextCash::stream_size size; // Size in bytes
             uint64_t totalFee; // Total of fees
             NextCash::stream_size zero; // Zero fee
-            NextCash::stream_size one; // >0 < 1.2 sat/B
-            NextCash::stream_size two; // 1.2 - 2.2 sat/B
-            NextCash::stream_size five; // 2.2 - 5.2 sat/B
-            NextCash::stream_size ten; // 5.2 - 10.2 sat/B
+            NextCash::stream_size low;  // >0  <1 sat/B
+            NextCash::stream_size one;  // >=1 <2 sat/B
+            NextCash::stream_size two;  // >=2 <5 sat/B
+            NextCash::stream_size five; // >=5 <10 sat/B
             NextCash::stream_size remainingSize; // Total size of remaining transactions
             uint64_t remainingFee; // Total fee of remaining transactions
             unsigned int pendingCount; // Number of pending transactions
@@ -183,18 +183,18 @@ namespace BitCoin
 
             void clear()
             {
-                count = 0;
-                size = 0L;
-                totalFee = 0L;
-                zero = 0L;
-                one = 0L;
-                two = 0L;
-                five = 0L;
-                ten = 0L;
-                remainingSize = 0L;
-                remainingFee = 0L;
-                pendingCount = 0;
-                pendingSize = 0L;
+                count    = 0;
+                size     = 0UL;
+                totalFee = 0UL;
+                zero     = 0UL;
+                low      = 0UL;
+                one      = 0UL;
+                two      = 0UL;
+                five     = 0UL;
+                remainingSize = 0UL;
+                remainingFee  = 0UL;
+                pendingCount  = 0;
+                pendingSize   = 0UL;
             }
 
         };

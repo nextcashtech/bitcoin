@@ -1358,14 +1358,14 @@ namespace BitCoin
 
             if(feeRate == 0)
                 pData.zero += ((Transaction *)*trans)->size();
-            else if(feeRate < 1200)
+            else if(feeRate < 1000)
+                pData.low += ((Transaction *)*trans)->size();
+            else if(feeRate < 2000)
                 pData.one += ((Transaction *)*trans)->size();
-            else if(feeRate < 2200)
+            else if(feeRate < 5000)
                 pData.two += ((Transaction *)*trans)->size();
-            else if(feeRate < 5200)
+            else if(feeRate < 10000)
                 pData.five += ((Transaction *)*trans)->size();
-            else if(feeRate < 10200)
-                pData.ten += ((Transaction *)*trans)->size();
             else
             {
                 pData.remainingSize += ((Transaction *)*trans)->size();

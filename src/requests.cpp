@@ -730,10 +730,10 @@ namespace BitCoin
             sendData.writeUnsignedLong(requestData.totalFee); // Total of fees
             sendData.writeUnsignedLong(requestData.size); // Size in bytes
             sendData.writeUnsignedLong(requestData.zero); // Zero fee
-            sendData.writeUnsignedLong(requestData.one); // Below 1 sat/B
-            sendData.writeUnsignedLong(requestData.two); // Below 2 sat/B
-            sendData.writeUnsignedLong(requestData.five); // Below 5 sat/B
-            sendData.writeUnsignedLong(requestData.ten); // Below 10 sat/B
+            sendData.writeUnsignedLong(requestData.low); // Low fee
+            sendData.writeUnsignedLong(requestData.one); // 1 sat/B
+            sendData.writeUnsignedLong(requestData.two); // 2 sat/B
+            sendData.writeUnsignedLong(requestData.five); // 5 sat/B
             sendData.writeUnsignedLong(requestData.remainingSize); // Total size of remaining
             sendData.writeUnsignedLong(requestData.remainingFee); // Total fee of remaining
             sendData.writeUnsignedInt(requestData.pendingCount); // Number of pending transactions
