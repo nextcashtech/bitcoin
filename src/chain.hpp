@@ -290,11 +290,15 @@ namespace BitCoin
         void releaseBlocksForNode(unsigned int pNodeID);
         void releaseBlockForNode(const NextCash::Hash &pHash, unsigned int pNodeID);
 
+        static const uint8_t LOCK_HEADERS  = 0x01;
+        static const uint8_t LOCK_PENDING  = 0x02;
+        static const uint8_t LOCK_BRANCHES = 0x04;
+
         // Add header/block to queue to be processed and added to top of chain
         //   Parameter pMainBranchOnly : True when no branches should be checked.
         //   pMarkNodeID will be marked on the pending block if NEED_BLOCK is returned.
-        HashStatus addHeader(Header &pHeader, unsigned int pMarkNodeID = 0, bool pHeadersLocked = false,
-          bool pBranchesLocked = false, bool pMainBranchOnly = false);
+        HashStatus addHeader(Header &pHeader, unsigned int pMarkNodeID = 0, uint8_t pLocks = 0x00,
+          bool pMainBranchOnly = false);
         HashStatus addBlock(Block *pBlock);
 
         // Retrieve block hashes starting at a specific hash. (empty starting hash for first block)
@@ -310,7 +314,7 @@ namespace BitCoin
           const NextCash::Hash &pStoppingHash, unsigned int pCount);
 
         // Get block or hash at specific height
-        bool getHash(unsigned int pHeight, NextCash::Hash &pHash, bool pHeadersLocked = false);
+        bool getHash(unsigned int pHeight, NextCash::Hash &pHash, uint8_t pLocks = 0x00);
         bool getBlock(unsigned int pHeight, Block &pBlock);
         bool getHeader(unsigned int pHeight, Header &pHeader);
 
@@ -420,7 +424,7 @@ namespace BitCoin
         void updatePendingBlocks();
 
         // Revert to a lower height
-        bool revert(unsigned int pHeight, bool pHeadersLocked = false);
+        bool revert(unsigned int pHeight, uint8_t pLocks = 0x00);
         bool revertFileHeight(unsigned int pHeight);
 
         uint32_t calculateTargetBits(); // Calculate required target bits for new header.
