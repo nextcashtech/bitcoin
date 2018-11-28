@@ -1837,6 +1837,7 @@ namespace BitCoin
                 ++item;
         }
 
+        mCache.shrink();
         return true;
     }
 

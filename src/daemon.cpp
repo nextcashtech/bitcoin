@@ -1652,7 +1652,7 @@ namespace BitCoin
             }
         }
 
-        double dropScore = averageScore - (scoreStandardDeviation * 1.25);
+        double dropScore = averageScore - (scoreStandardDeviation * 1.5);
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Node Performance Summary : average speed %d KB/s, average ping %d ms, drop score %d",
           (int)averageSpeed / 1000, (int)averagePing, (int)(100.0 * dropScore));
@@ -1716,7 +1716,7 @@ namespace BitCoin
             mChain.lockBlock(0, block->header.hash);
         }
 
-        std::vector<Transaction *> transactionList;
+        TransactionList transactionList;
         mChain.memPool().getToAnnounce(transactionList, 0);
         if(transactionList.size() == 0)
             return;
@@ -1729,8 +1729,10 @@ namespace BitCoin
         mChain.memPool().freeTransactions(transactionList, 0);
 
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
-            (*node)->sendAnnouncments();
+            (*node)->finalizeAnnouncments();
         mNodeLock.readUnlock();
+
+        transactionList.clearNoDelete(); // Still owned by mempool.
     }
 
     void Daemon::runManage(void *pParameter)

@@ -93,7 +93,7 @@ namespace BitCoin
         ~MemPool();
 
         enum HashStatus { HASH_NEED, HASH_REQUESTED, HASH_ALREADY_HAVE, HASH_INVALID, HASH_LOW_FEE,
-          HASH_NON_STANDARD };
+          HASH_NON_STANDARD, HASH_DOUBLE_SPEND, HASH_REJECTED_ANCESTOR };
         HashStatus hashStatus(Chain *pChain, const NextCash::Hash &pHash, unsigned int pNodeID,
           bool pRetry);
 
@@ -137,11 +137,11 @@ namespace BitCoin
         void calculateShortIDs(Message::CompactBlockData *pCompactBlock,
           NextCash::SortedSet &pShortIDs);
 
-        // Get the transaction.
-        Transaction *getTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
-
         // Get a copy of a transaction. Receiver is responsible for delete.
         Transaction *getTransactionCopy(const NextCash::Hash &pHash);
+
+        // Get the transaction.
+        Transaction *getTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
 
         // Confirm no longer using transaction from getTransaction.
         void freeTransaction(const NextCash::Hash &pHash, unsigned int pNodeID);
@@ -152,8 +152,8 @@ namespace BitCoin
         void process(Chain *pChain);
 
         // Get transaction hashes that should be announced.
-        void getToAnnounce(std::vector<Transaction *> &pList, unsigned int pNodeID);
-        void freeTransactions(std::vector<Transaction *> &pList, unsigned int pNodeID);
+        void getToAnnounce(TransactionList &pList, unsigned int pNodeID);
+        void freeTransactions(TransactionList &pList, unsigned int pNodeID);
 
         // Full mempool requests.
         void getFullList(NextCash::HashList &pList, const BloomFilter &pFilter);
@@ -208,7 +208,7 @@ namespace BitCoin
         bool insert(Transaction *pTransaction, bool pAnnounce);
 
         // Returns true if the transaction is locked by a node.
-        bool removeInternal(Transaction *pTransaction, bool pDelete = true);
+        void removeInternal(Transaction *pTransaction);
 
         // Drop all the oldest/lowest fee rate transactions.
         void drop();
@@ -216,10 +216,6 @@ namespace BitCoin
         // Drop verified transactions older than 24 hours
         // Drop pending transactions older than 5 minutes.
         void expire();
-
-        void addInvalidHash(const NextCash::Hash &pHash);
-        void addLowFeeHash(const NextCash::Hash &pHash);
-        void addNonStandardHash(const NextCash::Hash &pHash);
 
         class RequestedHash : public NextCash::HashObject
         {
@@ -284,7 +280,12 @@ namespace BitCoin
         bool checkPendingTransaction(Chain *pChain, Transaction *pTransaction,
           unsigned int pDepth);
 
+        // Check for child transactions of this transaction in pending.
         void checkPendingForNewTransaction(Chain *pChain, const NextCash::Hash &pHash,
+          unsigned int pDepth);
+
+        // Remove any child transactions of this transaction from pending.
+        void removePendingForNewTransaction(Chain *pChain, const NextCash::Hash &pHash,
           unsigned int pDepth);
 
         class OutpointHash : public NextCash::HashObject
@@ -336,25 +337,15 @@ namespace BitCoin
         NextCash::HashSet mTransactions; // Verified transactions.
         NextCash::HashSet mPendingTransactions; // Transactions waiting for unseen outpoints.
 
-        class HashTime : public NextCash::HashObject
-        {
-        public:
-
-            HashTime(const NextCash::Hash &pHash) : mHash(pHash) { time = getTime(); }
-            ~HashTime() {}
-
-            Time time;
-
-            const NextCash::Hash &getHash() const { return mHash; }
-
-        private:
-
-            NextCash::Hash mHash;
-
-        };
-
         // Transactions that failed to verify, had a low fee, or are non-standard.
-        NextCash::HashSet mInvalidHashes, mLowFeeHashes, mNonStandardHashes;
+        NextCash::HashSet mInvalidHashes, mLowFeeHashes, mNonStandardHashes, mDoubleSpendHashes,
+          mRejectedAncestorHashes;
+
+        void addInvalidHash(const NextCash::Hash &pHash);
+        void addLowFeeHash(const NextCash::Hash &pHash);
+        void addNonStandardHash(const NextCash::Hash &pHash);
+        void addDoubleSpendHash(const NextCash::Hash &pHash);
+        void addRejectedAncestorHash(const NextCash::Hash &pHash);
 
         NextCash::HashList mToAnnounce; // Transactions that need to be announced to peers.
 
@@ -381,16 +372,6 @@ namespace BitCoin
         NextCash::Mutex mNodeLock;
         NextCash::HashSet mNodeLocks;
         NextCash::HashSet mNodeLockedTransactions;
-
-        bool addIfLockedByNode(Transaction *pTransaction)
-        {
-            mNodeLock.lock();
-            bool result = mNodeLocks.contains(pTransaction->hash);
-            if(result)
-                mNodeLockedTransactions.insert(pTransaction);
-            mNodeLock.unlock();
-            return result;
-        }
     };
 }
 

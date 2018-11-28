@@ -1914,7 +1914,8 @@ namespace BitCoin
         }
 
         // Go to location in header where the data offset to the block is
-        mInputFile->setReadOffset(HEADER_START_OFFSET + (pOffset * HEADER_ITEM_SIZE) + BLOCK_HASH_SIZE);
+        mInputFile->setReadOffset(HEADER_START_OFFSET + (pOffset * HEADER_ITEM_SIZE) +
+          BLOCK_HASH_SIZE);
 
         NextCash::stream_size offset = mInputFile->readUnsignedInt();
         if(offset == 0)

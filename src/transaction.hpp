@@ -186,8 +186,9 @@ namespace BitCoin
 
         Transaction &operator = (const Transaction &pRight);
 
-        // HashObject virtual function
+        // HashObject virtual functions
         const NextCash::Hash &getHash() const { return hash; }
+        bool valueEquals(const NextCash::SortedObject *pRight) const { return this == pRight; }
 
         void write(NextCash::OutputStream *pStream);
 

@@ -1410,13 +1410,10 @@ namespace BitCoin
             calculateSipHashKeys();
 
             // Short IDs
-            shortIDs.clear();
             shortIDs.reserve(block->transactions.size());
 
             // Add Coinbase to prefilled automatically
-            prefilled.clear();
-            prefilled.push_back(PrefilledTransaction(0,
-              pBlock->transactions.front()));
+            prefilled.push_back(PrefilledTransaction(0, pBlock->transactions.front()));
 
             Time time = getTime();
             unsigned int offset = 0;

@@ -122,8 +122,8 @@ namespace BitCoin
         bool announceBlock(Block *pBlock);
 
         // Send notification of a new transaction in the mempool
-        void addTransactionAnnouncements(std::vector<Transaction *> &pTransactions);
-        bool sendAnnouncments();
+        void addTransactionAnnouncements(TransactionList &pTransactions);
+        bool finalizeAnnouncments();
 
         // Used to send transactions created by this wallet
         bool sendTransaction(Transaction *pTransaction);
@@ -171,13 +171,15 @@ namespace BitCoin
 
         enum FillResult
         {
-            FILL_COMPLETE   = 0x00, // Block is now complete.
-            FILL_INCOMPLETE = 0x01, // Request sent for missing data.
-            FILL_FAILED     = 0x02  // Failed. New request required.
+            FILL_COMPLETE,   // Block is now complete.
+            FILL_INCOMPLETE, // Request sent for missing data.
+            FILL_FAILED,     // Failed. New request required.
+            FILL_ABANDONED   // Fill abandoned because another node has taken over.
         };
 
         // Attempt to fill block from compact block.
-        FillResult fillCompactBlock(Message::CompactBlockData *pCompactBlock);
+        FillResult fillCompactBlock(Message::CompactBlockData *pCompactBlock,
+          bool pRequestTransactions);
 
         // Adds transactions to the compact block.
         // Returns true if any transactions were added.
@@ -225,6 +227,8 @@ namespace BitCoin
         bool mMemPoolReceived;
         bool mProcessingCompactTransactions;
         bool *mStopFlag;
+        std::vector<Message::Data *> mMessagesToSend;
+        NextCash::Mutex mMessagesToSendLock;
 
         Message::VersionData *mSentVersionData, *mReceivedVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;
@@ -235,7 +239,7 @@ namespace BitCoin
         uint32_t mPingCutoff;
         Time mLastBlackListCheck;
         Time mLastMerkleCheck, mLastMerkleRequest, mLastMerkleReceive;
-        Message::InventoryData mInventoryData;
+        Message::InventoryData *mInventoryData;
         std::vector<Message::CompactBlockData *> mIncomingCompactBlocks, mOutgoingCompactBlocks;
 
         BloomFilter mFilter; // Bloom filter received from peer
@@ -253,6 +257,7 @@ namespace BitCoin
 
         NextCash::Mutex mBlockRequestMutex;
         NextCash::HashList mBlocksRequested;
+        NextCash::HashSet mTransactionsRequested;
         Time mBlockRequestTime, mLastBlockReceiveTime;
 
         bool updateBlockRequest(const NextCash::Hash &pHash, Message::Data *pMessage,

@@ -269,7 +269,9 @@ namespace BitCoin
 
         bool getPendingHeaderHashes(NextCash::HashList &pList);
 
-        enum HashStatus { ALREADY_HAVE, HEADER_NEEDED, HEADER_ADDED, BLOCK_NEEDED, BLOCK_ADDED,
+        enum HashStatus { ALREADY_HAVE,
+          HEADER_NEEDED, HEADER_ADDED,
+          BLOCK_NEEDED, BLOCK_ADDED,
           SHORT_CHAIN, INVALID, UNKNOWN };
 
         // Return the status of the specified block hash

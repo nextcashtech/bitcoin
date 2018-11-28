@@ -10,6 +10,7 @@
 
 #include "stream.hpp"
 #include "network.hpp"
+#include "hash_set.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -224,6 +225,24 @@ namespace BitCoin
     unsigned int compactIntegerSize(uint64_t pValue);
     unsigned int writeCompactInteger(NextCash::OutputStream *pStream, uint64_t pValue);
     uint64_t readCompactInteger(NextCash::InputStream *pStream);
+
+    // Object used to save hashes with times in a HashSet.
+    class HashTime : public NextCash::HashObject
+    {
+    public:
+
+        HashTime(const NextCash::Hash &pHash) : mHash(pHash) { time = getTime(); }
+        ~HashTime() {}
+
+        Time time;
+
+        const NextCash::Hash &getHash() const { return mHash; }
+
+    private:
+
+        NextCash::Hash mHash;
+
+    };
 
     namespace Base
     {

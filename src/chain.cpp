@@ -40,6 +40,7 @@ namespace BitCoin
         mMaxTargetBits = 0x1d00ffff;
         mLastFullPendingOffset = 0;
         mStopRequested = false;
+        mSaveDataInProgress = false;
         mIsInSync = false;
         mWasInSync = false;
         mHeadersNeeded = true;
@@ -1044,8 +1045,11 @@ namespace BitCoin
 
         if(pHeader.previousHash == mLastHeaderHash)
         {
+            mPendingLock.writeLock("Add Pending Header");
+
             if(!processHeader(pHeader))
             {
+                mPendingLock.writeUnlock();
                 if(!pHeadersLocked)
                     mHeadersLock.writeUnlock();
                 return INVALID;
@@ -1056,8 +1060,6 @@ namespace BitCoin
 
             if(!mInfo.spvMode && mApprovedBlockHeight != 0xffffffff)
             {
-                mPendingLock.writeLock("Add Pending Header");
-
                 // Add pending block if necessary.
                 bool addPending = false;
                 if(mPendingBlocks.size() == 0)
@@ -1087,10 +1089,26 @@ namespace BitCoin
                     mPendingLock.writeUnlock();
                     return BLOCK_NEEDED;
                 }
+                else
+                {
+                    bool full = false;
+                    for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
+                      pending != mPendingBlocks.end(); ++pending)
+                        if((*pending)->block->header.hash == pHeader.hash)
+                        {
+                            full = (*pending)->isFull();
+                            break;
+                        }
 
-                mPendingLock.writeUnlock();
+                    mPendingLock.writeUnlock();
+                    if(!full)
+                        return BLOCK_NEEDED;
+                    else
+                        return HEADER_ADDED;
+                }
             }
 
+            mPendingLock.writeUnlock();
             return HEADER_ADDED;
         }
 

@@ -148,19 +148,15 @@ namespace BitCoin
         {
             mLastConnectionActive = getTime();
             if(pConnectionType & Node::INCOMING)
-            {
                 ++mStatistics.incomingConnections;
-            }
             else if(!(pConnectionType & Node::SEED))
-            {
                 ++mStatistics.outgoingConnections;
-            }
         }
 
-        bool loadKeyStore(const uint8_t *pPassword = (const uint8_t *)"",
-                          unsigned int pPasswordLength = 0);
-        bool saveKeyStore(const uint8_t *pPassword = (const uint8_t *)"",
-                          unsigned int pPasswordLength = 0);
+        bool loadKeyStore(const uint8_t *pPassword = (const uint8_t *)"NextCash",
+                          unsigned int pPasswordLength = 8);
+        bool saveKeyStore(const uint8_t *pPassword = (const uint8_t *)"NextCash",
+                          unsigned int pPasswordLength = 8);
         void resetKeysSynchronized();
 
         enum Status { INACTIVE, LOADING_WALLETS, LOADING_CHAIN, FINDING_PEERS, CONNECTING_TO_PEERS,
