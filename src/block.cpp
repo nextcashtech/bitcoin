@@ -1484,37 +1484,25 @@ namespace BitCoin
         {
             mInputFile->setReadOffset(HEADER_START_OFFSET + (lastGoodCount * HEADER_ITEM_SIZE));
             if(!hash.read(mInputFile))
-            {
-                mValid = false;
                 break;
-            }
+
+            if(hash.isZero())
+                break;
 
             if(mInputFile->remaining() < 4)
-            {
-                mValid = false;
                 break;
-            }
             dataOffset = mInputFile->readUnsignedInt();
 
             if(dataOffset + 4 > mInputFile->length())
-            {
-                mValid = false;
                 break;
-            }
 
             if(!Header::getHeader((mID * MAX_COUNT) + lastGoodCount, block.header))
-            {
-                mValid = false;
                 break;
-            }
 
             mInputFile->setReadOffset(dataOffset);
 
             if(mInputFile->remaining() < 4)
-            {
-                mValid = false;
                 break;
-            }
             transactionCount = mInputFile->readUnsignedInt();
 
             block.transactions.reserve(transactionCount);
@@ -1527,19 +1515,12 @@ namespace BitCoin
                 else
                 {
                     delete transaction;
-                    mValid = false;
                     break;
                 }
             }
 
-            if(!mValid)
-                break;
-
             if(!block.validate())
-            {
-                mValid = false;
                 break;
-            }
 
             block.clear();
             lastGoodOffset = mInputFile->readOffset();
@@ -1549,7 +1530,7 @@ namespace BitCoin
         if(lastGoodOffset == 0)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
-              "Block file %08x has no good headers : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
+              "Block file %08x has no good blocks", mID);
             return false;
         }
 
@@ -1580,7 +1561,7 @@ namespace BitCoin
 
             mInputFile->setReadOffset(HEADER_START_OFFSET);
 
-            // Transafer block to swap file
+            // Transfer block to swap file
             for(unsigned int i = 0; i <= lastGoodCount; ++i)
             {
                 if(!hash.read(mInputFile))
@@ -1618,20 +1599,11 @@ namespace BitCoin
             }
         }
 
-        if(mValid)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-              "Repaired block file %08x. Truncated %d blocks", mID, previousCount - lastGoodCount);
-            mModified = true;
-            updateCRC();
-            return true;
-        }
-        else
-        {
-            NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
-              "Failed to repair block file %08x : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
-            return false;
-        }
+        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+          "Repaired block file %08x. Truncated %d blocks", mID, previousCount - lastGoodCount);
+        mModified = true;
+        updateCRC();
+        return true;
     }
 
     void BlockFile::getLastCount()
@@ -1872,6 +1844,7 @@ namespace BitCoin
             return false;
         }
 
+        updateCRC();
         return true;
     }
 

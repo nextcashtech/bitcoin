@@ -836,6 +836,7 @@ namespace BitCoin
             return false;
         }
 
+        updateCRC();
         return true;
     }
 
