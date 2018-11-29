@@ -2603,8 +2603,7 @@ namespace BitCoin
         Key *key;
     };
 
-    static const char sEncryptKeyInitVector[] =
-      "0daf9958eec1c536d8bed3608942b56098ed723b0e26713b1ba8f83e85f1525d";
+    static const char sEncryptKeyInitVector[] = "0daf9958eec1c536d8bed3608942b560";
 
     KeyStore::KeyStore()
     {
