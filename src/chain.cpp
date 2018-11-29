@@ -168,7 +168,7 @@ namespace BitCoin
         }
     }
 
-    Block *Chain::blockToAnnounce()
+    Block *Chain::blockToAnnounce(unsigned int pNodeID)
     {
         Block *result = NULL;
         NextCash::Hash hash;
@@ -181,9 +181,12 @@ namespace BitCoin
             {
                 result = mAnnounceBlock;
                 mAnnounceBlock = NULL;
+                mPendingLock.writeUnlock();
             }
             else
             {
+                mPendingLock.writeUnlock();
+
                 // Get block from file
                 result = new Block();
                 if(!getBlock(hash, *result))
@@ -193,7 +196,16 @@ namespace BitCoin
                 }
             }
         }
-        mPendingLock.writeUnlock();
+        else
+            mPendingLock.writeUnlock();
+
+        if(result != NULL)
+        {
+            mBlockMutex.lock();
+            mBlockLocks.emplace_back(pNodeID, result->header.hash);
+            mBlocksBeingSent.push_back(result);
+            mBlockMutex.unlock();
+        }
         return result;
     }
 
@@ -204,7 +216,7 @@ namespace BitCoin
         mBlockMutex.unlock();
     }
 
-    bool Chain::unlockBlock(unsigned int pNodeID, const NextCash::Hash &pHash)
+    bool Chain::releaseBlock(unsigned int pNodeID, const NextCash::Hash &pHash)
     {
         mBlockMutex.lock();
         bool found = false;
@@ -214,21 +226,22 @@ namespace BitCoin
             {
                 found = true;
                 mBlockLocks.erase(lock);
+                break;
             }
 
         if(found)
         {
             // Free if there are no more locks on that block.
-            found = false;
+            bool remaining = false;
             for(std::vector<BlockLock>::iterator lock = mBlockLocks.begin();
               lock != mBlockLocks.end(); ++lock)
                 if(lock->hash == pHash)
                 {
-                    found = true;
+                    remaining = true;
                     break;
                 }
 
-            if(!found)
+            if(!remaining)
             {
                 for(std::vector<Block *>::iterator block = mBlocksBeingSent.begin();
                   block != mBlocksBeingSent.end(); ++block)
@@ -426,7 +439,7 @@ namespace BitCoin
         for(std::vector<PendingBlockData *>::iterator pending =
           longestBranch->pendingBlocks.begin(); pending != longestBranch->pendingBlocks.end();
           ++pending)
-            if(addHeader((*pending)->block->header, 0, locks, true) != INVALID)
+            if(addHeader((*pending)->block->header, 0, locks, true) == INVALID)
             {
                 success = false; // Main branch will be re-activated
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
@@ -1001,6 +1014,18 @@ namespace BitCoin
         if(!(pLocks & LOCK_HEADERS))
             mHeadersLock.writeLock("Add");
 
+        if(pHeader.hash == mLastHeaderHash)
+        {
+            if(!(pLocks & LOCK_HEADERS))
+                mHeadersLock.writeUnlock();
+            NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
+              "Header is latest in chain : %s", pHeader.hash.hex().text());
+            if(pMarkNodeID != 0 && markBlockForNode(pHeader.hash, pMarkNodeID))
+                return BLOCK_NEEDED;
+            else
+                return ALREADY_HAVE;
+        }
+
         // Remove pending header
         for(std::list<PendingHeaderData *>::iterator pendingHeader = mPendingHeaders.begin();
           pendingHeader != mPendingHeaders.end(); ++pendingHeader)
@@ -1104,6 +1129,11 @@ namespace BitCoin
                         if((*pending)->block->header.hash == pHeader.hash)
                         {
                             full = (*pending)->isFull();
+                            if(pMarkNodeID != 0)
+                            {
+                                (*pending)->requestingNode = pMarkNodeID;
+                                (*pending)->requestedTime = getTime();
+                            }
                             break;
                         }
 
@@ -1127,8 +1157,7 @@ namespace BitCoin
               "Header already in chain : %s", pHeader.hash.hex().text());
             if(!(pLocks & LOCK_HEADERS))
                 mHeadersLock.writeUnlock();
-
-            if(markBlockForNode(pHeader.hash, pMarkNodeID))
+            if(pMarkNodeID != 0 && markBlockForNode(pHeader.hash, pMarkNodeID))
                 return BLOCK_NEEDED;
             else
                 return ALREADY_HAVE;
@@ -1687,10 +1716,13 @@ namespace BitCoin
         {
             if(isInSync())
             {
+                mPendingLock.writeLock("Add Announce");
                 mBlocksToAnnounce.push_back(nextPending->block->header.hash);
-                if(mAnnounceBlock == NULL)
-                    mAnnounceBlock = nextPending->block;
+                if(mAnnounceBlock != NULL)
+                    delete mAnnounceBlock;
+                mAnnounceBlock = nextPending->block;
                 nextPending->block = NULL;
+                mPendingLock.writeUnlock();
             }
 
             // Delete block

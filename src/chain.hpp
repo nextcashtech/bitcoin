@@ -245,10 +245,10 @@ namespace BitCoin
         void clearInSync() { mIsInSync = false; }
         bool wasInSync() { return mWasInSync; }
 
-        Block *blockToAnnounce();
+        Block *blockToAnnounce(unsigned int pNodeID);
         void lockBlock(unsigned int pNodeID, const NextCash::Hash &pHash);
         // Returns true if the block was unlocked. False if it was never locked.
-        bool unlockBlock(unsigned int pNodeID, const NextCash::Hash &pHash);
+        bool releaseBlock(unsigned int pNodeID, const NextCash::Hash &pHash);
 
         // Check if a block is already in the chain
         bool blockAvailable(const NextCash::Hash &pHash);

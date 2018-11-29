@@ -1699,12 +1699,9 @@ namespace BitCoin
 
     void Daemon::announce()
     {
-        Block *block = mChain.blockToAnnounce();
+        Block *block = mChain.blockToAnnounce(0);
         if(block != NULL)
         {
-            // Add daemon lock on block
-            mChain.lockBlock(0, block->header.hash);
-
             // Announce to all nodes
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
               "Announcing block : %s", block->header.hash.hex().text());
@@ -1713,7 +1710,8 @@ namespace BitCoin
                 (*node)->announceBlock(block);
             mNodeLock.readUnlock();
 
-            mChain.lockBlock(0, block->header.hash);
+            // Release lock on block from blockToAnnounce.
+            mChain.releaseBlock(0, block->header.hash);
         }
 
         TransactionList transactionList;

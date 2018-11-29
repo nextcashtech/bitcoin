@@ -68,6 +68,7 @@ namespace BitCoin
         mOldTransactionCount = 0;
         mPingCount = 0;
         mConnectedTime = getTime();
+        mLastExpireTime = mConnectedTime;
         mStarted = false;
         mStopRequested = false;
         mStopped = false;
@@ -152,6 +153,7 @@ namespace BitCoin
         mOldTransactionCount = 0;
         mPingCount = 0;
         mConnectedTime = getTime();
+        mLastExpireTime = mConnectedTime;
         mStarted = false;
         mStopRequested = false;
         mStopped = false;
@@ -220,17 +222,28 @@ namespace BitCoin
 
         for(std::vector<Message::CompactBlockData *>::iterator block =
           mIncomingCompactBlocks.begin(); block != mIncomingCompactBlocks.end(); ++block)
+        {
+            if(!(*block)->deleteBlock)
+                mChain->releaseBlock(mID, (*block)->block->header.hash);
             delete *block;
+        }
 
         for(std::vector<Message::CompactBlockData *>::iterator block =
           mOutgoingCompactBlocks.begin(); block != mOutgoingCompactBlocks.end(); ++block)
+        {
+            if(!(*block)->deleteBlock)
+                mChain->releaseBlock(mID, (*block)->block->header.hash);
             delete *block;
+        }
 
         mMessagesToSendLock.lock();
         for(std::vector<Message::Data *>::iterator message = mMessagesToSend.begin();
           message != mMessagesToSend.end(); ++message)
             delete *message;
         mMessagesToSendLock.unlock();
+
+        if(mInventoryData != NULL)
+            delete mInventoryData;
     }
 
     bool Node::isOpen()
@@ -250,7 +263,7 @@ namespace BitCoin
         if(!isOutgoing() || mReleased)
             return;
 
-        NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Releasing");
+        NextCash::Log::add(NextCash::Log::DEBUG, mName, "Releasing");
         if(mMonitor != NULL)
             mMonitor->release(mID);
         mBlockRequestMutex.lock();
@@ -263,7 +276,7 @@ namespace BitCoin
           mOutgoingCompactBlocks.begin(); compact != mOutgoingCompactBlocks.end();)
         {
             if(!(*compact)->deleteBlock)
-                mChain->unlockBlock(mID, (*compact)->block->header.hash);
+                mChain->releaseBlock(mID, (*compact)->block->header.hash);
             delete *compact;
             compact = mOutgoingCompactBlocks.erase(compact);
         }
@@ -271,7 +284,7 @@ namespace BitCoin
           mIncomingCompactBlocks.begin(); compact != mIncomingCompactBlocks.end();)
         {
             if(!(*compact)->deleteBlock)
-                mChain->unlockBlock(mID, (*compact)->block->header.hash);
+                mChain->releaseBlock(mID, (*compact)->block->header.hash);
             delete *compact;
             compact = mIncomingCompactBlocks.erase(compact);
         }
@@ -413,61 +426,6 @@ namespace BitCoin
             }
         }
 
-        // Timeout compact blocks.
-        for(std::vector<Message::CompactBlockData *>::iterator compact =
-          mOutgoingCompactBlocks.begin(); compact != mOutgoingCompactBlocks.end();)
-        {
-            if(time - (*compact)->time > 120)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                  "Removing old outgoing compact block : %s",
-                  (*compact)->block->header.hash.hex().text());
-                if(!(*compact)->deleteBlock)
-                    mChain->unlockBlock(mID, (*compact)->block->header.hash);
-                delete *compact;
-                compact = mOutgoingCompactBlocks.erase(compact);
-            }
-            else
-                ++compact;
-        }
-
-        if(!mProcessingCompactTransactions)
-        {
-            for(std::vector<Message::CompactBlockData *>::iterator compact =
-              mIncomingCompactBlocks.begin(); compact != mIncomingCompactBlocks.end();)
-            {
-                if(time - (*compact)->time > 60)
-                {
-                    // Remove from blocks requested
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                      "Removing old incoming compact block : %s",
-                      (*compact)->block->header.hash.hex().text());
-                    Time time = getTime();
-                    mBlockRequestMutex.lock();
-                    for(NextCash::HashList::iterator hash = mBlocksRequested.begin();
-                      hash != mBlocksRequested.end(); ++hash)
-                        if(*hash == (*compact)->block->header.hash)
-                        {
-                            mBlocksRequested.erase(hash);
-                            ++mBlockDownloadCount;
-                            if(mMessageInterpreter.pendingBlockStartTime != 0)
-                            {
-                                mBlockDownloadTime +=
-                                  time - mMessageInterpreter.pendingBlockStartTime;
-                                mBlockDownloadSize += (*compact)->size;
-                            }
-                            break;
-                        }
-                    mBlockRequestMutex.unlock();
-
-                    delete *compact;
-                    compact = mIncomingCompactBlocks.erase(compact);
-                }
-                else
-                    ++compact;
-            }
-        }
-
         if(!mHeaderRequested.isEmpty() && time - mHeaderRequestTime > 15)
         {
             NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Not providing headers");
@@ -511,6 +469,85 @@ namespace BitCoin
         }
 
         return true;
+    }
+
+    void Node::expire()
+    {
+        mLastExpireTime = getTime();
+
+        // Expire announced transactions
+        mAnnounceMutex.lock();
+        for(NextCash::HashSet::Iterator hash = mAnnounceTransactions.begin();
+          hash != mAnnounceTransactions.end();)
+        {
+            try
+            {
+                if(mLastExpireTime - dynamic_cast<HashTime *>(*hash)->time > 300)
+                    hash = mAnnounceTransactions.eraseDelete(hash);
+                else
+                    ++hash;
+            }
+            catch(...)
+            {
+                hash = mAnnounceTransactions.eraseDelete(hash);
+            }
+        }
+        mAnnounceTransactions.shrink();
+        mAnnounceMutex.unlock();
+
+        // Timeout compact blocks.
+        for(std::vector<Message::CompactBlockData *>::iterator compact =
+          mOutgoingCompactBlocks.begin(); compact != mOutgoingCompactBlocks.end();)
+        {
+            if(mLastExpireTime - (*compact)->time > 120)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                  "Removing old outgoing compact block : %s",
+                  (*compact)->block->header.hash.hex().text());
+                if(!(*compact)->deleteBlock)
+                    mChain->releaseBlock(mID, (*compact)->block->header.hash);
+                delete *compact;
+                compact = mOutgoingCompactBlocks.erase(compact);
+            }
+            else
+                ++compact;
+        }
+
+        if(!mProcessingCompactTransactions)
+        {
+            for(std::vector<Message::CompactBlockData *>::iterator compact =
+              mIncomingCompactBlocks.begin(); compact != mIncomingCompactBlocks.end();)
+            {
+                if(mLastExpireTime - (*compact)->time > 60)
+                {
+                    // Remove from blocks requested
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                      "Removing old incoming compact block : %s",
+                      (*compact)->block->header.hash.hex().text());
+                    mBlockRequestMutex.lock();
+                    for(NextCash::HashList::iterator hash = mBlocksRequested.begin();
+                      hash != mBlocksRequested.end(); ++hash)
+                        if(*hash == (*compact)->block->header.hash)
+                        {
+                            mBlocksRequested.erase(hash);
+                            ++mBlockDownloadCount;
+                            if(mMessageInterpreter.pendingBlockStartTime != 0)
+                            {
+                                mBlockDownloadTime +=
+                                  mLastExpireTime - mMessageInterpreter.pendingBlockStartTime;
+                                mBlockDownloadSize += (*compact)->size;
+                            }
+                            break;
+                        }
+                    mBlockRequestMutex.unlock();
+
+                    delete *compact;
+                    compact = mIncomingCompactBlocks.erase(compact);
+                }
+                else
+                    ++compact;
+            }
+        }
     }
 
     bool Node::sendMessage(Message::Data *pData)
@@ -788,6 +825,7 @@ namespace BitCoin
 
         if(mAnnounceBlocksCompact && mSendCompactBlocksVersion != 0L)
         {
+            mChain->lockBlock(mID, pBlock->header.hash);
             Message::CompactBlockData *compactBlock = new Message::CompactBlockData(pBlock, false);
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
              "Announcing block with compact (%d prefilled) : %s", compactBlock->prefilled.size(),
@@ -795,7 +833,6 @@ namespace BitCoin
             mMessagesToSendLock.lock();
             mMessagesToSend.push_back(compactBlock);
             mMessagesToSendLock.unlock();
-            mChain->lockBlock(mID, pBlock->header.hash);
             return true;
         }
         else if(mSendHeaders)
@@ -838,13 +875,13 @@ namespace BitCoin
 
         for(std::vector<Transaction *>::iterator trans = pTransactions.begin();
           trans != pTransactions.end(); ++trans)
-            if(!mAnnounceTransactions.contains((*trans)->hash))
+            if(!mAnnounceTransactions.remove((*trans)->hash)) // Hash was not announced to us yet.
             {
                 if(mReceivedVersionData->relay)
                 {
                     if((*trans)->feeRate() >= mMinimumFeeRate)
-                        mInventoryData->inventory
-                          .push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION,
+                        mInventoryData->inventory.push_back(
+                          new Message::InventoryHash(Message::InventoryHash::TRANSACTION,
                           (*trans)->hash));
                 }
                 else if(mFilter.contains(**trans))
@@ -869,7 +906,8 @@ namespace BitCoin
                                 if(mFilter.flags() & BloomFilter::UPDATE_P2PUBKEY_ONLY)
                                 {
                                     // Don't add unless P2PKH or MultiSig
-                                    type = ScriptInterpreter::parseOutputScript(output->script, hashes);
+                                    type = ScriptInterpreter::parseOutputScript(output->script,
+                                      hashes);
                                     if(type != ScriptInterpreter::P2PKH &&
                                       type != ScriptInterpreter::MULTI_SIG)
                                         continue;
@@ -1101,13 +1139,9 @@ namespace BitCoin
     bool Node::addAnnouncedTransaction(const NextCash::Hash &pHash)
     {
         mAnnounceMutex.lock();
-        if(!mAnnounceTransactions.contains(pHash))
-        {
-            // Keep list at 5000 or less
-            if(mAnnounceTransactions.size() > 5000)
-                mAnnounceTransactions.erase(mAnnounceTransactions.begin());
-            mAnnounceTransactions.push_back(pHash);
-        }
+        HashTime *newHashTime = new HashTime(pHash);
+        if(!mAnnounceTransactions.insert(newHashTime))
+            delete newHashTime;
         mAnnounceMutex.unlock();
 
         return mMonitor != NULL && mMonitor->addTransactionAnnouncement(pHash, mID);
@@ -1208,7 +1242,6 @@ namespace BitCoin
                     // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                       // "Compact block found transaction %d : 0x%04x%08x : %s", offset, *shortID >> 32,
                       // *shortID & 0x00000000ffffffff, (*trans)->hash.hex().text());
-                    *trans = new Transaction(**trans);
                     increasedSize += (*trans)->size();
                 }
 
@@ -1263,7 +1296,6 @@ namespace BitCoin
                 // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   // "Compact block found transaction %d : 0x%04x%08x : %s", offset, *shortID >> 32,
                   // *shortID & 0x00000000ffffffff, (*trans)->hash.hex().text());
-                *trans = new Transaction(**trans);
                 increasedSize += (*trans)->size();
             }
 
@@ -1535,6 +1567,9 @@ namespace BitCoin
 
         if(time - mLastCheckTime > 5 && !check())
             return; // Closed
+
+        if(time - mLastExpireTime > 60)
+            expire();
 
         // if(time - mLastBlackListCheck > 10)
         // {
@@ -3060,7 +3095,7 @@ namespace BitCoin
 
                         transData.transactions.clear(); // Prevent from being delete twice.
                         if(!(*compact)->deleteBlock)
-                            mChain->unlockBlock(mID, getCompactTransData->headerHash);
+                            mChain->releaseBlock(mID, getCompactTransData->headerHash);
                         delete *compact;
                         mOutgoingCompactBlocks.erase(compact);
                         break;

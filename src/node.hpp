@@ -264,7 +264,11 @@ namespace BitCoin
           bool pComplete);
 
         NextCash::Mutex mAnnounceMutex;
-        NextCash::HashList mAnnounceBlocks, mAnnounceTransactions, mSentTransactions;
+        NextCash::HashList mAnnounceBlocks, mSentTransactions;
+        NextCash::HashSet mAnnounceTransactions;
+
+        Time mLastExpireTime;
+        void expire();
 
         // Transaction hashes that were already requested, but not received, when announced.
         // This ensures if one node fails to send a requested transaction, that another can still

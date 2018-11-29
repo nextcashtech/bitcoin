@@ -14,6 +14,7 @@
 #include "base.hpp"
 #include "peer.hpp"
 #include "block.hpp"
+#include "sorted_set.hpp"
 
 #include <cstdint>
 #include <list>
@@ -125,7 +126,7 @@ namespace BitCoin
         // Peers
         bool mPeersModified;
         NextCash::ReadersLock mPeerLock;
-        std::list<Peer *> mPeers;
+        NextCash::SortedSet mPeers;
 
         static NextCash::String sPath;
         static Info *sInstance;

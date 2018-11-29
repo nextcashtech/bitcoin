@@ -125,9 +125,6 @@ namespace BitCoin
         writePeersFile();
 
         mPeerLock.writeLock("Destroy");
-        for(std::list<Peer *>::iterator i = mPeers.begin(); i != mPeers.end(); ++i)
-            delete *i;
-        mPeerLock.writeUnlock();
     }
 
     bool Info::load()
@@ -349,8 +346,16 @@ namespace BitCoin
         mPeerLock.readLock();
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
           "Writing peers file with %d peers", mPeers.size());
-        for(std::list<Peer *>::iterator i = mPeers.begin(); i != mPeers.end(); ++i)
-            (*i)->write(&file);
+        for(NextCash::SortedSet::Iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
+        {
+            try
+            {
+                dynamic_cast<const Peer *>(*peer)->write(&file);
+            }
+            catch(...)
+            {
+            }
+        }
         mPeerLock.readUnlock();
 
         file.close();
@@ -381,18 +386,19 @@ namespace BitCoin
             return true;
 
         mPeerLock.writeLock("Load");
-        for(std::list<Peer *>::iterator i = mPeers.begin(); i != mPeers.end(); ++i)
-            delete (*i);
         mPeers.clear();
 
         Peer *newPeer;
         while(file.remaining())
         {
             newPeer = new Peer();
-            if(newPeer->read(&file))
-                mPeers.push_back(newPeer);
-            else
+            if(!newPeer->read(&file))
+            {
+                delete newPeer;
                 break;
+            }
+            else if(!mPeers.insert(newPeer))
+                delete newPeer;
         }
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
@@ -411,10 +417,21 @@ namespace BitCoin
             readPeersFile();
 
         mPeerLock.readLock();
-        for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
-            if((*peer)->rating >= pMinimumRating && (*peer)->rating <= pMaximumRating &&
-              ((*peer)->services & mServicesRequiredMask) == mServicesRequiredMask)
-                pPeers.push_back(*peer);
+        Peer *peer;
+        for(NextCash::SortedSet::Iterator iter = mPeers.begin(); iter != mPeers.end(); ++iter)
+        {
+            try
+            {
+                peer = dynamic_cast<Peer *>(*iter);
+                if(peer->rating >= pMinimumRating && peer->rating <= pMaximumRating &&
+                  (peer->services & mServicesRequiredMask) == mServicesRequiredMask)
+                    pPeers.push_back(peer);
+            }
+            catch(...)
+            {
+            }
+
+        }
         mPeerLock.readUnlock();
 
         // Sort Randomly
@@ -432,22 +449,29 @@ namespace BitCoin
 
         //bool remove = false;
         mPeerLock.readLock();
-        for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
-            if((*peer)->address.matches(pAddress))
+        Peer lookup;
+        lookup.address = pAddress;
+        try
+        {
+            Peer *peer = dynamic_cast<Peer *>(mPeers.get(lookup));
+            if(peer != NULL)
             {
                 // Update
-                if((*peer)->rating > pMinimum)
+                if(peer->rating > pMinimum)
                 {
-                    (*peer)->rating -= pCount;
-                    if((*peer)->rating < pMinimum)
-                        (*peer)->rating = pMinimum;
+                    peer->rating -= pCount;
+                    if(peer->rating < pMinimum)
+                        peer->rating = pMinimum;
                 }
-                (*peer)->updateTime();
+                peer->updateTime();
                 // if((*peer)->rating < 0)
                     // remove = true;
                 mPeersModified = true;
-                break;
             }
+        }
+        catch(...)
+        {
+        }
         mPeerLock.readUnlock();
 
         // if(remove)
@@ -476,19 +500,25 @@ namespace BitCoin
             readPeersFile();
 
         mPeerLock.readLock();
-        for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
-            if((*peer)->address.matches(pAddress))
+        Peer lookup;
+        lookup.address = pAddress;
+        try
+        {
+            Peer *peer = dynamic_cast<Peer *>(mPeers.get(lookup));
+            if(peer != NULL)
             {
                 // Update existing
-                (*peer)->updateTime();
-                (*peer)->services = pServices;
+                peer->updateTime();
+                peer->services = pServices;
                 if(pUserAgent != NULL)
-                    (*peer)->userAgent = pUserAgent;
-                (*peer)->rating += 5;
+                    peer->userAgent = pUserAgent;
+                peer->rating += 5;
                 mPeersModified = true;
-                mPeerLock.readUnlock();
-                return;
             }
+        }
+        catch(...)
+        {
+        }
         mPeerLock.readUnlock();
     }
 
@@ -502,16 +532,23 @@ namespace BitCoin
             readPeersFile();
 
         mPeerLock.readLock();
-        for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
-            if((*peer)->address.matches(pAddress))
+        Peer lookup;
+        lookup.address = pAddress;
+        try
+        {
+            Peer *peer = dynamic_cast<Peer *>(mPeers.get(lookup));
+            if(peer != NULL)
             {
                 // Update existing
-                (*peer)->updateTime();
-                (*peer)->rating += 5;
+                // Update existing
+                peer->updateTime();
+                peer->rating += 5;
                 mPeersModified = true;
-                mPeerLock.readUnlock();
-                return;
             }
+        }
+        catch(...)
+        {
+        }
         mPeerLock.readUnlock();
     }
 
@@ -524,18 +561,10 @@ namespace BitCoin
         if(mPeers.size() == 0)
             readPeersFile();
 
-        mPeerLock.readLock();
-        for(std::list<Peer *>::iterator peer = mPeers.begin(); peer != mPeers.end(); ++peer)
-            if((*peer)->address.matches(pAddress))
-            {
-                mPeerLock.readUnlock();
-                return false;
-            }
-        mPeerLock.readUnlock();
-
         // Add new
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
           "Adding new peer %s", pAddress.text().text());
+        bool result = true;
         Peer *newPeer = new Peer;
         newPeer->rating = 0;
         newPeer->updateTime();
@@ -543,10 +572,15 @@ namespace BitCoin
         newPeer->services = pServices;
 
         mPeerLock.writeLock("Add");
-        mPeers.push_front(newPeer);
+        if(mPeers.insert(newPeer))
+            mPeersModified = true;
+        else
+        {
+            delete newPeer;
+            result = false;
+        }
         mPeerLock.writeUnlock();
-        mPeersModified = true;
-        return true;
+        return result;
     }
 
     bool Info::test()
