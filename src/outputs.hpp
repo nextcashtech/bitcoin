@@ -315,6 +315,9 @@ namespace BitCoin
         Outputs() : mLock("OutputsLock") { mNextBlockHeight = 0; mSavedBlockHeight = 0; }
         ~Outputs() {}
 
+        // Returns 0xffffffff if not found.
+        unsigned int getBlockHeight(const NextCash::Hash &pTransactionID);
+
         static const uint8_t MARK_SPENT = 0x01;
         static const uint8_t REQUIRE_UNSPENT = 0x02;
         bool getOutput(const NextCash::Hash &pTransactionID, uint32_t pIndex, uint8_t pFlags,
@@ -435,6 +438,9 @@ namespace BitCoin
               sizeof(void *); // Data pointer in cache.
             NextCash::stream_size cacheDataSize()
               { return mCacheRawDataSize + (mCache.size() * staticCacheItemSize); }
+
+            // Returns 0xffffffff if not found.
+            unsigned int getBlockHeight(const NextCash::Hash &pTransactionID);
 
             SubSetIterator get(const NextCash::Hash &pTransactionID);
 

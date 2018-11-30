@@ -307,6 +307,15 @@ namespace BitCoin
         NextCash::Hash("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
     };
 
+    unsigned int Outputs::getBlockHeight(const NextCash::Hash &pTransactionID)
+    {
+        mLock.readLock();
+        SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
+        unsigned int result = subSet->getBlockHeight(pTransactionID);
+        mLock.readUnlock();
+        return result;
+    }
+
     bool Outputs::checkDuplicate(const NextCash::Hash &pTransactionID,
       unsigned int pBlockHeight, const NextCash::Hash &pBlockHash)
     {
@@ -988,6 +997,21 @@ namespace BitCoin
     {
         if(mSamples != NULL)
             delete[] mSamples;
+    }
+
+    unsigned int Outputs::SubSet::getBlockHeight(const NextCash::Hash &pTransactionID)
+    {
+        mLock.lock();
+
+        unsigned int result = 0xffffffff;
+        SubSetIterator item = mCache.find(pTransactionID);
+        if(item == mCache.end() && pull(pTransactionID))
+            item = mCache.find(pTransactionID);
+        if(item != mCache.end())
+            result = ((TransactionReference *)*item)->blockHeight;
+
+        mLock.unlock();
+        return result;
     }
 
     typename Outputs::SubSetIterator Outputs::SubSet::get(const NextCash::Hash &pTransactionID)
