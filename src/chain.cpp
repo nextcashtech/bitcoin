@@ -22,7 +22,7 @@
 #include <algorithm>
 
 #define BITCOIN_CHAIN_LOG_NAME "Chain"
-#define BLOCK_STATS_CACHE_SIZE 2500
+#define HEADER_STATS_CACHE_SIZE 2500
 
 
 namespace BitCoin
@@ -31,7 +31,7 @@ namespace BitCoin
 
     Chain::Chain() : mInfo(Info::instance()), mPendingLock("Chain Pending"),
       mProcessMutex("Chain Process"), mHeadersLock("Chain Headers"), mBlockMutex("Blocks"),
-      mBranchLock("Chain Branches")
+      mBranchLock("Chain Branches"), mBlockStatLock("Block Stat")
     {
         mNextHeaderHeight = 0;
         mNextBlockHeight = 0;
@@ -46,7 +46,7 @@ namespace BitCoin
         mHeadersNeeded = true;
         mAnnounceBlock = NULL;
         mMonitor = NULL;
-        mBlockStatHeight = 0;
+        mHeaderStatHeight = 0;
         mMemPoolRequests = 0;
 
         if(mInfo.approvedHash.isEmpty())
@@ -58,7 +58,7 @@ namespace BitCoin
     Chain::~Chain()
     {
         mPendingLock.writeLock("Destroy");
-        clearBlockStats();
+        clearHeaderStats();
         for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
           pending != mPendingBlocks.end(); ++pending)
             delete *pending;
@@ -672,7 +672,7 @@ namespace BitCoin
             blockSet.unlock();
 
             mForks.revert(this, mNextHeaderHeight);
-            revertLastBlockStat();
+            revertLastHeaderStat();
             --mNextHeaderHeight;
             if(!(pLocks & LOCK_HEADERS))
                 mHeadersLock.writeUnlock();
@@ -747,40 +747,40 @@ namespace BitCoin
         mPendingLock.writeUnlock();
     }
 
-    void Chain::addBlockStat(int32_t pVersion, Time pTime, uint32_t pTargetBits)
+    void Chain::addHeaderStat(int32_t pVersion, Time pTime, uint32_t pTargetBits)
     {
-        if(mBlockStats.size() == 0)
-            mBlockStats.emplace_back(pVersion, pTime, pTargetBits);
+        if(mHeaderStats.size() == 0)
+            mHeaderStats.emplace_back(pVersion, pTime, pTargetBits);
         else
-            mBlockStats.emplace_back(pVersion, pTime, pTargetBits,
-              mBlockStats.back().accumulatedWork);
-        ++mBlockStatHeight;
+            mHeaderStats.emplace_back(pVersion, pTime, pTargetBits,
+              mHeaderStats.back().accumulatedWork);
+        ++mHeaderStatHeight;
 
-        while(mBlockStats.size() > BLOCK_STATS_CACHE_SIZE)
-            mBlockStats.pop_front();
+        while(mHeaderStats.size() > HEADER_STATS_CACHE_SIZE)
+            mHeaderStats.pop_front();
     }
 
-    void Chain::revertLastBlockStat()
+    void Chain::revertLastHeaderStat()
     {
-        if(mBlockStats.size() == 0)
+        if(mHeaderStats.size() == 0)
             return;
 
-        if(mBlockStats.size() < BLOCK_STATS_CACHE_SIZE && mBlockStatHeight > BLOCK_STATS_CACHE_SIZE)
+        if(mHeaderStats.size() < HEADER_STATS_CACHE_SIZE && mHeaderStatHeight > HEADER_STATS_CACHE_SIZE)
         {
             // Calculate up to 5000 again on front.
             NextCash::Hash target(32), blockWork(32), accumulatedWork(32);
             Header header;
-            unsigned int accumulatedWorkHeight = mBlockStatHeight - mBlockStats.size();
+            unsigned int accumulatedWorkHeight = mHeaderStatHeight - mHeaderStats.size();
 
-            accumulatedWork = mBlockStats.front().accumulatedWork;
+            accumulatedWork = mHeaderStats.front().accumulatedWork;
 
-            while(mBlockStats.size() < 5000)
+            while(mHeaderStats.size() < 5000)
             {
                 if(!getHeader(accumulatedWorkHeight, header))
                     break;
 
-                mBlockStats.emplace_front(header.version, header.time, header.targetBits);
-                mBlockStats.front().accumulatedWork = accumulatedWork;
+                mHeaderStats.emplace_front(header.version, header.time, header.targetBits);
+                mHeaderStats.front().accumulatedWork = accumulatedWork;
 
                 target.setDifficulty(header.targetBits);
                 target.getWork(blockWork);
@@ -792,14 +792,14 @@ namespace BitCoin
         }
 
         // Remove last
-        mBlockStats.pop_back();
-        --mBlockStatHeight;
+        mHeaderStats.pop_back();
+        --mHeaderStatHeight;
     }
 
-    void Chain::clearBlockStats()
+    void Chain::clearHeaderStats()
     {
-        mBlockStats.clear();
-        mBlockStatHeight = 0;
+        mHeaderStats.clear();
+        mHeaderStatHeight = 0;
     }
 
     uint32_t Chain::calculateTargetBits()
@@ -931,7 +931,7 @@ namespace BitCoin
 
     bool Chain::processHeader(Header &pHeader)
     {
-        addBlockStat(pHeader.version, pHeader.time, pHeader.targetBits);
+        addHeaderStat(pHeader.version, pHeader.time, pHeader.targetBits);
         mForks.process(this, mNextHeaderHeight);
 
         // Check block version
@@ -940,7 +940,7 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
               "Version %d required", mForks.requiredBlockVersion(mNextHeaderHeight));
             mForks.revert(this, mNextHeaderHeight);
-            revertLastBlockStat();
+            revertLastHeaderStat();
             addBlackListedHash(pHeader.hash);
             return false;
         }
@@ -951,7 +951,7 @@ namespace BitCoin
         {
             // If on TestNet and 20 minutes since last block
             bool useTestMinDifficulty = network() == TESTNET &&
-              pHeader.time - time(mBlockStatHeight - 1) > 1200;
+              pHeader.time - time(mHeaderStatHeight - 1) > 1200;
 
             if(useTestMinDifficulty && pHeader.targetBits == 0x1d00ffff)
             {
@@ -965,7 +965,7 @@ namespace BitCoin
                   "Header (%d) target bits invalid : required 0x%08x != header 0x%08x",
                   mNextHeaderHeight, requiredTargetBits, pHeader.targetBits);
                 mForks.revert(this, mNextHeaderHeight);
-                revertLastBlockStat();
+                revertLastHeaderStat();
                 addBlackListedHash(pHeader.hash);
                 return false;
             }
@@ -975,7 +975,7 @@ namespace BitCoin
         if(!Header::add(mNextHeaderHeight, pHeader))
         {
             mForks.revert(this, mNextHeaderHeight);
-            revertLastBlockStat();
+            revertLastHeaderStat();
             return false;
         }
 
@@ -1500,6 +1500,8 @@ namespace BitCoin
 
         mProcessMutex.unlock();
 
+        addBlockStat(pBlock, mNextBlockHeight - 1);
+
         timer.stop();
 
         if(fullyValidated)
@@ -1923,17 +1925,16 @@ namespace BitCoin
         return Header::getHeader(thisBlockHeight, pHeader);
     }
 
-    BlockStat *Chain::blockStat(unsigned int pHeight)
+    HeaderStat *Chain::blockStat(unsigned int pHeight)
     {
         if(pHeight == INVALID_HEIGHT)
-            pHeight = mBlockStatHeight;
+            pHeight = mHeaderStatHeight;
 
-        if(pHeight > mBlockStatHeight ||
-          pHeight < (mBlockStatHeight + 1) - mBlockStats.size())
+        if(pHeight > mHeaderStatHeight || pHeight < (mHeaderStatHeight + 1) - mHeaderStats.size())
             return NULL;
 
-        unsigned int statHeight = mBlockStatHeight;
-        std::list<BlockStat>::iterator iter = --mBlockStats.end();
+        unsigned int statHeight = mHeaderStatHeight;
+        std::list<HeaderStat>::iterator iter = --mHeaderStats.end();
 
         while(statHeight > pHeight)
         {
@@ -1947,12 +1948,12 @@ namespace BitCoin
     int32_t Chain::version(unsigned int pHeight)
     {
         if(pHeight == INVALID_HEIGHT)
-            pHeight = mBlockStatHeight;
+            pHeight = mHeaderStatHeight;
 
-        if(pHeight > mBlockStatHeight)
+        if(pHeight > mHeaderStatHeight)
             return 0;
 
-        BlockStat *stat = blockStat(pHeight);
+        HeaderStat *stat = blockStat(pHeight);
         if(stat != NULL)
             return stat->version;
 
@@ -1966,12 +1967,12 @@ namespace BitCoin
     Time Chain::time(unsigned int pHeight)
     {
         if(pHeight == INVALID_HEIGHT)
-            pHeight = mBlockStatHeight;
+            pHeight = mHeaderStatHeight;
 
-        if(pHeight > mBlockStatHeight)
+        if(pHeight > mHeaderStatHeight)
             return 0;
 
-        BlockStat *stat = blockStat(pHeight);
+        HeaderStat *stat = blockStat(pHeight);
         if(stat != NULL)
             return stat->time;
 
@@ -1985,12 +1986,12 @@ namespace BitCoin
     uint32_t Chain::targetBits(unsigned int pHeight)
     {
         if(pHeight == INVALID_HEIGHT)
-            pHeight = mBlockStatHeight;
+            pHeight = mHeaderStatHeight;
 
-        if(pHeight > mBlockStatHeight)
+        if(pHeight > mHeaderStatHeight)
             return 0;
 
-        BlockStat *stat = blockStat(pHeight);
+        HeaderStat *stat = blockStat(pHeight);
         if(stat != NULL)
             return stat->targetBits;
 
@@ -2004,21 +2005,21 @@ namespace BitCoin
     NextCash::Hash Chain::accumulatedWork(unsigned int pHeight)
     {
         if(pHeight == INVALID_HEIGHT)
-            pHeight = mBlockStatHeight;
+            pHeight = mHeaderStatHeight;
 
-        if(pHeight == 0 || pHeight > mBlockStatHeight)
+        if(pHeight == 0 || pHeight > mHeaderStatHeight)
             return NextCash::Hash(32); // Zero hash
 
-        BlockStat *stat = blockStat(pHeight);
+        HeaderStat *stat = blockStat(pHeight);
         if(stat != NULL)
             return stat->accumulatedWork;
 
         // Get nearest accumulated work, top or bottom, and calculate to correct block height
         NextCash::Hash target(32), blockWork(32), accumulatedWork(32);
         Header header;
-        unsigned int accumulatedWorkHeight = (mBlockStatHeight + 1 - mBlockStats.size());
+        unsigned int accumulatedWorkHeight = (mHeaderStatHeight + 1 - mHeaderStats.size());
 
-        accumulatedWork = mBlockStats.front().accumulatedWork;
+        accumulatedWork = mHeaderStats.front().accumulatedWork;
 
         while(accumulatedWorkHeight > pHeight)
         {
@@ -2037,9 +2038,9 @@ namespace BitCoin
     Time Chain::getMedianPastTime(unsigned int pHeight, unsigned int pMedianCount)
     {
         if(pHeight == INVALID_HEIGHT)
-            pHeight = mBlockStatHeight;
+            pHeight = mHeaderStatHeight;
 
-        if(pHeight > mBlockStatHeight || pMedianCount > pHeight)
+        if(pHeight > mHeaderStatHeight || pMedianCount > pHeight)
             return 0;
 
         std::vector<Time> times;
@@ -2053,7 +2054,7 @@ namespace BitCoin
         return times[pMedianCount / 2];
     }
 
-    bool blockStatTimeLessThan(const BlockStat *pLeft, const BlockStat *pRight)
+    bool blockStatTimeLessThan(const HeaderStat *pLeft, const HeaderStat *pRight)
     {
         return pLeft->time < pRight->time;
     }
@@ -2061,22 +2062,22 @@ namespace BitCoin
     void Chain::getMedianPastTimeAndWork(unsigned int pHeight, Time &pTime,
       NextCash::Hash &pAccumulatedWork, unsigned int pMedianCount)
     {
-        if(pHeight > mBlockStatHeight || pMedianCount > pHeight)
+        if(pHeight > mHeaderStatHeight || pMedianCount > pHeight)
         {
             pTime = 0;
             pAccumulatedWork.zeroize();
             return;
         }
 
-        std::vector<BlockStat *> values, toDelete;
-        BlockStat *newStat;
+        std::vector<HeaderStat *> values, toDelete;
+        HeaderStat *newStat;
         for(unsigned int i = pHeight - pMedianCount + 1;
           i <= pHeight; ++i)
         {
             newStat = blockStat(i);
             if(newStat == NULL)
             {
-                newStat = new BlockStat();
+                newStat = new HeaderStat();
                 newStat->time = time(i);
                 newStat->accumulatedWork = accumulatedWork(i);
                 toDelete.push_back(newStat);
@@ -2087,7 +2088,7 @@ namespace BitCoin
         // Sort
         std::sort(values.begin(), values.end(), blockStatTimeLessThan);
 
-        // for(std::vector<BlockStat *>::iterator item=values.begin();item!=values.end();++item)
+        // for(std::vector<HeaderStat *>::iterator item=values.begin();item!=values.end();++item)
         // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_FORKS_LOG_NAME,
         // "Sorted stat median calculate time %d, work %s", (*item)->time, (*item)->accumulatedWork.hex().text());
 
@@ -2099,7 +2100,7 @@ namespace BitCoin
           "Median accumulated time/work at height %d : %d %s", pHeight,
           pTime, pAccumulatedWork.hex().text());
 
-        for(std::vector<BlockStat *>::iterator stat = toDelete.begin(); stat != toDelete.end();
+        for(std::vector<HeaderStat *>::iterator stat = toDelete.begin(); stat != toDelete.end();
           ++stat)
             delete *stat;
     }
@@ -2182,8 +2183,7 @@ namespace BitCoin
         }
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Updating outputs from height %d to %d", currentHeight,
-          blockHeight());
+          "Updating outputs from height %d to %d", currentHeight, blockHeight());
 
         Time lastCheckTime = getTime();
         bool success;
@@ -2326,7 +2326,7 @@ namespace BitCoin
     bool Chain::saveAccumulatedWork()
     {
         // Save accumulated proof of work.
-        if(mBlockStats.size() > 0)
+        if(mHeaderStats.size() > 0)
         {
             NextCash::String proofOfWorkTempFileName = mInfo.path();
             proofOfWorkTempFileName.pathAppend("pow.temp");
@@ -2336,8 +2336,8 @@ namespace BitCoin
                 return false;
             else
             {
-                proofOfWorkFile.writeUnsignedInt(mBlockStatHeight);
-                mBlockStats.back().accumulatedWork.write(&proofOfWorkFile);
+                proofOfWorkFile.writeUnsignedInt(mHeaderStatHeight);
+                mHeaderStats.back().accumulatedWork.write(&proofOfWorkFile);
 
                 NextCash::String proofOfWorkFileName = mInfo.path();
                 proofOfWorkFileName.pathAppend("pow");
@@ -2373,18 +2373,18 @@ namespace BitCoin
         Header::save();
         Block::save();
 
-        bool succes;
+        bool success;
         if(pFast)
-            succes = mOutputs.saveCache();
+            success = mOutputs.saveCache();
         else
-            succes = mOutputs.saveFull(mInfo.threadCount);
+            success = mOutputs.saveFull(mInfo.threadCount);
 #ifndef DISABLE_ADDRESSES
         if(!mAddresses.save(mInfo.threadCount))
-            succes = false;
+            success = false;
 #endif
 
         mSaveDataInProgress = false;
-        return succes;
+        return success;
     }
 
     bool Chain::savePending()
@@ -2548,7 +2548,7 @@ namespace BitCoin
             blockCount = headerCount;
         }
 
-        mBlockStatHeight = 0;
+        mHeaderStatHeight = 0;
         mNextHeaderHeight = 0;
         mNextBlockHeight = blockCount;
         mLastHeaderHash.clear();
@@ -2557,7 +2557,7 @@ namespace BitCoin
 #else
         mHashes.clear();
 #endif
-        clearBlockStats();
+        clearHeaderStats();
 
         HashLookupSet *lookup = mHashLookup;
         for(unsigned int i = 0; i < 0x10000; ++i)
@@ -2576,9 +2576,9 @@ namespace BitCoin
             // Add genesis header to chain
             Block *genesisBlock = Block::genesis(mMaxTargetBits);
 
-            addBlockStat(genesisBlock->header.version, genesisBlock->header.time,
+            addHeaderStat(genesisBlock->header.version, genesisBlock->header.time,
               genesisBlock->header.targetBits);
-            mBlockStatHeight = 0;
+            mHeaderStatHeight = 0;
 
             if(!Header::add(0, genesisBlock->header))
             {
@@ -2599,6 +2599,7 @@ namespace BitCoin
                     delete genesisBlock;
                     return false;
                 }
+                addBlockStat(*genesisBlock, 0);
                 ++blockCount;
                 ++mNextBlockHeight;
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
@@ -2772,13 +2773,13 @@ namespace BitCoin
                 // Calculate previous block stats
                 if(success)
                 {
-                    mBlockStatHeight = accumulatedWorkHeight;
-                    if(Header::getBlockStatsReverse(accumulatedWorkHeight, BLOCK_STATS_CACHE_SIZE,
-                      mBlockStats))
+                    mHeaderStatHeight = accumulatedWorkHeight;
+                    if(Header::getHeaderStatsReverse(accumulatedWorkHeight,
+                      HEADER_STATS_CACHE_SIZE, mHeaderStats))
                     {
                         // Update accumulated work
-                        for(std::list<BlockStat>::reverse_iterator stat = mBlockStats.rbegin();
-                          stat != mBlockStats.rend(); ++stat)
+                        for(std::list<HeaderStat>::reverse_iterator stat = mHeaderStats.rbegin();
+                          stat != mHeaderStats.rend(); ++stat)
                         {
                             stat->accumulatedWork = accumulatedWork;
 
@@ -2871,6 +2872,8 @@ namespace BitCoin
 
                 // Update transaction outputs if they aren't up to current chain block height
                 success = success && updateOutputs();
+
+                success = success && updateBlockStats();
             }
             catch(std::bad_alloc &pBadAlloc)
             {
@@ -2881,6 +2884,98 @@ namespace BitCoin
         }
 
         return success && loadPending();
+    }
+
+    bool Chain::updateBlockStats()
+    {
+        mBlockStatLock.lock();
+        NextCash::String blockStatFileName = mInfo.path();
+        blockStatFileName.pathAppend("block_statistics");
+        NextCash::FileOutputStream blockStatFile(blockStatFileName, false, true);
+
+        if(!blockStatFile.isValid())
+        {
+            mBlockStatLock.unlock();
+            return false;
+        }
+
+        unsigned int blockStatHeight = blockStatFile.length() / BlockStat::DATA_SIZE;
+        Block block;
+        BlockStat blockStat;
+        Time lastReportTime = getTime();
+
+        // Ensure a partial block was not written.
+        blockStatFile.setWriteOffset(blockStatHeight * BlockStat::DATA_SIZE);
+
+        while(blockStatHeight < mNextBlockHeight)
+        {
+            if(mStopRequested)
+                break;
+
+            if(getTime() - lastReportTime > 10)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+                  "Updating block stats : height %d", blockStatHeight);
+                lastReportTime = getTime();
+            }
+
+            if(!Block::getBlock(blockStatHeight, block))
+            {
+                mBlockStatLock.unlock();
+                return false;
+            }
+
+            blockStat.set(block, blockStatHeight);
+
+            blockStat.write(&blockStatFile);
+            ++blockStatHeight;
+        }
+
+        mBlockStatLock.unlock();
+        return true;
+    }
+
+    bool Chain::addBlockStat(const Block &pBlock, unsigned int pHeight)
+    {
+        mBlockStatLock.lock();
+        NextCash::String blockStatFileName = mInfo.path();
+        blockStatFileName.pathAppend("block_statistics");
+        NextCash::FileOutputStream blockStatFile(blockStatFileName);
+        NextCash::stream_size offset = pHeight * BlockStat::DATA_SIZE;
+
+        if(!blockStatFile.isValid() || blockStatFile.length() < offset)
+        {
+            mBlockStatLock.unlock();
+            return false;
+        }
+
+        BlockStat blockStat(pBlock, pHeight);
+        blockStatFile.setWriteOffset(offset);
+        blockStat.write(&blockStatFile);
+        blockStatFile.close();
+        mBlockStatLock.unlock();
+        return true;
+    }
+
+    bool Chain::getBlockStat(unsigned int pHeight, BlockStat &pBlockStat)
+    {
+        mBlockStatLock.lock();
+        NextCash::String blockStatFileName = mInfo.path();
+        blockStatFileName.pathAppend("block_statistics");
+        NextCash::FileInputStream blockStatFile(blockStatFileName);
+        NextCash::stream_size offset = pHeight * BlockStat::DATA_SIZE;
+
+        if(!blockStatFile.isValid() || blockStatFile.length() < offset + BlockStat::DATA_SIZE)
+        {
+            mBlockStatLock.unlock();
+            return false;
+        }
+
+        blockStatFile.setReadOffset(offset);
+        bool success = pBlockStat.read(&blockStatFile);
+        blockStatFile.close();
+        mBlockStatLock.unlock();
+        return success;
     }
 
     bool Chain::test()

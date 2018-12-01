@@ -368,24 +368,24 @@ namespace BitCoin
           transaction != pBlockTransactions.end(); ++transaction)
         {
             // Get references set for transaction ID.
-            transactionReference = new TransactionReference((*transaction)->hash, count == 0,
+            transactionReference = new TransactionReference((*transaction)->hash(), count == 0,
               pBlockHeight, (*transaction)->outputs.size());
 
             valid = true;
             if(!insert(transactionReference, **transaction))
             {
                 // Check for matching transaction marked for removal.
-                Iterator item = get((*transaction)->hash);
+                Iterator item = get((*transaction)->hash());
 
                 valid = false;
-                while(item && (*item)->getHash() == (*transaction)->hash)
+                while(item && (*item)->getHash() == (*transaction)->hash())
                 {
                     if(transactionReference->valueEquals(*item) && (*item)->markedRemove())
                     {
                         // Unmark the matching item for removal
                         NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
                           "Reversing removal of transaction output for block height %d : %s",
-                          pBlockHeight, (*transaction)->hash.hex().text());
+                          pBlockHeight, (*transaction)->hash().hex().text());
                         (*item)->clearRemove();
                         valid = true;
                         delete transactionReference;
@@ -402,7 +402,7 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                   "Failed to insert transaction output for block height %d : %s", pBlockHeight,
-                  (*transaction)->hash.hex().text());
+                  (*transaction)->hash().hex().text());
                 success = false;
                 delete transactionReference;
             }
@@ -476,14 +476,14 @@ namespace BitCoin
                 }
 
             // Remove transaction
-            reference = get((*transaction)->hash, true);
+            reference = get((*transaction)->hash(), true);
             found = false;
-            while(reference && reference.hash() == (*transaction)->hash)
+            while(reference && reference.hash() == (*transaction)->hash())
             {
                 if(!((TransactionReference *)(*reference))->markedRemove())
                 {
                     NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
-                      "Removing transaction : %s", (*transaction)->hash.hex().text());
+                      "Removing transaction : %s", (*transaction)->hash().hex().text());
                     reference->setRemove();
                     found = true;
                     break;
@@ -496,7 +496,7 @@ namespace BitCoin
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_OUTPUTS_LOG_NAME,
                   "Transaction not found to remove for revert : %s",
-                  (*transaction)->hash.hex().text());
+                  (*transaction)->hash().hex().text());
             }
         }
 

@@ -250,8 +250,8 @@ namespace BitCoin
         bool readHashes(unsigned int pOffset, unsigned int pCount, NextCash::HashList &pHashes);
         bool readTargetBits(unsigned int pOffset, unsigned int pCount,
           std::vector<uint32_t> &pTargetBits);
-        bool readBlockStatsReverse(unsigned int pOffset, unsigned int pCount,
-          std::list<BlockStat> &pBlockStats);
+        bool readHeaderStatsReverse(unsigned int pOffset, unsigned int pCount,
+          std::list<HeaderStat> &pHeaderStats);
 
     private:
 
@@ -910,8 +910,8 @@ namespace BitCoin
         return true;
     }
 
-    bool HeaderFile::readBlockStatsReverse(unsigned int pOffset, unsigned int pCount,
-      std::list<BlockStat> &pBlockStats)
+    bool HeaderFile::readHeaderStatsReverse(unsigned int pOffset, unsigned int pCount,
+      std::list<HeaderStat> &pHeaderStats)
     {
         if(!openFile())
         {
@@ -936,7 +936,7 @@ namespace BitCoin
             mInputFile->skip(64); // Skip previous and merkle hashes
             time = mInputFile->readUnsignedInt();
             targetBits = mInputFile->readUnsignedInt();
-            pBlockStats.emplace_front(version, time, targetBits);
+            pHeaderStats.emplace_front(version, time, targetBits);
 
             if(i == 0)
                 break;
@@ -1161,10 +1161,10 @@ namespace BitCoin
         return true;
     }
 
-    bool Header::getBlockStatsReverse(unsigned int pStartHeight, unsigned int pCount,
-      std::list<BlockStat> &pBlockStats)
+    bool Header::getHeaderStatsReverse(unsigned int pStartHeight, unsigned int pCount,
+      std::list<HeaderStat> &pHeaderStats)
     {
-        pBlockStats.clear();
+        pHeaderStats.clear();
 
         int fileID = HeaderFile::fileID(pStartHeight);
         unsigned int offset = HeaderFile::fileOffset(pStartHeight);
@@ -1190,9 +1190,9 @@ namespace BitCoin
                 return true;
         }
 
-        while(pBlockStats.size() < pCount)
+        while(pHeaderStats.size() < pCount)
         {
-            if(!file->readBlockStatsReverse(offset, pCount - pBlockStats.size(), pBlockStats))
+            if(!file->readHeaderStatsReverse(offset, pCount - pHeaderStats.size(), pHeaderStats))
             {
                 file->unlock(false);
                 return false;

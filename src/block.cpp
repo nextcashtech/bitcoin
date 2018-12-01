@@ -33,14 +33,14 @@ namespace BitCoin
                 delete *transaction;
     }
 
-    uint64_t Block::actualCoinbaseAmount()
+    uint64_t Block::actualCoinbaseAmount() const
     {
         if(transactions.size() == 0)
-            return 0;
+            return 0UL;
 
-        uint64_t result = 0;
+        uint64_t result = 0UL;
         Transaction *coinbase = transactions.front();
-        for(std::vector<Output>::iterator output = coinbase->outputs.begin();
+        for(std::vector<Output>::const_iterator output = coinbase->outputs.begin();
           output != coinbase->outputs.end(); ++output)
             result += output->amount;
 
@@ -92,7 +92,7 @@ namespace BitCoin
         for(unsigned int i = 0; i < header.transactionCount; ++i)
         {
             transaction = new Transaction();
-            if(transaction->read(pStream, true))
+            if(transaction->read(pStream))
                 transactions.push_back(transaction);
             else
             {
@@ -222,14 +222,14 @@ namespace BitCoin
         if(transactions.size() == 0)
             pMerkleHash.zeroize();
         else if(transactions.size() == 1)
-            pMerkleHash = transactions.front()->hash;
+            pMerkleHash = transactions.front()->hash();
         else
         {
             // Collect transaction hashes
             std::vector<NextCash::Hash> hashes;
             for(std::vector<Transaction *>::iterator trans = transactions.begin();
               trans != transactions.end(); ++trans)
-                hashes.push_back((*trans)->hash);
+                hashes.push_back((*trans)->hash());
 
             // Calculate the next level
             calculateMerkleHashLevel(hashes, pMerkleHash);
@@ -702,7 +702,7 @@ namespace BitCoin
             else
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-                  "Transaction %d failed : %s", offset, transaction->hash.hex().text());
+                  "Transaction %d failed : %s", offset, transaction->hash().hex().text());
                 transaction->print(data->chain->forks(), NextCash::Log::WARNING);
                 data->markComplete(offset, false);
             }
@@ -1910,7 +1910,7 @@ namespace BitCoin
         {
             transaction = new Transaction();
             transaction->setTime(pBlockTime);
-            if(transaction->read(mInputFile, true))
+            if(transaction->read(mInputFile))
                 pTransactions.push_back(transaction);
             else
             {
@@ -2080,5 +2080,65 @@ namespace BitCoin
         }
 
         return result;
+    }
+
+    BlockStat::BlockStat(const Block &pBlock, unsigned int pHeight) : hash(BLOCK_HASH_SIZE)
+    {
+        set(pBlock, pHeight);
+    }
+
+    void BlockStat::set(const Block &pBlock, unsigned int pHeight)
+    {
+        hash = pBlock.header.hash;
+        time = pBlock.header.time;
+        size = pBlock.size();
+        transactionCount = pBlock.transactions.size();
+        inputCount = 0;
+        outputCount = 0;
+        fees = 0UL;
+        amount = 0UL;
+
+        if(pBlock.transactions.size() == 0)
+            return;
+
+        fees = pBlock.actualCoinbaseAmount() - coinBaseAmount(pHeight);
+
+        for(std::vector<Transaction *>::const_iterator trans = pBlock.transactions.begin() + 1;
+          trans != pBlock.transactions.end(); ++trans)
+        {
+            inputCount += (*trans)->inputs.size();
+            outputCount += (*trans)->outputs.size();
+            for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
+              output != (*trans)->outputs.end(); ++output)
+                amount += output->amount;
+        }
+    }
+
+    void BlockStat::write(NextCash::OutputStream *pStream) const
+    {
+        hash.write(pStream);
+        pStream->writeUnsignedInt(time);
+        pStream->writeUnsignedLong(size);
+        pStream->writeUnsignedInt(transactionCount);
+        pStream->writeUnsignedInt(inputCount);
+        pStream->writeUnsignedInt(outputCount);
+        pStream->writeUnsignedLong(fees);
+        pStream->writeUnsignedLong(amount);
+    }
+
+    bool BlockStat::read(NextCash::InputStream *pStream)
+    {
+        if(pStream->remaining() < DATA_SIZE)
+            return false;
+        if(!hash.read(pStream, BLOCK_HASH_SIZE))
+            return false;
+        time = pStream->readUnsignedInt();
+        size = pStream->readUnsignedLong();
+        transactionCount = pStream->readUnsignedInt();
+        inputCount = pStream->readUnsignedInt();
+        outputCount = pStream->readUnsignedInt();
+        fees = pStream->readUnsignedLong();
+        amount = pStream->readUnsignedLong();
+        return true;
     }
 }

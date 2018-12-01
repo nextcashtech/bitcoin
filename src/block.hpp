@@ -57,7 +57,7 @@ namespace BitCoin
 
         void setSize(NextCash::stream_size pSize) { mSize = pSize; }
 
-        uint64_t actualCoinbaseAmount(); // Amount from coinbase transaction
+        uint64_t actualCoinbaseAmount() const; // Amount from coinbase transaction
 
         void calculateMerkleHash(NextCash::Hash &pMerkleHash);
 
@@ -213,13 +213,13 @@ namespace BitCoin
             right = NULL;
             matches = false;
         }
-        MerkleNode(Transaction *pTransaction, bool pMatches) : hash(pTransaction->hash)
+        MerkleNode(Transaction *pTransaction, bool pMatches) : hash(pTransaction->hash())
         {
             transaction = pTransaction;
             left = NULL;
             right = NULL;
             matches = pMatches;
-            hash = transaction->hash;
+            hash = transaction->hash();
         }
         MerkleNode(MerkleNode *pLeft, MerkleNode *pRight, bool pMatches)
         {
@@ -252,6 +252,49 @@ namespace BitCoin
     MerkleNode *buildMerkleTree(std::vector<Transaction *> &pBlockTransactions,
       BloomFilter &pFilter);
     MerkleNode *buildEmptyMerkleTree(unsigned int pNodeCount);
+
+    class BlockStat
+    {
+    public:
+
+        BlockStat() : hash(BLOCK_HASH_SIZE)
+        {
+            time = 0;
+            size = 0UL;
+            transactionCount = 0;
+            inputCount = 0;
+            outputCount = 0;
+            fees = 0UL;
+            amount = 0UL;
+        }
+        BlockStat(const Block &pBlock, unsigned int pHeight);
+        BlockStat(const BlockStat &pCopy) : hash(pCopy.hash)
+        {
+            time = pCopy.time;
+            size = pCopy.size;
+            transactionCount = pCopy.transactionCount;
+            inputCount = pCopy.inputCount;
+            outputCount = pCopy.outputCount;
+            fees = pCopy.fees;
+            amount = pCopy.amount;
+        }
+
+        void set(const Block &pBlock, unsigned int pHeight);
+
+        static const NextCash::stream_size DATA_SIZE = BLOCK_HASH_SIZE + 40;
+
+        NextCash::Hash        hash;
+        Time                  time;
+        NextCash::stream_size size;
+        unsigned int          transactionCount, inputCount, outputCount;
+        uint64_t              fees, amount;
+
+        uint64_t feeRate() const { return (fees * 1000L) / size; }
+
+        void write(NextCash::OutputStream *pStream) const;
+        bool read(NextCash::InputStream *pStream);
+
+    };
 }
 
 #endif

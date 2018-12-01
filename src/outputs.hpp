@@ -242,7 +242,7 @@ namespace BitCoin
         }
 
         // HashObject virtual functions
-        const NextCash::Hash &getHash() const { return mHash; }
+        const NextCash::Hash &getHash() { return mHash; }
         bool valueEquals(const NextCash::SortedObject *pRight) const
         {
             try
@@ -553,7 +553,7 @@ namespace BitCoin
             TransactionReference *operator *() { return (TransactionReference *)*mIterator; }
             TransactionReference *operator ->() { return (TransactionReference *)*mIterator; }
 
-            const NextCash::Hash &hash() const { return (*mIterator)->getHash(); }
+            const NextCash::Hash &hash() { return (*mIterator)->getHash(); }
 
             operator bool() const { return mSubSet != NULL && mIterator != mSubSet->end(); }
             bool operator !() const { return mSubSet == NULL || mIterator == mSubSet->end(); }

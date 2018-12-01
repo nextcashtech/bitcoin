@@ -29,7 +29,7 @@ namespace BitCoin
     {
     public:
 
-        Outpoint() : transactionID(32)
+        Outpoint() : transactionID(TRANSACTION_HASH_SIZE)
         {
             index = 0xffffffff;
             output = NULL;
@@ -110,7 +110,11 @@ namespace BitCoin
         }
 
         // Outpoint (32 trans id + 4 index), + 4 sequence, + script length size + script length
-        unsigned int size() { return 40 + compactIntegerSize(script.length()) + script.length(); }
+        unsigned int size()
+        {
+            return TRANSACTION_HASH_SIZE + 8 + compactIntegerSize(script.length()) +
+              script.length();
+        }
 
         void write(NextCash::OutputStream *pStream);
         bool read(NextCash::InputStream *pStream);
@@ -187,13 +191,13 @@ namespace BitCoin
         Transaction &operator = (const Transaction &pRight);
 
         // HashObject virtual functions
-        const NextCash::Hash &getHash() const { return hash; }
+        const NextCash::Hash &getHash() { return hash(); }
         bool valueEquals(const NextCash::SortedObject *pRight) const { return this == pRight; }
 
         void write(NextCash::OutputStream *pStream);
 
         // pCalculateHash will calculate the hash of the transaction data while it reads it
-        bool read(NextCash::InputStream *pStream, bool pCalculateHash = true);
+        bool read(NextCash::InputStream *pStream);
 
         // Skip over transaction in stream (The input stream's read offset must be at the beginning
         //   of a transaction)
@@ -219,15 +223,13 @@ namespace BitCoin
         // Print human readable version to log
         void print(const Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
 
-        // Hash
-        NextCash::Hash hash;
-
         // Data
         uint32_t version;
         std::vector<Input> inputs;
         std::vector<Output> outputs;
         uint32_t lockTime; // Time/Block height at or after which a transaction can be confirmed.
 
+        const NextCash::Hash &hash() { if(mHash.isEmpty()) calculateHash(); return mHash; }
         unsigned int size() const { return mSize; }
         Time time() const { return mTime; }
         bool feeIsValid() const { return mFee != INVALID_FEE; }
@@ -351,6 +353,7 @@ namespace BitCoin
 
     private:
 
+        NextCash::Hash mHash;
         Time mTime;
         int64_t mFee;
         NextCash::stream_size mSize;

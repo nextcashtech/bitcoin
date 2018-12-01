@@ -236,7 +236,7 @@ namespace BitCoin
 
         Time time;
 
-        const NextCash::Hash &getHash() const { return mHash; }
+        const NextCash::Hash &getHash() { return mHash; }
 
     private:
 

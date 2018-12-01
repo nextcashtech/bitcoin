@@ -875,19 +875,19 @@ namespace BitCoin
 
         for(std::vector<Transaction *>::iterator trans = pTransactions.begin();
           trans != pTransactions.end(); ++trans)
-            if(!mAnnounceTransactions.remove((*trans)->hash)) // Hash was not announced to us yet.
+            if(!mAnnounceTransactions.remove((*trans)->hash())) // Hash was not announced to us yet.
             {
                 if(mReceivedVersionData->relay)
                 {
                     if((*trans)->feeRate() >= mMinimumFeeRate)
                         mInventoryData->inventory.push_back(
                           new Message::InventoryHash(Message::InventoryHash::TRANSACTION,
-                          (*trans)->hash));
+                          (*trans)->hash()));
                 }
                 else if(mFilter.contains(**trans))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                      "Bloom filter contains transaction : %s", (*trans)->hash.hex().text());
+                      "Bloom filter contains transaction : %s", (*trans)->hash().hex().text());
 
                     // Update filter
                     if(mFilter.flags() & BloomFilter::UPDATE_MASK)
@@ -896,7 +896,7 @@ namespace BitCoin
                         NextCash::HashList hashes;
                         Outpoint outpoint;
 
-                        outpoint.transactionID = (*trans)->hash;
+                        outpoint.transactionID = (*trans)->hash();
                         outpoint.index = 0;
 
                         for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
@@ -920,7 +920,7 @@ namespace BitCoin
 
                     mInventoryData->inventory
                       .push_back(new Message::InventoryHash(Message::InventoryHash::TRANSACTION,
-                      (*trans)->hash));
+                      (*trans)->hash()));
                 }
             }
 
@@ -943,7 +943,7 @@ namespace BitCoin
 
     bool Node::sendTransaction(Transaction *pTransaction)
     {
-        if(!isOpen() || mReceivedVersionData == NULL || mSentTransactions.contains(pTransaction->hash))
+        if(!isOpen() || mReceivedVersionData == NULL || mSentTransactions.contains(pTransaction->hash()))
             return false;
 
         bool filterContains = mFilter.contains(*pTransaction);
@@ -958,13 +958,13 @@ namespace BitCoin
 
         if(result)
         {
-            mSentTransactions.push_back(pTransaction->hash);
+            mSentTransactions.push_back(pTransaction->hash());
             NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
-              "Sent transaction : %s", pTransaction->hash.hex().text());
+              "Sent transaction : %s", pTransaction->hash().hex().text());
         }
         else
             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-              "Failed to send transaction : %s", pTransaction->hash.hex().text());
+              "Failed to send transaction : %s", pTransaction->hash().hex().text());
 
         return result;
     }
@@ -1241,7 +1241,7 @@ namespace BitCoin
                 {
                     // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                       // "Compact block found transaction %d : 0x%04x%08x : %s", offset, *shortID >> 32,
-                      // *shortID & 0x00000000ffffffff, (*trans)->hash.hex().text());
+                      // *shortID & 0x00000000ffffffff, (*trans)->hash().hex().text());
                     increasedSize += (*trans)->size();
                 }
 
@@ -1256,7 +1256,7 @@ namespace BitCoin
               // "Prefilled %d : %s", offset, prefilled->transaction->hash.hex().text());
             *trans = prefilled->transaction;
             // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-              // "Compact block provided transaction %d : %s", offset, (*trans)->hash.hex().text());
+              // "Compact block provided transaction %d : %s", offset, (*trans)->hash().hex().text());
             increasedSize += (*trans)->size();
             prefilled->transaction = NULL;
 
@@ -1295,7 +1295,7 @@ namespace BitCoin
             {
                 // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   // "Compact block found transaction %d : 0x%04x%08x : %s", offset, *shortID >> 32,
-                  // *shortID & 0x00000000ffffffff, (*trans)->hash.hex().text());
+                  // *shortID & 0x00000000ffffffff, (*trans)->hash().hex().text());
                 increasedSize += (*trans)->size();
             }
 
@@ -1342,7 +1342,7 @@ namespace BitCoin
         for(givenTrans = pTransData->transactions.begin();
           givenTrans != pTransData->transactions.end(); ++givenTrans)
         {
-            givenShortIDs.emplace_back(pData->calculateShortID((*givenTrans)->hash));
+            givenShortIDs.emplace_back(pData->calculateShortID((*givenTrans)->hash()));
             // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
               // "Compact block transaction given 0x%04x%08x : %s", givenShortIDs.back() >> 32,
               // givenShortIDs.back() & 0x00000000ffffffff, (*givenTrans)->hash.hex().text());
@@ -2651,7 +2651,7 @@ namespace BitCoin
                           // trans != ((Message::BlockData *)message)->block->transactions.end();
                           // ++trans, ++offset)
                             // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                              // "Transaction %d : %s", offset, (*trans)->hash.hex().text());
+                              // "Transaction %d : %s", offset, (*trans)->hash().hex().text());
 
                         updateBlockRequest(((Message::BlockData *)message)->block->header.hash,
                           message, true);
@@ -2725,7 +2725,7 @@ namespace BitCoin
                       // transactionData->transaction->size(),
                       // transactionData->transaction->hash.hex().text());
 
-                    mTransactionsRequested.remove(transactionData->transaction->hash);
+                    mTransactionsRequested.remove(transactionData->transaction->hash());
 
                     if(!info.spvMode)
                     {
@@ -2759,25 +2759,25 @@ namespace BitCoin
                         case MemPool::NON_STANDARD:
                             sendRejectWithHash(Message::nameFor(message->type),
                               Message::RejectData::NON_STANDARD, "Non standard",
-                              transactionData->transaction->hash);
+                              transactionData->transaction->hash());
                             break;
 
                         case MemPool::DOUBLE_SPEND:
                             sendRejectWithHash(Message::nameFor(message->type),
                               Message::RejectData::DUPLICATE, "Double spend",
-                              transactionData->transaction->hash);
+                              transactionData->transaction->hash());
                             break;
 
                         case MemPool::LOW_FEE:
                             sendRejectWithHash(Message::nameFor(message->type),
                               Message::RejectData::LOW_FEE, "Fee below minimum",
-                              transactionData->transaction->hash);
+                              transactionData->transaction->hash());
                             break;
 
                         case MemPool::IN_CHAIN:
                             sendRejectWithHash(Message::nameFor(message->type),
                               Message::RejectData::LOW_FEE, "Already in chain",
-                              transactionData->transaction->hash);
+                              transactionData->transaction->hash());
                             ++mOldTransactionCount;
                             if(mOldTransactionCount > 100)
                             {
@@ -2792,11 +2792,11 @@ namespace BitCoin
                         case MemPool::INVALID:
                             sendRejectWithHash(Message::nameFor(message->type),
                               Message::RejectData::INVALID, "Invalid transaction",
-                              transactionData->transaction->hash);
+                              transactionData->transaction->hash());
 
                             NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                               "Dropping. Sent invalid transaction : %s",
-                              transactionData->transaction->hash.hex().text());
+                              transactionData->transaction->hash().hex().text());
                             info.addPeerFail(mAddress);
                             close();
                             success = false;

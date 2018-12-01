@@ -227,7 +227,7 @@ namespace BitCoin
         if(mIsEmpty || mDataSize == 0)
             return false;
 
-        if(contains(pTransaction.hash))
+        if(contains(pTransaction.hash()))
             return true;
 
         for(std::vector<Input>::iterator input=pTransaction.inputs.begin();input!=pTransaction.inputs.end();++input)

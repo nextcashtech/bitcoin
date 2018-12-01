@@ -123,7 +123,7 @@ namespace BitCoin
         // Add a received transaction if it was confirmed in a merkle block
         void addTransaction(Chain &pChain, Message::TransactionData *pTransactionData);
 
-        bool isConfirmed(NextCash::Hash &pTransactionID, bool pIsLocked = false)
+        bool isConfirmed(const NextCash::Hash &pTransactionID, bool pIsLocked = false)
         {
             if(!pIsLocked)
                 mMutex.lock();

@@ -317,6 +317,7 @@ namespace BitCoin
         bool getHash(unsigned int pHeight, NextCash::Hash &pHash, uint8_t pLocks = 0x00);
         bool getBlock(unsigned int pHeight, Block &pBlock);
         bool getHeader(unsigned int pHeight, Header &pHeader);
+        bool getBlockStat(unsigned int pHeight, BlockStat &pBlockStat);
 
         // Returns INVALID_HEIGHT when hash is not found
         unsigned int hashHeight(const NextCash::Hash &pHash);
@@ -401,6 +402,8 @@ namespace BitCoin
         bool updateAddresses();
 #endif
 
+        bool updateBlockStats();
+
         Monitor *mMonitor;
 
         // Verify and process block then add it to the chain
@@ -430,15 +433,15 @@ namespace BitCoin
         uint32_t calculateTargetBits(); // Calculate required target bits for new header.
         bool processHeader(Header &pHeader); // Validate header and add it to the chain.
 
-        unsigned int mBlockStatHeight; // Height of block referenced by last item in mBlockStats.
-        std::list<BlockStat> mBlockStats;
+        unsigned int mHeaderStatHeight; // Height of block referenced by last item in mHeaderStats.
+        std::list<HeaderStat> mHeaderStats;
 
         Forks mForks; // Info about soft and hard fork states.
 
-        BlockStat *blockStat(unsigned int pHeight); // Get block stat for height.
-        void addBlockStat(int32_t pVersion, Time pTime, uint32_t pTargetBits);
-        void revertLastBlockStat();
-        void clearBlockStats();
+        HeaderStat *blockStat(unsigned int pHeight); // Get block stat for height.
+        void addHeaderStat(int32_t pVersion, Time pTime, uint32_t pTargetBits);
+        void revertLastHeaderStat();
+        void clearHeaderStats();
         bool saveAccumulatedWork();
 
         unsigned int mNextBlockHeight; // Number of next block that will be added to the chain.
@@ -482,6 +485,9 @@ namespace BitCoin
 
         // Check if a branch has more accumulated proof of work than the main chain
         bool checkBranches();
+
+        NextCash::Mutex mBlockStatLock;
+        bool addBlockStat(const Block &pBlock, unsigned int pHeight);
 
     };
 }

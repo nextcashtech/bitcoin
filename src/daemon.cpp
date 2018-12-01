@@ -101,7 +101,7 @@ namespace BitCoin
         for(std::vector<Transaction *>::iterator trans = mTransactionsToTransmit.begin();
           trans != mTransactionsToTransmit.end();)
         {
-            if(mMonitor.isConfirmed((*trans)->hash))
+            if(mMonitor.isConfirmed((*trans)->hash()))
             {
                 delete *trans;
                 trans = mTransactionsToTransmit.erase(trans);
@@ -921,7 +921,7 @@ namespace BitCoin
         // TODO Add transaction verification
 
         // Add to monitor
-        mMonitor.addTransactionAnnouncement(transaction->hash, 0);
+        mMonitor.addTransactionAnnouncement(transaction->hash(), 0);
 
         Message::TransactionData data;
         data.transaction = transaction;
@@ -1059,14 +1059,14 @@ namespace BitCoin
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Created %d byte transaction with fee of %d sat (%0.2f sat/byte) : %s",
           transaction->size(), calculatedFee, (float)calculatedFee / (float)transaction->size(),
-          transaction->hash.hex().text());
+          transaction->hash().hex().text());
 
         Transaction *newTransaction = new Transaction(*transaction);
 
         // TODO Add transaction verification
 
         // Add to monitor
-        mMonitor.addTransactionAnnouncement(transaction->hash, 0);
+        mMonitor.addTransactionAnnouncement(transaction->hash(), 0);
 
         Message::TransactionData data;
         data.transaction = transaction;

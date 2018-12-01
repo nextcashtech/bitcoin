@@ -36,7 +36,7 @@ namespace BitCoin
         bool read(NextCash::InputStream *pStream);
 
         // SortedObject virtual function.
-        int compare(const SortedObject *pRight) const
+        int compare(SortedObject *pRight)
         {
             try
             {

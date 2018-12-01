@@ -1427,7 +1427,7 @@ namespace BitCoin
                 }
                 else
                 {
-                    shortIDs.emplace_back(calculateShortID((*trans)->hash));
+                    shortIDs.emplace_back(calculateShortID((*trans)->hash()));
                     ++offset;
                 }
             }

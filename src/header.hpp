@@ -19,23 +19,23 @@
 namespace BitCoin
 {
     // Statistical information needed from each header.
-    class BlockStat
+    class HeaderStat
     {
     public:
 
-        BlockStat() : accumulatedWork(32)
+        HeaderStat() : accumulatedWork(32)
         {
             version = 0;
             time = 0;
             targetBits = 0;
         }
-        BlockStat(const BlockStat &pCopy) : accumulatedWork(pCopy.accumulatedWork)
+        HeaderStat(const HeaderStat &pCopy) : accumulatedWork(pCopy.accumulatedWork)
         {
             version = pCopy.version;
             time = pCopy.time;
             targetBits = pCopy.targetBits;
         }
-        BlockStat(int32_t pVersion, Time pTime, uint32_t pTargetBits) : accumulatedWork(32)
+        HeaderStat(int32_t pVersion, Time pTime, uint32_t pTargetBits) : accumulatedWork(32)
         {
             version = pVersion;
             time = pTime;
@@ -45,7 +45,7 @@ namespace BitCoin
             target.setDifficulty(pTargetBits);
             target.getWork(accumulatedWork);
         }
-        BlockStat(int32_t pVersion, Time pTime, uint32_t pTargetBits,
+        HeaderStat(int32_t pVersion, Time pTime, uint32_t pTargetBits,
           NextCash::Hash &pPreviousAccumulatedWork) : accumulatedWork(32)
         {
             version = pVersion;
@@ -59,7 +59,7 @@ namespace BitCoin
             accumulatedWork += pPreviousAccumulatedWork;
         }
 
-        BlockStat &operator = (const BlockStat &pRight)
+        HeaderStat &operator = (const HeaderStat &pRight)
         {
             version = pRight.version;
             time = pRight.time;
@@ -160,8 +160,8 @@ namespace BitCoin
           std::vector<uint32_t> &pTargetBits);
 
         // Get block stats (in reverse order)
-        static bool getBlockStatsReverse(unsigned int pStartHeight, unsigned int pCount,
-          std::list<BlockStat> &pBlockStats);
+        static bool getHeaderStatsReverse(unsigned int pStartHeight, unsigned int pCount,
+          std::list<HeaderStat> &pHeaderStats);
 
         // Add header to appropriate header file.
         static bool add(unsigned int pHeight, const Header &pHeader);

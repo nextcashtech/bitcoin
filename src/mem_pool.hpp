@@ -70,7 +70,7 @@ namespace BitCoin
         }
         ~ShortIDHash() {}
 
-        int compare(const SortedObject *pRight) const
+        int compare(SortedObject *pRight)
         {
             if(shortID < ((ShortIDHash *)pRight)->shortID)
                 return -1;
@@ -257,7 +257,7 @@ namespace BitCoin
                 return *this;
             }
 
-            const NextCash::Hash &getHash() const { return hash; }
+            const NextCash::Hash &getHash() { return hash; }
         };
 
         NextCash::Mutex mRequestedHashesLock;
@@ -297,7 +297,7 @@ namespace BitCoin
 
             Outpoint outpoint;
 
-            const NextCash::Hash &getHash() const { return mHash; }
+            const NextCash::Hash &getHash() { return mHash; }
 
         private:
 
@@ -359,7 +359,7 @@ namespace BitCoin
 
             unsigned int nodeID;
 
-            const NextCash::Hash &getHash() const { return mHash; }
+            const NextCash::Hash &getHash() { return mHash; }
 
         private:
 
