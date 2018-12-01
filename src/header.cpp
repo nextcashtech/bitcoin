@@ -24,7 +24,7 @@ namespace BitCoin
     {
         NextCash::Hash target;
         target.setDifficulty(targetBits);
-        return hash <= target;
+        return hash() <= target;
     }
 
     void Header::calculateHash()
@@ -35,7 +35,7 @@ namespace BitCoin
         write(&digest, false);
 
         // Get SHA256_SHA256 of block data
-        digest.getResult(&hash);
+        digest.getResult(&mHash);
     }
 
     void Header::write(NextCash::OutputStream *pStream, bool pIncludeTransactionCount) const
@@ -62,22 +62,12 @@ namespace BitCoin
             writeCompactInteger(pStream, 0);
     }
 
-    bool Header::read(NextCash::InputStream *pStream, bool pIncludeTransactionCount,
-      bool pCalculateHash)
+    bool Header::read(NextCash::InputStream *pStream, bool pIncludeTransactionCount)
     {
-        // Create hash
-        NextCash::Digest *digest = NULL;
-        if(pCalculateHash)
-        {
-            digest = new NextCash::Digest(NextCash::Digest::SHA256_SHA256);
-            digest->setOutputEndian(NextCash::Endian::LITTLE);
-        }
-        hash.clear();
+        mHash.clear();
 
         if(pStream->remaining() < 80)
         {
-            if(digest != NULL)
-                delete digest;
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
               "Header read failed : only %d bytes", pStream->remaining());
             return false;
@@ -85,56 +75,31 @@ namespace BitCoin
 
         // Version
         version = (int32_t)pStream->readInt();
-        if(pCalculateHash)
-            digest->writeUnsignedInt((unsigned int)version);
 
         // Hash of previous block
         if(!previousHash.read(pStream))
         {
-            if(digest != NULL)
-                delete digest;
             NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
               "Header read failed : read previous hash failed");
             return false;
         }
-        if(pCalculateHash)
-            previousHash.write(digest);
 
         // Merkle Root Hash
         if(!merkleHash.read(pStream))
         {
-            if(digest != NULL)
-                delete digest;
             NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_HEADER_LOG_NAME,
               "Header read failed : read merkle hash failed");
             return false;
         }
-        if(pCalculateHash)
-            merkleHash.write(digest);
 
         // Time
         time = pStream->readUnsignedInt();
-        if(pCalculateHash)
-            digest->writeInt(time);
 
         // Encoded version of target threshold
         targetBits = pStream->readUnsignedInt();
-        if(pCalculateHash)
-            digest->writeUnsignedInt(targetBits);
 
         // Nonce
         nonce = pStream->readUnsignedInt();
-        if(pCalculateHash)
-            digest->writeUnsignedInt(nonce);
-
-        if(pCalculateHash)
-            digest->getResult(&hash);
-
-        if(digest != NULL)
-        {
-            delete digest;
-            digest = NULL;
-        }
 
         if(pIncludeTransactionCount)
             transactionCount = readCompactInteger(pStream);
@@ -146,7 +111,7 @@ namespace BitCoin
 
     void Header::clear()
     {
-        hash.clear();
+        mHash.clear();
         version = 0;
         previousHash.zeroize();
         merkleHash.zeroize();
@@ -159,7 +124,7 @@ namespace BitCoin
     void Header::print(NextCash::Log::Level pLevel)
     {
         NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "Hash          : %s",
-          hash.hex().text());
+          hash().hex().text());
         NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "Version       : 0x%08x",
           version);
         NextCash::Log::addFormatted(pLevel, BITCOIN_HEADER_LOG_NAME, "Previous Hash : %s",
@@ -233,7 +198,7 @@ namespace BitCoin
         bool validate(); // Validate CRC of file
 
         // Add a header to the file.
-        bool writeHeader(const Header &pHeader);
+        bool writeHeader(Header &pHeader);
 
         // Remove blocks from file above a specific offset in the file.
         bool removeHeadersAbove(unsigned int pOffset);
@@ -622,19 +587,19 @@ namespace BitCoin
         mValid = true;
         mInputFile->setReadOffset(DATA_START_OFFSET);
 
-        NextCash::Hash hash(BLOCK_HASH_SIZE);
+        NextCash::Hash indexHash(BLOCK_HASH_SIZE);
         Header header;
         NextCash::stream_size lastGoodOffset = DATA_START_OFFSET;
 
         while(mInputFile->remaining())
         {
-            if(!hash.read(mInputFile))
+            if(!indexHash.read(mInputFile))
             {
                 mValid = false;
                 break;
             }
 
-            if(!header.read(mInputFile, false, true))
+            if(!header.read(mInputFile, false))
             {
                 mValid = false;
                 break;
@@ -648,7 +613,7 @@ namespace BitCoin
 
             mInputFile->skip(4);
 
-            if(hash != header.hash)
+            if(indexHash != header.hash())
             {
                 mValid = false;
                 break;
@@ -737,9 +702,9 @@ namespace BitCoin
         return result;
     }
 
-    bool HeaderFile::writeHeader(const Header &pHeader)
+    bool HeaderFile::writeHeader(Header &pHeader)
     {
-        if(pHeader.hash.size() != BLOCK_HASH_SIZE)
+        if(pHeader.hash().size() != BLOCK_HASH_SIZE)
             return false;
 
         if(!openFile())
@@ -773,7 +738,7 @@ namespace BitCoin
         }
 
         // Write header data at end of file
-        pHeader.hash.write(outputFile);
+        pHeader.hash().write(outputFile);
         pHeader.write(outputFile, false);
         outputFile->writeUnsignedInt(pHeader.transactionCount);
         delete outputFile;
@@ -966,7 +931,7 @@ namespace BitCoin
         for(unsigned int i = pOffset; i < count && added < pCount; ++i, ++added)
         {
             pHeaders.emplace_back();
-            if(!pHeaders.back().read(mInputFile, false, true))
+            if(!pHeaders.back().read(mInputFile, false))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
                   "Failed to read header %d from file %08x", i, mID);
@@ -997,7 +962,7 @@ namespace BitCoin
           mInputFile->remaining() < 80)
             return false;
 
-        if(!pHeader.read(mInputFile, false, true))
+        if(!pHeader.read(mInputFile, false))
             return false;
 
         pHeader.transactionCount = mInputFile->readUnsignedInt();
@@ -1222,7 +1187,7 @@ namespace BitCoin
 
     }
 
-    bool Header::add(unsigned int pHeight, const Header &pHeader)
+    bool Header::add(unsigned int pHeight, Header &pHeader)
     {
         HeaderFile *file = HeaderFile::get(HeaderFile::fileID(pHeight), true, true);
         if(file == NULL)

@@ -378,6 +378,33 @@ namespace BitCoin
         return true;
     }
 
+    NextCash::String ScriptInterpreter::coinBaseText(NextCash::Buffer &pScript,
+      unsigned int pBlockVersion)
+    {
+        if(pBlockVersion >= 2)
+        {
+            unsigned int length = pullDataSize(pScript.readByte(), pScript, false);
+            if(length != 0xffffffff)
+            {
+                for(unsigned int i = 0; i < length; ++i)
+                    pScript.readByte();
+            }
+        }
+
+        NextCash::String result;
+        char byte;
+        while(pScript.remaining())
+        {
+            byte = pScript.readByte();
+            if(NextCash::isWhiteSpace(byte))
+                result += ' ';
+            else if(NextCash::isASCII(byte))
+                result += byte;
+        }
+
+        return result;
+    }
+
     NextCash::String ScriptInterpreter::scriptText(NextCash::Buffer &pScript, const Forks &pForks,
       unsigned int pBlockHeight)
     {

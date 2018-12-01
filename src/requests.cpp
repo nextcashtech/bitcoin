@@ -728,8 +728,10 @@ namespace BitCoin
                     Block block;
                     if(mChain->getBlock(height, block))
                     {
+                        unsigned int offset = 0;
                         for(std::vector<Transaction *>::iterator trans =
-                          block.transactions.begin(); trans != block.transactions.end(); ++trans)
+                          block.transactions.begin(); trans != block.transactions.end(); ++trans,
+                          ++offset)
                             if((*trans)->hash() == hash)
                             {
                                 sendData.writeString("tran:");
@@ -748,8 +750,12 @@ namespace BitCoin
                                     input->outpoint.transactionID.write(&sendData);
                                     sendData.writeUnsignedInt(input->outpoint.index);
                                     input->script.setReadOffset(0);
-                                    sendData.writeString(ScriptInterpreter::scriptText(
-                                      input->script, mChain->forks(), height), true);
+                                    if(offset == 0)
+                                        sendData.writeString(ScriptInterpreter::coinBaseText(
+                                          input->script, block.header.version), true);
+                                    else
+                                        sendData.writeString(ScriptInterpreter::scriptText(
+                                          input->script, mChain->forks(), height), true);
                                     sendData.writeUnsignedInt(input->sequence);
                                 }
 
@@ -803,7 +809,7 @@ namespace BitCoin
                     sendData.writeUnsignedLong(0UL);
 
                     sendData.writeUnsignedInt(height); // Height
-                    block.header.hash.write(&sendData); // Hash
+                    block.header.hash().write(&sendData); // Hash
                     sendData.writeUnsignedInt(block.header.time); // Time
                     sendData.writeUnsignedInt(block.size()); // Size
                     sendData.writeUnsignedLong(block.actualCoinbaseAmount() -

@@ -1704,14 +1704,14 @@ namespace BitCoin
         {
             // Announce to all nodes
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
-              "Announcing block : %s", block->header.hash.hex().text());
+              "Announcing block : %s", block->header.hash().hex().text());
             mNodeLock.readLock();
             for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                 (*node)->announceBlock(block);
             mNodeLock.readUnlock();
 
             // Release lock on block from blockToAnnounce.
-            mChain.releaseBlock(0, block->header.hash);
+            mChain.releaseBlock(0, block->header.hash());
         }
 
         TransactionList transactionList;

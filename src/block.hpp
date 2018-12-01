@@ -90,7 +90,7 @@ namespace BitCoin
           unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput);
 
         // Add block to appropriate block file.
-        static bool add(unsigned int pHeight, const Block &pBlock);
+        static bool add(unsigned int pHeight, Block &pBlock);
 
         static bool revertToHeight(unsigned int pHeight);
 
@@ -267,7 +267,6 @@ namespace BitCoin
             fees = 0UL;
             amount = 0UL;
         }
-        BlockStat(const Block &pBlock, unsigned int pHeight);
         BlockStat(const BlockStat &pCopy) : hash(pCopy.hash)
         {
             time = pCopy.time;
@@ -278,8 +277,9 @@ namespace BitCoin
             fees = pCopy.fees;
             amount = pCopy.amount;
         }
+        BlockStat(Block &pBlock, unsigned int pHeight);
 
-        void set(const Block &pBlock, unsigned int pHeight);
+        void set(Block &pBlock, unsigned int pHeight);
 
         static const NextCash::stream_size DATA_SIZE = BLOCK_HASH_SIZE + 40;
 

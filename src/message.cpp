@@ -223,21 +223,21 @@ namespace BitCoin
                   pInput->remaining() > 80)
                 {
                     Header header;
-                    if(header.read(pInput, true, true))
+                    if(header.read(pInput, true))
                     {
                         if(pendingBlockHash.isEmpty())
                         {
                             // Starting new block
                             pendingBlockStartTime = getTime();
                             pendingBlockLastReportTime = pendingBlockStartTime;
-                            pendingBlockHash = header.hash;
+                            pendingBlockHash = header.hash();
                             lastPendingBlockSize = pInput->remaining();
                             pendingBlockUpdateTime = pendingBlockStartTime;
                             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, pName,
                               "Started receiving %s : %s", command.text(),
-                              header.hash.hex().text());
+                              header.hash().hex().text());
                         }
-                        else if(pendingBlockHash == header.hash)
+                        else if(pendingBlockHash == header.hash())
                         {
                             if(pInput->remaining() != lastPendingBlockSize)
                             {
@@ -253,13 +253,13 @@ namespace BitCoin
                                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, pName,
                                       "Block downloading %d / %d (%ds) : %s", pInput->remaining(),
                                       payloadSize, pendingBlockUpdateTime - pendingBlockStartTime,
-                                      header.hash.hex().text());
+                                      header.hash().hex().text());
                                 else
                                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, pName,
                                       "Compact block downloading %d / %d (%ds) : %s",
                                       pInput->remaining(), payloadSize,
                                       pendingBlockUpdateTime - pendingBlockStartTime,
-                                      header.hash.hex().text());
+                                      header.hash().hex().text());
                             }
                         }
                         else
@@ -276,7 +276,7 @@ namespace BitCoin
                             // Starting new block
                             pendingBlockStartTime = getTime();
                             pendingBlockLastReportTime = pendingBlockStartTime;
-                            pendingBlockHash = header.hash;
+                            pendingBlockHash = header.hash();
                             lastPendingBlockSize = pInput->remaining();
                             pendingBlockUpdateTime = pendingBlockStartTime;
                         }
@@ -469,7 +469,7 @@ namespace BitCoin
               result->type == COMPACT_TRANS))
             {
                 // Block downloaded completely before first parsing of incoming data
-                if(pendingBlockHash != ((BlockData *)result)->block->header.hash)
+                if(pendingBlockHash != ((BlockData *)result)->block->header.hash())
                     pendingBlockStartTime = getTime();
                 pendingBlockUpdateTime = 0;
                 pendingBlockHash.clear();
@@ -1043,7 +1043,7 @@ namespace BitCoin
             for(unsigned int i = 0; i < count; ++i)
             {
                 headers.emplace_back();
-                if(!headers.back().read(pStream, true, true))
+                if(!headers.back().read(pStream, true))
                 {
                     headers.pop_back();
                     return false;
@@ -1157,7 +1157,7 @@ namespace BitCoin
             NextCash::stream_size startReadOffset = pStream->readOffset();
 
             // Block Header
-            if(!header.read(pStream, false, true))
+            if(!header.read(pStream, false))
             {
                 NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
                   "Merkle block read header failed.");
@@ -1519,7 +1519,7 @@ namespace BitCoin
             deleteBlock = true;
 
             // Block header without transaction count
-            if(!block->header.read(pStream, false, true))
+            if(!block->header.read(pStream, false))
             {
                 NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_MESSAGE_LOG_NAME,
                   "Compact block message has invalid header");
@@ -1764,14 +1764,14 @@ namespace BitCoin
             compactBlock.nonce = 0xb3413646edd998ea;
 
             compactBlock.block->header.calculateHash();
-            if(compactBlock.block->header.hash == correctHeaderHash)
+            if(compactBlock.block->header.hash() == correctHeaderHash)
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed header hash");
             else
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME,
                   "Failed header hash");
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME,
-                  "Result  : %s", compactBlock.block->header.hash.hex().text());
+                  "Result  : %s", compactBlock.block->header.hash().hex().text());
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME,
                   "Correct : %s", correctHeaderHash.hex().text());
                 result = false;

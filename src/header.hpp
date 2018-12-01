@@ -89,8 +89,8 @@ namespace BitCoin
             nonce = 0;
             transactionCount = 0;
         }
-        Header(const Header &pCopy) : hash(pCopy.hash), previousHash(pCopy.previousHash),
-          merkleHash(pCopy.merkleHash)
+        Header(const Header &pCopy) : previousHash(pCopy.previousHash),
+          merkleHash(pCopy.merkleHash), mHash(pCopy.mHash)
         {
             version = pCopy.version;
             time = pCopy.time;
@@ -101,7 +101,7 @@ namespace BitCoin
 
         Header &operator = (const Header &pRight)
         {
-            hash = pRight.hash;
+            mHash = pRight.mHash;
             version = pRight.version;
             previousHash = pRight.previousHash;
             merkleHash = pRight.merkleHash;
@@ -118,15 +118,14 @@ namespace BitCoin
         void write(NextCash::OutputStream *pStream, bool pIncludeTransactionCount) const;
 
         // pCalculateHash will calculate the hash of the block data while it reads it
-        bool read(NextCash::InputStream *pStream, bool pIncludeTransactionCount, bool pCalculateHash);
+        bool read(NextCash::InputStream *pStream, bool pIncludeTransactionCount);
 
         void clear();
 
         // Print human readable version to log.
         void print(NextCash::Log::Level pLevel = NextCash::Log::DEBUG);
 
-        // Hash
-        NextCash::Hash hash;
+        const NextCash::Hash &hash() { if(mHash.isEmpty()) calculateHash(); return mHash; }
 
         // Header
         int32_t version;
@@ -164,7 +163,7 @@ namespace BitCoin
           std::list<HeaderStat> &pHeaderStats);
 
         // Add header to appropriate header file.
-        static bool add(unsigned int pHeight, const Header &pHeader);
+        static bool add(unsigned int pHeight, Header &pHeader);
 
         static bool revertToHeight(unsigned int pHeight);
 
@@ -176,6 +175,8 @@ namespace BitCoin
         static void clean();  // Release any static cache data
 
     private:
+
+        NextCash::Hash mHash;
 
     };
 }

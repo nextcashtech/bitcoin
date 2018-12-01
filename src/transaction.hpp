@@ -291,7 +291,7 @@ namespace BitCoin
           int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, const Forks &pForks);
 
         // Check validity
-        void check(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight, bool pCoinBase,
+        void check(Chain *pChain, const NextCash::Hash &pBlockHash, unsigned int pHeight, bool pCoinBase,
           int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
           std::vector<unsigned int> &pSpentAges, NextCash::Timer &pCheckDupTime,
           NextCash::Timer &pOutputLookupTime, NextCash::Timer &pSignatureTime);

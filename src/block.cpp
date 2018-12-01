@@ -75,7 +75,7 @@ namespace BitCoin
         NextCash::stream_size startOffset = pStream->readOffset();
         mSize = 0;
 
-        if(!header.read(pStream, true, true))
+        if(!header.read(pStream, true))
             return false;
 
         clearTransactions();
@@ -694,7 +694,7 @@ namespace BitCoin
             }
 
             fullTime.start();
-            transaction->check(data->chain, data->block->header.hash, data->height, offset == 0,
+            transaction->check(data->chain, data->block->header.hash(), data->height, offset == 0,
               data->block->header.version, data->spentAgeLock, data->spentAges, checkDupTime,
               outputsTime, sigTime);
             if(transaction->isVerified())
@@ -733,7 +733,7 @@ namespace BitCoin
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block %d (multi-threaded) (%d trans) (%d KB) : %s", pHeight,
-          transactions.size(), size() / 1000, header.hash.hex().text());
+          transactions.size(), size() / 1000, header.hash().hex().text());
 
         mFees = 0;
 
@@ -871,7 +871,7 @@ namespace BitCoin
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block %d (%d trans) (%d KB) : %s", pHeight,
-          transactions.size(), size() / 1000, header.hash.hex().text());
+          transactions.size(), size() / 1000, header.hash().hex().text());
 
         NextCash::Timer addTime(true);
         // Add the transaction outputs from this block to the output pool
@@ -892,7 +892,7 @@ namespace BitCoin
             // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
               // "Processing transaction %d", transactionOffset);
             fullTime.start();
-            (*transaction)->check(pChain, header.hash, pHeight, transactionOffset == 0,
+            (*transaction)->check(pChain, header.hash(), pHeight, transactionOffset == 0,
               header.version, spentAgeLock, spentAges, checkDupTime, outputsTime, sigTime);
             if(!(*transaction)->isVerified())
             {
@@ -1062,7 +1062,7 @@ namespace BitCoin
         bool validate(); // Validate CRC
 
         // Add a block to the file
-        bool writeBlock(const Block &pBlock);
+        bool writeBlock(Block &pBlock);
 
         // Remove blocks from file above a specific offset in the file
         bool removeBlocksAbove(unsigned int pOffset);
@@ -1643,7 +1643,7 @@ namespace BitCoin
         }
     }
 
-    bool BlockFile::writeBlock(const Block &pBlock)
+    bool BlockFile::writeBlock(Block &pBlock)
     {
         if(!openFile())
             return false;
@@ -1676,7 +1676,7 @@ namespace BitCoin
 
         // Write hash and offset to file
         outputFile->setWriteOffset(HEADER_START_OFFSET + (count * HEADER_ITEM_SIZE));
-        pBlock.header.hash.write(outputFile);
+        pBlock.header.hash().write(outputFile);
         outputFile->writeUnsignedInt(nextBlockOffset);
 
         // Write block data at end of file
@@ -1692,7 +1692,7 @@ namespace BitCoin
 
         delete outputFile;
 
-        mLastHash = pBlock.header.hash;
+        mLastHash = pBlock.header.hash();
         ++mCount;
         mModified = true;
 
@@ -1702,7 +1702,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Block::add(unsigned int pHeight, const Block &pBlock)
+    bool Block::add(unsigned int pHeight, Block &pBlock)
     {
         BlockFile *file = BlockFile::get(BlockFile::fileID(pHeight), true, true);
         if(file == NULL)
@@ -2082,14 +2082,14 @@ namespace BitCoin
         return result;
     }
 
-    BlockStat::BlockStat(const Block &pBlock, unsigned int pHeight) : hash(BLOCK_HASH_SIZE)
+    BlockStat::BlockStat(Block &pBlock, unsigned int pHeight) : hash(BLOCK_HASH_SIZE)
     {
         set(pBlock, pHeight);
     }
 
-    void BlockStat::set(const Block &pBlock, unsigned int pHeight)
+    void BlockStat::set(Block &pBlock, unsigned int pHeight)
     {
-        hash = pBlock.header.hash;
+        hash = pBlock.header.hash();
         time = pBlock.header.time;
         size = pBlock.size();
         transactionCount = pBlock.transactions.size();

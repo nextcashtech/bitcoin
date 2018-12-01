@@ -355,6 +355,8 @@ namespace BitCoin
 
         static void removeCodeSeparators(NextCash::Buffer &pInputScript, NextCash::Buffer &pOutputScript);
 
+        static NextCash::String coinBaseText(NextCash::Buffer &pScript,
+          unsigned int pBlockVersion);
         static NextCash::String scriptText(NextCash::Buffer &pScript, const Forks &pForks,
           unsigned int pBlockHeight);
         static void printScript(NextCash::Buffer &pScript, const Forks &pForks,

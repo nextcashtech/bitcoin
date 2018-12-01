@@ -830,7 +830,7 @@ namespace BitCoin
         return true;
     }
 
-    void Transaction::check(Chain *pChain, NextCash::Hash &pBlockHash, unsigned int pHeight,
+    void Transaction::check(Chain *pChain, const NextCash::Hash &pBlockHash, unsigned int pHeight,
       bool pCoinBase, int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
       std::vector<unsigned int> &pSpentAges, NextCash::Timer &pCheckDupTime,
       NextCash::Timer &pOutputLookupTime, NextCash::Timer &pSignatureTime)
@@ -911,7 +911,6 @@ namespace BitCoin
                 }
 
                 // Input script only contains data pushes, including hard coded value pushes
-                // TODO Decide if this is needed.
                 input->script.setReadOffset(0);
                 if(pChain->forks().cashFork201811IsActive(pHeight) &&
                   !ScriptInterpreter::isPushOnly(input->script))

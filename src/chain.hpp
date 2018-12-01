@@ -285,7 +285,7 @@ namespace BitCoin
         void updateBlockProgress(const NextCash::Hash &pHash, unsigned int pNodeID, Time pTime);
         // Mark blocks as requested by the specified node
         void markBlocksForNode(NextCash::HashList &pHashes, unsigned int pNodeID);
-        bool markBlockForNode(NextCash::Hash &pHash, unsigned int pNodeID);
+        bool markBlockForNode(const NextCash::Hash &pHash, unsigned int pNodeID);
         // Release all blocks requested by a specified node so they will be requested again
         void releaseBlocksForNode(unsigned int pNodeID);
         void releaseBlockForNode(const NextCash::Hash &pHash, unsigned int pNodeID);
@@ -487,7 +487,7 @@ namespace BitCoin
         bool checkBranches();
 
         NextCash::Mutex mBlockStatLock;
-        bool addBlockStat(const Block &pBlock, unsigned int pHeight);
+        bool addBlockStat(Block &pBlock, unsigned int pHeight);
 
     };
 }
