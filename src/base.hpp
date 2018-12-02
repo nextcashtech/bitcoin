@@ -240,9 +240,7 @@ namespace BitCoin
         const NextCash::Hash &getHash() { return mHash; }
 
     private:
-
         NextCash::Hash mHash;
-
     };
 
     namespace Base

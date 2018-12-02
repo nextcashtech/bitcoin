@@ -30,8 +30,8 @@ namespace BitCoin
     NextCash::Hash Chain::sBTCForkBlockHash("00000000000000000019f112ec0a9982926f1258cdcc558dd7c3b7e5dc7fa148");
 
     Chain::Chain() : mInfo(Info::instance()), mPendingLock("Chain Pending"),
-      mProcessMutex("Chain Process"), mHeadersLock("Chain Headers"), mBlockMutex("Blocks"),
-      mBranchLock("Chain Branches"), mBlockStatLock("Block Stat")
+      mProcessMutex("Chain Process"), mHeadersLock("Chain Headers"), mMemPool(this),
+      mBlockMutex("Blocks"), mBranchLock("Chain Branches"), mBlockStatLock("Block Stat")
     {
         mNextHeaderHeight = 0;
         mNextBlockHeight = 0;
@@ -57,6 +57,7 @@ namespace BitCoin
 
     Chain::~Chain()
     {
+        mMemPool.stop();
         mPendingLock.writeLock("Destroy");
         clearHeaderStats();
         for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();

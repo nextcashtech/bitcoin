@@ -89,13 +89,13 @@ namespace BitCoin
     {
     public:
 
-        MemPool();
+        MemPool(Chain *pChain);
         ~MemPool();
 
-        enum HashStatus { HASH_NEED, HASH_REQUESTED, HASH_ALREADY_HAVE, HASH_INVALID, HASH_LOW_FEE,
-          HASH_NON_STANDARD, HASH_DOUBLE_SPEND, HASH_REJECTED_ANCESTOR };
-        HashStatus hashStatus(Chain *pChain, const NextCash::Hash &pHash, unsigned int pNodeID,
-          bool pRetry);
+        enum HashStatus { HASH_NEED, HASH_REQUESTED, HASH_PROCESSING, HASH_ALREADY_HAVE,
+          HASH_INVALID, HASH_LOW_FEE, HASH_NON_STANDARD, HASH_DOUBLE_SPEND,
+          HASH_REJECTED_ANCESTOR };
+        HashStatus hashStatus(const NextCash::Hash &pHash, unsigned int pNodeID, bool pRetry);
 
         // Return requested hashes that need to be requested again.
         // Note: This doesn't seem to make sense. If a node announces a transaction that we don't
@@ -114,12 +114,9 @@ namespace BitCoin
         // Returns true if it was a missing outpoint given by this node.
         bool release(const NextCash::Hash &pHash, unsigned int pNodeID);
 
-        // Add transaction to mem pool. Returns false if it was already in the mem pool or is
-        //   invalid
-        enum AddStatus { ADDED, ALREADY_HAVE, NON_STANDARD, DOUBLE_SPEND, LOW_FEE,
-          UNSEEN_OUTPOINTS, IN_CHAIN, INVALID };
-        AddStatus add(Transaction *pTransaction, Chain *pChain,
-          unsigned int pNodeID, NextCash::HashList &pUnseenOutpoints);
+        // Add transaction to processing pipeline.
+        // Returns true if the transaction has been added.
+        bool add(Transaction *pTransaction);
 
         // Pull transactions that have been added to a block from the mempool.
         // Locks mempool while the block is being processed.
@@ -149,7 +146,7 @@ namespace BitCoin
         bool getOutput(const NextCash::Hash &pHash, uint32_t pIndex, Output &pOutput,
           bool pIsLocked);
 
-        void process(Chain *pChain);
+        void process();
 
         // Get transaction hashes that should be announced.
         void getToAnnounce(TransactionList &pList, unsigned int pNodeID);
@@ -162,6 +159,8 @@ namespace BitCoin
         NextCash::stream_size pendingSize() const { return mPendingSize; }
         unsigned int count() const { return mTransactions.size(); }
         unsigned int pendingCount() const { return mPendingTransactions.size(); }
+
+        void stop();
 
         // Request support
         class RequestData
@@ -204,6 +203,10 @@ namespace BitCoin
     private:
 
         Info &mInfo;
+        Chain *mChain;
+
+        // Adds transaction if valid. Deletes if not.
+        void addInternal(Transaction *pTransaction);
 
         bool insert(Transaction *pTransaction, bool pAnnounce);
 
@@ -274,19 +277,15 @@ namespace BitCoin
         bool haveTransaction(const NextCash::Hash &pHash);
 
         // Checks transaction validity.
-        bool check(Transaction *pTransaction, Chain *pChain, unsigned int pNodeID,
-          NextCash::HashList &pUnseenOutpoints, bool pPending);
+        bool check(Transaction *pTransaction);
 
-        bool checkPendingTransaction(Chain *pChain, Transaction *pTransaction,
-          unsigned int pDepth);
+        bool checkPendingTransaction(Transaction *pTransaction, unsigned int pDepth);
 
         // Check for child transactions of this transaction in pending.
-        void checkPendingForNewTransaction(Chain *pChain, const NextCash::Hash &pHash,
-          unsigned int pDepth);
+        void checkPendingForNewTransaction(const NextCash::Hash &pHash, unsigned int pDepth);
 
         // Remove any child transactions of this transaction from pending.
-        void removePendingForNewTransaction(Chain *pChain, const NextCash::Hash &pHash,
-          unsigned int pDepth);
+        void removePendingForNewTransaction(const NextCash::Hash &pHash, unsigned int pDepth);
 
         class OutpointHash : public NextCash::HashObject
         {
@@ -367,7 +366,6 @@ namespace BitCoin
 
         // Transaction hashes that failed to verify, had a low fee, are non-standard, or ...
         NextCash::HashSet mHashStatuses;
-
         void addHashStatus(const NextCash::Hash &pHash, HashStatus pStatus);
 
         NextCash::HashList mToAnnounce; // Transactions that need to be announced to peers.
@@ -385,9 +383,7 @@ namespace BitCoin
             const NextCash::Hash &getHash() { return mHash; }
 
         private:
-
             NextCash::Hash mHash;
-
         };
 
         // Hold removed transactions here, while a node is sending it, until the node releases it
@@ -395,6 +391,21 @@ namespace BitCoin
         NextCash::Mutex mNodeLock;
         NextCash::HashSet mNodeLocks;
         NextCash::HashSet mNodeLockedTransactions;
+
+        // Processing pipe line.
+        NextCash::Mutex mPipeLineLock;
+        NextCash::HashSet mPipeLineTransactions;
+        std::list<NextCash::Hash> mPipeLineQueue;
+        bool mStopping; // To notify threads to stop.
+        unsigned int mPipeLineThreadCount;
+        NextCash::Thread **mPipeLineThreads;
+
+        // Get the next transaction to process.
+        Transaction *getPipeLineTransaction();
+
+        // Process run in threads to accept transactions.
+        static void processPipeLine(void *pParameter);
+
     };
 }
 

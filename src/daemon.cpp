@@ -2065,7 +2065,7 @@ namespace BitCoin
 
             if(getTime() - mLastMemPoolProcessTime > 30)
             {
-                mChain.memPool().process(&mChain);
+                mChain.memPool().process();
                 mLastMemPoolProcessTime = getTime();
             }
 

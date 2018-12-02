@@ -1159,7 +1159,7 @@ namespace BitCoin
         NextCash::HashList toRequest;
         for(NextCash::HashList::iterator hash = mSavedTransactions.begin();
           hash != mSavedTransactions.end();)
-            switch(mChain->memPool().hashStatus(mChain, *hash, mID, true))
+            switch(mChain->memPool().hashStatus(*hash, mID, true))
             {
             case MemPool::HASH_NEED: // Failed previous request. Try with this node.
                 toRequest.push_back(*hash);
@@ -1168,7 +1168,7 @@ namespace BitCoin
             case MemPool::HASH_REQUESTED: // Still requested by another node.
                 ++hash;
                 break;
-            default: // Already processed.
+            default: // Already received.
                 hash = mSavedTransactions.erase(hash);
                 break;
             }
@@ -2425,7 +2425,7 @@ namespace BitCoin
 
                             if(!info.spvMode)
                             {
-                                switch(mChain->memPool().hashStatus(mChain, (*item)->hash, mID,
+                                switch(mChain->memPool().hashStatus((*item)->hash, mID,
                                   false))
                                 {
                                 case MemPool::HASH_NEED:
@@ -2438,6 +2438,11 @@ namespace BitCoin
                                       // "Transaction already requested : %s",
                                       // (*item)->hash.hex().text());
                                     mSavedTransactions.push_back((*item)->hash);
+                                    break;
+                                case MemPool::HASH_PROCESSING:
+                                    // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                                      // "Transaction processing : %s",
+                                      // (*item)->hash.hex().text());
                                     break;
                                 case MemPool::HASH_ALREADY_HAVE:
                                     // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
@@ -2734,81 +2739,8 @@ namespace BitCoin
                     if(!info.spvMode)
                     {
                         NextCash::HashList unseen, allUnseen;
-                        switch(mChain->memPool().add(transactionData->transaction, mChain, mID,
-                          unseen))
-                        {
-                        case MemPool::ADDED:
-                            if(mMonitor != NULL)
-                            {
-                                transactionData->transaction =
-                                  new Transaction(*transactionData->transaction);
-                                mMonitor->addTransaction(*mChain, transactionData);
-                            }
-                            else // So it won't be deleted with the message
-                                transactionData->transaction = NULL;
-                            break;
-
-                        case MemPool::UNSEEN_OUTPOINTS: // Added to pending
-                            requestTransactions(unseen, false);
-                            if(mMonitor != NULL)
-                            {
-                                transactionData->transaction =
-                                  new Transaction(*transactionData->transaction);
-                                mMonitor->addTransaction(*mChain, transactionData);
-                            }
-                            else // So it won't be deleted with the message
-                                transactionData->transaction = NULL;
-                            break;
-
-                        case MemPool::NON_STANDARD:
-                            sendRejectWithHash(Message::nameFor(message->type),
-                              Message::RejectData::NON_STANDARD, "Non standard",
-                              transactionData->transaction->hash());
-                            break;
-
-                        case MemPool::DOUBLE_SPEND:
-                            sendRejectWithHash(Message::nameFor(message->type),
-                              Message::RejectData::DUPLICATE, "Double spend",
-                              transactionData->transaction->hash());
-                            break;
-
-                        case MemPool::LOW_FEE:
-                            sendRejectWithHash(Message::nameFor(message->type),
-                              Message::RejectData::LOW_FEE, "Fee below minimum",
-                              transactionData->transaction->hash());
-                            break;
-
-                        case MemPool::IN_CHAIN:
-                            sendRejectWithHash(Message::nameFor(message->type),
-                              Message::RejectData::LOW_FEE, "Already in chain",
-                              transactionData->transaction->hash());
-                            ++mOldTransactionCount;
-                            if(mOldTransactionCount > 100)
-                            {
-                                NextCash::Log::add(NextCash::Log::INFO, mName,
-                                  "Dropping. Sent too many transactions already in chain");
-                                info.addPeerFail(mAddress);
-                                close();
-                                success = false;
-                            }
-                            break;
-
-                        case MemPool::INVALID:
-                            sendRejectWithHash(Message::nameFor(message->type),
-                              Message::RejectData::INVALID, "Invalid transaction",
-                              transactionData->transaction->hash());
-
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                              "Dropping. Sent invalid transaction : %s",
-                              transactionData->transaction->hash().hex().text());
-                            info.addPeerFail(mAddress);
-                            close();
-                            success = false;
-                            break;
-
-                        default:
-                            break;
-                        }
+                        if(mChain->memPool().add(transactionData->transaction))
+                            transactionData->transaction = NULL;
                     }
                     else if(mMonitor != NULL)
                         mMonitor->addTransaction(*mChain, transactionData);
