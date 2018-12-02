@@ -212,6 +212,7 @@ namespace BitCoin
         NextCash::Mutex mConnectionMutex;
         NextCash::Network::Connection *mConnection;
         NextCash::Buffer mReceiveBuffer;
+        NextCash::Mutex mStatisticsLock;
         Statistics mStatistics;
         bool mStarted, mIsInitialized, mStopRequested, mStopped;
         uint32_t mConnectionType;

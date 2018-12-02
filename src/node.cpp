@@ -25,8 +25,10 @@ namespace BitCoin
     unsigned int Node::mNextID = 256;
 
     Node::Node(NextCash::Network::Connection *pConnection, uint32_t pConnectionType,
-      uint64_t pServices, Daemon *pDaemon, bool *pStopFlag, bool pAnnounceCompact) : mConnectionMutex("Node Connection"),
-      mMessagesToSendLock("Node Messages"), mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce")
+      uint64_t pServices, Daemon *pDaemon, bool *pStopFlag, bool pAnnounceCompact) :
+      mConnectionMutex("Node Connection"), mStatisticsLock("Statistics"),
+      mMessagesToSendLock("Node Messages"), mBlockRequestMutex("Node Block Request"),
+      mAnnounceMutex("Node Announce")
     {
         mConnectionType = pConnectionType;
         mRequestAnnounceCompact = pAnnounceCompact;
@@ -110,8 +112,8 @@ namespace BitCoin
 
     Node::Node(NextCash::IPAddress &pIPAddress, uint32_t pConnectionType, uint64_t pServices,
       Daemon *pDaemon, bool pAnnounceCompact) : mConnectionMutex("Node Connection"),
-      mMessagesToSendLock("Node Messages"), mBlockRequestMutex("Node Block Request"),
-      mAnnounceMutex("Node Announce")
+      mStatisticsLock("Statistics"), mMessagesToSendLock("Node Messages"),
+      mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce")
     {
         mConnectionType = pConnectionType;
         mRequestAnnounceCompact = pAnnounceCompact;
@@ -311,16 +313,10 @@ namespace BitCoin
 
     void Node::collectStatistics(Statistics &pCollection)
     {
-        if(!mConnected)
-            return;
-
-        mConnectionMutex.lock();
-        mStatistics.bytesReceived += mConnection->bytesReceived();
-        mStatistics.bytesSent += mConnection->bytesSent();
-        mConnection->resetByteCounts();
-        mConnectionMutex.unlock();
+        mStatisticsLock.lock();
         pCollection += mStatistics;
         mStatistics.clear();
+        mStatisticsLock.unlock();
     }
 
     void Node::prepare()
@@ -379,6 +375,14 @@ namespace BitCoin
 
         if(!isOpen())
             return false;
+
+        mConnectionMutex.lock();
+        mStatisticsLock.lock();
+        mStatistics.bytesReceived += mConnection->bytesReceived();
+        mStatistics.bytesSent += mConnection->bytesSent();
+        mConnection->resetByteCounts();
+        mStatisticsLock.unlock();
+        mConnectionMutex.unlock();
 
         Info &info = Info::instance();
 

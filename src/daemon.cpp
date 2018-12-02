@@ -544,11 +544,10 @@ namespace BitCoin
             for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
             {
                 blocksRequestedCount += (*node)->blocksRequestedCount();
+                (*node)->collectStatistics(mStatistics);
             }
             mNodeLock.readUnlock();
         }
-
-        collectStatistics();
 
         NextCash::String timeText;
 
