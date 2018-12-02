@@ -160,34 +160,12 @@ namespace BitCoin
 
         mLock.readLock();
 
-        if(mInvalidHashes.contains(pHash))
+        HashStatusTime *status = (HashStatusTime *)mHashStatuses.get(pHash);
+        if(status != NULL)
         {
+            HashStatus result = status->status;
             mLock.readUnlock();
-            return HASH_INVALID;
-        }
-
-        if(mLowFeeHashes.contains(pHash))
-        {
-            mLock.readUnlock();
-            return HASH_LOW_FEE;
-        }
-
-        if(mNonStandardHashes.contains(pHash))
-        {
-            mLock.readUnlock();
-            return HASH_NON_STANDARD;
-        }
-
-        if(mDoubleSpendHashes.contains(pHash))
-        {
-            mLock.readUnlock();
-            return HASH_DOUBLE_SPEND;
-        }
-
-        if(mRejectedAncestorHashes.contains(pHash))
-        {
-            mLock.readUnlock();
-            return HASH_REJECTED_ANCESTOR;
+            return result;
         }
 
         if(haveTransaction(pHash))
@@ -206,39 +184,11 @@ namespace BitCoin
         return HASH_NEED;
     }
 
-    void MemPool::addInvalidHash(const NextCash::Hash &pHash)
+    void MemPool::addHashStatus(const NextCash::Hash &pHash, HashStatus pStatus)
     {
-        HashTime *newHashTime = new HashTime(pHash);
-        if(!mInvalidHashes.insert(newHashTime))
-            delete newHashTime;
-    }
-
-    void MemPool::addLowFeeHash(const NextCash::Hash &pHash)
-    {
-        HashTime *newHashTime = new HashTime(pHash);
-        if(!mLowFeeHashes.insert(newHashTime))
-            delete newHashTime;
-    }
-
-    void MemPool::addNonStandardHash(const NextCash::Hash &pHash)
-    {
-        HashTime *newHashTime = new HashTime(pHash);
-        if(!mNonStandardHashes.insert(newHashTime))
-            delete newHashTime;
-    }
-
-    void MemPool::addDoubleSpendHash(const NextCash::Hash &pHash)
-    {
-        HashTime *newHashTime = new HashTime(pHash);
-        if(!mDoubleSpendHashes.insert(newHashTime))
-            delete newHashTime;
-    }
-
-    void MemPool::addRejectedAncestorHash(const NextCash::Hash &pHash)
-    {
-        HashTime *newHashTime = new HashTime(pHash);
-        if(!mRejectedAncestorHashes.insert(newHashTime))
-            delete newHashTime;
+        HashStatusTime *newHashStatusTime = new HashStatusTime(pHash, pStatus);
+        if(!mHashStatuses.insert(newHashStatusTime))
+            delete newHashStatusTime;
     }
 
     void MemPool::getToAnnounce(TransactionList &pList, unsigned int pNodeID)
@@ -449,7 +399,7 @@ namespace BitCoin
         else if(!pTransaction->isStandard())
         {
             mLock.writeLock("Non Standard Pending");
-            addNonStandardHash(pTransaction->hash());
+            addHashStatus(pTransaction->hash(), HASH_NON_STANDARD);
             mValidatingTransactions.removeSorted(pTransaction->hash());
             mLock.writeUnlock();
 
@@ -580,7 +530,7 @@ namespace BitCoin
                       "Removing descendant of rejected transaction (%d bytes) : %s",
                       ((Transaction *)*trans)->size(), (*trans)->getHash().hex().text());
                     pendingRemoved.push_back((*trans)->getHash());
-                    addRejectedAncestorHash((*trans)->getHash());
+                    addHashStatus((*trans)->getHash(), HASH_REJECTED_ANCESTOR);
                     mPendingSize -= ((Transaction *)*trans)->size();
                     trans = mPendingTransactions.eraseDelete(trans);
                     removed = true;
@@ -653,7 +603,7 @@ namespace BitCoin
               pTransaction->hash().hex().text());
 
             mLock.writeLock("AddInvalid");
-            addInvalidHash(pTransaction->hash());
+            addHashStatus(pTransaction->hash(), HASH_INVALID);
             mValidatingTransactions.removeSorted(pTransaction->hash());
             mLock.writeUnlock();
             removePendingForNewTransaction(pChain, pTransaction->hash(), 1);
@@ -671,7 +621,7 @@ namespace BitCoin
                 pTransaction->print(pChain->forks(), NextCash::Log::VERBOSE);
 
                 mLock.writeLock("AddNonStd");
-                addNonStandardHash(pTransaction->hash());
+                addHashStatus(pTransaction->hash(), HASH_NON_STANDARD);
                 mValidatingTransactions.removeSorted(pTransaction->hash());
                 mLock.writeUnlock();
                 removePendingForNewTransaction(pChain, pTransaction->hash(), 1);
@@ -687,7 +637,7 @@ namespace BitCoin
                   pTransaction->hash().hex().text());
 
                 mLock.writeLock("AddLow");
-                addLowFeeHash(pTransaction->hash());
+                addHashStatus(pTransaction->hash(), HASH_LOW_FEE);
                 mValidatingTransactions.removeSorted(pTransaction->hash());
                 mLock.writeUnlock();
                 removePendingForNewTransaction(pChain, pTransaction->hash(), 1);
@@ -702,7 +652,7 @@ namespace BitCoin
                   pTransaction->size(), pTransaction->hash().hex().text());
 
                 mLock.writeLock("AddLow");
-                addLowFeeHash(pTransaction->hash());
+                addHashStatus(pTransaction->hash(), HASH_LOW_FEE);
                 mValidatingTransactions.removeSorted(pTransaction->hash());
                 mLock.writeUnlock();
                 removePendingForNewTransaction(pChain, pTransaction->hash(), 1);
@@ -718,7 +668,7 @@ namespace BitCoin
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
               "Transaction has double spend : %s", pTransaction->hash().hex().text());
-            addDoubleSpendHash(pTransaction->hash());
+            addHashStatus(pTransaction->hash(), HASH_DOUBLE_SPEND);
             mLock.writeUnlock();
             removePendingForNewTransaction(pChain, pTransaction->hash(), 1);
             return DOUBLE_SPEND;
@@ -908,11 +858,7 @@ namespace BitCoin
         mTransactions.shrink();
         mPendingTransactions.shrink();
 
-        mInvalidHashes.shrink();
-        mLowFeeHashes.shrink();
-        mNonStandardHashes.shrink();
-        mDoubleSpendHashes.shrink();
-        mRejectedAncestorHashes.shrink();
+        mHashStatuses.shrink();
 
         mLock.writeUnlock();
 
@@ -1228,17 +1174,17 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Expired %d requested hashes", count);
 
-        // Expire invalid hashes
+        // Expire hash statuses
         expireTime = getTime() - (60 * 60); // 1 hour
         count = 0;
-        for(NextCash::HashSet::Iterator hash = mInvalidHashes.begin();
-          hash != mInvalidHashes.end();)
+        for(NextCash::HashSet::Iterator hash = mHashStatuses.begin();
+          hash != mHashStatuses.end();)
         {
-            if(((HashTime *)*hash)->time < expireTime)
+            if(((HashStatusTime *)*hash)->time < expireTime)
             {
                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Expiring invalid hash : %s", (*hash)->getHash().hex().text());
-                hash = mInvalidHashes.eraseDelete(hash);
+                  "Expiring hash status : %s", (*hash)->getHash().hex().text());
+                hash = mHashStatuses.eraseDelete(hash);
                 ++count;
             }
             else
@@ -1247,86 +1193,7 @@ namespace BitCoin
 
         if(count > 0)
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Expired %d invalid hashes", count);
-
-        // Expire low fee hashes
-        count = 0;
-        for(NextCash::HashSet::Iterator hash = mLowFeeHashes.begin(); hash != mLowFeeHashes.end();)
-        {
-            if(((HashTime *)*hash)->time < expireTime)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Expiring low fee hash : %s", (*hash)->getHash().hex().text());
-                hash = mLowFeeHashes.eraseDelete(hash);
-                ++count;
-            }
-            else
-                ++hash;
-        }
-
-        if(count > 0)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Expired %d low fee hashes", count);
-
-        // Expire non-standard hashes
-        count = 0;
-        for(NextCash::HashSet::Iterator hash = mNonStandardHashes.begin();
-          hash != mNonStandardHashes.end();)
-        {
-            if(((HashTime *)*hash)->time < expireTime)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Expiring non-standard hash : %s", (*hash)->getHash().hex().text());
-                hash = mNonStandardHashes.eraseDelete(hash);
-                ++count;
-            }
-            else
-                ++hash;
-        }
-
-        if(count > 0)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Expired %d non-standard hashes", count);
-
-        // Expire double spend hashes
-        count = 0;
-        for(NextCash::HashSet::Iterator hash = mDoubleSpendHashes.begin();
-          hash != mDoubleSpendHashes.end();)
-        {
-            if(((HashTime *)*hash)->time < expireTime)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Expiring double spend hash : %s", (*hash)->getHash().hex().text());
-                hash = mDoubleSpendHashes.eraseDelete(hash);
-                ++count;
-            }
-            else
-                ++hash;
-        }
-
-        if(count > 0)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Expired %d double spend hashes", count);
-
-        // Expire rejected ancestor hashes
-        count = 0;
-        for(NextCash::HashSet::Iterator hash = mRejectedAncestorHashes.begin();
-          hash != mRejectedAncestorHashes.end();)
-        {
-            if(((HashTime *)*hash)->time < expireTime)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Expiring rejected ancestor hash : %s", (*hash)->getHash().hex().text());
-                hash = mRejectedAncestorHashes.eraseDelete(hash);
-                ++count;
-            }
-            else
-                ++hash;
-        }
-
-        if(count > 0)
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              "Expired %d rejected ancestor hashes", count);
+              "Expired %d hash statuses", count);
 
         mLock.writeUnlock();
     }

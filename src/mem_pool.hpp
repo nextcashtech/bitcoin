@@ -337,15 +337,38 @@ namespace BitCoin
         NextCash::HashSet mTransactions; // Verified transactions.
         NextCash::HashSet mPendingTransactions; // Transactions waiting for unseen outpoints.
 
-        // Transactions that failed to verify, had a low fee, or are non-standard.
-        NextCash::HashSet mInvalidHashes, mLowFeeHashes, mNonStandardHashes, mDoubleSpendHashes,
-          mRejectedAncestorHashes;
+        // Object used to save hashes with times in a HashSet.
+        class HashStatusTime : public NextCash::HashObject
+        {
+        public:
 
-        void addInvalidHash(const NextCash::Hash &pHash);
-        void addLowFeeHash(const NextCash::Hash &pHash);
-        void addNonStandardHash(const NextCash::Hash &pHash);
-        void addDoubleSpendHash(const NextCash::Hash &pHash);
-        void addRejectedAncestorHash(const NextCash::Hash &pHash);
+            HashStatusTime(const NextCash::Hash &pHash, HashStatus pStatus) : mHash(pHash)
+            {
+                time = getTime();
+                status = pStatus;
+            }
+            HashStatusTime(HashStatusTime &pCopy) : mHash(pCopy.mHash)
+            {
+                time = pCopy.time;
+                status = pCopy.status;
+            }
+            ~HashStatusTime() {}
+
+            Time time;
+            HashStatus status;
+
+            const NextCash::Hash &getHash() { return mHash; }
+
+        private:
+
+            NextCash::Hash mHash;
+
+        };
+
+        // Transaction hashes that failed to verify, had a low fee, are non-standard, or ...
+        NextCash::HashSet mHashStatuses;
+
+        void addHashStatus(const NextCash::Hash &pHash, HashStatus pStatus);
 
         NextCash::HashList mToAnnounce; // Transactions that need to be announced to peers.
 

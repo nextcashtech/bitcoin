@@ -232,6 +232,7 @@ namespace BitCoin
     public:
 
         HashTime(const NextCash::Hash &pHash) : mHash(pHash) { time = getTime(); }
+        HashTime(HashTime &pCopy) : mHash(pCopy.mHash) { time = pCopy.time; }
         ~HashTime() {}
 
         Time time;
