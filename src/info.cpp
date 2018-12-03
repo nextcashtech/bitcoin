@@ -562,8 +562,6 @@ namespace BitCoin
             readPeersFile();
 
         // Add new
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
-          "Adding new peer %s", pAddress.text().text());
         bool result = true;
         Peer *newPeer = new Peer;
         newPeer->rating = 0;
@@ -573,7 +571,11 @@ namespace BitCoin
 
         mPeerLock.writeLock("Add");
         if(mPeers.insert(newPeer))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
+              "Added new peer %s", pAddress.text().text());
             mPeersModified = true;
+        }
         else
         {
             delete newPeer;
