@@ -265,10 +265,12 @@ namespace BitCoin
         bool isValid() const { return mStatus & IS_VALID; }
         bool isStandard() const { return mStatus & IS_STANDARD; }
         bool outpointsFound() const { return mStatus & OUTPOINTS_FOUND; }
-        bool isVerified() const { return mStatus & (IS_VALID | SIGS_VERIFIED | OUTPOINTS_FOUND); }
 
         // Flag masks
-        static const uint8_t STANDARD_VERIFIED_MASK = IS_VALID | IS_STANDARD | SIGS_VERIFIED;
+        static const uint8_t VERIFIED_MASK = IS_VALID | SIGS_VERIFIED | OUTPOINTS_FOUND;
+        bool isVerified() const
+          { return (mStatus & VERIFIED_MASK) == VERIFIED_MASK; }
+        static const uint8_t STANDARD_VERIFIED_MASK = VERIFIED_MASK | IS_STANDARD;
         bool isStandardVerified() const
           { return (mStatus & STANDARD_VERIFIED_MASK) == STANDARD_VERIFIED_MASK; }
 

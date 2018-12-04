@@ -1018,6 +1018,8 @@ namespace BitCoin
                     }
                 }
 
+            mStatus |= OUTPOINTS_FOUND;
+            mStatus |= SIGS_VERIFIED;
             mFee = newFee;
         }
         else
@@ -2071,8 +2073,9 @@ namespace BitCoin
 
     TransactionList::~TransactionList()
     {
-        for(std::vector<Transaction *>::iterator item=begin();item!=end();++item)
-            delete *item;
+        for(std::vector<Transaction *>::iterator item = begin(); item != end(); ++item)
+            if(*item != NULL)
+                delete *item;
     }
 
     Transaction *TransactionList::getSorted(const NextCash::Hash &pHash)
