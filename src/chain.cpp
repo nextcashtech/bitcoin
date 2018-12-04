@@ -396,7 +396,7 @@ namespace BitCoin
         // Read all main chain blocks above branch height and put them in a branch.
         Block *block;
         Info &info = Info::instance();
-        for(unsigned int height = longestBranch->height; height < headerHeight(); ++height)
+        for(unsigned int height = longestBranch->height; height <= headerHeight(); ++height)
         {
             block = new Block();
             if(info.spvMode || blockHeight() < height)
