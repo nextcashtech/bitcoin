@@ -114,6 +114,13 @@ namespace BitCoin
         return true;
     }
 
+    void TransactionReference::clearSpends()
+    {
+        uint32_t *spentHeight = mSpentHeights;
+        for(unsigned int i = 0; i < mOutputCount; ++i, ++spentHeight)
+            *spentHeight = 0;
+    }
+
     void TransactionReference::clearOutputs()
     {
         if(mSpentHeights != NULL)
@@ -387,6 +394,7 @@ namespace BitCoin
                           "Reversing removal of transaction output for block height %d : %s",
                           pBlockHeight, (*transaction)->hash().hex().text());
                         (*item)->clearRemove();
+                        (*item)->clearSpends();
                         valid = true;
                         delete transactionReference;
                         transactionReference = (TransactionReference *)*item;
@@ -454,7 +462,7 @@ namespace BitCoin
                             {
                                 NextCash::Log::addFormatted(NextCash::Log::DEBUG,
                                   BITCOIN_OUTPUTS_LOG_NAME,
-                                  "Reverting spend on input transaction : %s index %d",
+                                  "Reverted spend on input transaction : %s index %d",
                                   input->outpoint.transactionID.hex().text(),
                                   input->outpoint.index);
                             }

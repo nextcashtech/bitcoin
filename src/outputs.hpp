@@ -240,6 +240,7 @@ namespace BitCoin
             else
                 return false;
         }
+        void clearSpends();
 
         // HashObject virtual functions
         const NextCash::Hash &getHash() { return mHash; }
