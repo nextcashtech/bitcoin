@@ -356,6 +356,7 @@ namespace BitCoin
                     // Drop branches that are HISTORY_BRANCH_CHECKING blocks behind the main chain
                     delete *branch;
                     branch = mBranches.erase(branch);
+                    ++offset;
                     continue;
                 }
             }
@@ -376,7 +377,7 @@ namespace BitCoin
 
         // Swap the branch with the most "work" for the main chain.
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Activating branch at height %d (%d headers)", longestBranch->height,
+          "Activating branch at height %d (%d blocks)", longestBranch->height,
           longestBranch->pendingBlocks.size());
 
         // Remove branch from branch list
@@ -417,6 +418,13 @@ namespace BitCoin
             mLastFullPendingOffset = 0;
             mPendingBlockCount = 0;
         }
+
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+          "Main converted to branch at height %d (%d blocks)", newBranch->height,
+          newBranch->pendingBlocks.size());
+
+        // Add the previous main branch as a new branch
+        mBranches.push_back(newBranch);
 
         // Revert the main chain to the before branch height.
         mProcessMutex.lock();
@@ -474,11 +482,7 @@ namespace BitCoin
         }
 
         longestBranch->pendingBlocks.clear(); // No deletes necessary since they were reused
-
         delete longestBranch;
-
-        // Add the previous main branch as a new branch
-        mBranches.push_back(newBranch);
 
         mProcessMutex.unlock();
         mBranchLock.unlock();
@@ -1171,22 +1175,22 @@ namespace BitCoin
         unsigned int branchID = 1;
         if(!(pLocks & LOCK_BRANCHES))
             mBranchLock.lock();
-        for(std::vector<Branch *>::iterator branch = mBranches.begin();
-          branch != mBranches.end(); ++branch, ++branchID)
+        for(std::vector<Branch *>::iterator branch = mBranches.begin(); branch != mBranches.end();
+          ++branch, ++branchID)
         {
             if(pHeader.previousHash == (*branch)->pendingBlocks.back()->block->header.hash())
             {
                 // Add at end of branch
                 (*branch)->addBlock(new Block(pHeader));
-                if(!(pLocks & LOCK_BRANCHES))
-                    mBranchLock.unlock();
-                if(!(pLocks & LOCK_HEADERS))
-                    mHeadersLock.writeUnlock();
                 unsigned int branchHeight = (*branch)->height + (*branch)->pendingBlocks.size() -
                   1;
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                   "Added header to branch %d (%d blocks) at height %d : %s", branchID,
                   (*branch)->pendingBlocks.size(), branchHeight, pHeader.hash().hex().text());
+                if(!(pLocks & LOCK_BRANCHES))
+                    mBranchLock.unlock();
+                if(!(pLocks & LOCK_HEADERS))
+                    mHeadersLock.writeUnlock();
                 if(checkBranches())
                     return HEADER_ADDED;
                 else
@@ -1208,13 +1212,12 @@ namespace BitCoin
                       "Header already in branch %d (%d blocks) at height %d : %s", branchID,
                       (*branch)->pendingBlocks.size(), branchHeaderHeight,
                       pHeader.hash().hex().text());
+                    unsigned int branchHeight = (*branch)->height +
+                      (*branch)->pendingBlocks.size() - 1;
                     if(!(pLocks & LOCK_BRANCHES))
                         mBranchLock.unlock();
                     if(!(pLocks & LOCK_HEADERS))
                         mHeadersLock.writeUnlock();
-
-                    unsigned int branchHeight = (*branch)->height +
-                      (*branch)->pendingBlocks.size() - 1;
                     if(branchHeight < headerHeight() && headerHeight() - branchHeight > 10)
                         return SHORT_CHAIN;
                     else
@@ -1267,11 +1270,11 @@ namespace BitCoin
 
         if(!(pLocks & LOCK_BRANCHES))
             mBranchLock.unlock();
+        if(!(pLocks & LOCK_HEADERS))
+            mHeadersLock.writeUnlock();
 
         NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
           "Unknown header : %s", pHeader.hash().hex().text());
-        if(!(pLocks & LOCK_HEADERS))
-            mHeadersLock.writeUnlock();
         return UNKNOWN;
     }
 
@@ -1611,13 +1614,12 @@ namespace BitCoin
                 {
                     if((*pending)->isFull())
                     {
-                        mBranchLock.unlock();
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                           "Block already received on branch %d from [%d]: %s", branchID,
                           (*pending)->requestingNode, pBlock->header.hash().hex().text());
-
                         unsigned int branchHeight = (*branch)->height +
                           (*branch)->pendingBlocks.size() - 1;
+                        mBranchLock.unlock();
                         if(branchHeight < headerHeight() && headerHeight() - branchHeight > 10)
                             return SHORT_CHAIN;
                         else
@@ -1634,13 +1636,12 @@ namespace BitCoin
                         }
 
                         (*pending)->replace(pBlock);
-                        mBranchLock.unlock();
                         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
                           "Block received on branch %d from [%d]: %s", branchID,
                           (*pending)->requestingNode, pBlock->header.hash().hex().text());
-
                         unsigned int branchHeight = (*branch)->height +
                           (*branch)->pendingBlocks.size() - 1;
+                        mBranchLock.unlock();
                         if(branchHeight < headerHeight() && headerHeight() - branchHeight > 10)
                             return SHORT_CHAIN;
                         else
