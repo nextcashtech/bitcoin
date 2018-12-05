@@ -20,6 +20,7 @@
 #include "block.hpp"
 #include "key.hpp"
 #include "bloom_filter.hpp"
+#include "bloom_lookup.hpp"
 
 #include <cstdint>
 
@@ -53,7 +54,8 @@ namespace BitCoin
             // Version >= 70014
             SEND_COMPACT, COMPACT_BLOCK, GET_COMPACT_TRANS, COMPACT_TRANS, // BIP-0152
 
-            THIN_BLOCK
+            // BUIP-0093 Graphene
+            GET_GRAPHENE, GRAPHENE, GET_GRAPHENE_TRANS, GRAPHENE_TRANS
 
         };
 
@@ -125,6 +127,8 @@ namespace BitCoin
                     pStream->readByte();
                 return true;
             }
+
+            bool isBlockData();
 
             Type type;
             NextCash::stream_size size;
@@ -337,7 +341,7 @@ namespace BitCoin
         {
         public:
 
-            FilterLoadData() : Data(FILTER_LOAD) { }
+            FilterLoadData() : Data(FILTER_LOAD), filter(BloomFilter::STANDARD) { }
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
@@ -635,13 +639,72 @@ namespace BitCoin
             CompactTransData() : Data(COMPACT_TRANS) {}
             CompactTransData(const NextCash::Hash &pHeaderHash) : Data(COMPACT_TRANS),
               headerHash(pHeaderHash) {}
-            ~CompactTransData();
+            ~CompactTransData() {}
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             NextCash::Hash headerHash;
-            std::vector<Transaction *> transactions;
+            TransactionList transactions;
+        };
+
+        class GetGrapheneBlockData : public Data
+        {
+        public:
+
+            GetGrapheneBlockData() : Data(GET_GRAPHENE) {}
+            ~GetGrapheneBlockData() {}
+
+            // void write(NextCash::OutputStream *pStream);
+            // bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
+
+        };
+
+        class GrapheneBlockData : public Data
+        {
+        public:
+
+            GrapheneBlockData() : Data(GRAPHENE), filter(BloomFilter::GRAPHENE) {}
+            ~GrapheneBlockData() {}
+
+            // void write(NextCash::OutputStream *pStream);
+            // bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
+
+            Header header;
+            TransactionList transactions;
+            uint64_t blockTransactionCount;
+
+            // Set
+            uint8_t ordered;
+            uint64_t receiverItems;
+            std::vector<uint8_t> order;
+            BloomFilter filter;
+            BloomLookup lookup;
+
+        };
+
+        class GetGrapheneTransactionData : public Data
+        {
+        public:
+
+            GetGrapheneTransactionData() : Data(GET_GRAPHENE_TRANS) {}
+            ~GetGrapheneTransactionData() {}
+
+            // void write(NextCash::OutputStream *pStream);
+            // bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
+
+        };
+
+        class GrapheneTransactionData : public Data
+        {
+        public:
+
+            GrapheneTransactionData() : Data(GRAPHENE_TRANS) {}
+            ~GrapheneTransactionData() {}
+
+            // void write(NextCash::OutputStream *pStream);
+            // bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
+
         };
 
         bool test();

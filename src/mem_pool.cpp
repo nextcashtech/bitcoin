@@ -597,6 +597,10 @@ namespace BitCoin
 
     bool MemPool::add(Transaction *pTransaction)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_MEMPOOL_ADD_ID, PROFILER_MEMPOOL_ADD_NAME), true);
+#endif
         NextCash::Timer timer(true);
 
         mLock.writeLock("Add Check");
@@ -644,10 +648,10 @@ namespace BitCoin
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_MEMPOOL_ADD_ID, PROFILER_MEMPOOL_ADD_NAME), true);
+          PROFILER_MEMPOOL_ADD_INTERNAL_ID, PROFILER_MEMPOOL_ADD_INTERNAL_NAME), true);
 
         NextCash::Profiler &profilerMB = NextCash::getProfiler(PROFILER_SET,
-          PROFILER_MEMPOOL_ADD_B_ID, PROFILER_MEMPOOL_ADD_B_NAME);
+          PROFILER_MEMPOOL_ADD_INTERNAL_B_ID, PROFILER_MEMPOOL_ADD_INTERNAL_B_NAME);
         profilerMB.addHits(pTransaction->size());
 #endif
         NextCash::Timer timer(true);

@@ -20,6 +20,10 @@ bool chainTest();
 bool merkleTest1();
 bool merkleTest2();
 
+// To run with valgrind.
+//   make test.debug
+//   valgrind --leak-check=full --log-file=valgrind.log --max-stackframe=10000000 ./test.debug
+
 
 namespace BitCoin
 {
@@ -116,7 +120,7 @@ bool merkleTest1()
         return false;
     }
 
-    BitCoin::BloomFilter filter(100);
+    BitCoin::BloomFilter filter(BitCoin::BloomFilter::STANDARD, 100);
     NextCash::Hash addressHash;
     BitCoin::PaymentRequest paymentRequest;
 
@@ -172,8 +176,8 @@ bool merkleTest1()
     {
         if(node->transaction != NULL)
         {
-            foundHash = node->transaction->hash;
-            if(node->transaction->hash == transactionHash)
+            foundHash = node->transaction->hash();
+            if(node->transaction->hash() == transactionHash)
                 found = true;
             break;
         }
@@ -200,7 +204,7 @@ bool merkleTest1()
 
     found = false;
     for(std::vector<BitCoin::Transaction *>::iterator trans=transactionsToSend.begin();trans!=transactionsToSend.end();++trans)
-        if((*trans)->hash == transactionHash)
+        if((*trans)->hash() == transactionHash)
         {
             found = true;
             break;
@@ -293,7 +297,7 @@ bool merkleTest2()
         return false;
     }
 
-    BitCoin::BloomFilter filter(100);
+    BitCoin::BloomFilter filter(BitCoin::BloomFilter::STANDARD, 100);
     NextCash::Hash addressHash;
     BitCoin::PaymentRequest paymentRequest;
 
@@ -347,8 +351,8 @@ bool merkleTest2()
     {
         if(node->transaction != NULL)
         {
-            foundHash = node->transaction->hash;
-            if(node->transaction->hash == transactionHash)
+            foundHash = node->transaction->hash();
+            if(node->transaction->hash() == transactionHash)
                 found = true;
             break;
         }
@@ -375,7 +379,7 @@ bool merkleTest2()
 
     found = false;
     for(std::vector<BitCoin::Transaction *>::iterator trans=transactionsToSend.begin();trans!=transactionsToSend.end();++trans)
-        if((*trans)->hash == transactionHash)
+        if((*trans)->hash() == transactionHash)
         {
             found = true;
             break;
@@ -451,17 +455,17 @@ const NextCash::Hash &addBlock(BitCoin::Chain &pChain, const NextCash::Hash &pPr
     newBlock->header.targetBits = pTargetBits;
     newBlock->header.previousHash = pPreviousHash;
     newBlock->transactions.push_back(BitCoin::Transaction::createCoinbaseTransaction(pBlockHeight, 0, pCoinbaseKeyHash));
-    pTransactionID = newBlock->transactions.front()->hash;
+    pTransactionID = newBlock->transactions.front()->hash();
     newBlock->finalize();
 
     if(pChain.addBlock(newBlock) != 0)
     {
         NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed to add block %d : %s",
-          pBlockHeight, newBlock->header.hash.hex().text());
+          pBlockHeight, newBlock->header.hash().hex().text());
         return emptyHash;
     }
 
-    return newBlock->header.hash;
+    return newBlock->header.hash();
 }
 
 // Build blocks with zero difficulty and test chain reverts and branch switches

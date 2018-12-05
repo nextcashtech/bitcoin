@@ -22,7 +22,7 @@
 
 namespace BitCoin
 {
-    Monitor::Monitor() : mMutex("Monitor")
+    Monitor::Monitor() : mMutex("Monitor"), mFilter(BloomFilter::STANDARD)
     {
         mKeyStore = NULL;
         mFilterID = 0;

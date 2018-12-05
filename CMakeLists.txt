@@ -22,6 +22,7 @@ add_library( bitcoin STATIC SHARED
              src/base.cpp
              src/block.cpp
              src/bloom_filter.cpp
+             src/bloom_lookup.cpp
              src/chain.cpp
              src/daemon.cpp
              src/forks.cpp

@@ -23,9 +23,12 @@ namespace BitCoin
 {
     const unsigned int BloomFilter::MAX_SIZE = 36000; // bytes
     const unsigned int BloomFilter::MAX_FUNCTIONS = 50;
+    const unsigned int BloomFilter::MIN_FUNCTIONS = 1;
 
-    BloomFilter::BloomFilter(unsigned int pElementCount, unsigned char pFlags, double pFalsePositiveRate, unsigned int pTweak)
+    BloomFilter::BloomFilter(Format pFormat, unsigned int pElementCount, unsigned char pFlags,
+      double pFalsePositiveRate, unsigned int pTweak)
     {
+        mFormat = pFormat;
         mData = NULL;
         setup(pElementCount, pFlags, pFalsePositiveRate, pTweak);
     }
@@ -36,27 +39,48 @@ namespace BitCoin
             delete[] mData;
     }
 
-    void BloomFilter::setup(unsigned int pElementCount, unsigned char pFlags, double pFalsePositiveRate, unsigned int pTweak)
+    void BloomFilter::setup(unsigned int pElementCount, unsigned char pFlags,
+      double pFalsePositiveRate, unsigned int pTweak)
     {
         if(mData != NULL)
             delete[] mData;
 
-        if(pElementCount < 20)
-            pElementCount = 20;
+        if(mFormat == GRAPHENE)
+        {
+            if(pElementCount < 1)
+                pElementCount = 1;
 
-        mDataSize = std::min((unsigned int)(-1 / LN2SQUARED * pElementCount * log(pFalsePositiveRate)), MAX_SIZE * 8) / 8;
+            mDataSize =
+              (unsigned int)(std::ceil(-1 / LN2SQUARED * pElementCount * log(pFalsePositiveRate) /
+              8));
+            mHashFunctionCount = std::max(MIN_FUNCTIONS,
+              (unsigned int)(mDataSize * 8 / pElementCount * LN2));
+        }
+        else
+        {
+            if(pElementCount < 20)
+                pElementCount = 20;
+
+            mDataSize =
+              std::min((unsigned int)(-1 / LN2SQUARED * pElementCount * log(pFalsePositiveRate)),
+              MAX_SIZE * 8) / 8;
+            mHashFunctionCount = std::min((unsigned int)(mDataSize * 8 / pElementCount * LN2),
+              MAX_FUNCTIONS);
+        }
+
         mData = new unsigned char[mDataSize];
-        mHashFunctionCount = std::min((unsigned int)(mDataSize * 8 / pElementCount * LN2), MAX_FUNCTIONS);
+        std::memset(mData, 0, mDataSize);
+
         mTweak = pTweak;
         mFlags = pFlags;
-        mIsFull = false;
+        mIsFull = mDataSize == 0;
         mIsEmpty = true;
 
-        std::memset(mData, 0, mDataSize);
     }
 
     const BloomFilter &BloomFilter::operator = (const BloomFilter &pRight)
     {
+        mFormat = pRight.mFormat;
         if(mData != NULL)
             delete[] mData;
         mData = NULL;
@@ -81,7 +105,7 @@ namespace BitCoin
         mIsFull = true;
         mIsEmpty = true;
         unsigned char *byte = mData;
-        for(unsigned int i=0;i<mDataSize;++i,++byte)
+        for(unsigned int i = 0; i < mDataSize; ++i, ++byte)
         {
             if(*byte != 0xff)
                 mIsFull = false;
@@ -96,7 +120,7 @@ namespace BitCoin
             return;
 
         unsigned int offset;
-        for(unsigned int i=0;i<mHashFunctionCount;i++)
+        for(unsigned int i = 0; i < mHashFunctionCount; ++i)
         {
             offset = bitOffset(i, pHash);
             mData[offset >> 3] |= (1 << (7 & offset)); // Set bit at offset
@@ -114,7 +138,7 @@ namespace BitCoin
         pOutpoint.write(&data);
 
         unsigned int offset;
-        for(unsigned int i=0;i<mHashFunctionCount;i++)
+        for(unsigned int i = 0; i < mHashFunctionCount; ++i)
         {
             offset = bitOffset(i, data);
             mData[offset >> 3] |= (1 << (7 & offset)); // Set bit at offset
@@ -129,7 +153,7 @@ namespace BitCoin
             return;
 
         unsigned int offset;
-        for(unsigned int i=0;i<mHashFunctionCount;i++)
+        for(unsigned int i = 0; i < mHashFunctionCount; ++i)
         {
             offset = bitOffset(i, pData);
             mData[offset >> 3] |= (1 << (7 & offset)); // Set bit at offset
@@ -168,7 +192,7 @@ namespace BitCoin
             {
                 data.copyBuffer(pScript, byteCount);
 
-                for(i=0;i<mHashFunctionCount;i++)
+                for(i = 0; i < mHashFunctionCount; ++i)
                 {
                     offset = bitOffset(i, data);
                     mData[offset >> 3] |= (1 << (7 & offset)); // Set bit at offset
@@ -189,7 +213,7 @@ namespace BitCoin
             return false;
 
         unsigned int offset;
-        for(unsigned int i=0;i<mHashFunctionCount;i++)
+        for(unsigned int i = 0; i < mHashFunctionCount; ++i)
         {
             offset = bitOffset(i, pHash);
             if(!(mData[offset >> 3] & (1 << (7 & offset)))) // Bit at offset is not set
@@ -210,7 +234,7 @@ namespace BitCoin
         pOutpoint.write(&data);
 
         unsigned int offset;
-        for(unsigned int i=0;i<mHashFunctionCount;i++)
+        for(unsigned int i = 0; i < mHashFunctionCount; ++i)
         {
             offset = bitOffset(i, data);
             if(!(mData[offset >> 3] & (1 << (7 & offset)))) // Bit at offset is not set
@@ -230,11 +254,13 @@ namespace BitCoin
         if(contains(pTransaction.hash()))
             return true;
 
-        for(std::vector<Input>::iterator input=pTransaction.inputs.begin();input!=pTransaction.inputs.end();++input)
+        for(std::vector<Input>::iterator input = pTransaction.inputs.begin();
+          input != pTransaction.inputs.end(); ++input)
             if(contains(input->outpoint))
                 return true;
 
-        for(std::vector<Output>::iterator output=pTransaction.outputs.begin();output!=pTransaction.outputs.end();++output)
+        for(std::vector<Output>::iterator output = pTransaction.outputs.begin();
+          output != pTransaction.outputs.end(); ++output)
             if(containsScript(output->script))
                 return true;
 
@@ -277,7 +303,7 @@ namespace BitCoin
                 data.copyBuffer(pScript, byteCount);
                 matches = true;
 
-                for(i=0;i<mHashFunctionCount;i++)
+                for(i = 0; i < mHashFunctionCount; ++i)
                 {
                     offset = bitOffset(i, data);
                     if(!(mData[offset >> 3] & (1 << (7 & offset)))) // Bit at offset is not set
@@ -309,15 +335,10 @@ namespace BitCoin
 
     bool BloomFilter::read(NextCash::InputStream *pStream)
     {
-        if(mData != NULL)
-        {
-            // Delete any previous data
+        if(mData != NULL) // Delete any previous data
             delete[] mData;
-            mDataSize = 0;
-        }
 
         mDataSize = readCompactInteger(pStream);
-
         if(mDataSize == 0 || mDataSize > MAX_SIZE || mDataSize > pStream->remaining() - 9)
         {
             mDataSize = 0;
@@ -330,6 +351,7 @@ namespace BitCoin
 
         mHashFunctionCount = pStream->readUnsignedInt();
         mTweak = pStream->readUnsignedInt();
+
         mFlags = pStream->readByte();
 
         if(mHashFunctionCount > MAX_FUNCTIONS)
@@ -355,6 +377,8 @@ namespace BitCoin
 
     void BloomFilter::assign(BloomFilter &pValue)
     {
+        mFormat = pValue.mFormat;
+
         if(mData != NULL)
         {
             // Delete any previous data
@@ -376,6 +400,8 @@ namespace BitCoin
 
     void BloomFilter::copy(BloomFilter &pValue)
     {
+        mFormat = pValue.mFormat;
+
         if(mData != NULL)
         {
             // Delete any previous data
@@ -403,7 +429,7 @@ namespace BitCoin
         /***********************************************************************************************
          * Bloom Random Hash
          ***********************************************************************************************/
-        BloomFilter filter(100);
+        BloomFilter filter(STANDARD, 100);
         NextCash::Hash randomHash(32);
 
         randomHash.randomize();
@@ -433,7 +459,7 @@ namespace BitCoin
          ***********************************************************************************************/
         const unsigned int SET_CHECK_SIZE = 1000;
         NextCash::Hash hashes[SET_CHECK_SIZE];
-        BloomFilter setFilter(SET_CHECK_SIZE, UPDATE_ALL, 0.01);
+        BloomFilter setFilter(STANDARD, SET_CHECK_SIZE, UPDATE_ALL, 0.01);
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOOM_LOG_NAME,
           "Created bloom filter with %d bytes and %d functions", filter.size(), filter.functionCount());

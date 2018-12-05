@@ -2621,9 +2621,6 @@ namespace BitCoin
                 digest.writeUnsignedInt((i % 10) + 1);
                 digest.getResult(&hash);
 
-                // Create new value
-                data = new TransactionReference(hash, i == 0, i, (i % 10) + 1);
-
                 // Mark to remove
                 found = testOutputs.get(hash);
                 if(found)
@@ -2641,9 +2638,6 @@ namespace BitCoin
                 digest.writeUnsignedInt(i);
                 digest.writeUnsignedInt((i % 10) + 1);
                 digest.getResult(&hash);
-
-                // Create new value
-                data = new TransactionReference(hash, i == 0, i, (i % 10) + 1);
 
                 // Mark old
                 found = testOutputs.get(hash);

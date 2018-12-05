@@ -207,7 +207,17 @@ namespace BitCoin
         // Parse address into public key hash
         data.writeBase58AsBinary(pText);
 
-        pType = static_cast<AddressType>(data.readByte());
+        if(data.length () == 0)
+            return false;
+
+        try
+        {
+            pType = static_cast<AddressType>(data.readByte());
+        }
+        catch(...)
+        {
+            return false;
+        }
 
         if(pType == MAIN_PRIVATE_KEY || pType == TEST_PRIVATE_KEY)
             return false;
@@ -715,7 +725,18 @@ namespace BitCoin
         std::memset(mData, 0, 64);
 
         pStream->read(input, totalLength);
-        mHashType = static_cast<Signature::HashType>(pStream->readByte());
+        try
+        {
+            mHashType = static_cast<Signature::HashType>(pStream->readByte());
+        }
+        catch(...)
+        {
+            NextCash::String hex;
+            hex.writeHex(input, totalLength);
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+              "Invalid signature hash type : %s", totalLength, hex.text());
+            return false;
+        }
 
         if(!pStrictECDSA_DER_Sigs)
         {
@@ -1360,7 +1381,17 @@ namespace BitCoin
             return false;
         }
 
-        AddressType type = static_cast<AddressType>(data.readByte());
+        AddressType type;
+        try
+        {
+            type = static_cast<AddressType>(data.readByte());
+        }
+        catch(...)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+              "Invalid address type");
+            return false;
+        }
 
         if(type != MAIN_PRIVATE_KEY && type != TEST_PRIVATE_KEY)
         {
@@ -2498,7 +2529,16 @@ namespace BitCoin
 
             flags = pStream->readUnsignedInt();
 
-            derivationPathMethod = static_cast<Key::DerivationPathMethod>(pStream->readByte());
+            try
+            {
+                derivationPathMethod = static_cast<Key::DerivationPathMethod>(pStream->readByte());
+            }
+            catch(...)
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+                  "Invalid derivation path method");
+                return false;
+            }
 
             if(pVersion > 1)
                 createdDate = pStream->readInt();

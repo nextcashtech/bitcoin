@@ -119,7 +119,7 @@ namespace BitCoin
         bool requestPeers();
 
         // Send notification of a new block on the chain
-        bool announceBlock(Block *pBlock);
+        void announceBlock(Block *pBlock);
 
         // Send notification of a new transaction in the mempool
         void addTransactionAnnouncements(TransactionList &pTransactions);
@@ -265,8 +265,18 @@ namespace BitCoin
           bool pComplete);
 
         NextCash::Mutex mAnnounceMutex;
-        NextCash::HashList mAnnounceBlocks, mSentTransactions;
-        NextCash::HashSet mAnnounceTransactions;
+        NextCash::HashList mAnnounceBlocks; // Blocks announced by peer.
+        NextCash::HashList mSentTransactions; // Transactions sent to peer.
+        NextCash::HashSet mAnnounceTransactions; // Transactions annoucned by peer.
+
+        void addAnnouncedBlock(const NextCash::Hash &pHash);
+        bool addAnnouncedTransaction(const NextCash::Hash &pHash);
+
+        NextCash::Mutex mAnnounceBlockMutex;
+        std::vector<Block *> mBlocksToAnnounce;
+
+        // Process new blocks and send block announcements.
+        void processBlocksToAnnounce();
 
         Time mLastExpireTime;
         void expire();
@@ -277,9 +287,6 @@ namespace BitCoin
         NextCash::HashList mSavedTransactions;
         Time mLastSavedCheckTime;
         bool checkSaved();
-
-        void addAnnouncedBlock(const NextCash::Hash &pHash);
-        bool addAnnouncedTransaction(const NextCash::Hash &pHash);
 
         bool mConnected;
         Time mConnectedTime;

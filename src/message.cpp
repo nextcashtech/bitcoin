@@ -82,8 +82,14 @@ namespace BitCoin
                 return "getblocktxn";
             case COMPACT_TRANS:
                 return "blocktxn";
-            case THIN_BLOCK:
-                return "thinblock";
+            case GET_GRAPHENE:
+                return "get_grblk";
+            case GRAPHENE:
+                return "grblk";
+            case GET_GRAPHENE_TRANS:
+                return "get_grblktx";
+            case GRAPHENE_TRANS:
+                return "grblktx";
             default:
             case UNKNOWN:
                 return "";
@@ -146,10 +152,31 @@ namespace BitCoin
                 return GET_COMPACT_TRANS;
             else if(std::strcmp(pCommand, "blocktxn") == 0)
                 return COMPACT_TRANS;
-            else if(std::strcmp(pCommand, "thinblock") == 0)
-                return THIN_BLOCK;
+            else if(std::strcmp(pCommand, "get_grblk") == 0)
+                return GET_GRAPHENE;
+            else if(std::strcmp(pCommand, "grblk") == 0)
+                return GRAPHENE;
+            else if(std::strcmp(pCommand, "get_grblktx") == 0)
+                return GET_GRAPHENE_TRANS;
+            else if(std::strcmp(pCommand, "grblktx") == 0)
+                return GRAPHENE_TRANS;
             else
                 return UNKNOWN;
+        }
+
+        bool Data::isBlockData()
+        {
+            switch(type)
+            {
+            case BLOCK:
+            case COMPACT_BLOCK:
+            case COMPACT_TRANS:
+            case GRAPHENE:
+            case GRAPHENE_TRANS:
+                return true;
+            default:
+                return false;
+            }
         }
 
         Data *Interpreter::read(NextCash::Buffer *pInput, const char *pName)
@@ -219,7 +246,7 @@ namespace BitCoin
             // Check if payload is complete
             if(payloadSize > pInput->remaining())
             {
-                if((command == "block" || command == "cmpctblock" || command == "thinblock") &&
+                if((command == "block" || command == "cmpctblock" || command == "grblktx") &&
                   pInput->remaining() > 80)
                 {
                     Header header;
@@ -249,29 +276,18 @@ namespace BitCoin
                             if(getTime() - pendingBlockLastReportTime >= 30)
                             {
                                 pendingBlockLastReportTime = getTime();
-                                if(command == "block")
-                                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, pName,
-                                      "Block downloading %d / %d (%ds) : %s", pInput->remaining(),
-                                      payloadSize, pendingBlockUpdateTime - pendingBlockStartTime,
-                                      header.hash().hex().text());
-                                else
-                                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, pName,
-                                      "Compact block downloading %d / %d (%ds) : %s",
-                                      pInput->remaining(), payloadSize,
-                                      pendingBlockUpdateTime - pendingBlockStartTime,
-                                      header.hash().hex().text());
+                                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, pName,
+                                  "Block (%s) downloading %d / %d (%ds) : %s", command.text(),
+                                  pInput->remaining(), payloadSize,
+                                  pendingBlockUpdateTime - pendingBlockStartTime,
+                                  header.hash().hex().text());
                             }
                         }
                         else
                         {
                             // New block started without finishing last block
-                            if(command == "block")
-                                NextCash::Log::addFormatted(NextCash::Log::ERROR, pName,
-                                  "Failed block download : %s", pendingBlockHash.hex().text());
-                            else
-                                NextCash::Log::addFormatted(NextCash::Log::ERROR, pName,
-                                  "Failed compact block download : %s",
-                                  pendingBlockHash.hex().text());
+                            NextCash::Log::addFormatted(NextCash::Log::ERROR, pName,
+                              "Failed block download : %s", pendingBlockHash.hex().text());
 
                             // Starting new block
                             pendingBlockStartTime = getTime();
@@ -282,7 +298,8 @@ namespace BitCoin
                         }
                     }
                 }
-                else if(command == "blocktxn" && pInput->remaining() > BLOCK_HASH_SIZE)
+                else if((command == "blocktxn" || command == "grblktx") &&
+                  pInput->remaining() > BLOCK_HASH_SIZE)
                 {
                     NextCash::Hash headerHash(BLOCK_HASH_SIZE);
                     if(headerHash.read(pInput))
@@ -446,6 +463,18 @@ namespace BitCoin
                 case COMPACT_TRANS:
                     result = new CompactTransData();
                     break;
+                case GET_GRAPHENE:
+                    result = new GetGrapheneBlockData();
+                    break;
+                case GRAPHENE:
+                    result = new GrapheneBlockData();
+                    break;
+                case GET_GRAPHENE_TRANS:
+                    result = new GetGrapheneTransactionData();
+                    break;
+                case GRAPHENE_TRANS:
+                    result = new GrapheneTransactionData();
+                    break;
                 default:
                 case UNKNOWN:
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, pName,
@@ -465,11 +494,10 @@ namespace BitCoin
                 result = NULL;
             }
 
-            if(result != NULL && (result->type == BLOCK || result->type == COMPACT_BLOCK ||
-              result->type == COMPACT_TRANS))
+            if(result != NULL && result->isBlockData())
             {
                 // Block downloaded completely before first parsing of incoming data
-                if(pendingBlockHash != ((BlockData *)result)->block->header.hash())
+                if(pendingBlockHash.isEmpty())
                     pendingBlockStartTime = getTime();
                 pendingBlockUpdateTime = 0;
                 pendingBlockHash.clear();
@@ -1639,14 +1667,6 @@ namespace BitCoin
             return true;
         }
 
-        CompactTransData::~CompactTransData()
-        {
-            for(std::vector<Transaction *>::iterator trans = transactions.begin();
-              trans != transactions.end(); ++trans)
-                if(*trans != NULL)
-                    delete *trans;
-        }
-
         void CompactTransData::write(NextCash::OutputStream *pStream)
         {
             // Header hash
@@ -1654,7 +1674,7 @@ namespace BitCoin
 
             // Transactions
             writeCompactInteger(pStream, transactions.size());
-            for(std::vector<Transaction *>::iterator trans = transactions.begin();
+            for(TransactionList::iterator trans = transactions.begin();
               trans != transactions.end(); ++trans)
                 (*trans)->write(pStream);
         }
@@ -1815,6 +1835,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -1868,6 +1889,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version message compare");
                     result = false;
                 }
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -1888,9 +1910,13 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed version acknowledge message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
+            {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed version acknowledge message");
+                delete messageReceiveData;
+            }
 
             /***********************************************************************************************
              * PING
@@ -1910,9 +1936,13 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed ping message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
+            {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed ping message");
+                delete messageReceiveData;
+            }
 
             /***********************************************************************************************
              * PONG
@@ -1932,9 +1962,13 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed pong message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
+            {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed pong message");
+                delete messageReceiveData;
+            }
 
             /***********************************************************************************************
              * REJECT
@@ -1954,6 +1988,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed reject message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -1976,6 +2011,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed reject message compare");
                     result = false;
                 }
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -1996,9 +2032,13 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get addresses message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
+            {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed get addresses message");
+                delete messageReceiveData;
+            }
 
             /***********************************************************************************************
              * ADDRESSES
@@ -2037,6 +2077,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed addresses message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2065,6 +2106,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed addresses message compare");
                     result = false;
                 }
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -2085,6 +2127,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed fee filter message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2101,6 +2144,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed fee filter message compare");
                     result = false;
                 }
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -2125,6 +2169,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter add message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2142,13 +2187,14 @@ namespace BitCoin
                 }
                 else
                     NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed filter add message");
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
              * FILTER_LOAD
              ***********************************************************************************************/
             FilterLoadData filterLoadData;
-            BloomFilter filter(100);
+            BloomFilter filter(BloomFilter::STANDARD, 100);
 
             for(unsigned int i=0;i<100;++i)
             {
@@ -2171,6 +2217,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed filter load message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2203,6 +2250,7 @@ namespace BitCoin
                 }
                 else
                     NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed filter load message");
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -2223,6 +2271,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get blocks message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2249,6 +2298,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get blocks message compare");
                     result = false;
                 }
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -2270,6 +2320,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed block message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2308,6 +2359,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed block message compare");
                     result = false;
                 }
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -2328,6 +2380,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get data message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2350,6 +2403,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get data message compare");
                     result = false;
                 }
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -2370,6 +2424,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get headers message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2396,6 +2451,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed get headers message compare");
                     result = false;
                 }
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -2416,6 +2472,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed headers message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2436,6 +2493,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed headers message compare");
                     result = false;
                 }
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -2456,6 +2514,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed inventory message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2478,6 +2537,7 @@ namespace BitCoin
                     NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed inventory message compare");
                     result = false;
                 }
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -2498,9 +2558,13 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed mem pool message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
+            {
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_MESSAGE_LOG_NAME, "Passed mem pool message");
+                delete messageReceiveData;
+            }
 
             /***********************************************************************************************
              * MERKLE_BLOCK
@@ -2521,6 +2585,7 @@ namespace BitCoin
             // {
                 // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed merkle block message read type");
                 // result = false;
+                // delete messageReceiveData;
             // }
             // else
             // {
@@ -2547,6 +2612,7 @@ namespace BitCoin
                     // NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed merkle block message compare");
                     // result = false;
                 // }
+                // delete messageReceiveData;
             // }
 
             /***********************************************************************************************
@@ -2569,6 +2635,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed transaction message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2586,6 +2653,7 @@ namespace BitCoin
                 //    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed transaction message compare");
                 //    result = false;
                 //}
+                delete messageReceiveData;
             }
 
             /***********************************************************************************************
@@ -2606,6 +2674,7 @@ namespace BitCoin
             {
                 NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed not found message read type");
                 result = false;
+                delete messageReceiveData;
             }
             else
             {
@@ -2623,6 +2692,7 @@ namespace BitCoin
                 //    NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_MESSAGE_LOG_NAME, "Failed not found message compare");
                 //    result = false;
                 //}
+                delete messageReceiveData;
             }
 
             return result;

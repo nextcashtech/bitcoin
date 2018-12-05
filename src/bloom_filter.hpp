@@ -22,6 +22,12 @@ namespace BitCoin
     {
     public:
 
+        enum Format
+        {
+            STANDARD,
+            GRAPHENE
+        };
+
         enum Flags
         {
             UPDATE_NONE = 0,
@@ -32,9 +38,11 @@ namespace BitCoin
 
         static const unsigned int MAX_SIZE; // bytes
         static const unsigned int MAX_FUNCTIONS;
+        static const unsigned int MIN_FUNCTIONS;
 
-        BloomFilter()
+        BloomFilter(Format pFormat)
         {
+            mFormat = pFormat;
             mData = NULL;
             mDataSize = 0;
             mHashFunctionCount = 0;
@@ -45,6 +53,7 @@ namespace BitCoin
         }
         BloomFilter(const BloomFilter &pCopy)
         {
+            mFormat = pCopy.mFormat;
             mData = NULL;
             mDataSize = pCopy.mDataSize;
             mHashFunctionCount = pCopy.mHashFunctionCount;
@@ -59,7 +68,7 @@ namespace BitCoin
                 std::memcpy(mData, pCopy.mData, mDataSize);
             }
         }
-        BloomFilter(unsigned int pElementCount, unsigned char pFlags = UPDATE_NONE,
+        BloomFilter(Format pFormat, unsigned int pElementCount, unsigned char pFlags = UPDATE_NONE,
           double pFalsePositiveRate = 0.00001, unsigned int pTweak = NextCash::Math::randomInt());
         ~BloomFilter();
 
@@ -101,21 +110,24 @@ namespace BitCoin
 
         unsigned int bitOffset(unsigned int pHashNum, const NextCash::Hash &pHash) const
         {
-            NextCash::Digest digest(NextCash::Digest::MURMUR3);
-            digest.initialize(pHashNum * 0xFBA4C795 + mTweak);
-            pHash.write(&digest);
-            return digest.getResult() % (mDataSize * 8);
+            return NextCash::Digest::murMur3(pHash.data(), pHash.size(),
+              pHashNum * 0xFBA4C795 + mTweak) % (mDataSize * 8);
+        }
+
+        unsigned int bitOffset(unsigned int pHashNum, const uint8_t *pData,
+          NextCash::stream_size pDataSize) const
+        {
+            return NextCash::Digest::murMur3(pData, pDataSize, pHashNum * 0xFBA4C795 + mTweak) %
+              (mDataSize * 8);
         }
 
         unsigned int bitOffset(unsigned int pHashNum, NextCash::Buffer &pData) const
         {
-            NextCash::Digest digest(NextCash::Digest::MURMUR3);
-            digest.initialize(pHashNum * 0xFBA4C795 + mTweak);
-            pData.setReadOffset(0);
-            digest.writeStream(&pData, pData.length());
-            return digest.getResult() % (mDataSize * 8);
+            return NextCash::Digest::murMur3(pData.begin(), pData.length(),
+              pHashNum * 0xFBA4C795 + mTweak) % (mDataSize * 8);
         }
 
+        Format mFormat;
         unsigned char *mData;
         unsigned int mDataSize;
         unsigned int mHashFunctionCount;
