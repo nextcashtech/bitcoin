@@ -34,6 +34,7 @@ add_library( bitcoin STATIC SHARED
              src/message.cpp
              src/monitor.cpp
              src/node.cpp
+             src/output.cpp
              src/outputs.cpp
              src/peer.cpp
              src/requests.cpp

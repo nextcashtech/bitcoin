@@ -7,6 +7,11 @@
  **************************************************************************/
 #include "node.hpp"
 
+#ifdef PROFILER_ON
+#include "profiler.hpp"
+#include "profiler_setup.hpp"
+#endif
+
 #include "digest.hpp"
 #include "info.hpp"
 #include "message.hpp"
@@ -225,25 +230,14 @@ namespace BitCoin
             delete mReceivedVersionData;
 
         mAnnounceBlockMutex.lock();
-        for(std::vector<Block *>::iterator block = mBlocksToAnnounce.begin();
-          block != mBlocksToAnnounce.end(); ++block)
-            mChain->releaseBlock(mID, (*block)->header.hash());
 
         for(std::vector<Message::CompactBlockData *>::iterator block =
           mIncomingCompactBlocks.begin(); block != mIncomingCompactBlocks.end(); ++block)
-        {
-            if(!(*block)->deleteBlock)
-                mChain->releaseBlock(mID, (*block)->block->header.hash());
             delete *block;
-        }
 
         for(std::vector<Message::CompactBlockData *>::iterator block =
           mOutgoingCompactBlocks.begin(); block != mOutgoingCompactBlocks.end(); ++block)
-        {
-            if(!(*block)->deleteBlock)
-                mChain->releaseBlock(mID, (*block)->block->header.hash());
             delete *block;
-        }
 
         mMessagesToSendLock.lock();
         for(std::vector<Message::Data *>::iterator message = mMessagesToSend.begin();
@@ -284,16 +278,12 @@ namespace BitCoin
         for(std::vector<Message::CompactBlockData *>::iterator compact =
           mOutgoingCompactBlocks.begin(); compact != mOutgoingCompactBlocks.end();)
         {
-            if(!(*compact)->deleteBlock)
-                mChain->releaseBlock(mID, (*compact)->block->header.hash());
             delete *compact;
             compact = mOutgoingCompactBlocks.erase(compact);
         }
         for(std::vector<Message::CompactBlockData *>::iterator compact =
           mIncomingCompactBlocks.begin(); compact != mIncomingCompactBlocks.end();)
         {
-            if(!(*compact)->deleteBlock)
-                mChain->releaseBlock(mID, (*compact)->block->header.hash());
             delete *compact;
             compact = mIncomingCompactBlocks.erase(compact);
         }
@@ -515,8 +505,6 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   "Removing old outgoing compact block : %s",
                   (*compact)->block->header.hash().hex().text());
-                if(!(*compact)->deleteBlock)
-                    mChain->releaseBlock(mID, (*compact)->block->header.hash());
                 delete *compact;
                 compact = mOutgoingCompactBlocks.erase(compact);
             }
@@ -765,37 +753,35 @@ namespace BitCoin
         return sendMessage(&getAddresses);
     }
 
-    bool Node::sendBlock(Block &pBlock)
+    bool Node::sendBlock(BlockReference &pBlock)
     {
         if(!isOpen())
             return false;
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Sending block (%d) (%d KB) : %s",
-          mChain->hashHeight(pBlock.header.hash()), pBlock.size() / 1000,
-          pBlock.header.hash().hex().text());
+          mChain->hashHeight(pBlock->header.hash()), pBlock->size() / 1000,
+          pBlock->header.hash().hex().text());
 
-        Message::BlockData blockData;
-        blockData.block = &pBlock;
+        Message::BlockData blockData(pBlock);
         bool success = sendMessage(&blockData);
         if(success)
             ++mStatistics.blocksSent;
-        blockData.block = NULL; // We don't want to delete the block when the message is deleted
         return success;
     }
 
     bool Node::sendMerkleBlock(const NextCash::Hash &pBlockHash)
     {
-        Block block;
+        BlockReference block(mChain->getBlock(pBlockHash));
 
-        if(!mChain->getBlock(pBlockHash, block))
+        if(!block)
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
               "Merkle block not found : %s", pBlockHash.hex().text());
             return false;
         }
 
-        std::vector<Transaction *> includedTransactions;
-        Message::MerkleBlockData merkleMessage(&block, mFilter, includedTransactions);
+        TransactionList includedTransactions;
+        Message::MerkleBlockData merkleMessage(block, mFilter, includedTransactions);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
           "Sending merkle block with %d trans : %s", includedTransactions.size(),
           pBlockHash.hex().text());
@@ -803,24 +789,20 @@ namespace BitCoin
             return false;
 
         Message::TransactionData transactionMessage;
-        for(std::vector<Transaction *>::iterator trans = includedTransactions.begin();
+        for(TransactionList::iterator trans = includedTransactions.begin();
           trans != includedTransactions.end(); ++trans)
         {
             transactionMessage.transaction = *trans;
             if(!sendMessage(&transactionMessage))
-            {
-                transactionMessage.transaction = NULL; // Prevent from being double deleted
                 return false;
-            }
         }
-        transactionMessage.transaction = NULL; // Prevent from being double deleted
 
         return true;
     }
 
     void Node::processBlocksToAnnounce()
     {
-        Block *block = NULL;
+        BlockReference block;
         mAnnounceBlockMutex.lock();
         if(mBlocksToAnnounce.size() > 0)
         {
@@ -829,11 +811,11 @@ namespace BitCoin
         }
         mAnnounceBlockMutex.unlock();
 
-        if(block == NULL)
+        if(!block)
             return;
 
         // Process any transactions in the block
-        for(std::vector<Transaction *>::iterator trans = block->transactions.begin() + 1;
+        for(TransactionList::iterator trans = block->transactions.begin() + 1;
           trans != block->transactions.end(); ++trans)
         {
             mAnnounceTransactions.remove((*trans)->hash());
@@ -845,24 +827,20 @@ namespace BitCoin
         {
             // Don't announce to node that already announced to you
             mAnnounceMutex.unlock();
-            mChain->releaseBlock(mID, block->header.hash());
             return;
         }
         mAnnounceMutex.unlock();
 
         if(mAnnounceBlocksCompact && mSendCompactBlocksVersion != 0L)
         {
-            Message::CompactBlockData *compactBlock = new Message::CompactBlockData(block, false);
+            Message::CompactBlockData *compactBlock = new Message::CompactBlockData(block);
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
               "Announcing block with compact (%d prefilled) : %s", compactBlock->prefilled.size(),
               block->header.hash().hex().text());
             if(sendMessage(compactBlock))
                 mOutgoingCompactBlocks.push_back(compactBlock);
             else
-            {
                 delete compactBlock;
-                mChain->releaseBlock(mID, block->header.hash());
-            }
         }
         else if(mSendHeaders)
         {
@@ -872,9 +850,8 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
               "Announcing block with header : %s", block->header.hash().hex().text());
             sendMessage(headersData);
+            ++mStatistics.headersSent;
             delete headersData;
-            mStatistics.headersSent += headersData->headers.size();
-            mChain->releaseBlock(mID, block->header.hash());
         }
         else
         {
@@ -885,16 +862,13 @@ namespace BitCoin
               push_back(new Message::InventoryHash(Message::InventoryHash::BLOCK, block->header.hash()));
             sendMessage(inventoryData);
             delete inventoryData;
-            mChain->releaseBlock(mID, block->header.hash());
         }
     }
 
-    void Node::announceBlock(Block *pBlock)
+    void Node::announceBlock(BlockReference &pBlock)
     {
         if(!isOpen() || mReceivedVersionData == NULL)
             return;
-
-        mChain->lockBlock(mID, pBlock->header.hash());
 
         mAnnounceBlockMutex.lock();
         mBlocksToAnnounce.push_back(pBlock);
@@ -912,8 +886,8 @@ namespace BitCoin
 
         mAnnounceMutex.lock();
 
-        for(std::vector<Transaction *>::iterator trans = pTransactions.begin();
-          trans != pTransactions.end(); ++trans)
+        for(TransactionList::iterator trans = pTransactions.begin(); trans != pTransactions.end();
+          ++trans)
             if(!mAnnounceTransactions.remove((*trans)->hash())) // Hash was not announced to us yet.
             {
                 if(mReceivedVersionData->relay)
@@ -923,7 +897,7 @@ namespace BitCoin
                           new Message::InventoryHash(Message::InventoryHash::TRANSACTION,
                           (*trans)->hash()));
                 }
-                else if(mFilter.contains(**trans))
+                else if(mFilter.contains(*trans))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                       "Bloom filter contains transaction : %s", (*trans)->hash().hex().text());
@@ -980,7 +954,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Node::sendTransaction(Transaction *pTransaction)
+    bool Node::sendTransaction(TransactionReference &pTransaction)
     {
         if(!isOpen() || mReceivedVersionData == NULL || mSentTransactions.contains(pTransaction->hash()))
             return false;
@@ -990,10 +964,8 @@ namespace BitCoin
         if(!mReceivedVersionData->relay && !filterContains)
             return false;
 
-        Message::TransactionData transactionData;
-        transactionData.transaction = pTransaction;
+        Message::TransactionData transactionData(pTransaction);
         bool result = sendMessage(&transactionData);
-        transactionData.transaction = NULL;
 
         if(result)
         {
@@ -1229,7 +1201,7 @@ namespace BitCoin
 #endif
         Message::GetCompactTransData getTransactions(pCompactBlock->block->header.hash());
 
-        pCompactBlock->block->clearTransactions();
+        pCompactBlock->block->transactions.clear();
         pCompactBlock->block->transactions.resize(pCompactBlock->block->header.transactionCount,
           NULL);
 
@@ -1243,7 +1215,7 @@ namespace BitCoin
         NextCash::stream_size increasedSize = 0L;
         NextCash::SortedSet shortIDs;
         std::vector<uint64_t>::iterator shortID = pCompactBlock->shortIDs.begin();
-        std::vector<Transaction *>::iterator trans = pCompactBlock->block->transactions.begin();
+        TransactionList::iterator trans = pCompactBlock->block->transactions.begin();
 
         for(std::vector<Message::PrefilledTransaction>::iterator prefilled =
           pCompactBlock->prefilled.begin(); prefilled != pCompactBlock->prefilled.end();
@@ -1257,9 +1229,9 @@ namespace BitCoin
                 shortIDLookup.shortID = *shortID;
                 memPoolShortID = (ShortIDHash *)memPoolShortIDs.get(shortIDLookup);
                 if(memPoolShortID != NULL)
-                    *trans = mChain->memPool().getTransactionCopy(memPoolShortID->hash);
+                    *trans = mChain->memPool().getTransaction(memPoolShortID->hash);
 
-                if(*trans == NULL)
+                if(!*trans)
                 {
                     // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                       // "Compact block missing transaction %d (encoded %d) : 0x%04x%08x", offset,
@@ -1312,9 +1284,9 @@ namespace BitCoin
             shortIDLookup.shortID = *shortID;
             memPoolShortID = (ShortIDHash *)memPoolShortIDs.get(shortIDLookup);
             if(memPoolShortID != NULL)
-                *trans = mChain->memPool().getTransactionCopy(memPoolShortID->hash);
+                *trans = mChain->memPool().getTransaction(memPoolShortID->hash);
 
-            if(*trans == NULL)
+            if(!*trans)
             {
                 // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   // "Compact block missing transaction %d (encoded %d) : 0x%04x%08x", offset,
@@ -1396,7 +1368,7 @@ namespace BitCoin
         unsigned int i;
         NextCash::stream_size increasedSize = 0L;
         std::vector<uint64_t>::iterator shortID = pData->shortIDs.begin();
-        std::vector<Transaction *>::iterator trans = pData->block->transactions.begin();
+        TransactionList::iterator trans = pData->block->transactions.begin();
 
         for(std::vector<Message::PrefilledTransaction>::iterator prefilled =
           pData->prefilled.begin();
@@ -1405,7 +1377,7 @@ namespace BitCoin
             for(i = 0; i < prefilled->offset; ++i)
             {
                 // Use short IDs to fill the gap between prefilled.
-                if(*trans == NULL)
+                if(!*trans)
                 {
                     // Find short ID in given transactions.
                     found = false;
@@ -1416,7 +1388,7 @@ namespace BitCoin
                             givenTrans = pTransData->transactions.begin() +
                               (givenShortID - givenShortIDs.begin());
 
-                            if(*givenTrans == NULL)
+                            if(!*givenTrans)
                             {
                                 NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
                                   "Compact block transaction already used %d : 0x%04x%08x", offset,
@@ -1453,7 +1425,7 @@ namespace BitCoin
             }
 
             // Skip prefilled transactions.
-            if(*trans == NULL)
+            if(!*trans)
             {
                 // This should not happen
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
@@ -1469,7 +1441,7 @@ namespace BitCoin
         while(shortID != pData->shortIDs.end())
         {
             // Use short IDs to finish.
-            if(*trans == NULL)
+            if(!*trans)
             {
                 // Find short ID in given transactions.
                 found = false;
@@ -1480,7 +1452,7 @@ namespace BitCoin
                         givenTrans = pTransData->transactions.begin() +
                           (givenShortID - givenShortIDs.begin());
 
-                        if(*givenTrans == NULL)
+                        if(!*givenTrans)
                         {
                             NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
                               "Compact block transaction already used %d : 0x%04x%08x", offset,
@@ -2209,7 +2181,7 @@ namespace BitCoin
 
                 Message::GetDataData *getDataData = (Message::GetDataData *)message;
                 Message::NotFoundData notFoundData;
-                Block *block;
+                BlockReference block;
                 bool fail = false;
 
                 for(Message::Inventory::iterator item = getDataData->inventory.begin();
@@ -2231,10 +2203,10 @@ namespace BitCoin
                         }
                         else
                         {
-                            block = new Block();
-                            if(mChain->getBlock((*item)->hash, *block))
+                            block = mChain->getBlock((*item)->hash);
+                            if(block)
                             {
-                                if(!sendBlock(*block))
+                                if(!sendBlock(block))
                                     fail = true;
                             }
                             else
@@ -2243,27 +2215,23 @@ namespace BitCoin
                                   "Block not found : %s", (*item)->hash.hex().text());
                                 notFoundData.inventory.push_back(new Message::InventoryHash(**item));
                             }
-                            delete block;
                         }
                         break;
                     }
                     case Message::InventoryHash::TRANSACTION:
                     {
-                        Message::TransactionData transactionData;
-                        transactionData.transaction =
-                          mChain->memPool().getTransaction((*item)->hash, mID);
-                        if(transactionData.transaction == NULL)
-                            notFoundData.inventory.push_back(new Message::InventoryHash(**item));
-                        else
+                        TransactionReference transaction =
+                          mChain->memPool().getTransaction((*item)->hash);
+                        if(transaction)
                         {
+                            Message::TransactionData transactionData(transaction);
                             NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
                               "Sending transaction (%d bytes) : %s",
                               transactionData.transaction->size(), (*item)->hash.hex().text());
                             sendMessage(&transactionData);
-                            mChain->memPool().freeTransaction((*item)->hash, mID);
                         }
-                        // Don't delete it. It is still in the mem pool
-                        transactionData.transaction = NULL;
+                        else
+                            notFoundData.inventory.push_back(new Message::InventoryHash(**item));
                         break;
                     }
                     case Message::InventoryHash::FILTERED_BLOCK:
@@ -2287,14 +2255,14 @@ namespace BitCoin
                         }
                         else
                         {
-                            block = new Block();
-                            if(mChain->getBlock((*item)->hash, *block))
+                            block = mChain->getBlock((*item)->hash);
+                            if(block)
                             {
                                 if(mSendCompactBlocksVersion != 0L &&
                                   mChain->headerHeight() - height < 10)
                                 {
                                     Message::CompactBlockData *compactBlock =
-                                      new Message::CompactBlockData(block, true);
+                                      new Message::CompactBlockData(block);
                                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                                      "Sending compact block (%d/%d prefilled) (%d) : %s",
                                      compactBlock->prefilled.size(),
@@ -2307,14 +2275,12 @@ namespace BitCoin
                                 }
                                 else
                                 {
-                                    if(!sendBlock(*block))
+                                    if(!sendBlock(block))
                                         fail = true;
-                                    delete block;
                                 }
                             }
                             else
                             {
-                                delete block;
                                 NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
                                   "Failed to get block (%d) : %s", height,
                                   (*item)->hash.hex().text());
@@ -2762,7 +2728,7 @@ namespace BitCoin
 
                 // Verify and add to mem pool or monitor.
                 Message::TransactionData *transactionData = (Message::TransactionData *)message;
-                if(transactionData->transaction != NULL)
+                if(transactionData->transaction)
                 {
                     // NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
                       // "Received transaction (%d bytes) : %s",
@@ -2774,11 +2740,10 @@ namespace BitCoin
                     if(!info.spvMode)
                     {
                         NextCash::HashList unseen, allUnseen;
-                        if(mChain->memPool().add(transactionData->transaction))
-                            transactionData->transaction = NULL;
+                        mChain->memPool().add(transactionData->transaction);
                     }
                     else if(mMonitor != NULL)
-                        mMonitor->addTransaction(*mChain, transactionData);
+                        mMonitor->addTransaction(*mChain, transactionData->transaction);
                 }
                 break;
             }
@@ -3064,9 +3029,7 @@ namespace BitCoin
                             sendMessage(&transData);
                         }
 
-                        transData.transactions.clearNoDelete(); // Prevent from being delete twice.
-                        if(!(*compact)->deleteBlock)
-                            mChain->releaseBlock(mID, getCompactTransData->headerHash);
+                        transData.transactions.clear(); // Prevent from being delete twice.
                         delete *compact;
                         mOutgoingCompactBlocks.erase(compact);
                         break;

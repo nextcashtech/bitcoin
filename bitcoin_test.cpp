@@ -101,9 +101,10 @@ bool merkleTest1()
     /***********************************************************************************************
      * Merkle block (Randomly chosen transaction)
      ***********************************************************************************************/
-    BitCoin::Block block;
+    BitCoin::BlockReference block;
 
-    if(!BitCoin::Block::getBlock(515695, block))
+    block = BitCoin::Block::getBlock(515695);
+    if(!block)
     {
         NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed read block %d", 515695);
         return false;
@@ -111,11 +112,11 @@ bool merkleTest1()
 
     // Validate Merkle Hash
     NextCash::Hash calculatedMerkleHash;
-    block.calculateMerkleHash(calculatedMerkleHash);
-    if(calculatedMerkleHash != block.header.merkleHash)
+    block->calculateMerkleHash(calculatedMerkleHash);
+    if(calculatedMerkleHash != block->header.merkleHash)
     {
         NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed match merkle root hash");
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Block Hash : %s", block.header.merkleHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Block Hash : %s", block->header.merkleHash.hex().text());
         NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Calc Hash  : %s", calculatedMerkleHash.hex().text());
         return false;
     }
@@ -138,7 +139,7 @@ bool merkleTest1()
 
     filter.add(addressHash);
 
-    BitCoin::MerkleNode *merkleTreeRoot = BitCoin::buildMerkleTree(block.transactions, filter);
+    BitCoin::MerkleNode *merkleTreeRoot = BitCoin::buildMerkleTree(block->transactions, filter);
 
     //merkleTreeRoot->print();
 
@@ -150,10 +151,10 @@ bool merkleTest1()
     else
         NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed create merkle tree");
 
-    if(merkleTreeRoot->hash != block.header.merkleHash)
+    if(merkleTreeRoot->hash != block->header.merkleHash)
     {
         NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle tree hash");
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Merkle Hash : %s", block.header.merkleHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Merkle Hash : %s", block->header.merkleHash.hex().text());
         NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Merkle Tree : %s", merkleTreeRoot->hash.hex().text());
         return false;
     }
@@ -174,7 +175,7 @@ bool merkleTest1()
 
     while(node != NULL)
     {
-        if(node->transaction != NULL)
+        if(node->transaction)
         {
             foundHash = node->transaction->hash();
             if(node->transaction->hash() == transactionHash)
@@ -199,11 +200,12 @@ bool merkleTest1()
     }
 
     // Check building merkle block message and parsing it
-    std::vector<BitCoin::Transaction *> transactionsToSend;
-    BitCoin::Message::MerkleBlockData merkleBlockMessage(&block, filter, transactionsToSend);
+    BitCoin::TransactionList transactionsToSend;
+    BitCoin::Message::MerkleBlockData merkleBlockMessage(block, filter, transactionsToSend);
 
     found = false;
-    for(std::vector<BitCoin::Transaction *>::iterator trans=transactionsToSend.begin();trans!=transactionsToSend.end();++trans)
+    for(BitCoin::TransactionList::iterator trans = transactionsToSend.begin();
+      trans != transactionsToSend.end(); ++trans)
         if((*trans)->hash() == transactionHash)
         {
             found = true;
@@ -211,12 +213,12 @@ bool merkleTest1()
         }
 
     if(found)
-        NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Passed merkle block message transaction found : %s",
-          transactionHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::INFO,
+          "Test", "Passed merkle block message transaction found : %s", transactionHash.hex().text());
     else
     {
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed merkle block message transaction found : %s",
-          transactionHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test",
+          "Failed merkle block message transaction found : %s", transactionHash.hex().text());
         return false;
     }
 
@@ -278,9 +280,10 @@ bool merkleTest2()
     /***********************************************************************************************
      * Merkle block (Randomly chosen transaction)
      ***********************************************************************************************/
-    BitCoin::Block block;
+    BitCoin::BlockReference block;
 
-    if(!BitCoin::Block::getBlock(515712, block))
+    block = BitCoin::Block::getBlock(515712);
+    if(!block)
     {
         NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "Failed read block %d", 515712);
         return false;
@@ -288,11 +291,11 @@ bool merkleTest2()
 
     // Validate Merkle Hash
     NextCash::Hash calculatedMerkleHash;
-    block.calculateMerkleHash(calculatedMerkleHash);
-    if(calculatedMerkleHash != block.header.merkleHash)
+    block->calculateMerkleHash(calculatedMerkleHash);
+    if(calculatedMerkleHash != block->header.merkleHash)
     {
         NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed match merkle root hash");
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Block Hash : %s", block.header.merkleHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Block Hash : %s", block->header.merkleHash.hex().text());
         NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Calc Hash  : %s", calculatedMerkleHash.hex().text());
         return false;
     }
@@ -315,7 +318,7 @@ bool merkleTest2()
 
     filter.add(addressHash);
 
-    BitCoin::MerkleNode *merkleTreeRoot = BitCoin::buildMerkleTree(block.transactions, filter);
+    BitCoin::MerkleNode *merkleTreeRoot = BitCoin::buildMerkleTree(block->transactions, filter);
 
     if(merkleTreeRoot == NULL)
     {
@@ -325,10 +328,10 @@ bool merkleTest2()
     else
         NextCash::Log::add(NextCash::Log::INFO, "Test", "Passed create merkle tree");
 
-    if(merkleTreeRoot->hash != block.header.merkleHash)
+    if(merkleTreeRoot->hash != block->header.merkleHash)
     {
         NextCash::Log::add(NextCash::Log::ERROR, "Test", "Failed merkle tree hash");
-        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Merkle Hash : %s", block.header.merkleHash.hex().text());
+        NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Merkle Hash : %s", block->header.merkleHash.hex().text());
         NextCash::Log::addFormatted(NextCash::Log::ERROR, "Test", "  Merkle Tree : %s", merkleTreeRoot->hash.hex().text());
         return false;
     }
@@ -349,7 +352,7 @@ bool merkleTest2()
 
     while(node != NULL)
     {
-        if(node->transaction != NULL)
+        if(node->transaction)
         {
             foundHash = node->transaction->hash();
             if(node->transaction->hash() == transactionHash)
@@ -374,11 +377,12 @@ bool merkleTest2()
     }
 
     // Check building merkle block message and parsing it
-    std::vector<BitCoin::Transaction *> transactionsToSend;
-    BitCoin::Message::MerkleBlockData merkleBlockMessage(&block, filter, transactionsToSend);
+    BitCoin::TransactionList transactionsToSend;
+    BitCoin::Message::MerkleBlockData merkleBlockMessage(block, filter, transactionsToSend);
 
     found = false;
-    for(std::vector<BitCoin::Transaction *>::iterator trans=transactionsToSend.begin();trans!=transactionsToSend.end();++trans)
+    for(BitCoin::TransactionList::iterator trans = transactionsToSend.begin();
+      trans != transactionsToSend.end(); ++trans)
         if((*trans)->hash() == transactionHash)
         {
             found = true;
@@ -450,7 +454,7 @@ const NextCash::Hash &addBlock(BitCoin::Chain &pChain, const NextCash::Hash &pPr
   int pBlockHeight, uint32_t pBlockTime, uint32_t pTargetBits, NextCash::Hash &pTransactionID)
 {
     const static NextCash::Hash emptyHash;
-    BitCoin::Block *newBlock = new BitCoin::Block();
+    BitCoin::BlockReference newBlock(new BitCoin::Block());
     newBlock->header.time = pBlockTime;
     newBlock->header.targetBits = pTargetBits;
     newBlock->header.previousHash = pPreviousHash;

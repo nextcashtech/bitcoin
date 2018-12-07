@@ -9,6 +9,7 @@
 
 #ifdef PROFILER_ON
 #include "profiler.hpp"
+#include "profiler_setup.hpp"
 #endif
 
 #include "log.hpp"
@@ -20,8 +21,7 @@
 namespace BitCoin
 {
     MemPool::MemPool(Chain *pChain) : mInfo(Info::instance()),
-      mRequestedHashesLock("RequestedHashes"), mLock("MemPool"), mNodeLock("MemPool Nodes"),
-      mPipeLineLock("PipeLine")
+      mRequestedHashesLock("RequestedHashes"), mLock("MemPool"), mPipeLineLock("PipeLine")
     {
         mChain = pChain;
         mSize = 0;
@@ -99,35 +99,6 @@ namespace BitCoin
         mRequestedHashesLock.unlock();
     }
 
-    // void MemPool::getNeededHashes(NextCash::HashList &pList)
-    // {
-        // pList.clear();
-        // Time time = getTime();
-        // mRequestedHashesLock.lock();
-        // for(NextCash::HashSet::Iterator hash = mRequestedHashes.begin();
-          // hash != mRequestedHashes.end();)
-        // {
-            // if(((RequestedHash *)*hash)->nodeID == 0 || time - ((RequestedHash *)*hash)->time > 4)
-            // {
-                // if(((RequestedHash *)*hash)->requestAttempts > 2)
-                // {
-                    // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-                      // "Requested transaction failed %d times : %s",
-                      // ((RequestedHash *)*hash)->requestAttempts, (*hash)->getHash().hex().text());
-                    // hash = mRequestedHashes.erase(hash);
-                // }
-                // else
-                // {
-                    // pList.emplace_back((*hash)->getHash());
-                    // ++hash;
-                // }
-            // }
-            // else
-                // ++hash;
-        // }
-        // mRequestedHashesLock.unlock();
-    // }
-
     void MemPool::markTransactions(NextCash::HashList &pList, unsigned int pNodeID)
     {
         RequestedHash *requestedHash;
@@ -172,16 +143,16 @@ namespace BitCoin
         return result;
     }
 
-    Transaction *MemPool::getPipeLineTransaction()
+    TransactionReference MemPool::getPipeLineTransaction()
     {
-        Transaction *result = NULL;
+        TransactionReference result;
         mLock.writeLock("Get PipeLine");
         mPipeLineLock.lock();
         if(mPipeLineQueue.size() > 0)
         {
-            result = (Transaction *)mPipeLineTransactions.getAndRemove(mPipeLineQueue.front());
+            result = mPipeLineTransactions.getAndRemove(mPipeLineQueue.front());
             mPipeLineQueue.pop_front();
-            if(result != NULL)
+            if(result)
                 mValidatingTransactions.insertSorted(result->hash());
         }
         mPipeLineLock.unlock();
@@ -199,11 +170,11 @@ namespace BitCoin
             return;
         }
 
-        Transaction *transaction;
+        TransactionReference transaction;
         while(!memPool->mStopping)
         {
             transaction = memPool->getPipeLineTransaction();
-            if(transaction == NULL)
+            if(!transaction)
             {
                 if(memPool->mStopping)
                     break;
@@ -267,52 +238,22 @@ namespace BitCoin
 
     void MemPool::getToAnnounce(TransactionList &pList, unsigned int pNodeID)
     {
-        Transaction *transaction;
+        TransactionReference transaction;
         pList.clear();
 
         mLock.writeLock("Get Announce");
-        mNodeLock.lock();
 
         for(NextCash::HashList::iterator hash = mToAnnounce.begin(); hash != mToAnnounce.end();
           ++hash)
         {
-            transaction = (Transaction *)mTransactions.get(*hash);
-            if(transaction != NULL)
-            {
-                mNodeLocks.insert(new HashNodeID(*hash, pNodeID), true);
+            transaction = mTransactions.get(*hash);
+            if(transaction)
                 pList.push_back(transaction);
-            }
         }
 
         mToAnnounce.clear();
 
-        mNodeLock.unlock();
         mLock.writeUnlock();
-    }
-
-    void MemPool::freeTransactions(TransactionList &pList, unsigned int pNodeID)
-    {
-        mNodeLock.lock();
-        NextCash::HashSet::Iterator lock;
-        bool found;
-        for(TransactionList::iterator trans = pList.begin(); trans != pList.end(); ++trans)
-        {
-            found = false;
-            for(lock = mNodeLocks.find((*trans)->hash()); lock != mNodeLocks.end() &&
-              (*lock)->getHash() == (*trans)->hash(); ++lock)
-            {
-                if(((HashNodeID *)*lock)->nodeID == pNodeID)
-                {
-                    found = true;
-                    mNodeLocks.eraseDelete(lock);
-                    break;
-                }
-            }
-
-            if(found && !mNodeLocks.contains((*trans)->hash())) // No locks left on this transaction.
-                mNodeLockedTransactions.removeAll((*trans)->hash());
-        }
-        mNodeLock.unlock();
     }
 
     void MemPool::getFullList(NextCash::HashList &pList, const BloomFilter &pFilter)
@@ -324,9 +265,9 @@ namespace BitCoin
         if(pFilter.isEmpty())
             pList.reserve(mTransactions.size());
 
-        for(NextCash::HashSet::Iterator trans = mTransactions.begin();
-          trans != mTransactions.end(); ++trans)
-            if(pFilter.isEmpty() || pFilter.contains(*((Transaction *)*trans)))
+        for(TransactionSet::Iterator trans = mTransactions.begin(); trans != mTransactions.end();
+          ++trans)
+            if(pFilter.isEmpty() || pFilter.contains(*trans))
                 pList.push_back((*trans)->getHash());
 
         mLock.readUnlock();
@@ -334,12 +275,11 @@ namespace BitCoin
 
     bool MemPool::haveTransaction(const NextCash::Hash &pHash)
     {
-        return mTransactions.contains(pHash) ||
-          mPendingTransactions.contains(pHash) ||
+        return mTransactions.contains(pHash) || mPendingTransactions.contains(pHash) ||
           mValidatingTransactions.containsSorted(pHash);
     }
 
-    bool MemPool::check(Transaction *pTransaction)
+    bool MemPool::check(TransactionReference &pTransaction)
     {
         NextCash::Hash emptyBlockHash;
         NextCash::Mutex spentAgeLock("Spent Age");
@@ -366,7 +306,7 @@ namespace BitCoin
         return true;
     }
 
-    bool MemPool::checkPendingTransaction(Transaction *pTransaction, unsigned int pDepth)
+    bool MemPool::checkPendingTransaction(TransactionReference &pTransaction, unsigned int pDepth)
     {
         // if(pDepth > 0)
             // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
@@ -390,7 +330,6 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
               "Existing transaction. (%d bytes) : %s", pTransaction->size(),
               pTransaction->hash().hex().text());
-            delete pTransaction;
         }
         else if(!pTransaction->isValid())
         {
@@ -408,7 +347,6 @@ namespace BitCoin
                   "Removed pending transaction (%d bytes) : %s", pTransaction->size(),
                   pTransaction->hash().hex().text());
             pTransaction->print(mChain->forks(), NextCash::Log::VERBOSE);
-            delete pTransaction;
         }
         else if(!pTransaction->outpointsFound())
         {
@@ -425,8 +363,6 @@ namespace BitCoin
                   "Expiring pending transaction (time %d) %s (%d bytes) : %s",
                   pTransaction->time(), timeString.text(), pTransaction->size(),
                   pTransaction->hash().hex().text());
-
-                delete pTransaction;
             }
             else
             {
@@ -443,7 +379,6 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
                       "Failed to re-add pending transaction. (%d bytes) (%llu fee rate) : %s",
                       pTransaction->size(), pTransaction->feeRate(), pTransaction->hash().hex().text());
-                    delete pTransaction;
                 }
             }
         }
@@ -459,7 +394,6 @@ namespace BitCoin
               "Nonstandard transaction. (%d bytes) : %s", pTransaction->size(),
               pTransaction->hash().hex().text());
             pTransaction->print(mChain->forks(), NextCash::Log::VERBOSE);
-            delete pTransaction;
         }
         else if(pTransaction->isStandardVerified())
         {
@@ -492,7 +426,6 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
                   "Failed to add pending transaction. (%d bytes) (%llu fee rate) : %s",
                   pTransaction->size(), pTransaction->feeRate(), pTransaction->hash().hex().text());
-                delete pTransaction;
             }
 
             return true;
@@ -505,7 +438,6 @@ namespace BitCoin
             mLock.writeLock("Unknown Pending");
             mValidatingTransactions.removeSorted(pTransaction->hash());
             mLock.writeUnlock();
-            delete pTransaction;
         }
 
         return false;
@@ -520,10 +452,10 @@ namespace BitCoin
 
         // Find any pending child transactions of the new transaction.
         mLock.readLock();
-        for(NextCash::HashSet::Iterator trans = mPendingTransactions.begin();
+        for(TransactionSet::Iterator trans = mPendingTransactions.begin();
           trans != mPendingTransactions.end(); ++trans)
-            for(std::vector<Input>::iterator input = ((Transaction *)*trans)->inputs.begin();
-              input != ((Transaction *)*trans)->inputs.end(); ++input)
+            for(std::vector<Input>::iterator input = (*trans)->inputs.begin();
+              input != (*trans)->inputs.end(); ++input)
                 if(input->outpoint.transactionID == pHash)
                 {
                     pendingToCheck.push_back((*trans)->getHash());
@@ -531,13 +463,13 @@ namespace BitCoin
                 }
         mLock.readUnlock();
 
-        Transaction *transaction;
+        TransactionReference transaction;
         for(NextCash::HashList::iterator hash = pendingToCheck.begin();
           hash != pendingToCheck.end(); ++hash)
         {
             mLock.writeLock("Get Pending Child");
-            transaction = (Transaction *)mPendingTransactions.getAndRemove(*hash);
-            if(transaction != NULL)
+            transaction = mPendingTransactions.getAndRemove(*hash);
+            if(transaction)
             {
                 mPendingSize -= transaction->size();
                 if(!mValidatingTransactions.insertSorted(transaction->hash()))
@@ -546,13 +478,11 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_MEM_POOL_LOG_NAME,
                       "Already validating pending child transaction (%d bytes) : %s",
                       transaction->size(), transaction->hash().hex().text());
-                    delete transaction;
-                    transaction = NULL;
                 }
             }
             mLock.writeUnlock();
 
-            if(transaction != NULL)
+            if(transaction)
                 checkPendingTransaction(transaction, pDepth);
         }
     }
@@ -567,21 +497,21 @@ namespace BitCoin
         // Find any pending child transactions of the new transaction.
         mLock.readLock();
         bool removed;
-        for(NextCash::HashSet::Iterator trans = mPendingTransactions.begin();
+        for(TransactionSet::Iterator trans = mPendingTransactions.begin();
           trans != mPendingTransactions.end();)
         {
             removed = false;
-            for(std::vector<Input>::iterator input = ((Transaction *)*trans)->inputs.begin();
-              input != ((Transaction *)*trans)->inputs.end(); ++input)
+            for(std::vector<Input>::iterator input = (*trans)->inputs.begin();
+              input != (*trans)->inputs.end(); ++input)
                 if(input->outpoint.transactionID == pHash)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
                       "Removing descendant of rejected transaction (%d bytes) : %s",
-                      ((Transaction *)*trans)->size(), (*trans)->getHash().hex().text());
+                      (*trans)->size(), (*trans)->getHash().hex().text());
                     pendingRemoved.push_back((*trans)->getHash());
                     addHashStatus((*trans)->getHash(), HASH_REJECTED_ANCESTOR);
-                    mPendingSize -= ((Transaction *)*trans)->size();
-                    trans = mPendingTransactions.eraseDelete(trans);
+                    mPendingSize -= (*trans)->size();
+                    trans = mPendingTransactions.erase(trans);
                     removed = true;
                     break;
                 }
@@ -595,7 +525,7 @@ namespace BitCoin
             removePendingForNewTransaction(*hash, pDepth + 1);
     }
 
-    bool MemPool::add(Transaction *pTransaction)
+    bool MemPool::add(TransactionReference &pTransaction)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -644,7 +574,7 @@ namespace BitCoin
         return result;
     }
 
-    void MemPool::addInternal(Transaction *pTransaction)
+    void MemPool::addInternal(TransactionReference &pTransaction)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -667,7 +597,6 @@ namespace BitCoin
             mLock.writeLock("Existing");
             mValidatingTransactions.removeSorted(pTransaction->hash());
             mLock.writeUnlock();
-            delete pTransaction;
             return;
         }
         else if(!pTransaction->isValid())
@@ -681,7 +610,6 @@ namespace BitCoin
             mValidatingTransactions.removeSorted(pTransaction->hash());
             mLock.writeUnlock();
             removePendingForNewTransaction(pTransaction->hash(), 1);
-            delete pTransaction;
             return;
         }
 
@@ -700,7 +628,6 @@ namespace BitCoin
                 mValidatingTransactions.removeSorted(pTransaction->hash());
                 mLock.writeUnlock();
                 removePendingForNewTransaction(pTransaction->hash(), 1);
-                delete pTransaction;
                 return;
             }
 
@@ -717,7 +644,6 @@ namespace BitCoin
                 mValidatingTransactions.removeSorted(pTransaction->hash());
                 mLock.writeUnlock();
                 removePendingForNewTransaction(pTransaction->hash(), 1);
-                delete pTransaction;
                 return;
             }
             else if(mSize + pTransaction->size() > mInfo.memPoolLowFeeSize &&
@@ -733,7 +659,6 @@ namespace BitCoin
                 mValidatingTransactions.removeSorted(pTransaction->hash());
                 mLock.writeUnlock();
                 removePendingForNewTransaction(pTransaction->hash(), 1);
-                delete pTransaction;
                 return;
             }
         }
@@ -749,7 +674,6 @@ namespace BitCoin
             addHashStatus(pTransaction->hash(), HASH_DOUBLE_SPEND);
             mLock.writeUnlock();
             removePendingForNewTransaction(pTransaction->hash(), 1);
-            delete pTransaction;
             return;
         }
 
@@ -777,17 +701,14 @@ namespace BitCoin
             mLock.writeUnlock();
             if(inserted)
                 checkPendingForNewTransaction(hash, 1);
-            else
-                delete pTransaction;
             return;
         }
 
-        delete pTransaction;
         mLock.writeUnlock();
         return;
     }
 
-    unsigned int MemPool::pull(std::vector<Transaction *> &pTransactions)
+    unsigned int MemPool::pull(TransactionList &pTransactions)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -795,24 +716,25 @@ namespace BitCoin
 #endif
         mLock.writeLock("Pull");
 
-        Transaction *matchingTransaction;
+        TransactionReference matchingTransaction;
         unsigned int result = 0;
 
-        for(std::vector<Transaction *>::iterator transaction = pTransactions.begin();
-          transaction != pTransactions.end(); ++transaction)
-        {
-            matchingTransaction = (Transaction *)mTransactions.get((*transaction)->hash());
-            if(matchingTransaction == NULL)
-                matchingTransaction =
-                  (Transaction *)mPendingTransactions.get((*transaction)->hash());
-
-            if(matchingTransaction != NULL)
-            {
+        for(TransactionList::iterator trans = pTransactions.begin(); trans != pTransactions.end();
+          ++trans)
+            if((*trans)->inMemPool())
                 ++result;
-                if(matchingTransaction != *transaction)
-                    (*transaction)->pullPrecomputed(*matchingTransaction);
+            else
+            {
+                matchingTransaction = mTransactions.get((*trans)->hash());
+                if(!matchingTransaction)
+                    matchingTransaction = mPendingTransactions.get((*trans)->hash());
+
+                if(matchingTransaction)
+                {
+                    ++result;
+                    *trans = matchingTransaction; // Replace with transaction from mempool.
+                }
             }
-        }
 
         // Intenionally leave locked while block processes.
         mLock.writeUnlock(); // TODO Make function to convert write lock to read lock.
@@ -820,42 +742,17 @@ namespace BitCoin
         return result;
     }
 
-    void MemPool::revert(const std::vector<Transaction *> &pTransactions, bool pFollowingPull)
+    void MemPool::revert(TransactionList &pTransactions, bool pFollowingPull)
     {
         // Should already be locked while block was processing.
         if(pFollowingPull)
             mLock.readUnlock();
-        // mLock.writeLock("Revert");
 
-        // unsigned int previousSize = mSize;
-        // unsigned int previousCount = mTransactions.size() + mPendingTransactions.size();
-        // Transaction *newTransaction;
-
-        // for(std::vector<Transaction *>::const_iterator transaction = pTransactions.begin() + 1;
-          // transaction != pTransactions.end(); ++transaction)
-        // {
-            // // TODO Only accept valid transactions.
-            // newTransaction = new Transaction(**transaction);
-            // if(!insert(newTransaction, false))
-                // delete newTransaction;
-        // }
-
-        // if((mTransactions.size() + mPendingTransactions.size()) == previousCount)
-            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              // "Not increased reverting block. %d trans, %d KB",
-              // mTransactions.size() + mPendingTransactions.size(), mSize / 1000);
-        // else
-            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_MEM_POOL_LOG_NAME,
-              // "Increased reverting block by %d trans, %d KB, %d%% to %d trans, %d KB",
-              // (mTransactions.size() + mPendingTransactions.size()) - previousCount,
-              // (mSize - previousSize) / 1000, (int)(((float)(mSize - previousSize) /
-              // (float)mSize) * 100.0f), mTransactions.size() + mPendingTransactions.size(),
-              // mSize / 1000);
-
-        // mLock.writeUnlock();
+        // Transactions are not removed from the mempool until finalize, so we probably don't need
+        //   to do anything here.
     }
 
-    void MemPool::finalize(std::vector<Transaction *> &pTransactions)
+    void MemPool::finalize(TransactionList &pTransactions)
     {
         mLock.readUnlock();
         mLock.writeLock("Finalize");
@@ -868,14 +765,14 @@ namespace BitCoin
         unsigned int index;
         unsigned int removedCount = 0;
         uint64_t removedSize = 0L;
-        Transaction *matchingTransaction;
-        for(std::vector<Transaction *>::iterator trans = pTransactions.begin();
-          trans != pTransactions.end(); ++trans)
+        TransactionReference matchingTransaction;
+        for(TransactionList::iterator trans = pTransactions.begin(); trans != pTransactions.end();
+          ++trans)
         {
-            if((*trans)->wasInMemPool())
+            if((*trans)->inMemPool())
             {
-                matchingTransaction = (Transaction *)mTransactions.getAndRemove((*trans)->hash());
-                if(matchingTransaction != NULL)
+                matchingTransaction = mTransactions.getAndRemove((*trans)->hash());
+                if(matchingTransaction)
                 {
                     ++removedCount;
                     removedSize += matchingTransaction->size();
@@ -883,28 +780,25 @@ namespace BitCoin
                 }
                 else
                 {
-                    matchingTransaction =
-                      (Transaction *)mPendingTransactions.getAndRemove((*trans)->hash());
-                    if(matchingTransaction != NULL)
+                    matchingTransaction = mPendingTransactions.getAndRemove((*trans)->hash());
+                    if(matchingTransaction)
                     {
                         ++removedCount;
                         removedSize += matchingTransaction->size();
                         mPendingSize -= matchingTransaction->size();
-                        delete matchingTransaction;
                     }
                 }
             }
             else if(outpointExists(*trans))
             {
                 // Find transaction and remove.
-                for(NextCash::HashSet::Iterator poolTrans = mTransactions.begin();
+                for(TransactionSet::Iterator poolTrans = mTransactions.begin();
                   poolTrans != mTransactions.end(); ++poolTrans)
                 {
                     spentFound = false;
                     index = 0;
-                    for(std::vector<Input>::iterator poolInput =
-                      ((Transaction *)*poolTrans)->inputs.begin();
-                      poolInput != ((Transaction *)*poolTrans)->inputs.end() && !spentFound; ++poolInput, ++index)
+                    for(std::vector<Input>::iterator poolInput = (*poolTrans)->inputs.begin();
+                      poolInput != (*poolTrans)->inputs.end() && !spentFound; ++poolInput, ++index)
                         for(std::vector<Input>::iterator input = (*trans)->inputs.begin();
                           input != (*trans)->inputs.end() && !spentFound; ++input, ++index)
                             if(input->outpoint.transactionID == poolInput->outpoint.transactionID &&
@@ -922,9 +816,9 @@ namespace BitCoin
                     if(spentFound)
                     {
                         ++removedCount;
-                        removedSize += ((Transaction *)*poolTrans)->size();
-                        removeInternal((Transaction *)*poolTrans);
-                        poolTrans = mTransactions.eraseNoDelete(poolTrans);
+                        removedSize += (*poolTrans)->size();
+                        removeInternal(*poolTrans);
+                        poolTrans = mTransactions.erase(poolTrans);
                         break;
                     }
                 }
@@ -943,11 +837,6 @@ namespace BitCoin
         mRequestedHashes.shrink();
         mRequestedHashesLock.unlock();
 
-        mNodeLock.lock();
-        mNodeLocks.shrink();
-        mNodeLockedTransactions.shrink();
-        mNodeLock.unlock();
-
         int percent = 0;
         if(removedSize > 0)
             percent = (int)(((float)removedSize /
@@ -958,10 +847,11 @@ namespace BitCoin
           (mSize + mPendingSize) / 1000);
     }
 
-    bool MemPool::insert(Transaction *pTransaction, bool pAnnounce)
+    bool MemPool::insert(TransactionReference &pTransaction, bool pAnnounce)
     {
         if(mTransactions.insert(pTransaction))
         {
+            pTransaction->setInMemPool();
             mSize += pTransaction->size();
 
             if(pAnnounce)
@@ -985,7 +875,7 @@ namespace BitCoin
         digest.getResult(&pHash);
     }
 
-    void MemPool::removeInternal(Transaction *pTransaction)
+    void MemPool::removeInternal(TransactionReference &pTransaction)
     {
         // Remove outpoints
         NextCash::Hash hash(32);
@@ -996,19 +886,11 @@ namespace BitCoin
             mOutpoints.remove(hash);
         }
 
+        pTransaction->clearInMemPool();
         mSize -= pTransaction->size();
-
-        // Don't delete if locked by a node.
-        mNodeLock.lock();
-        bool locked = mNodeLocks.contains(pTransaction->hash());
-        if(locked) // Save to delete when lock is released.
-            mNodeLockedTransactions.insert(pTransaction, true);
-        mNodeLock.unlock();
-        if(!locked)
-            delete pTransaction;
     }
 
-    bool MemPool::outpointExists(Transaction *pTransaction)
+    bool MemPool::outpointExists(TransactionReference &pTransaction)
     {
         NextCash::Hash hash(32);
         for(std::vector<Input>::iterator input = pTransaction->inputs.begin();
@@ -1023,61 +905,23 @@ namespace BitCoin
 
     bool MemPool::outputExists(const NextCash::Hash &pTransactionID, unsigned int pIndex)
     {
-        Transaction *transaction = (Transaction *)mTransactions.get(pTransactionID);
-        if(transaction == NULL)
-            return false;
-        else
+        TransactionReference transaction = mTransactions.get(pTransactionID);
+        if(transaction)
             return pIndex < transaction->outputs.size();
+        else
+            return false;
     }
 
-    Transaction *MemPool::getTransactionCopy(const NextCash::Hash &pHash)
-    {
-#ifdef PROFILER_ON
-        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
-          PROFILER_MEMPOOL_GET_TRANS_COPY_ID, PROFILER_MEMPOOL_GET_TRANS_COPY_NAME), true);
-#endif
-        mLock.readLock();
-        Transaction *result = (Transaction *)mTransactions.get(pHash);
-        if(result == NULL)
-            result = (Transaction *)mPendingTransactions.get(pHash);
-        if(result != NULL)
-            result = new Transaction(*result); // Make copy
-        mLock.readUnlock();
-        return result;
-    }
-
-    Transaction *MemPool::getTransaction(const NextCash::Hash &pHash, unsigned int pNodeID)
+    TransactionReference MemPool::getTransaction(const NextCash::Hash &pHash)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
           PROFILER_MEMPOOL_GET_TRANS_ID, PROFILER_MEMPOOL_GET_TRANS_NAME), true);
 #endif
         mLock.readLock();
-        Transaction *result = (Transaction *)mTransactions.get(pHash);
-        mNodeLock.lock();
-        if(result != NULL)
-            mNodeLocks.insert(new HashNodeID(pHash, pNodeID), true);
-        mNodeLock.unlock();
+        TransactionReference result = mTransactions.get(pHash);
         mLock.readUnlock();
         return result;
-    }
-
-    void MemPool::freeTransaction(const NextCash::Hash &pHash, unsigned int pNodeID)
-    {
-        mNodeLock.lock();
-        NextCash::HashSet::Iterator lock;
-        bool found = false;
-        for(lock = mNodeLocks.find(pHash); lock != mNodeLocks.end() && (*lock)->getHash() == pHash;
-          ++lock)
-            if(((HashNodeID *)*lock)->nodeID == pNodeID)
-            {
-                found = true;
-                mNodeLocks.eraseDelete(lock);
-                break;
-            }
-        if(found && !mNodeLocks.contains(pHash))
-            mNodeLockedTransactions.removeAll(pHash);
-        mNodeLock.unlock();
     }
 
     void MemPool::calculateShortIDs(Message::CompactBlockData *pCompactBlock,
@@ -1093,12 +937,12 @@ namespace BitCoin
         pShortIDs.clear();
         pShortIDs.reserve(mTransactions.size() + mPendingTransactions.size());
 
-        for(NextCash::HashSet::Iterator trans = mTransactions.begin();
-          trans != mTransactions.end(); ++trans)
+        for(TransactionSet::Iterator trans = mTransactions.begin(); trans != mTransactions.end();
+          ++trans)
             pShortIDs.insert(new ShortIDHash((*trans)->getHash(),
               pCompactBlock->calculateShortID((*trans)->getHash())));
 
-        for(NextCash::HashSet::Iterator trans = mPendingTransactions.begin();
+        for(TransactionSet::Iterator trans = mPendingTransactions.begin();
           trans != mPendingTransactions.end(); ++trans)
             pShortIDs.insert(new ShortIDHash((*trans)->getHash(),
               pCompactBlock->calculateShortID((*trans)->getHash())));
@@ -1116,8 +960,8 @@ namespace BitCoin
         bool result = false;
         if(!pIsLocked)
             mLock.readLock();
-        Transaction *transaction = (Transaction *)mTransactions.get(pHash);
-        if(transaction != NULL && transaction->outputs.size() > pIndex)
+        TransactionReference transaction = mTransactions.get(pHash);
+        if(transaction && transaction->outputs.size() > pIndex)
         {
             pOutput = transaction->outputs.at(pIndex);
             result = true;
@@ -1127,12 +971,12 @@ namespace BitCoin
         return result;
     }
 
-    bool MemPool::isSpent(Transaction *pTransaction)
+    bool MemPool::isSpent(TransactionReference &pTransaction)
     {
-        for(NextCash::HashSet::Iterator trans = mTransactions.begin();
-          trans != mTransactions.end(); ++trans)
-            for(std::vector<Input>::iterator input = ((Transaction *)(*trans))->inputs.begin();
-              input != ((Transaction *)(*trans))->inputs.end(); ++input)
+        for(TransactionSet::Iterator trans = mTransactions.begin(); trans != mTransactions.end();
+          ++trans)
+            for(std::vector<Input>::iterator input = (*trans)->inputs.begin();
+              input != (*trans)->inputs.end(); ++input)
                 if(input->outpoint.transactionID == pTransaction->hash())
                     return true;
         return false;
@@ -1148,25 +992,24 @@ namespace BitCoin
             minFee = mInfo.lowFee;
 
         mLock.writeLock("Drop");
-        NextCash::HashSet::Iterator lowestFeeTransaction = mTransactions.end();
+        TransactionSet::Iterator lowestFeeTransaction = mTransactions.end();
         uint64_t lowestFeeRate;
         uint64_t feeRate;
 
         while(true)
         {
-            for(NextCash::HashSet::Iterator trans = mTransactions.begin();
+            for(TransactionSet::Iterator trans = mTransactions.begin();
               trans != mTransactions.end(); ++trans)
-                if(!isSpent((Transaction *)*trans)) // Don't remove an ancestor
+                if(!isSpent(*trans)) // Don't remove an ancestor
                 {
-                    feeRate = ((Transaction *)*trans)->feeRate();
+                    feeRate = (*trans)->feeRate();
                     if(lowestFeeTransaction == mTransactions.end())
                     {
                         lowestFeeRate = feeRate;
                         lowestFeeTransaction = trans;
                     }
                     else if(feeRate < lowestFeeRate || (feeRate == lowestFeeRate &&
-                      ((Transaction *)*trans)->time() <
-                      ((Transaction *)*lowestFeeTransaction)->time()))
+                      (*trans)->time() < (*lowestFeeTransaction)->time()))
                     {
                         lowestFeeRate = feeRate;
                         lowestFeeTransaction = trans;
@@ -1179,10 +1022,10 @@ namespace BitCoin
 
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
               "Dropping transaction (%llu fee rate) (%d bytes) : %s", lowestFeeRate,
-              ((Transaction *)*lowestFeeTransaction)->size(),
+              (*lowestFeeTransaction)->size(),
               (*lowestFeeTransaction)->getHash().hex().text());
-            removeInternal((Transaction *)*lowestFeeTransaction);
-            mTransactions.eraseNoDelete(lowestFeeTransaction);
+            removeInternal(*lowestFeeTransaction);
+            mTransactions.erase(lowestFeeTransaction);
         }
         mLock.writeUnlock();
     }
@@ -1193,36 +1036,33 @@ namespace BitCoin
         NextCash::String timeString;
 
         mLock.writeLock("Expire");
-        for(NextCash::HashSet::Iterator trans = mTransactions.begin();
-          trans != mTransactions.end();)
+        for(TransactionSet::Iterator trans = mTransactions.begin(); trans != mTransactions.end();)
         {
-            if(((Transaction *)*trans)->time() < expireTime)
+            if((*trans)->time() < expireTime)
             {
-                timeString.writeFormattedTime(((Transaction *)*trans)->time());
+                timeString.writeFormattedTime((*trans)->time());
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Expiring transaction (time %d) %s (%d bytes) : %s",
-                  ((Transaction *)*trans)->time(), timeString.text(),
-                  ((Transaction *)*trans)->size(), (*trans)->getHash().hex().text());
-                removeInternal((Transaction *)*trans);
-                trans = mTransactions.eraseNoDelete(trans);
+                  "Expiring transaction (time %d) %s (%d bytes) : %s", (*trans)->time(),
+                  timeString.text(), (*trans)->size(), (*trans)->getHash().hex().text());
+                removeInternal(*trans);
+                trans = mTransactions.erase(trans);
             }
             else
                 ++trans;
         }
 
         expireTime = getTime() - (60 * 5); // 5 minutes
-        for(NextCash::HashSet::Iterator trans = mPendingTransactions.begin();
+        for(TransactionSet::Iterator trans = mPendingTransactions.begin();
           trans != mPendingTransactions.end();)
         {
-            if(((Transaction *)*trans)->time() < expireTime)
+            if((*trans)->time() < expireTime)
             {
-                timeString.writeFormattedTime(((Transaction *)*trans)->time());
+                timeString.writeFormattedTime((*trans)->time());
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MEM_POOL_LOG_NAME,
-                  "Expiring pending transaction (time %d) %s (%d bytes) : %s",
-                  ((Transaction *)*trans)->time(), timeString.text(),
-                  ((Transaction *)*trans)->size(), (*trans)->getHash().hex().text());
-                mPendingSize -= ((Transaction *)*trans)->size();
-                trans = mPendingTransactions.eraseDelete(trans);
+                  "Expiring pending transaction (time %d) %s (%d bytes) : %s", (*trans)->time(),
+                  timeString.text(), (*trans)->size(), (*trans)->getHash().hex().text());
+                mPendingSize -= (*trans)->size();
+                trans = mPendingTransactions.erase(trans);
             }
             else
                 ++trans;
@@ -1294,26 +1134,26 @@ namespace BitCoin
 
         uint64_t feeRate;
 
-        for(NextCash::HashSet::Iterator trans = mTransactions.begin();
-          trans != mTransactions.end(); ++trans)
+        for(TransactionSet::Iterator trans = mTransactions.begin(); trans != mTransactions.end();
+          ++trans)
         {
-            feeRate = ((Transaction *)*trans)->feeRate();
-            pData.totalFee += (uint64_t)((Transaction *)*trans)->fee();
+            feeRate = (*trans)->feeRate();
+            pData.totalFee += (uint64_t)(*trans)->fee();
 
             if(feeRate == 0)
-                pData.zero += ((Transaction *)*trans)->size();
+                pData.zero += (*trans)->size();
             else if(feeRate < 1000)
-                pData.low += ((Transaction *)*trans)->size();
+                pData.low += (*trans)->size();
             else if(feeRate < 2000)
-                pData.one += ((Transaction *)*trans)->size();
+                pData.one += (*trans)->size();
             else if(feeRate < 5000)
-                pData.two += ((Transaction *)*trans)->size();
+                pData.two += (*trans)->size();
             else if(feeRate < 10000)
-                pData.five += ((Transaction *)*trans)->size();
+                pData.five += (*trans)->size();
             else
             {
-                pData.remainingSize += ((Transaction *)*trans)->size();
-                pData.remainingFee += ((Transaction *)*trans)->fee();
+                pData.remainingSize += (*trans)->size();
+                pData.remainingFee += (*trans)->fee();
             }
         }
 

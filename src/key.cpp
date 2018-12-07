@@ -9,6 +9,7 @@
 
 #ifdef PROFILER_ON
 #include "profiler.hpp"
+#include "profiler_setup.hpp"
 #endif
 
 #include "log.hpp"

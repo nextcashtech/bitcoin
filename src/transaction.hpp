@@ -14,10 +14,11 @@
 #include "hash_set.hpp"
 #include "stream.hpp"
 #include "buffer.hpp"
+#include "reference_counter.hpp"
 #include "base.hpp"
 #include "forks.hpp"
 #include "key.hpp"
-#include "outputs.hpp"
+#include "output.hpp"
 
 #include <vector>
 
@@ -143,30 +144,7 @@ namespace BitCoin
         uint8_t signatureStatus;
     };
 
-    class Transaction;
-
-    class TransactionList : public std::vector<Transaction *>
-    {
-    public:
-
-        ~TransactionList();
-
-        Transaction *getSorted(const NextCash::Hash &pHash);
-        bool insertSorted(Transaction *pTransaction);
-        bool removeSorted(const NextCash::Hash &pHash);
-
-        Transaction *getAndRemoveSorted(const NextCash::Hash &pHash);
-        Transaction *getAndRemoveAt(unsigned int pOffset);
-
-        void clear();
-        void clearNoDelete();
-
-        typedef std::vector<Transaction *>::iterator iterator;
-        typedef std::vector<Transaction *>::const_iterator const_iterator;
-
-    };
-
-    class Transaction : public NextCash::HashObject
+    class Transaction
     {
     public:
 
@@ -190,9 +168,11 @@ namespace BitCoin
 
         Transaction &operator = (const Transaction &pRight);
 
-        // HashObject virtual functions
         const NextCash::Hash &getHash() { return hash(); }
-        bool valueEquals(const NextCash::SortedObject *pRight) const { return this == pRight; }
+        bool valueEquals(const NextCash::SortedObject *pRight) const
+          { return this == (const Transaction *)pRight; }
+        bool valueEquals(Transaction &pRight) { return this == &pRight; }
+        int compare(Transaction &pRight) { return hash().compare(pRight.hash()); }
 
         void write(NextCash::OutputStream *pStream);
 
@@ -210,15 +190,6 @@ namespace BitCoin
 
         void clear();
         void clearCache();
-
-        // Pull precomputed data from another matching transaction.
-        void pullPrecomputed(Transaction &pMatchingTransaction)
-        {
-            mFee = pMatchingTransaction.mFee;
-            mStatus = pMatchingTransaction.mStatus;
-            mTime = pMatchingTransaction.mTime;
-            mStatus |= WAS_IN_MEMPOOL;
-        }
 
         // Print human readable version to log
         void print(const Forks &pForks, NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
@@ -257,7 +228,7 @@ namespace BitCoin
 #ifdef TRANS_ID_DUP_CHECK
         static const uint8_t DUP_CHECKED     = 0x20; // Duplicate ID has been checked for
 #endif
-        static const uint8_t WAS_IN_MEMPOOL  = 0x40; // Was in the mempool during block validation
+        static const uint8_t IN_MEMPOOL      = 0x40; // Was in the mempool during block validation
 
         // Flag checking operations
         uint8_t status() const { return mStatus; }
@@ -350,8 +321,9 @@ namespace BitCoin
         // Run unit tests
         static bool test();
 
-        void setWasInMemPool() { mStatus |= WAS_IN_MEMPOOL; }
-        bool wasInMemPool() const { return mStatus & WAS_IN_MEMPOOL; }
+        void setInMemPool() { mStatus |= IN_MEMPOOL; }
+        void clearInMemPool() { if(mStatus & IN_MEMPOOL) mStatus ^= IN_MEMPOOL; }
+        bool inMemPool() const { return mStatus & IN_MEMPOOL; }
 
     private:
 
@@ -366,6 +338,26 @@ namespace BitCoin
         bool writeSignatureData(const Forks &pForks, unsigned int pHeight,
           NextCash::OutputStream *pStream, unsigned int pInputOffset,
           NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType);
+
+    };
+
+    typedef NextCash::ReferenceCounter<Transaction> TransactionReference;
+
+    class TransactionList : public std::vector<TransactionReference>
+    {
+    public:
+
+        TransactionReference getSorted(const NextCash::Hash &pHash);
+        bool insertSorted(TransactionReference pTransaction);
+        bool removeSorted(const NextCash::Hash &pHash);
+
+        TransactionReference getAndRemoveSorted(const NextCash::Hash &pHash);
+        TransactionReference getAndRemoveAt(unsigned int pOffset);
+
+        typedef std::vector<TransactionReference>::iterator iterator;
+        typedef std::vector<TransactionReference>::const_iterator const_iterator;
+        typedef std::vector<TransactionReference>::reverse_iterator reverse_iterator;
+        typedef std::vector<TransactionReference>::const_reverse_iterator const_reverse_iterator;
 
     };
 }

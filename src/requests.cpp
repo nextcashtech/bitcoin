@@ -725,13 +725,12 @@ namespace BitCoin
                 else
                 {
                     // Get Block at height
-                    Block block;
-                    if(mChain->getBlock(height, block))
+                    BlockReference block(mChain->getBlock(height));
+                    if(block)
                     {
                         unsigned int offset = 0;
-                        for(std::vector<Transaction *>::iterator trans =
-                          block.transactions.begin(); trans != block.transactions.end(); ++trans,
-                          ++offset)
+                        for(TransactionList::iterator trans = block->transactions.begin();
+                          trans != block->transactions.end(); ++trans, ++offset)
                             if((*trans)->hash() == hash)
                             {
                                 sendData.writeString("tran:");
@@ -752,7 +751,7 @@ namespace BitCoin
                                     input->script.setReadOffset(0);
                                     if(offset == 0)
                                         sendData.writeString(ScriptInterpreter::coinBaseText(
-                                          input->script, block.header.version), true);
+                                          input->script, block->header.version), true);
                                     else
                                         sendData.writeString(ScriptInterpreter::scriptText(
                                           input->script, mChain->forks(), height), true);
@@ -800,27 +799,27 @@ namespace BitCoin
                   "Received block request for height %d", height);
 
                 // Get Block at height
-                Block block;
                 unsigned int inputCount, outputCount;
                 int64_t amountSent;
-                if(mChain->getBlock(height, block))
+                BlockReference block(mChain->getBlock(height));
+                if(block)
                 {
                     sendData.writeString("blok:");
                     sendData.writeUnsignedLong(0UL);
 
                     sendData.writeUnsignedInt(height); // Height
-                    block.header.hash().write(&sendData); // Hash
-                    sendData.writeUnsignedInt(block.header.time); // Time
-                    sendData.writeUnsignedInt(block.size()); // Size
-                    sendData.writeUnsignedLong(block.actualCoinbaseAmount() -
+                    block->header.hash().write(&sendData); // Hash
+                    sendData.writeUnsignedInt(block->header.time); // Time
+                    sendData.writeUnsignedInt(block->size()); // Size
+                    sendData.writeUnsignedLong(block->actualCoinbaseAmount() -
                       coinBaseAmount(height)); // Fees
-                    sendData.writeUnsignedInt(block.transactions.size()); // Transaction Count
+                    sendData.writeUnsignedInt(block->transactions.size()); // Transaction Count
 
                     inputCount = 0;
                     outputCount = 0;
                     amountSent = 0L;
-                    for(std::vector<Transaction *>::iterator trans = block.transactions.begin();
-                      trans != block.transactions.end(); ++trans)
+                    for(TransactionList::iterator trans = block->transactions.begin();
+                      trans != block->transactions.end(); ++trans)
                     {
                         inputCount += (*trans)->inputs.size();
                         outputCount += (*trans)->outputs.size();
@@ -832,8 +831,8 @@ namespace BitCoin
                     sendData.writeUnsignedInt(outputCount); // Output Count
                     sendData.writeLong(amountSent); // Amount Sent
 
-                    for(std::vector<Transaction *>::iterator trans = block.transactions.begin();
-                      trans != block.transactions.end(); ++trans)
+                    for(TransactionList::iterator trans = block->transactions.begin();
+                      trans != block->transactions.end(); ++trans)
                     {
                         (*trans)->hash().write(&sendData); // Hash
                         sendData.writeUnsignedInt((*trans)->size()); // Size

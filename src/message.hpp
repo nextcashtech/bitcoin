@@ -370,22 +370,26 @@ namespace BitCoin
         {
         public:
 
-            BlockData() : Data(BLOCK) { block = NULL; }
-            ~BlockData() { if(block != NULL) delete block; }
+            BlockData() : Data(BLOCK) {}
+            BlockData(BlockReference &pBlock) : Data(BLOCK), block(pBlock) {}
 
             void write(NextCash::OutputStream *pStream)
             {
-                if(block != NULL)
+                if(block)
                     block->write(pStream);
             }
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
             {
-                if(block == NULL)
-                    block = new Block();
-                return block->read(pStream);
+                block = new Block();
+                if(!block->read(pStream))
+                {
+                    block.clear();
+                    return false;
+                }
+                return true;
             }
 
-            Block *block;
+            BlockReference block;
 
         };
 
@@ -458,7 +462,8 @@ namespace BitCoin
         public:
 
             MerkleBlockData() : Data(MERKLE_BLOCK) { }
-            MerkleBlockData(Block *pBlock, BloomFilter &pFilter, std::vector<Transaction *> &pIncludedTransactions);
+            MerkleBlockData(BlockReference &pBlock, BloomFilter &pFilter,
+              TransactionList &pIncludedTransactions);
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
@@ -480,7 +485,7 @@ namespace BitCoin
 
             // Recursively parse merkle tree and add hashes and flags for specified node
             void addNode(MerkleNode *pNode, unsigned int pDepth, unsigned int &pNextBitOffset,
-              unsigned char &pNextByte, std::vector<Transaction *> &pIncludedTransactions);
+              unsigned char &pNextByte, TransactionList &pIncludedTransactions);
 
         };
 
@@ -488,13 +493,28 @@ namespace BitCoin
         {
         public:
 
-            TransactionData() : Data(TRANSACTION) { transaction = NULL; }
-            ~TransactionData() { if(transaction != NULL) delete transaction; }
+            TransactionData() : Data(TRANSACTION) {}
+            TransactionData(TransactionReference &pTransaction) : Data(TRANSACTION),
+              transaction(pTransaction) {}
 
-            void write(NextCash::OutputStream *pStream);
-            bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
+            void write(NextCash::OutputStream *pStream)
+            {
+                if(transaction)
+                    transaction->write(pStream);
+            }
 
-            Transaction *transaction;
+            bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
+            {
+                transaction = new Transaction();
+                if(!transaction->read(pStream))
+                {
+                    transaction.clear();
+                    return false;
+                }
+                return true;
+            }
+
+            TransactionReference transaction;
 
         };
 
@@ -553,32 +573,28 @@ namespace BitCoin
         {
         public:
 
-            PrefilledTransaction() { offset = 0; transaction = NULL; }
-            PrefilledTransaction(const PrefilledTransaction &pCopy)
+            PrefilledTransaction() : transaction(NULL) { offset = 0; }
+            PrefilledTransaction(const PrefilledTransaction &pCopy) :
+              transaction(pCopy.transaction)
             {
                 offset = pCopy.offset;
-                transaction = new Transaction(*pCopy.transaction);
             }
-            PrefilledTransaction(unsigned int pOffset, Transaction *pTransaction)
+            PrefilledTransaction(unsigned int pOffset, TransactionReference pTransaction) :
+              transaction(pTransaction)
             {
                 offset = pOffset;
-                transaction = new Transaction(*pTransaction);
             }
-            ~PrefilledTransaction()
-            {
-                if(transaction != NULL)
-                    delete transaction;
-            }
+            ~PrefilledTransaction() {}
 
             PrefilledTransaction &operator = (const PrefilledTransaction &pRight)
             {
                 offset = pRight.offset;
-                transaction = new Transaction(*pRight.transaction);
+                transaction = pRight.transaction;
                 return *this;
             }
 
             unsigned int offset;
-            Transaction *transaction; // Reference to transaction contained in block
+            TransactionReference transaction; // Reference to transaction contained in block
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize);
@@ -589,13 +605,12 @@ namespace BitCoin
         public:
 
             CompactBlockData();
-            CompactBlockData(Block *pBlock, bool pDelete); // Create message from full block to send.
-            ~CompactBlockData();
+            CompactBlockData(BlockReference &pBlock); // Create message from full block to send.
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
-            Block *block;
+            BlockReference block;
             uint64_t nonce;
             std::vector<uint64_t> shortIDs;
             std::vector<PrefilledTransaction> prefilled;
@@ -604,7 +619,6 @@ namespace BitCoin
             uint64_t calculateShortID(const NextCash::Hash &pTransactionID);
 
             Time time;
-            bool deleteBlock;
 
             // Calculate key values used in SipHash for short IDs.
             void calculateSipHashKeys();

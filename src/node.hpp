@@ -119,14 +119,14 @@ namespace BitCoin
         bool requestPeers();
 
         // Send notification of a new block on the chain
-        void announceBlock(Block *pBlock);
+        void announceBlock(BlockReference &pBlock);
 
         // Send notification of a new transaction in the mempool
         void addTransactionAnnouncements(TransactionList &pTransactions);
         bool finalizeAnnouncments();
 
         // Used to send transactions created by this wallet
-        bool sendTransaction(Transaction *pTransaction);
+        bool sendTransaction(TransactionReference &pTransaction);
 
         bool compactBlocksEnabled() const { return mSendCompactBlocksVersion != 0L; }
         bool announceBlocksCompact() const { return mAnnounceBlocksCompact; }
@@ -196,7 +196,7 @@ namespace BitCoin
         bool sendReject(const char *pCommand, Message::RejectData::Code pCode, const char *pReason);
         bool sendRejectWithHash(const char *pCommand, Message::RejectData::Code pCode, const char *pReason,
           const NextCash::Hash &pHash);
-        bool sendBlock(Block &pBlock);
+        bool sendBlock(BlockReference &pBlock);
         bool sendBloomFilter();
         bool sendMerkleBlock(const NextCash::Hash &pBlockHash);
 
@@ -273,7 +273,7 @@ namespace BitCoin
         bool addAnnouncedTransaction(const NextCash::Hash &pHash);
 
         NextCash::Mutex mAnnounceBlockMutex;
-        std::vector<Block *> mBlocksToAnnounce;
+        std::vector<BlockReference> mBlocksToAnnounce;
 
         // Process new blocks and send block announcements.
         void processBlocksToAnnounce();
