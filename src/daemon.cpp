@@ -58,11 +58,11 @@ namespace BitCoin
         mIncomingNodes = 0;
         mOutgoingNodes = 0;
         mLastDataSaveTime = getTime();
-        mLastMemPoolCheckPending = getTime();
         mLastMonitorProcess = getTime();
         mLastCleanTime = getTime();
         mNodeListener = NULL;
         mLastRequestCleanTime = getTime();
+        mLastMemPoolProcessTime = getTime();
         mRequestsListener = NULL;
         mGoodNodeMax = 5;
         mOutgoingNodeMax = 8;
@@ -101,7 +101,7 @@ namespace BitCoin
         for(std::vector<Transaction *>::iterator trans = mTransactionsToTransmit.begin();
           trans != mTransactionsToTransmit.end();)
         {
-            if(mMonitor.isConfirmed((*trans)->hash))
+            if(mMonitor.isConfirmed((*trans)->hash()))
             {
                 delete *trans;
                 trans = mTransactionsToTransmit.erase(trans);
@@ -184,7 +184,7 @@ namespace BitCoin
         mFinishMode = pMode;
     }
 
-    void Daemon::setFinishTime(int32_t pTime)
+    void Daemon::setFinishTime(Time pTime)
     {
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Finish time set to %d", pTime);
@@ -475,20 +475,15 @@ namespace BitCoin
         saveStatistics();
         saveMonitor();
         saveKeyStore();
-        mChain.save();
+        mChain.save(true);
         mChain.clearInSync();
         Header::clean();
         Block::clean();
         mInfo.save();
 
 #ifdef PROFILER_ON
-        NextCash::String profilerTime;
-        profilerTime.writeFormattedTime(getTime(), "%Y%m%d.%H%M");
-        NextCash::String profilerFileName = "profiler.";
-        profilerFileName += profilerTime;
-        profilerFileName += ".txt";
-        NextCash::FileOutputStream profilerFile(profilerFileName, true);
-        NextCash::ProfilerManager::write(&profilerFile);
+        NextCash::printProfilerDataToLog(NextCash::Log::VERBOSE);
+        NextCash::resetProfilers();
 #endif
 
         mRunning = false;
@@ -549,11 +544,10 @@ namespace BitCoin
             for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
             {
                 blocksRequestedCount += (*node)->blocksRequestedCount();
+                (*node)->collectStatistics(mStatistics);
             }
             mNodeLock.readUnlock();
         }
-
-        collectStatistics();
 
         NextCash::String timeText;
 
@@ -591,8 +585,9 @@ namespace BitCoin
               mChain.addresses().cacheDataSize() / 1000);
 #endif
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Mem Pool : %d/%d trans/pending (%d KB)", mChain.memPool().count(),
-              mChain.memPool().pendingCount(), mChain.memPool().size() / 1000);
+              "Mem Pool : %d/%d trans/pending (%d/%d KB)", mChain.memPool().count(),
+              mChain.memPool().pendingCount(), mChain.memPool().size() / 1000,
+              mChain.memPool().pendingSize() / 1000);
 
             if(!mChain.isInSync())
             {
@@ -795,36 +790,6 @@ namespace BitCoin
         mKeysSynchronized = mKeyStore.allAreSynchronized();
     }
 
-    bool checkSignature(Transaction &pTransaction, Monitor &pMonitor,
-      std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd,
-      Chain *pChain)
-    {
-        std::vector<Monitor::RelatedTransactionData> relatedTransactions;
-        std::vector<unsigned int> spentAges;
-
-        pMonitor.getTransactions(pChainKeyBegin, pChainKeyEnd, relatedTransactions, true);
-
-        std::vector<Transaction *> transactions;
-        for(std::vector<Monitor::RelatedTransactionData>::iterator trans =
-          relatedTransactions.begin(); trans != relatedTransactions.end(); ++trans)
-            transactions.push_back(&trans->transaction);
-
-        pTransaction.clearCache();
-
-        TransactionList tempMemPool;
-        NextCash::HashList outpoints;
-        if(!pTransaction.check(pChain, tempMemPool, outpoints,
-          pChain->forks().requiredBlockVersion(pChain->forks().height()),
-          pChain->forks().height()))
-        {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
-              "Failed to process transaction");
-            return false;
-        }
-
-        return true;
-    }
-
     int estimatedStandardFee(int pInputCount, int pOutputCount, double pFeeRate)
     {
         // P2PKH/P2SH input size
@@ -952,17 +917,10 @@ namespace BitCoin
 
         Transaction *newTransaction = new Transaction(*transaction);
 
-        // Verify Transaction
-        if(!checkSignature(*newTransaction, mMonitor, chainKeys->begin(), chainKeys->end(),
-          &mChain))
-        {
-            delete transaction;
-            delete newTransaction;
-            return 1;
-        }
+        // TODO Add transaction verification
 
         // Add to monitor
-        mMonitor.addTransactionAnnouncement(transaction->hash, 0);
+        mMonitor.addTransactionAnnouncement(transaction->hash(), 0);
 
         Message::TransactionData data;
         data.transaction = transaction;
@@ -1100,21 +1058,14 @@ namespace BitCoin
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
           "Created %d byte transaction with fee of %d sat (%0.2f sat/byte) : %s",
           transaction->size(), calculatedFee, (float)calculatedFee / (float)transaction->size(),
-          transaction->hash.hex().text());
+          transaction->hash().hex().text());
 
         Transaction *newTransaction = new Transaction(*transaction);
 
-        // Verify Transaction
-        if(!checkSignature(*newTransaction, mMonitor, chainKeys->begin(), chainKeys->end(),
-          &mChain))
-        {
-            delete transaction;
-            delete newTransaction;
-            return 1;
-        }
+        // TODO Add transaction verification
 
         // Add to monitor
-        mMonitor.addTransactionAnnouncement(transaction->hash, 0);
+        mMonitor.addTransactionAnnouncement(transaction->hash(), 0);
 
         Message::TransactionData data;
         data.transaction = transaction;
@@ -1244,7 +1195,7 @@ namespace BitCoin
         NextCash::HashList list;
     };
 
-    void Daemon::sendRequests()
+    void Daemon::sendBlockRequests()
     {
         if(mInfo.spvMode)
             return;
@@ -1305,6 +1256,46 @@ namespace BitCoin
             return;
         }
 
+        if(blocksToRequest.size() == 1)
+        {
+            if(mChain.isInSync() && mChain.lastHeaderHash() == blocksToRequest.front())
+            {
+                unsigned int compactsAvailable = 0;
+                for(std::vector<Node *>::iterator node = requestNodes.begin();
+                  node != requestNodes.end(); ++node)
+                    if((*node)->compactBlocksEnabled())
+                    {
+                        ++compactsAvailable;
+                        if((*node)->requestBlocks(blocksToRequest))
+                        {
+                            mNodeLock.readUnlock();
+                            return;
+                        }
+                    }
+
+                if(compactsAvailable == 0)
+                    NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                      "No nodes with compact blocks enabled to request block from");
+                else
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                      "None of the %d compact block nodes had the block to request",
+                      compactsAvailable);
+            }
+
+            for(std::vector<Node *>::iterator node = requestNodes.begin();
+              node != requestNodes.end(); ++node)
+                if((*node)->requestBlocks(blocksToRequest))
+                {
+                    mNodeLock.readUnlock();
+                    return;
+                }
+
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              "No nodes had the block to request");
+            mNodeLock.readUnlock();
+            return;
+        }
+
         // Divided these up (staggered) between available nodes
         NodeRequests *nodeRequests = new NodeRequests[requestNodes.size()];
         NodeRequests *nodeRequest = nodeRequests;
@@ -1350,77 +1341,6 @@ namespace BitCoin
         std::random_shuffle(pNodeList.begin(), pNodeList.end()); // Sort Randomly
     }
 
-    void Daemon::sendTransactionRequests()
-    {
-        NextCash::HashList transactionsToRequest;
-
-        mChain.memPool().getNeeded(transactionsToRequest);
-
-        if(transactionsToRequest.size() == 0)
-            return;
-
-        mNodeLock.readLock();
-
-        if(mNodes.size() == 0)
-        {
-            mNodeLock.readUnlock();
-            return;
-        }
-
-        std::vector<Node *> nodes = mNodes; // Copy list of nodes
-        randomizeOutgoing(nodes);
-
-        if(nodes.size() == 0)
-        {
-            mNodeLock.readUnlock();
-            return;
-        }
-
-        NodeRequests *nodeRequests = new NodeRequests[nodes.size()];
-        NodeRequests *nodeRequest;
-        unsigned int i;
-
-        // Assign nodes
-        nodeRequest = nodeRequests;
-        for(std::vector<Node *>::iterator node=nodes.begin();node!=nodes.end();++node)
-            if((*node)->isReady())
-            {
-                nodeRequest->node = *node;
-                ++nodeRequest;
-            }
-
-        // Try to find nodes that have the transactions
-        bool found;
-        for(NextCash::HashList::iterator hash=transactionsToRequest.begin();hash!=transactionsToRequest.end();++hash)
-        {
-            found = false;
-            nodeRequest = nodeRequests;
-            for(i=0;i<nodes.size();++i)
-            {
-                if(nodeRequest->node->hasTransaction(*hash))
-                {
-                    nodeRequest->list.push_back(*hash);
-                    found = true;
-                }
-                ++nodeRequest;
-            }
-
-            if(!found) // Add to first node
-                nodeRequests->list.push_back(*hash);
-        }
-
-        // Send requests to nodes
-        nodeRequest = nodeRequests;
-        for(i=0;i<nodes.size();++i)
-        {
-            nodeRequest->node->requestTransactions(nodeRequest->list);
-            ++nodeRequest;
-        }
-
-        delete[] nodeRequests;
-        mNodeLock.readUnlock();
-    }
-
     void Daemon::sendHeaderRequest()
     {
         mNodeLock.readLock();
@@ -1456,6 +1376,58 @@ namespace BitCoin
         mNodeLock.readUnlock();
     }
 
+    void Daemon::sendTransactionRequests()
+    {
+        // Node: See not on getNeededHashes
+        // NextCash::HashList transactionHashes;
+        // mChain.memPool().getNeededHashes(transactionHashes);
+
+        // if(transactionHashes.size() == 0)
+            // return;
+
+        // mNodeLock.readLock();
+        // std::vector<Node *> nodes = mNodes; // Copy list of nodes
+        // randomizeOutgoing(nodes);
+
+        // if(nodes.size() == 0)
+        // {
+            // mNodeLock.readUnlock();
+            // return;
+        // }
+
+        // if(transactionHashes.size() < 5000)
+        // {
+            // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              // "Re-requesting %d transactions from %s", transactionHashes.size(),
+              // nodes.front()->name());
+            // nodes.front()->requestTransactions(transactionHashes, true);
+        // }
+        // else
+        // {
+            // NextCash::HashList transactionSubList;
+            // NextCash::HashList::iterator next = transactionHashes.begin();
+
+            // for(std::vector<Node *>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+            // {
+                // transactionSubList.clear();
+                // while(next != transactionHashes.end() && transactionSubList.size() < 5000)
+                    // transactionSubList.push_back(*next++);
+
+                // if(transactionSubList.size() == 0)
+                    // break;
+
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+                  // "Re-requesting %d transactions from %s", transactionSubList.size(), (*node)->name());
+                // (*node)->requestTransactions(transactionSubList, true);
+
+                // if(next == transactionHashes.end())
+                    // break;
+            // }
+        // }
+
+        // mNodeLock.readUnlock();
+    }
+
     void Daemon::checkSync()
     {
         // Latest header older than 3 hours.
@@ -1470,7 +1442,7 @@ namespace BitCoin
                 ++count;
         mNodeLock.readUnlock();
 
-        if(count >= 4 && (mInfo.spvMode || mChain.blockHeight() == mChain.headerHeight()))
+        if(count >= 3 && (mInfo.spvMode || mChain.blockHeight() == mChain.headerHeight()))
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
               "Chain is in sync. %d nodes have matching latest header : %s", count,
@@ -1679,7 +1651,7 @@ namespace BitCoin
             }
         }
 
-        double dropScore = averageScore - (scoreStandardDeviation * 1.25);
+        double dropScore = averageScore - (scoreStandardDeviation * 1.5);
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
           "Node Performance Summary : average speed %d KB/s, average ping %d ms, drop score %d",
           (int)averageSpeed / 1000, (int)averagePing, (int)(100.0 * dropScore));
@@ -1726,40 +1698,43 @@ namespace BitCoin
 
     void Daemon::announce()
     {
-        Block *block = mChain.blockToAnnounce();
+        Block *block = mChain.blockToAnnounce(0);
         if(block != NULL)
         {
             // Announce to all nodes
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_DAEMON_LOG_NAME,
+              "Announcing block : %s", block->header.hash().hex().text());
             mNodeLock.readLock();
             for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
                 (*node)->announceBlock(block);
             mNodeLock.readUnlock();
-            delete block;
+
+            // Release lock on block from blockToAnnounce.
+            mChain.releaseBlock(0, block->header.hash());
         }
 
-        NextCash::HashList transactionList;
-        Transaction *transaction;
-        mChain.memPool().getToAnnounce(transactionList);
-        if(transactionList.size() > 0)
-        {
-            mNodeLock.readLock();
-            for(NextCash::HashList::iterator hash=transactionList.begin();hash!=transactionList.end();++hash)
-            {
-                transaction = mChain.memPool().get(*hash);
-                if(transaction != NULL)
-                {
-                    // Announce to all nodes
-                    for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
-                        (*node)->announceTransaction(transaction);
-                }
-            }
-            mNodeLock.readUnlock();
-        }
+        TransactionList transactionList;
+        mChain.memPool().getToAnnounce(transactionList, 0);
+        if(transactionList.size() == 0)
+            return;
+        NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
+          "Announcing %d transactions", transactionList.size());
+
+        mNodeLock.readLock();
+        for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
+            (*node)->addTransactionAnnouncements(transactionList);
+        mChain.memPool().freeTransactions(transactionList, 0);
+
+        for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
+            (*node)->finalizeAnnouncments();
+        mNodeLock.readUnlock();
+
+        transactionList.clearNoDelete(); // Still owned by mempool.
     }
 
-    void Daemon::runManage()
+    void Daemon::runManage(void *pParameter)
     {
-        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        Daemon *daemon = (Daemon *)pParameter;
         if(daemon == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -1863,20 +1838,17 @@ namespace BitCoin
         }
 #endif
 
-        int32_t startTime = getTime();
-        int32_t lastStatReportTime = startTime;
-        int32_t lastSyncCheck = startTime;
-        int32_t lastRequestCheckTime = startTime;
-        int32_t lastInfoSaveTime = startTime;
-        int32_t lastImprovement = startTime;
-        int32_t lastTransactionRequest = startTime;
-        int32_t lastTransactionTransmit = startTime;
-        int32_t time;
+        Time startTime = getTime();
+        Time lastStatReportTime = startTime;
+        Time lastSyncCheck = startTime;
+        Time lastRequestCheckTime = startTime;
+        Time lastInfoSaveTime = startTime;
+        Time lastImprovement = startTime;
+        Time lastTransactionRequest = startTime;
+        Time lastTransactionTransmit = startTime;
+        Time time;
 #ifdef PROFILER_ON
-        uint32_t lastProfilerWrite = startTime;
-        NextCash::String profilerTime;
-        NextCash::String profilerFileName;
-        NextCash::FileOutputStream *profilerFile;
+        Time lastProfilerWrite = startTime;
 #endif
 
         while(!mStopping)
@@ -1942,7 +1914,7 @@ namespace BitCoin
                   (mChain.pendingBlockCount() == 0 && time - lastRequestCheckTime > 10))
                 {
                     lastRequestCheckTime = time;
-                    sendRequests();
+                    sendBlockRequests();
                 }
 
                 if(time - lastSyncCheck > 10)
@@ -1956,18 +1928,14 @@ namespace BitCoin
             }
             else
             {
-                if(mChain.headersNeeded() || getTime() - mLastHeaderRequestTime > 120)
+                if(mChain.headersNeeded())
                     sendHeaderRequest();
                 if(mChain.blocksNeeded())
-                    sendRequests();
-                if(!mInfo.spvMode)
+                    sendBlockRequests();
+                if(getTime() - lastTransactionRequest > 2)
                 {
-                    time = getTime();
-                    if(time - lastTransactionRequest > 20)
-                    {
-                        lastTransactionRequest = time;
-                        sendTransactionRequests();
-                    }
+                    sendTransactionRequests();
+                    lastTransactionRequest = getTime();
                 }
             }
 
@@ -2043,21 +2011,17 @@ namespace BitCoin
             time = getTime();
             if(time - lastProfilerWrite > 3600)
             {
-                profilerTime.writeFormattedTime(time, "%Y%m%d.%H%M");
-                profilerFileName.writeFormatted("profiler.%s.txt", profilerTime.text());
-                profilerFile = new NextCash::FileOutputStream(profilerFileName, true);
-                NextCash::ProfilerManager::write(profilerFile);
-                delete profilerFile;
-                NextCash::ProfilerManager::reset();
+                NextCash::printProfilerDataToLog(NextCash::Log::VERBOSE);
+                NextCash::resetProfilers();
                 lastProfilerWrite = time;
             }
 #endif
         }
     }
 
-    void Daemon::runProcess()
+    void Daemon::runProcess(void *pParameter)
     {
-        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        Daemon *daemon = (Daemon *)pParameter;
         if(daemon == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -2099,25 +2063,20 @@ namespace BitCoin
             if(mStopping)
                 return;
 
-            if(getTime() - mLastMemPoolCheckPending > 20)
+            if(getTime() - mLastMemPoolProcessTime > 30)
             {
-                mChain.memPool().checkPendingTransactions(&mChain, mInfo.minFee);
-                mLastMemPoolCheckPending = getTime();
+                mChain.memPool().process();
+                mLastMemPoolProcessTime = getTime();
             }
 
             if(mStopping)
                 return;
 
-            mChain.memPool().process(mInfo.memPoolSize);
-
-            if(mStopping)
-                return;
-
-            int32_t time = getTime();
+            Time time = getTime();
             if((time - mLastDataSaveTime > 30 && mChain.saveDataNeeded()) ||
               time - mLastDataSaveTime > 3600)
             {
-                mChain.saveData();
+                mChain.saveData(false);
                 mLastDataSaveTime = getTime();
             }
 
@@ -2126,9 +2085,9 @@ namespace BitCoin
         }
     }
 
-    void Daemon::runScan()
+    void Daemon::runScan(void *pParameter)
     {
-        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        Daemon *daemon = (Daemon *)pParameter;
         if(daemon == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -2187,9 +2146,9 @@ namespace BitCoin
 
     };
 
-    void scanThreadRun()
+    void scanThreadRun(void *pParameter)
     {
-        ScanThreadData *data = (ScanThreadData *)NextCash::Thread::getParameter();
+        ScanThreadData *data = (ScanThreadData *)pParameter;
         if(data == NULL)
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME,
@@ -2260,7 +2219,7 @@ namespace BitCoin
                 try
                 {
                     scanNode = new Node(connection, Node::SCAN, peer->services, data->daemon,
-                      &data->stop);
+                      &data->stop, false);
                 }
                 catch(std::bad_alloc &pBadAlloc)
                 {
@@ -2324,7 +2283,7 @@ namespace BitCoin
     }
 
     bool Daemon::addNode(NextCash::Network::Connection *pConnection, uint32_t pType,
-      uint64_t pServices)
+      uint64_t pServices, bool pAnnounceCompact)
     {
         mLastConnectionActive = getTime();
 
@@ -2340,7 +2299,7 @@ namespace BitCoin
         Node *node;
         try
         {
-            node = new Node(pConnection, pType, pServices, this);
+            node = new Node(pConnection, pType, pServices, this, NULL, pAnnounceCompact);
         }
         catch(std::bad_alloc &pBadAlloc)
         {
@@ -2375,12 +2334,12 @@ namespace BitCoin
     }
 
     bool Daemon::addNode(NextCash::IPAddress &pIPAddress, uint32_t pType,
-      uint64_t pServices)
+      uint64_t pServices, bool pAnnounceCompact)
     {
         Node *node;
         try
         {
-            node = new Node(pIPAddress, pType, pServices, this);
+            node = new Node(pIPAddress, pType, pServices, this, pAnnounceCompact);
         }
         catch(std::bad_alloc &pBadAlloc)
         {
@@ -2449,7 +2408,7 @@ namespace BitCoin
         NextCash::Network::list(pName, ipList);
         unsigned int result = 0;
 #ifdef SINGLE_THREAD
-        int32_t lastNodeProcess = getTime();
+        Time lastNodeProcess = getTime();
 #endif
 
         if(ipList.size() == 0)
@@ -2480,7 +2439,7 @@ namespace BitCoin
             {
                 if(ipAddress.setText(*ip))
                 {
-                    addNode(ipAddress, Node::SEED, 0);
+                    addNode(ipAddress, Node::SEED, 0, false);
                     ++result;
                 }
             }
@@ -2514,7 +2473,7 @@ namespace BitCoin
         bool found;
         uint64_t servicesMask = Message::VersionData::FULL_NODE_BIT;
 #ifdef SINGLE_THREAD
-        int32_t lastNodeProcess = getTime();
+        Time lastNodeProcess = getTime();
 #endif
 
         mConnecting = true;
@@ -2522,13 +2481,18 @@ namespace BitCoin
         mNodeLock.readLock();
         unsigned int goodCount = 0;
         unsigned int allCount = 0;
+        unsigned int compactCount = 0;
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
+        {
             if((*node)->isOutgoing())
             {
                 if((*node)->isGood())
                     ++goodCount;
                 ++allCount;
             }
+            if((*node)->announceBlocksCompact())
+                ++compactCount;
+        }
         mNodeLock.readUnlock();
 
         if(mInfo.spvMode)
@@ -2580,8 +2544,10 @@ namespace BitCoin
 
                 mNodeLock.readUnlock();
 
-                if(addNode((*peer)->address, Node::GOOD, (*peer)->services))
+                if(addNode((*peer)->address, Node::GOOD, (*peer)->services, compactCount < 3))
                 {
+                    if(compactCount < 3)
+                        ++compactCount;
                     ++goodCount;
                     ++allCount;
                     ++newCount;
@@ -2615,7 +2581,7 @@ namespace BitCoin
             mInfo.getRandomizedPeers(peers, OKAY_RATING, servicesMask);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Found %d okay peers", peers.size());
-            int32_t startTime = getTime();
+            Time startTime = getTime();
             for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
               !mStopping && allCount < maxOutgoingNodes() - 3; ++peer)
             {
@@ -2654,8 +2620,10 @@ namespace BitCoin
                 while(mRecentIPs.size() > RECENT_IP_COUNT)
                     mRecentIPs.erase(mRecentIPs.begin());
 
-                if(addNode((*peer)->address, Node::NONE, (*peer)->services))
+                if(addNode((*peer)->address, Node::NONE, (*peer)->services, compactCount < 3))
                 {
+                    if(compactCount < 3)
+                        ++compactCount;
                     ++allCount;
                     ++newCount;
 #ifdef SINGLE_THREAD
@@ -2689,7 +2657,7 @@ namespace BitCoin
             mInfo.getRandomizedPeers(peers, USABLE_RATING, servicesMask);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
               "Found %d usable peers", peers.size());
-            int32_t startTime = getTime();
+            Time startTime = getTime();
             for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
               !mStopping && allCount < maxOutgoingNodes(); ++peer)
             {
@@ -2728,8 +2696,10 @@ namespace BitCoin
                 while(mRecentIPs.size() > RECENT_IP_COUNT)
                     mRecentIPs.pop_front();
 
-                if(addNode((*peer)->address, Node::NONE, 0))
+                if(addNode((*peer)->address, Node::NONE, 0, compactCount < 3))
                 {
+                    if(compactCount < 3)
+                        ++compactCount;
                     ++allCount;
                     ++newCount;
 #ifdef SINGLE_THREAD
@@ -2849,9 +2819,9 @@ namespace BitCoin
             delete *requestChannel;
     }
 
-    void Daemon::runConnections()
+    void Daemon::runConnections(void *pParameter)
     {
-        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        Daemon *daemon = (Daemon *)pParameter;
         if(daemon == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,
@@ -2944,7 +2914,7 @@ namespace BitCoin
                     }
                     else if(newConnection->isOpen())
                     {
-                        if(addNode(newConnection, Node::INCOMING, 0) &&
+                        if(addNode(newConnection, Node::INCOMING, 0, false) &&
                           mIncomingNodes >= mMaxIncoming)
                         {
                             delete mNodeListener;
@@ -2961,9 +2931,9 @@ namespace BitCoin
         }
     }
 
-    void Daemon::runRequests()
+    void Daemon::runRequests(void *pParameter)
     {
-        Daemon *daemon = (Daemon *)NextCash::Thread::getParameter();
+        Daemon *daemon = (Daemon *)pParameter;
         if(daemon == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_DAEMON_LOG_NAME,

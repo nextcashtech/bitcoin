@@ -20,6 +20,7 @@
 #include "block.hpp"
 #include "key.hpp"
 #include "bloom_filter.hpp"
+#include "bloom_lookup.hpp"
 
 #include <cstdint>
 
@@ -51,7 +52,10 @@ namespace BitCoin
             REJECT, // BIP-0061
 
             // Version >= 70014
-            SEND_COMPACT, COMPACT_BLOCK, GET_BLOCK_TRANSACTIONS, BLOCK_TRANSACTIONS // BIP-0152
+            SEND_COMPACT, COMPACT_BLOCK, GET_COMPACT_TRANS, COMPACT_TRANS, // BIP-0152
+
+            // BUIP-0093 Graphene
+            GET_GRAPHENE, GRAPHENE, GET_GRAPHENE_TRANS, GRAPHENE_TRANS
 
         };
 
@@ -62,7 +66,8 @@ namespace BitCoin
         {
         public:
 
-            enum Type { UNKNOWN=0x00, TRANSACTION=0x01, BLOCK=0x02, FILTERED_BLOCK=0x03, COMPACT_BLOCK=0x04 };
+            enum Type { UNKNOWN = 0x00, TRANSACTION = 0x01, BLOCK = 0x02, FILTERED_BLOCK = 0x03,
+              COMPACT_BLOCK = 0x04 };
 
             InventoryHash() : hash(32) { type = UNKNOWN; }
             InventoryHash(Type pType, const NextCash::Hash &pHash) { type = pType; hash = pHash; }
@@ -118,12 +123,15 @@ namespace BitCoin
             {
                 if(pStream->remaining() < pSize)
                     return false;
-                for(unsigned int i=0;i<pSize;i++)
+                for(unsigned int i = 0; i < pSize; i++)
                     pStream->readByte();
                 return true;
             }
 
+            bool isBlockData();
+
             Type type;
+            NextCash::stream_size size;
 
         };
 
@@ -144,7 +152,7 @@ namespace BitCoin
 
             int32_t version;
             NextCash::Hash pendingBlockHash;
-            int32_t pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
+            Time pendingBlockStartTime, pendingBlockLastReportTime, pendingBlockUpdateTime;
             unsigned int lastPendingBlockSize;
 
         };
@@ -180,7 +188,7 @@ namespace BitCoin
             uint16_t transmittingPort;
             uint64_t nonce;
             NextCash::String userAgent;
-            int32_t startBlockHeight;
+            uint32_t startBlockHeight;
             uint8_t relay; // Relay all transactions (without bloom filter)
         };
 
@@ -286,7 +294,7 @@ namespace BitCoin
                 return *this;
             }
 
-            uint32_t time;
+            Time time;
             uint64_t services;
             uint8_t ip[16];
             uint16_t port;
@@ -333,7 +341,7 @@ namespace BitCoin
         {
         public:
 
-            FilterLoadData() : Data(FILTER_LOAD) { }
+            FilterLoadData() : Data(FILTER_LOAD), filter(BloomFilter::STANDARD) { }
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
@@ -508,24 +516,36 @@ namespace BitCoin
         {
         public:
 
-            SendCompactData() : Data(SEND_COMPACT) { }
+            SendCompactData() : Data(SEND_COMPACT)
+            {
+                sendCompact = 0x00;
+                version = 1L;
+            }
+            SendCompactData(bool pAnnounce, uint64_t pVersion) : Data(SEND_COMPACT)
+            {
+                if(pAnnounce)
+                    sendCompact = 0x01;
+                else
+                    sendCompact = 0x00;
+                version = pVersion;
+            }
 
             void write(NextCash::OutputStream *pStream)
             {
                 pStream->writeByte(sendCompact);
-                pStream->writeUnsignedLong(encoding);
+                pStream->writeUnsignedLong(version);
             }
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion)
             {
                 if(pSize != 9)
                     return false;
                 sendCompact = pStream->readByte();
-                encoding = pStream->readUnsignedLong();
+                version = pStream->readUnsignedLong();
                 return true;
             }
 
             bool sendCompact;
-            uint64_t encoding;
+            uint64_t version;
 
         };
 
@@ -533,11 +553,28 @@ namespace BitCoin
         {
         public:
 
-            PrefilledTransaction() { offset = 0; transaction = 0; }
+            PrefilledTransaction() { offset = 0; transaction = NULL; }
+            PrefilledTransaction(const PrefilledTransaction &pCopy)
+            {
+                offset = pCopy.offset;
+                transaction = new Transaction(*pCopy.transaction);
+            }
             PrefilledTransaction(unsigned int pOffset, Transaction *pTransaction)
             {
                 offset = pOffset;
-                transaction = pTransaction;
+                transaction = new Transaction(*pTransaction);
+            }
+            ~PrefilledTransaction()
+            {
+                if(transaction != NULL)
+                    delete transaction;
+            }
+
+            PrefilledTransaction &operator = (const PrefilledTransaction &pRight)
+            {
+                offset = pRight.offset;
+                transaction = new Transaction(*pRight.transaction);
+                return *this;
             }
 
             unsigned int offset;
@@ -552,47 +589,121 @@ namespace BitCoin
         public:
 
             CompactBlockData();
+            CompactBlockData(Block *pBlock, bool pDelete); // Create message from full block to send.
             ~CompactBlockData();
-
-            // Sets block to be sent in message
-            void setBlock(Block *pBlock); // Does not delete block given this way
-
-            // Decodes transaction IDs and puts transactions in the block
-            bool fillBlock();
-
-            bool updateShortIDs();
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
             Block *block;
             uint64_t nonce;
-            NextCash::HashList shortIDs;
-            std::vector<PrefilledTransaction> prefilledTransactionIDs;
+            std::vector<uint64_t> shortIDs;
+            std::vector<PrefilledTransaction> prefilled;
 
+            // Return the short ID for the specified transaction ID.
+            uint64_t calculateShortID(const NextCash::Hash &pTransactionID);
+
+            Time time;
             bool deleteBlock;
 
+            // Calculate key values used in SipHash for short IDs.
+            void calculateSipHashKeys();
+
+        private:
+
+            uint64_t mKey0 = 0;
+            uint64_t mKey1 = 0;
+
         };
 
-        class GetBlockTransactionsData : public Data
+        class GetCompactTransData : public Data
         {
         public:
 
-            GetBlockTransactionsData() : Data(GET_BLOCK_TRANSACTIONS) {}
+            GetCompactTransData() : Data(GET_COMPACT_TRANS) {}
+            GetCompactTransData(const NextCash::Hash &pHeaderHash) : Data(GET_COMPACT_TRANS),
+              headerHash(pHeaderHash) {}
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
+            NextCash::Hash headerHash;
+            std::vector<unsigned int> offsets;
+
         };
 
-        class BlockTransactionsData : public Data
+        class CompactTransData : public Data
         {
         public:
 
-            BlockTransactionsData() : Data(BLOCK_TRANSACTIONS) {}
+            CompactTransData() : Data(COMPACT_TRANS) {}
+            CompactTransData(const NextCash::Hash &pHeaderHash) : Data(COMPACT_TRANS),
+              headerHash(pHeaderHash) {}
+            ~CompactTransData() {}
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
+
+            NextCash::Hash headerHash;
+            TransactionList transactions;
+        };
+
+        class GetGrapheneBlockData : public Data
+        {
+        public:
+
+            GetGrapheneBlockData() : Data(GET_GRAPHENE) {}
+            ~GetGrapheneBlockData() {}
+
+            // void write(NextCash::OutputStream *pStream);
+            // bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
+
+        };
+
+        class GrapheneBlockData : public Data
+        {
+        public:
+
+            GrapheneBlockData() : Data(GRAPHENE), filter(BloomFilter::GRAPHENE) {}
+            ~GrapheneBlockData() {}
+
+            // void write(NextCash::OutputStream *pStream);
+            // bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
+
+            Header header;
+            TransactionList transactions;
+            uint64_t blockTransactionCount;
+
+            // Set
+            uint8_t ordered;
+            uint64_t receiverItems;
+            std::vector<uint8_t> order;
+            BloomFilter filter;
+            BloomLookup lookup;
+
+        };
+
+        class GetGrapheneTransactionData : public Data
+        {
+        public:
+
+            GetGrapheneTransactionData() : Data(GET_GRAPHENE_TRANS) {}
+            ~GetGrapheneTransactionData() {}
+
+            // void write(NextCash::OutputStream *pStream);
+            // bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
+
+        };
+
+        class GrapheneTransactionData : public Data
+        {
+        public:
+
+            GrapheneTransactionData() : Data(GRAPHENE_TRANS) {}
+            ~GrapheneTransactionData() {}
+
+            // void write(NextCash::OutputStream *pStream);
+            // bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
 
         };
 

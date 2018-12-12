@@ -1,7 +1,9 @@
 
 COMPILER=g++
-COMPILE_FLAGS=-I./.include -I../nextcash/.include -Isecp256k1/include -pthread -std=c++11 -Wall -DDISABLE_ADDRESSES
-# To Turn profiler on add this to the end of COMPILE_FLAGS : -DPROFILER_ON
+COMPILE_FLAGS=-I./.include -I../nextcash/.include -Isecp256k1/include -pthread -std=c++11 -Wall -DDISABLE_ADDRESSES -DPROFILER_ON
+# To turn profiler on add this to the end of COMPILE_FLAGS : -DPROFILER_ON
+# To disable the address database add this to the end of COMPILE_FLAGS : -DDISABLE_ADDRESSES
+# To turn on duplicate transaction ID checking add this to COMPILE_FLAGS : -DTRANS_ID_DUP_CHECK
 LIBRARY_PATHS=-L../nextcash -Lsecp256k1/.libs
 LIBRARIES=-lnextcash -lsecp256k1
 DEBUG_LIBRARIES=-lnextcash.debug -lsecp256k1
@@ -20,7 +22,8 @@ list:
 	@echo Headers : $(HEADER_FILES)
 	@echo Sources : $(SOURCE_FILES)
 	@echo Run Options :
-	@echo "  make build_secp256k1    # Run tests"
+	@echo "  make build_secp256k1 # Build only secp256k1 library"
+	@echo "  make test_secp256k1 # Test secp256k1 library"
 	@echo "  make debug   # Build exe with gdb info"
 	@echo "  make release # Build release exe"
 	@echo "  make test    # Run tests"
@@ -30,7 +33,7 @@ build_secp256k1:
 	@echo ----------------------------------------------------------------------------------------------------
 	@echo "\tBUILDING secp256k1"
 	@echo ----------------------------------------------------------------------------------------------------
-	@cd secp256k1; ./autogen.sh; ./configure; make
+	@cd secp256k1; ./autogen.sh; ./configure --enable-static --disable-shared; make
 	@touch build_secp256k1
 
 test_secp256k1:
@@ -38,6 +41,13 @@ test_secp256k1:
 	@echo "\tTESTING secp256k1"
 	@echo ----------------------------------------------------------------------------------------------------
 	@cd secp256k1; ./tests
+
+clean_secp256k1:
+	@echo ----------------------------------------------------------------------------------------------------
+	@echo "\tCLEANING secp256k1"
+	@echo ----------------------------------------------------------------------------------------------------
+	@cd secp256k1; make clean
+	@rm build_secp256k1
 
 headers:
 	@echo ----------------------------------------------------------------------------------------------------
@@ -115,7 +125,7 @@ test.debug: headers ${OBJECT_DIRECTORY}/.debug_headers build_secp256k1 ${DEBUG_O
 	@echo "\t\033[0;33mBUILDING DEBUG TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	${COMPILER} -c -ggdb -o ${OBJECT_DIRECTORY}/test.o.debug bitcoin_test.cpp ${COMPILE_FLAGS}
-	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/test.o.debug ${LIBRARY_PATHS} ${LIBRARIES} -o test.debug ${LINK_FLAGS}
+	${COMPILER} ${DEBUG_OBJECTS} ${OBJECT_DIRECTORY}/test.o.debug ${LIBRARY_PATHS} ${DEBUG_LIBRARIES} -o test.debug ${LINK_FLAGS}
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 
 clean:
@@ -123,5 +133,3 @@ clean:
 	@echo "\tCLEANING"
 	@echo ----------------------------------------------------------------------------------------------------
 	@rm -vfr ${HEADER_DIRECTORY} ${OBJECT_DIRECTORY} test test.debug ${OUTPUT} ${OUTPUT}.debug
-	@cd secp256k1; make clean
-	@rm build_secp256k1

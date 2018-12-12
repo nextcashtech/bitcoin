@@ -194,7 +194,10 @@ namespace BitCoin
         OP_NOP7                = 0xb6, // The word is ignored. Does not mark transaction as invalid.
         OP_NOP8                = 0xb7, // The word is ignored. Does not mark transaction as invalid.
         OP_NOP9                = 0xb8, // The word is ignored. Does not mark transaction as invalid.
-        OP_NOP10               = 0xb9  // The word is ignored. Does not mark transaction as invalid.
+        OP_NOP10               = 0xb9, // The word is ignored. Does not mark transaction as invalid.
+
+        OP_CHECKDATASIG        = 0xba,
+        OP_CHECKDATASIGVERIFY  = 0xbb
     };
 
     class ScriptInterpreter
@@ -258,6 +261,14 @@ namespace BitCoin
             }
             else
                 return false; // Empty stack
+        }
+
+        bool stackIsClean()
+        {
+            if(!mVerified)
+                return false;
+
+            return mStack.size() == 1;
         }
 
         bool isStandard() { return mStandard; }
@@ -344,6 +355,8 @@ namespace BitCoin
 
         static void removeCodeSeparators(NextCash::Buffer &pInputScript, NextCash::Buffer &pOutputScript);
 
+        static NextCash::String coinBaseText(NextCash::Buffer &pScript,
+          unsigned int pBlockVersion);
         static NextCash::String scriptText(NextCash::Buffer &pScript, const Forks &pForks,
           unsigned int pBlockHeight);
         static void printScript(NextCash::Buffer &pScript, const Forks &pForks,

@@ -25,7 +25,7 @@ namespace BitCoin
         RequestChannel(NextCash::Network::Connection *pConnection, Chain *pChain);
         ~RequestChannel();
 
-        static void run();
+        static void run(void *pParameter);
 
         void requestStop();
 
@@ -43,12 +43,12 @@ namespace BitCoin
         NextCash::Buffer mReceiveBuffer;
         bool mStop, mStopped, mAuthenticated;
 
-        int32_t mLastReceiveTime;
-        int32_t mConnectedTime;
+        Time mLastReceiveTime;
+        Time mConnectedTime;
 
         Chain *mChain;
 
-        int mPreviousStatisticsHeight;
+        unsigned int mPreviousStatisticsHeight;
         unsigned int mPreviousStatisticsHours;
         NextCash::Buffer mPreviousStatisticsResult;
 

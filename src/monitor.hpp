@@ -9,6 +9,7 @@
 #define BITCOIN_ADDRESS_BLOCK_HPP
 
 #include "hash.hpp"
+#include "hash_container_list.hpp"
 #include "stream.hpp"
 #include "block.hpp"
 #include "transaction.hpp"
@@ -122,7 +123,7 @@ namespace BitCoin
         // Add a received transaction if it was confirmed in a merkle block
         void addTransaction(Chain &pChain, Message::TransactionData *pTransactionData);
 
-        bool isConfirmed(NextCash::Hash &pTransactionID, bool pIsLocked = false)
+        bool isConfirmed(const NextCash::Hash &pTransactionID, bool pIsLocked = false)
         {
             if(!pIsLocked)
                 mMutex.lock();
@@ -210,7 +211,7 @@ namespace BitCoin
             int64_t amount;
             std::vector<unsigned int> payOutputs, spendInputs;
 
-            int32_t announceTime;
+            Time announceTime;
             std::vector<unsigned int> nodes; // IDs of nodes that announced this transaction
 
         };
@@ -225,7 +226,7 @@ namespace BitCoin
             {
             public:
 
-                NodeData(unsigned int pNodeID, int32_t pRequestTime)
+                NodeData(unsigned int pNodeID, Time pRequestTime)
                 {
                     nodeID = pNodeID;
                     requestTime = pRequestTime;
@@ -233,12 +234,12 @@ namespace BitCoin
                 }
 
                 unsigned int nodeID;
-                int32_t requestTime, receiveTime;
+                Time requestTime, receiveTime;
 
             };
 
             MerkleRequestData(uint8_t pRequiredNodeCount, unsigned int pNodeID,
-              int32_t pRequestTime)
+              Time pRequestTime)
             {
                 requiredNodeCount = pRequiredNodeCount;
                 nodes.emplace_back(pNodeID, pRequestTime);
@@ -248,9 +249,9 @@ namespace BitCoin
             }
             ~MerkleRequestData();
 
-            bool addNode(unsigned int pNodeID, int32_t pRequestTime);
+            bool addNode(unsigned int pNodeID, Time pRequestTime);
             bool removeNode(unsigned int pNodeID);
-            unsigned int timedOutNode(int32_t pTime);
+            unsigned int timedOutNode(Time pTime);
             bool wasRequested(unsigned int pNodeID);
             bool markReceived(unsigned int pNodeID);
             bool hasReceived(); // Return true if any node has given a complete response

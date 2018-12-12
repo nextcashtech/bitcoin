@@ -46,13 +46,13 @@ namespace BitCoin
         static const uint32_t NOT_OUTGOING = SEED | INCOMING | SCAN;
 
         Node(NextCash::Network::Connection *pConnection, uint32_t pConnectionType,
-          uint64_t pServices, Daemon *pDaemon, bool *pStopFlag = NULL);
+          uint64_t pServices, Daemon *pDaemon, bool *pStopFlag, bool pAnnounceCompact);
 
         Node(NextCash::IPAddress &pIPAddress, uint32_t pConnectionType,
-             uint64_t pServices, Daemon *pDaemon);
+             uint64_t pServices, Daemon *pDaemon, bool pAnnounceCompact);
         ~Node();
 
-        static void run();
+        static void run(void *pParameter);
         void runInThread();
 
         unsigned int id() { return mID; }
@@ -83,14 +83,14 @@ namespace BitCoin
         bool isInitialized() const { return mIsInitialized; }
         bool isStopped() const { return mStopped; }
         // Versions exchanged and initial ping completed
-        bool isReady() const { return mPingRoundTripTime != -1; }
-        milliseconds pingTimeMilliseconds() const { return mPingRoundTripTime; }
+        bool isReady() const { return mPingRoundTripTime != 0xffffffffffffffff; }
+        Milliseconds pingTimeMilliseconds() const { return mPingRoundTripTime; }
         void setPingCutoff(uint32_t pPingCutoff) { mPingCutoff = pPingCutoff; }
 
         // Time that the node connected
-        int32_t connectedTime() { return mConnectedTime; }
+        Time connectedTime() { return mConnectedTime; }
         // Last time a message was received from this peer
-        int32_t lastReceiveTime() { return mLastReceiveTime; }
+        Time lastReceiveTime() { return mLastReceiveTime; }
 
         unsigned int blockHeight()
         {
@@ -106,7 +106,7 @@ namespace BitCoin
         const NextCash::Hash &lastHeaderHash() const { return mLastHeaderHash; }
 
         // Block requests
-        bool requestBlocks(NextCash::HashList &pList);
+        bool requestBlocks(NextCash::HashList &pList, bool pForceFull = false);
         bool waitingForBlockRequests();
         unsigned int blocksRequestedCount() { return (unsigned int)mBlocksRequested.size(); }
         unsigned int blocksDownloadedCount() const { return mBlockDownloadCount; }
@@ -114,19 +114,22 @@ namespace BitCoin
         unsigned int blocksDownloadedTime() const { return mBlockDownloadTime; }
         double blockDownloadBytesPerSecond() const;
 
-        bool hasTransaction(const NextCash::Hash &pHash);
-        bool requestTransactions(NextCash::HashList &pList);
+        bool requestTransactions(NextCash::HashList &pList, bool pReMark);
 
         bool requestPeers();
 
         // Send notification of a new block on the chain
-        bool announceBlock(Block *pBlock);
+        void announceBlock(Block *pBlock);
 
         // Send notification of a new transaction in the mempool
-        bool announceTransaction(Transaction *pTransaction);
+        void addTransactionAnnouncements(TransactionList &pTransactions);
+        bool finalizeAnnouncments();
 
         // Used to send transactions created by this wallet
         bool sendTransaction(Transaction *pTransaction);
+
+        bool compactBlocksEnabled() const { return mSendCompactBlocksVersion != 0L; }
+        bool announceBlocksCompact() const { return mAnnounceBlocksCompact; }
 
         bool isNewlyReady()
         {
@@ -166,6 +169,23 @@ namespace BitCoin
         // Release anything (i.e requests) associated with this node
         void release();
 
+        enum FillResult
+        {
+            FILL_COMPLETE,   // Block is now complete.
+            FILL_INCOMPLETE, // Request sent for missing data.
+            FILL_FAILED,     // Failed. New request required.
+            FILL_ABANDONED   // Fill abandoned because another node has taken over.
+        };
+
+        // Attempt to fill block from compact block.
+        FillResult fillCompactBlock(Message::CompactBlockData *pCompactBlock,
+          bool pRequestTransactions);
+
+        // Adds transactions to the compact block.
+        // Returns true if any transactions were added.
+        bool addTransactionsToCompactBlock(Message::CompactBlockData *pCompactBlock,
+          Message::CompactTransData *pTransData);
+
         unsigned int mActiveMerkleRequests;
         bool requestMerkleBlock(NextCash::Hash &pHash);
 
@@ -192,26 +212,36 @@ namespace BitCoin
         NextCash::Mutex mConnectionMutex;
         NextCash::Network::Connection *mConnection;
         NextCash::Buffer mReceiveBuffer;
+        NextCash::Mutex mStatisticsLock;
         Statistics mStatistics;
         bool mStarted, mIsInitialized, mStopRequested, mStopped;
         uint32_t mConnectionType;
         bool mIsGood;
-        bool mSendBlocksCompact;
+        bool mAnnounceBlocksCompact, mRequestAnnounceCompact;
+        uint64_t mSendCompactBlocksVersion;
+        bool mSendCompactSent;
         bool mRejected;
         bool mWasReady;
         bool mReleased;
         bool mMemPoolRequested;
+        Time mMemPoolRequestedTime;
+        bool mMemPoolReceived;
+        bool mProcessingCompactTransactions;
         bool *mStopFlag;
+        std::vector<Message::Data *> mMessagesToSend;
+        NextCash::Mutex mMessagesToSendLock;
 
         Message::VersionData *mSentVersionData, *mReceivedVersionData;
         bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;
-        int32_t mLastReceiveTime;
-        int32_t mLastCheckTime;
-        milliseconds mLastPingTime;
-        milliseconds mPingRoundTripTime;
-        int32_t mPingCutoff;
-        int32_t mLastBlackListCheck;
-        int32_t mLastMerkleCheck, mLastMerkleRequest, mLastMerkleReceive;
+        Time mLastReceiveTime;
+        Time mLastCheckTime;
+        Milliseconds mLastPingTime;
+        Milliseconds mPingRoundTripTime;
+        uint32_t mPingCutoff;
+        Time mLastBlackListCheck;
+        Time mLastMerkleCheck, mLastMerkleRequest, mLastMerkleReceive;
+        Message::InventoryData *mInventoryData;
+        std::vector<Message::CompactBlockData *> mIncomingCompactBlocks, mOutgoingCompactBlocks;
 
         BloomFilter mFilter; // Bloom filter received from peer
         uint64_t mMinimumFeeRate;
@@ -222,22 +252,46 @@ namespace BitCoin
         unsigned int mBlockDownloadSize;
         unsigned int mBlockDownloadTime;
 
-        NextCash::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested, mLastHeaderHash;
-        int32_t mHeaderRequestTime;
+        NextCash::Hash mHeaderRequested, mLastBlockAnnounced, mLastHeaderRequested,
+          mLastHeaderHash;
+        Time mHeaderRequestTime;
 
         NextCash::Mutex mBlockRequestMutex;
         NextCash::HashList mBlocksRequested;
-        int32_t mBlockRequestTime, mLastBlockReceiveTime;
+        NextCash::HashSet mTransactionsRequested;
+        Time mBlockRequestTime, mLastBlockReceiveTime;
+
+        bool updateBlockRequest(const NextCash::Hash &pHash, Message::Data *pMessage,
+          bool pComplete);
 
         NextCash::Mutex mAnnounceMutex;
-        NextCash::HashList mAnnounceBlocks, mAnnounceTransactions, mSentTransactions;
+        NextCash::HashList mAnnounceBlocks; // Blocks announced by peer.
+        NextCash::HashList mSentTransactions; // Transactions sent to peer.
+        NextCash::HashSet mAnnounceTransactions; // Transactions annoucned by peer.
 
         void addAnnouncedBlock(const NextCash::Hash &pHash);
         bool addAnnouncedTransaction(const NextCash::Hash &pHash);
 
+        NextCash::Mutex mAnnounceBlockMutex;
+        std::vector<Block *> mBlocksToAnnounce;
+
+        // Process new blocks and send block announcements.
+        void processBlocksToAnnounce();
+
+        Time mLastExpireTime;
+        void expire();
+
+        // Transaction hashes that were already requested, but not received, when announced.
+        // This ensures if one node fails to send a requested transaction, that another can still
+        //   request it.
+        NextCash::HashList mSavedTransactions;
+        Time mLastSavedCheckTime;
+        bool checkSaved();
+
         bool mConnected;
-        int32_t mConnectedTime;
+        Time mConnectedTime;
         unsigned int mMessagesReceived;
+        unsigned int mOldTransactionCount;
         unsigned int mPingCount;
 
         uint64_t mServices;

@@ -7,10 +7,6 @@
  **************************************************************************/
 #include "forks.hpp"
 
-#ifdef PROFILER_ON
-#include "profiler.hpp"
-#endif
-
 #include "log.hpp"
 #include "file_stream.hpp"
 #include "base.hpp"
@@ -269,10 +265,6 @@ namespace BitCoin
     {
         mMutex.lock();
 
-#ifdef PROFILER_ON
-        NextCash::Profiler outputsProfiler("Forks Process");
-#endif
-
         if(mBlockVersionRequiredHeights[2] == 0)
         {
             unsigned int totalCount = 1000;
@@ -406,7 +398,7 @@ namespace BitCoin
 
             uint32_t compositeValue = 0;
             int32_t version;
-            int32_t medianTimePast = pChain->getMedianPastTime(pHeight, 11);
+            Time medianTimePast = pChain->getMedianPastTime(pHeight, 11);
             for(std::vector<SoftFork *>::iterator softFork = mForks.begin();
               softFork != mForks.end(); ++softFork)
             {
@@ -566,7 +558,7 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_FORKS_LOG_NAME,
                       "2018 Nov fork activated at block height %d", pHeight);
                     mCashFork201811BlockHeight = pHeight;
-                    //TODO mCashForkID = 0x00FF0001;
+                    mBlockMaxSize = FORK_201811_MAX_BLOCK_SIZE;
                 }
             }
         }
@@ -594,7 +586,6 @@ namespace BitCoin
             // Undo Nov 2018 fork
             mCashFork201811BlockHeight = 0;
             mBlockMaxSize = FORK_201805_MAX_BLOCK_SIZE;
-            mCashForkID = 0;
         }
 
         if(mCashFork201805BlockHeight != 0 && pHeight <= mCashFork201805BlockHeight)
@@ -909,8 +900,7 @@ namespace BitCoin
         // Height at offset 1 represents version 3
         // Height at offset 2 represents version 4
         for(int i = 2; i >= 0; --i)
-            if(mBlockVersionEnabledHeights[i] != 0 &&
-              (unsigned int)mBlockVersionEnabledHeights[i] > pHeight)
+            if(mBlockVersionEnabledHeights[i] != 0 && mBlockVersionEnabledHeights[i] < pHeight)
                 return i + 2;
 
         return 1;
@@ -923,8 +913,7 @@ namespace BitCoin
         // Height at offset 1 represents version 3
         // Height at offset 2 represents version 4
         for(int i = 2; i >= 0; --i)
-            if(mBlockVersionRequiredHeights[i] != 0 &&
-              (unsigned int)mBlockVersionRequiredHeights[i] > pHeight)
+            if(mBlockVersionRequiredHeights[i] != 0 && mBlockVersionRequiredHeights[i] < pHeight)
                 return i + 2;
 
         return 1;

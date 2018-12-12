@@ -27,7 +27,7 @@ namespace BitCoin
         pStream->writeInt(rating);
 
         // Time
-        pStream->writeInt(time);
+        pStream->writeUnsignedInt(time);
 
         // Services
         pStream->writeUnsignedLong(services);
@@ -74,7 +74,7 @@ namespace BitCoin
         rating = pStream->readInt();
 
         // Time
-        time = pStream->readInt();
+        time = pStream->readUnsignedInt();
 
         // Services
         services = pStream->readUnsignedLong();

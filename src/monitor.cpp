@@ -22,7 +22,7 @@
 
 namespace BitCoin
 {
-    Monitor::Monitor() : mMutex("Monitor")
+    Monitor::Monitor() : mMutex("Monitor"), mFilter(BloomFilter::STANDARD)
     {
         mKeyStore = NULL;
         mFilterID = 0;
@@ -62,7 +62,7 @@ namespace BitCoin
                 delete *trans;
     }
 
-    bool Monitor::MerkleRequestData::addNode(unsigned int pNodeID, int32_t pRequestTime)
+    bool Monitor::MerkleRequestData::addNode(unsigned int pNodeID, Time pRequestTime)
     {
         if(complete || nodes.size() >= requiredNodeCount)
             return false;
@@ -87,7 +87,7 @@ namespace BitCoin
         return false;
     }
 
-    unsigned int Monitor::MerkleRequestData::timedOutNode(int32_t pTime)
+    unsigned int Monitor::MerkleRequestData::timedOutNode(Time pTime)
     {
         unsigned int result = 0;
         for(std::vector<NodeData>::iterator node = nodes.begin(); node != nodes.end(); ++node)
@@ -207,7 +207,7 @@ namespace BitCoin
         mTransactions.clear();
         for(std::vector<SPVTransactionData *>::iterator trans = transactions.begin();
           trans != transactions.end(); ++trans)
-            mTransactions.insert((*trans)->transaction->hash, *trans);
+            mTransactions.insert((*trans)->transaction->hash(), *trans);
 
         mMutex.unlock();
     }
@@ -311,7 +311,7 @@ namespace BitCoin
                 clear();
                 return false;
             }
-            mTransactions.insert(newSPVTransaction->transaction->hash, newSPVTransaction);
+            mTransactions.insert(newSPVTransaction->transaction->hash(), newSPVTransaction);
         }
 
         // Update transactions
@@ -557,9 +557,9 @@ namespace BitCoin
                 pTransaction->amount += output->amount;
 
                 // Check if this is a new output that needs to be monitored.
-                if(mPendingTransactions.get(pTransaction->transaction->hash) ==
+                if(mPendingTransactions.get(pTransaction->transaction->hash()) ==
                   mPendingTransactions.end() &&
-                  mTransactions.get(pTransaction->transaction->hash) == mTransactions.end())
+                  mTransactions.get(pTransaction->transaction->hash()) == mTransactions.end())
                     newUTXO = true;
             }
 
@@ -615,7 +615,7 @@ namespace BitCoin
         }
 
         // Find oldest create date which does not have a pass started.
-        int32_t oldestCreateDate = 0, thisCreateDate;
+        Time oldestCreateDate = 0, thisCreateDate;
         for(unsigned int i = 0; i < mKeyStore->size(); ++i)
             if(!mKeyStore->passStarted(i))
             {
@@ -872,14 +872,14 @@ namespace BitCoin
             for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
               index != (*trans)->payOutputs.end(); ++index)
                 if((*trans)->transaction != NULL)
-                    outpoints.emplace_back((*trans)->transaction->hash, *index);
+                    outpoints.emplace_back((*trans)->transaction->hash(), *index);
 
         // Add confirmed outpoints to monitor for being spent.
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mTransactions.begin(); trans != mTransactions.end(); ++trans)
             for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
               index != (*trans)->payOutputs.end(); ++index)
-                outpoints.emplace_back((*trans)->transaction->hash, *index);
+                outpoints.emplace_back((*trans)->transaction->hash(), *index);
 
         // Remove confirmed spent outpoints.
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
@@ -1088,11 +1088,11 @@ namespace BitCoin
                       hash != payAddresses.end(); ++hash)
                         if(containsAddress(*hash, pChainKeyBegin, pChainKeyEnd))
                         {
-                            pOutputs.emplace_back((*trans)->transaction->hash, *index);
+                            pOutputs.emplace_back((*trans)->transaction->hash(), *index);
                             pOutputs.back().output =
                               new Output((*trans)->transaction->outputs[*index]);
-                            pOutputs.back().confirmations = (uint32_t)(pChain->headerHeight() -
-                              pChain->hashHeight((*trans)->blockHash) + 1);
+                            pOutputs.back().confirmations = pChain->headerHeight() -
+                              pChain->hashHeight((*trans)->blockHash) + 1;
                             break;
                         }
                 }
@@ -1127,7 +1127,7 @@ namespace BitCoin
                           hash != payAddresses.end(); ++hash)
                             if(containsAddress(*hash, pChainKeyBegin, pChainKeyEnd))
                             {
-                                pOutputs.emplace_back((*trans)->transaction->hash, *index);
+                                pOutputs.emplace_back((*trans)->transaction->hash(), *index);
                                 pOutputs.back().output =
                                   new Output((*trans)->transaction->outputs[*index]);
                                 pOutputs.back().confirmations = 0;
@@ -1181,7 +1181,7 @@ namespace BitCoin
     bool Monitor::updateRelatedTransactionData(RelatedTransactionData &pData,
       std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd)
     {
-        if(pData.transaction.hash.isEmpty())
+        if(pData.transaction.hash().isEmpty())
             return false;
 
         Output spentOutput;
@@ -1256,7 +1256,7 @@ namespace BitCoin
 
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mTransactions.begin(); trans != mTransactions.end(); ++trans)
-            if((*trans)->transaction->hash == pID)
+            if((*trans)->transaction->hash() == pID)
             {
                 pTransaction.transaction = *(*trans)->transaction;
                 pTransaction.blockHash = (*trans)->blockHash;
@@ -1269,7 +1269,7 @@ namespace BitCoin
 
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
-            if((*trans)->transaction->hash == pID)
+            if((*trans)->transaction->hash() == pID)
             {
                 pTransaction.transaction = *(*trans)->transaction;
                 pTransaction.blockHash = (*trans)->blockHash;
@@ -1516,7 +1516,7 @@ namespace BitCoin
         NextCash::HashContainerList<MerkleRequestData *>::Iterator request;
         MerkleRequestData *newMerkleRequest;
         unsigned int blockHeight;
-        int32_t time = getTime();
+        Time time = getTime();
         uint8_t requiredNodeCount = Info::instance().merkleBlockCountRequired;
         bool found;
 
@@ -1663,7 +1663,7 @@ namespace BitCoin
         mMutex.lock();
 
         NextCash::HashContainerList<MerkleRequestData *>::Iterator requestIter =
-          mMerkleRequests.get(pData->header.hash);
+          mMerkleRequests.get(pData->header.hash());
         if(requestIter == mMerkleRequests.end())
         {
             mMutex.unlock();
@@ -1678,8 +1678,8 @@ namespace BitCoin
         {
             // Check next item (for reverse mode)
             ++requestIter;
-            if(requestIter == mMerkleRequests.end() || requestIter.hash() != pData->header.hash ||
-               !(*requestIter)->wasRequested(pNodeID))
+            if(requestIter == mMerkleRequests.end() ||
+              requestIter.hash() != pData->header.hash() || !(*requestIter)->wasRequested(pNodeID))
             {
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   "Node [%d] sent unrequested merkle block.", pNodeID);
@@ -1703,7 +1703,7 @@ namespace BitCoin
         if(!pData->validate(transactionHashes))
         {
             mMutex.lock();
-            requestIter = mMerkleRequests.get(pData->header.hash);
+            requestIter = mMerkleRequests.get(pData->header.hash());
             if(requestIter != mMerkleRequests.end())
                 (*requestIter)->removeNode(pNodeID);
             if(addNeedsClose(pNodeID))
@@ -1715,7 +1715,7 @@ namespace BitCoin
 
         mMutex.lock();
 
-        requestIter = mMerkleRequests.get(pData->header.hash);
+        requestIter = mMerkleRequests.get(pData->header.hash());
         if(requestIter == mMerkleRequests.end())
         {
             mMutex.unlock();
@@ -1726,7 +1726,7 @@ namespace BitCoin
         {
             // Check next item (for reverse mode)
             ++requestIter;
-            if(requestIter == mMerkleRequests.end() || requestIter.hash() != pData->header.hash ||
+            if(requestIter == mMerkleRequests.end() || requestIter.hash() != pData->header.hash() ||
               !(*requestIter)->wasRequested(pNodeID))
             {
                 mMutex.unlock();
@@ -1753,7 +1753,7 @@ namespace BitCoin
         SPVTransactionData *newSPVTransaction;
         NextCash::HashContainerList<SPVTransactionData *>::Iterator transaction;
         NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction;
-        unsigned int blockHeight = pChain.hashHeight(pData->header.hash);
+        unsigned int blockHeight = pChain.hashHeight(pData->header.hash());
         for(NextCash::HashList::iterator hash = transactionHashes.begin();
           hash != transactionHashes.end(); ++hash)
         {
@@ -1779,7 +1779,7 @@ namespace BitCoin
                         newSPVTransaction = *pendingTransaction;
                         mPendingTransactions.erase(pendingTransaction);
 
-                        newSPVTransaction->blockHash = pData->header.hash;
+                        newSPVTransaction->blockHash = pData->header.hash();
                         newSPVTransaction->blockHeight = blockHeight;
 
                         if(!confirmTransaction(newSPVTransaction))
@@ -1792,8 +1792,8 @@ namespace BitCoin
                     }
                     else // Create empty transaction
                     {
-                        newSPVTransaction = new SPVTransactionData(pData->header.hash,
-                          pChain.hashHeight(pData->header.hash));
+                        newSPVTransaction = new SPVTransactionData(pData->header.hash(),
+                          pChain.hashHeight(pData->header.hash()));
                         request->transactions.insert(*hash, newSPVTransaction);
                     }
                 }
@@ -1855,7 +1855,7 @@ namespace BitCoin
     {
         mMutex.lock();
 
-        if(isConfirmed(pTransactionData->transaction->hash, true))
+        if(isConfirmed(pTransactionData->transaction->hash(), true))
         {
             mMutex.unlock();
             return; // Already confirmed this transaction
@@ -1871,7 +1871,7 @@ namespace BitCoin
               mMerkleRequests.begin(); requestIter != mMerkleRequests.end(); ++requestIter)
             {
                 request = *requestIter;
-                transactionIter = request->transactions.get(pTransactionData->transaction->hash);
+                transactionIter = request->transactions.get(pTransactionData->transaction->hash());
                 if(transactionIter != request->transactions.end())
                 {
                     if(*transactionIter != NULL && (*transactionIter)->transaction == NULL)
@@ -1895,7 +1895,7 @@ namespace BitCoin
 
             // Check pending transactions
             NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction =
-              mPendingTransactions.get(pTransactionData->transaction->hash);
+              mPendingTransactions.get(pTransactionData->transaction->hash());
             if(pendingTransaction != mPendingTransactions.end() &&
                (*pendingTransaction)->transaction == NULL)
             {
@@ -1914,12 +1914,12 @@ namespace BitCoin
                         message.writeFormatted(
                           "Receive pending for %0.8f bitcoins.\nTransaction : %s",
                           bitcoins((*pendingTransaction)->amount),
-                          (*pendingTransaction)->transaction->hash.hex().text());
+                          (*pendingTransaction)->transaction->hash().hex().text());
                         NextCash::Log::addFormatted(NextCash::Log::INFO,
                           BITCOIN_MONITOR_LOG_NAME,
                           "Pending transaction receiving %0.8f bitcoins : %s",
                           bitcoins((*pendingTransaction)->amount),
-                          (*pendingTransaction)->transaction->hash.hex().text());
+                          (*pendingTransaction)->transaction->hash().hex().text());
                     }
                     else
                     {
@@ -1927,12 +1927,12 @@ namespace BitCoin
                         message.writeFormatted(
                           "Send pending for %0.8f bitcoins.\nTransaction : %s",
                           -bitcoins((*pendingTransaction)->amount),
-                          (*pendingTransaction)->transaction->hash.hex().text());
+                          (*pendingTransaction)->transaction->hash().hex().text());
                         NextCash::Log::addFormatted(NextCash::Log::INFO,
                           BITCOIN_MONITOR_LOG_NAME,
                           "Pending transaction sending %0.8f bitcoins : %s",
                           -bitcoins((*pendingTransaction)->amount),
-                          (*pendingTransaction)->transaction->hash.hex().text());
+                          (*pendingTransaction)->transaction->hash().hex().text());
                     }
 
                     notify(subject, message);
@@ -1941,7 +1941,7 @@ namespace BitCoin
                 else
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                       "Pending transaction (unrelated) : %s",
-                      (*pendingTransaction)->transaction->hash.hex().text());
+                      (*pendingTransaction)->transaction->hash().hex().text());
             }
 
             if(mBloomFilterNeedsRestart)
@@ -2039,12 +2039,12 @@ namespace BitCoin
         {
             if((*trans)->blockHash == pHash)
             {
-                pending = mPendingTransactions.get((*trans)->transaction->hash);
+                pending = mPendingTransactions.get((*trans)->transaction->hash());
                 if(pending == mPendingTransactions.end())
                 {
                     (*trans)->blockHeight = 0xffffffff;
                     (*trans)->blockHash.clear();
-                    mPendingTransactions.insert((*trans)->transaction->hash, *trans);
+                    mPendingTransactions.insert((*trans)->transaction->hash(), *trans);
                 }
                 else
                     delete *trans;
@@ -2083,12 +2083,12 @@ namespace BitCoin
         {
             if((*trans)->blockHeight > pBlockHeight)
             {
-                pending = mPendingTransactions.get((*trans)->transaction->hash);
+                pending = mPendingTransactions.get((*trans)->transaction->hash());
                 if(pending == mPendingTransactions.end())
                 {
                     (*trans)->blockHeight = 0xffffffff;
                     (*trans)->blockHash.clear();
-                    mPendingTransactions.insert((*trans)->transaction->hash, *trans);
+                    mPendingTransactions.insert((*trans)->transaction->hash(), *trans);
                 }
                 else
                     delete *trans;
@@ -2109,7 +2109,7 @@ namespace BitCoin
 
         // Remove from pending (in case some how duplicated)
         NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction =
-          mPendingTransactions.get(pTransaction->transaction->hash);
+          mPendingTransactions.get(pTransaction->transaction->hash());
         if(pendingTransaction != mPendingTransactions.end())
         {
             delete *pendingTransaction;
@@ -2118,7 +2118,7 @@ namespace BitCoin
 
         // Add to confirmed
         NextCash::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction =
-          mTransactions.get(pTransaction->transaction->hash);
+          mTransactions.get(pTransaction->transaction->hash());
         if(confirmedTransaction == mTransactions.end())
         {
             // Refresh in case it spends pending or previous transaction in this block.
@@ -2131,7 +2131,7 @@ namespace BitCoin
             // Determine if transaction actually effects related addresses.
             if(pTransaction->payOutputs.size() > 0 || pTransaction->spendInputs.size() > 0)
             {
-                mTransactions.insert(pTransaction->transaction->hash, pTransaction);
+                mTransactions.insert(pTransaction->transaction->hash(), pTransaction);
                 NextCash::String subject, message;
 
                 if(pTransaction->amount > 0)
@@ -2139,23 +2139,23 @@ namespace BitCoin
                     subject = "Bitcoin Cash Receive Confirmed";
                     message.writeFormatted("Receive confirmed for %0.8f bitcoins in block %d\nNew Balance : %0.8f\nTransaction : %s",
                       bitcoins(pTransaction->amount), pTransaction->blockHeight,
-                      bitcoins(balance(true)), pTransaction->transaction->hash.hex().text());
+                      bitcoins(balance(true)), pTransaction->transaction->hash().hex().text());
                     NextCash::Log::addFormatted(NextCash::Log::INFO,
                       BITCOIN_MONITOR_LOG_NAME,
                       "Confirmed transaction receiving %0.8f bitcoins : %s",
-                      bitcoins(pTransaction->amount), pTransaction->transaction->hash.hex().text());
+                      bitcoins(pTransaction->amount), pTransaction->transaction->hash().hex().text());
                 }
                 else
                 {
                     subject = "Bitcoin Cash Send Confirmed";
                     message.writeFormatted("Send confirmed for %0.8f bitcoins in block %d.\nNew Balance : %0.8f\nTransaction : %s",
                       -bitcoins(pTransaction->amount), pTransaction->blockHeight,
-                      bitcoins(balance(true)), pTransaction->transaction->hash.hex().text());
+                      bitcoins(balance(true)), pTransaction->transaction->hash().hex().text());
                     NextCash::Log::addFormatted(NextCash::Log::INFO,
                       BITCOIN_MONITOR_LOG_NAME,
                       "Confirmed transaction sending %0.8f bitcoins : %s",
                       -bitcoins(pTransaction->amount),
-                      pTransaction->transaction->hash.hex().text());
+                      pTransaction->transaction->hash().hex().text());
                 }
 
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
@@ -2190,7 +2190,7 @@ namespace BitCoin
         {
             MerkleRequestData *merkleRequest = *request;
             unsigned int nodeID;
-            int32_t time = getTime();
+            Time time = getTime();
             if(!merkleRequest->isComplete())
             {
                 // Time out requests

@@ -10,11 +10,14 @@
 
 #include "mutex.hpp"
 #include "hash.hpp"
+#include "hash_set.hpp"
+#include "sorted_set.hpp"
 #include "log.hpp"
 #include "buffer.hpp"
 #include "file_stream.hpp"
 #include "base.hpp"
 #include "forks.hpp"
+#include "profiler_setup.hpp"
 
 #include <vector>
 #include <stdlib.h>
@@ -70,21 +73,36 @@ namespace BitCoin
     };
 
     // Reference to a transaction's outputs with information to get them quickly
-    class TransactionReference
+    class TransactionReference : public NextCash::HashObject
     {
     public:
 
         TransactionReference()
         {
-            mFlags = 0;
+            cacheFlags = 0;
+            dataFlags = 0;
             mDataOffset = NextCash::INVALID_STREAM_SIZE;
             blockHeight  = 0;
             mOutputCount = 0;
             mSpentHeights = NULL;
         }
-        TransactionReference(uint32_t pBlockHeight, uint32_t pOutputCount)
+        TransactionReference(const NextCash::Hash &pHash) : mHash(pHash)
         {
-            mFlags = 0;
+            cacheFlags = 0;
+            dataFlags = 0;
+            mDataOffset = NextCash::INVALID_STREAM_SIZE;
+            blockHeight  = 0;
+            mOutputCount = 0;
+            mSpentHeights = NULL;
+        }
+        TransactionReference(const NextCash::Hash &pHash, bool pIsCoinBase, uint32_t pBlockHeight,
+          uint32_t pOutputCount) : mHash(pHash)
+        {
+            cacheFlags = 0;
+            if(pIsCoinBase)
+                dataFlags = COINBASE_DATA_FLAG;
+            else
+                dataFlags = 0;
             mDataOffset = NextCash::INVALID_STREAM_SIZE;
             blockHeight  = pBlockHeight;
             mOutputCount = pOutputCount;
@@ -102,22 +120,27 @@ namespace BitCoin
                 delete[] mSpentHeights;
         }
 
-        // Flags
-        bool markedRemove() const { return mFlags & REMOVE_FLAG; }
-        bool isModified() const { return mFlags & MODIFIED_FLAG; }
-        bool isNew() const { return mFlags & NEW_FLAG; }
-        bool isOld() const { return mFlags & OLD_FLAG; }
+        void setHash(const NextCash::Hash &pHash) { mHash = pHash; }
 
-        void setRemove() { mFlags |= REMOVE_FLAG; }
-        void setModified() { mFlags |= MODIFIED_FLAG; }
-        void setNew() { mFlags |= NEW_FLAG; }
-        void setOld() { mFlags |= OLD_FLAG; }
+        // Data Flags
+        bool isCoinBase() const { return dataFlags & COINBASE_DATA_FLAG; }
 
-        void clearRemove() { mFlags &= ~REMOVE_FLAG; }
-        void clearModified() { mFlags &= ~MODIFIED_FLAG; }
-        void clearNew() { mFlags &= ~NEW_FLAG; }
-        void clearOld() { mFlags &= ~OLD_FLAG; }
-        void clearFlags() { mFlags = 0; }
+        // Cache Flags
+        bool markedRemove() const { return cacheFlags & REMOVE_CACHE_FLAG; }
+        bool isModified() const { return cacheFlags & MODIFIED_CACHE_FLAG; }
+        bool isNew() const { return cacheFlags & NEW_CACHE_FLAG; }
+        bool isOld() const { return cacheFlags & OLD_CACHE_FLAG; }
+
+        void setRemove() { cacheFlags |= REMOVE_CACHE_FLAG; }
+        void setModified() { cacheFlags |= MODIFIED_CACHE_FLAG; }
+        void setNew() { cacheFlags |= NEW_CACHE_FLAG; }
+        void setOld() { cacheFlags |= OLD_CACHE_FLAG; }
+
+        void clearRemove() { cacheFlags &= ~REMOVE_CACHE_FLAG; }
+        void clearModified() { cacheFlags &= ~MODIFIED_CACHE_FLAG; }
+        void clearNew() { cacheFlags &= ~NEW_CACHE_FLAG; }
+        void clearOld() { cacheFlags &= ~OLD_CACHE_FLAG; }
+        void clearFlags() { cacheFlags = 0; }
 
         bool wasWritten() const { return mDataOffset != NextCash::INVALID_STREAM_SIZE; }
         NextCash::stream_size dataOffset() const { return mDataOffset; }
@@ -125,7 +148,7 @@ namespace BitCoin
         void clearDataOffset() { mDataOffset = NextCash::INVALID_STREAM_SIZE; }
 
         // Returns the size(bytes) in memory of the object
-        NextCash::stream_size size() const;
+        NextCash::stream_size memorySize() const;
 
         // Evaluates the relative age of two objects.
         // Used to determine which objects to drop from cache
@@ -152,13 +175,6 @@ namespace BitCoin
             if(blockHeight > ((TransactionReference *)pRight)->blockHeight)
                 return 1;
             return 0;
-        }
-
-        // Returns true if the value of this object matches the value pRight references.
-        bool valuesMatch(const TransactionReference *pRight) const
-        {
-            // Since more than one transaction with the same hash will never be in the same block.
-            return blockHeight == ((TransactionReference *)pRight)->blockHeight;
         }
 
         bool read(NextCash::InputStream *pStream);
@@ -189,7 +205,6 @@ namespace BitCoin
             setModified();
             return true;
         }
-
 
         bool isUnspent(uint32_t pIndex) const
           { return mOutputCount > pIndex && mSpentHeights[pIndex] == 0; }
@@ -225,19 +240,55 @@ namespace BitCoin
             else
                 return false;
         }
+        void clearSpends();
+
+        // HashObject virtual functions
+        const NextCash::Hash &getHash() { return mHash; }
+        bool valueEquals(const NextCash::SortedObject *pRight) const
+        {
+            try
+            {
+                // Since more than one transaction with the same hash will never be in the same
+                //   block.
+                return blockHeight ==
+                  dynamic_cast<const TransactionReference *>(pRight)->blockHeight;
+            }
+            catch(...)
+            {
+                return false;
+            }
+        }
 
         void print(NextCash::Log::Level pLevel = NextCash::Log::Level::VERBOSE);
 
         uint32_t blockHeight; // Block height of transaction
+        uint8_t cacheFlags;
+        uint8_t dataFlags;
 
     private:
 
-        static const uint8_t NEW_FLAG           = 0x01; // Hasn't been added to the index yet.
-        static const uint8_t MODIFIED_FLAG      = 0x02; // Modified since last write.
-        static const uint8_t REMOVE_FLAG        = 0x04; // Needs removed from index and cache.
-        static const uint8_t OLD_FLAG           = 0x08; // Needs to be dropped from cache.
+        static const uint8_t NEW_CACHE_FLAG           = 0x01; // Hasn't been added to the index yet.
+        static const uint8_t MODIFIED_CACHE_FLAG      = 0x02; // Modified since last write.
+        static const uint8_t REMOVE_CACHE_FLAG        = 0x04; // Needs removed from index and cache.
+        static const uint8_t OLD_CACHE_FLAG           = 0x08; // Needs to be dropped from cache.
 
-        uint8_t mFlags;
+        // This transaction is a coinbase transaction (first of block).
+        static const uint8_t COINBASE_DATA_FLAG = 0x01;
+
+        // Size in file not counting variable size data.
+        // Base size :
+        //   sizeof(uint8_t) dataFlags
+        //   sizeof(uint32_t) height
+        //   sizeof(uint32_t) output count
+        static const NextCash::stream_size mBaseSize = sizeof(uint8_t) + (2 * sizeof(uint32_t));
+
+        // Base memory size :
+        //   Base size
+        //   sizeof(uint32_t *) spent height pointer
+        //   sizeof(NextCash::stream_size) data offset
+        //   sizeof(uint8_t) cacheFlags
+        static const NextCash::stream_size mBaseMemorySize = mBaseSize + sizeof(uint32_t *) +
+          sizeof(NextCash::stream_size) + sizeof(uint8_t);
 
         // The offset in the data file of the hash value, followed by the specific data for the
         //   virtual read/write functions.
@@ -250,29 +301,39 @@ namespace BitCoin
         uint32_t mOutputCount;
         uint32_t *mSpentHeights;
 
+        NextCash::Hash mHash;
+
         TransactionReference(const TransactionReference &pCopy);
         const TransactionReference &operator = (const TransactionReference &pRight);
 
     };
 
     // Container for all unspent transaction outputs
-    class TransactionOutputPool
+    class Outputs
     {
     public:
 
-        TransactionOutputPool() : mLock("OutputsLock") { mNextBlockHeight = 0; mSavedBlockHeight = 0; }
-        ~TransactionOutputPool() {}
+        Outputs() : mLock("OutputsLock") { mNextBlockHeight = 0; mSavedBlockHeight = 0; }
+        ~Outputs() {}
+
+        // Returns 0xffffffff if not found.
+        unsigned int getBlockHeight(const NextCash::Hash &pTransactionID);
 
         static const uint8_t MARK_SPENT = 0x01;
         static const uint8_t REQUIRE_UNSPENT = 0x02;
         bool getOutput(const NextCash::Hash &pTransactionID, uint32_t pIndex, uint8_t pFlags,
           uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight);
+
         bool isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex);
         bool spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
           uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent);
         bool hasUnspent(const NextCash::Hash &pTransactionID,
           uint32_t pSpentBlockHeight = 0xffffffff);
-        bool exists(const NextCash::Hash &pTransactionID);
+        bool exists(const NextCash::Hash &pTransactionID, bool pPullIfNeeded = true);
+
+        static const uint8_t UNSPENT_STATUS_EXISTS  = 0x01; // Transaction output found
+        static const uint8_t UNSPENT_STATUS_UNSPENT = 0x02; // Transaction output is not spent
+        uint8_t unspentStatus(const NextCash::Hash &pTransactionID, uint32_t pIndex);
 
         // BIP-0030 Check if a transaction ID exists with unspent outputs before this block height.
         //   pBlockHash is for exceptions allowed before BIP-0030 was activated.
@@ -310,26 +371,24 @@ namespace BitCoin
 
         bool load(const char *pFilePath, NextCash::stream_size pTargetCacheSize,
           NextCash::stream_size pCacheDelta);
-        bool save(unsigned int pThreadCount, bool pAutoTrimCache = true);
+
+        bool saveFull(unsigned int pThreadCount, bool pAutoTrimCache = true);
+        bool saveCache();
 
         static bool test();
 
     private:
 
-        TransactionOutputPool(const TransactionOutputPool &pCopy);
-        const TransactionOutputPool &operator = (const TransactionOutputPool &pRight);
+        Outputs(const Outputs &pCopy);
+        const Outputs &operator = (const Outputs &pRight);
+
+        bool saveBlockHeight();
 
         unsigned int mNextBlockHeight, mSavedBlockHeight;
 
         static const uint32_t BIP0030_HASH_COUNT = 2;
         static const uint32_t BIP0030_HEIGHTS[BIP0030_HASH_COUNT];
         static const NextCash::Hash BIP0030_HASHES[BIP0030_HASH_COUNT];
-
-        // Returns true if the values pointed to by both HashData pointers match
-        static bool transactionsMatch(TransactionReference *&pLeft, TransactionReference *&pRight)
-        {
-            return pLeft->valuesMatch(pRight);
-        }
 
         unsigned int subSetOffset(const NextCash::Hash &pTransactionID)
         {
@@ -362,8 +421,7 @@ namespace BitCoin
             }
         };
 
-        typedef typename NextCash::HashContainerList<TransactionReference *>::Iterator
-          SubSetIterator;
+        typedef typename NextCash::HashSet::Iterator SubSetIterator;
 
         class SubSet
         {
@@ -382,11 +440,13 @@ namespace BitCoin
             NextCash::stream_size cacheDataSize()
               { return mCacheRawDataSize + (mCache.size() * staticCacheItemSize); }
 
+            // Returns 0xffffffff if not found.
+            unsigned int getBlockHeight(const NextCash::Hash &pTransactionID);
+
             SubSetIterator get(const NextCash::Hash &pTransactionID);
 
             // Inserts a new item corresponding to the lookup.
-            bool insert(const NextCash::Hash &pTransactionID, TransactionReference *pReference,
-              Transaction &pTransaction);
+            bool insert(TransactionReference *pReference, Transaction &pTransaction);
 
             bool getOutput(const NextCash::Hash &pTransactionID, uint32_t pIndex, uint8_t pFlags,
               uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight);
@@ -394,7 +454,8 @@ namespace BitCoin
             bool spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
               uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent);
             bool hasUnspent(const NextCash::Hash &pTransactionID, uint32_t pSpentBlockHeight);
-            bool exists(const NextCash::Hash &pTransactionID);
+            bool exists(const NextCash::Hash &pTransactionID, bool pPullIfNeeded);
+            uint8_t unspentStatus(const NextCash::Hash &pTransactionID, uint32_t pIndex);
 
             bool checkDuplicate(const NextCash::Hash &pTransactionID, unsigned int pBlockHeight,
               const NextCash::Hash &pBlockHash);
@@ -406,8 +467,11 @@ namespace BitCoin
             // If pPullMatchingFunction then only items that return true will be pulled.
             bool pull(const NextCash::Hash &pTransactionID, TransactionReference *pMatching = NULL);
 
-            bool load(const char *pFilePath, unsigned int pID);
-            bool save(NextCash::stream_size pMaxCacheDataSize, bool pAutoTrimCache);
+            bool load(const char *pFilePath, unsigned int pID, unsigned int &pLoadedCount);
+            bool save(NextCash::stream_size pMaxCacheDataSize, bool pAutoTrimCache,
+              unsigned int &pSavedCount);
+
+            bool saveCache(unsigned int &pSavedCount);
 
             // Rewrite data file filling in gaps from removed data.
             bool defragment();
@@ -417,9 +481,6 @@ namespace BitCoin
             bool pullHash(NextCash::InputStream *pDataFile, NextCash::stream_size pFileOffset,
               NextCash::Hash &pHash)
             {
-#ifdef PROFILER_ON
-                NextCash::Profiler profiler("Hash SubSet Pull Hash");
-#endif
                 if(!pDataFile->setReadOffset(pFileOffset))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
@@ -446,8 +507,7 @@ namespace BitCoin
               NextCash::InputStream *pDataFile, NextCash::stream_size &pBegin,
               NextCash::stream_size &pEnd);
 
-            bool loadCache();
-            bool saveCache();
+            bool loadCache(unsigned int &pLoadedCount);
 
             // Mark items in the cache as old until it is under the specified data size.
             // Only called by trimeCache.
@@ -461,7 +521,7 @@ namespace BitCoin
             const char *mFilePath;
             NextCash::stream_size mIndexSize, mNewSize, mCacheRawDataSize;
             unsigned int mID;
-            NextCash::HashContainerList<TransactionReference *> mCache;
+            NextCash::HashSet mCache;
             SampleEntry *mSamples;
 
         };
@@ -491,10 +551,10 @@ namespace BitCoin
                 mIterator = pIterator;
             }
 
-            TransactionReference *operator *() { return *mIterator; }
-            TransactionReference *operator ->() { return *mIterator; }
+            TransactionReference *operator *() { return (TransactionReference *)*mIterator; }
+            TransactionReference *operator ->() { return (TransactionReference *)*mIterator; }
 
-            const NextCash::Hash &hash() const { return mIterator.hash(); }
+            const NextCash::Hash &hash() { return (*mIterator)->getHash(); }
 
             operator bool() const { return mSubSet != NULL && mIterator != mSubSet->end(); }
             bool operator !() const { return mSubSet == NULL || mIterator == mSubSet->end(); }
@@ -586,18 +646,17 @@ namespace BitCoin
         NextCash::stream_size cacheDelta() const { return mCacheDelta; }
         void setCacheDelta(NextCash::stream_size pSize) { mCacheDelta = pSize; }
 
-        Iterator get(const NextCash::Hash &pTransactionID);
+        Iterator get(const NextCash::Hash &pTransactionID, bool pLocked = false);
 
         // Inserts a new item corresponding to the lookup.
         // Returns false if the pReference matches an existing value under the same hash according
         //   to the TransactionReference::valuesMatch function.
-        bool insert(const NextCash::Hash &pTransactionID, TransactionReference *pReference,
-          Transaction &pTransaction);
+        bool insert(TransactionReference *pReference, Transaction &pTransaction);
 
         Iterator begin();
         Iterator end();
 
-        bool load(const char *pFilePath);
+        bool loadSubSets(const char *pFilePath);
         bool saveSingleThreaded(bool pAutoTrimCache);
         bool saveMultiThreaded(unsigned int pThreadCount, bool pAutoTrimCache);
 
@@ -612,6 +671,7 @@ namespace BitCoin
                 maxSetCacheDataSize = pMaxSetCacheDataSize;
                 autoTrimCache = pAutoTrimCache;
                 offset = 0;
+                savedCount = 0;
                 success = true;
                 for(unsigned int i = 0; i < OUTPUTS_SET_COUNT; ++i)
                 {
@@ -625,6 +685,7 @@ namespace BitCoin
             NextCash::stream_size maxSetCacheDataSize;
             bool autoTrimCache;
             unsigned int offset;
+            unsigned int savedCount;
             bool success;
             bool setComplete[OUTPUTS_SET_COUNT];
             bool setSuccess[OUTPUTS_SET_COUNT];
@@ -644,17 +705,20 @@ namespace BitCoin
                 return result;
             }
 
-            void markComplete(unsigned int pOffset, bool pSuccess)
+            void markComplete(unsigned int pOffset, bool pSuccess, unsigned int pCount)
             {
+                mutex.lock();
+                savedCount += pCount;
                 setComplete[pOffset] = true;
                 setSuccess[pOffset] = pSuccess;
                 if(!pSuccess)
                     success = false;
+                mutex.unlock();
             }
 
         };
 
-        static void saveThreadRun(); // Thread to process save tasks
+        static void saveThreadRun(void *pParameter); // Thread to process save tasks
 
     };
 }

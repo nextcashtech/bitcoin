@@ -14,6 +14,7 @@
 #include "base.hpp"
 #include "peer.hpp"
 #include "block.hpp"
+#include "sorted_set.hpp"
 
 #include <cstdint>
 #include <list>
@@ -51,11 +52,18 @@ namespace BitCoin
         // Amount of memory to use for transaction outputs before saving to file.
         NextCash::stream_size addressesCacheSize;
 
-        // Minimum fee for transaction mem pool (Satoshis per KB).
+        // Lowest fee that will be accepted into the mem pool (Satoshis per KB).
         uint64_t minFee;
 
-        // The size of the mem pool (unconfirmed transactions) at which they start getting dropped.
-        uint32_t memPoolSize;
+        // When the mem pool size reaches the memPoolLowFeeSize, fees below lowFee will be dropped
+        //   to keep the size under memPoolLowFeeSize. The mem pool size can only grow above
+        //   memPoolLowFeeSize with all fees above lowFee.
+        NextCash::stream_size memPoolLowFeeSize;
+        uint64_t lowFee; // (Satoshis per KB).
+
+        // When the mem pool size reaches the memPoolSize, the lowest fee/oldest transactions will
+        //   be dropped to keep the size under memPoolSize.
+        NextCash::stream_size memPoolSize;
 
         // Number of merkle blocks per block required from different peers to confirm a block's
         //   transactions.
@@ -84,6 +92,7 @@ namespace BitCoin
         void updatePeer(const NextCash::IPAddress &pAddress, const char *pUserAgent, uint64_t pServices);
         void addPeerSuccess(const NextCash::IPAddress &pAddress, int pCount = 1);
         void addPeerFail(const NextCash::IPAddress &pAddress, int pCount = 1, int pMinimum = -500);
+        unsigned int peerCount() const { return mPeers.size(); }
 
         bool initialBlockDownloadIsComplete() { return mInitialBlockDownloadComplete; }
         void setInitialBlockDownloadComplete()
@@ -117,7 +126,7 @@ namespace BitCoin
         // Peers
         bool mPeersModified;
         NextCash::ReadersLock mPeerLock;
-        std::list<Peer *> mPeers;
+        NextCash::SortedSet mPeers;
 
         static NextCash::String sPath;
         static Info *sInstance;

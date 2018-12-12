@@ -11,11 +11,12 @@
 #include "string.hpp"
 #include "network.hpp"
 #include "base.hpp"
+#include "sorted_set.hpp"
 
 
 namespace BitCoin
 {
-    class Peer
+    class Peer : public NextCash::SortedObject
     {
     public:
 
@@ -34,6 +35,29 @@ namespace BitCoin
         void write(NextCash::OutputStream *pStream) const;
         bool read(NextCash::InputStream *pStream);
 
+        // SortedObject virtual function.
+        int compare(SortedObject *pRight)
+        {
+            try
+            {
+                const uint8_t *left = address.ip;
+                const uint8_t *right = dynamic_cast<const Peer *>(pRight)->address.ip;
+                for(unsigned int i = 0; i < INET6_ADDRLEN; ++i, ++left, ++right)
+                {
+                    if(*left < *right)
+                        return -1;
+                    else if(*left > *right)
+                        return 1;
+                }
+
+                return 0;
+            }
+            catch(...)
+            {
+                return -1;
+            }
+        }
+
         void updateTime() { time = getTime(); }
 
         Peer &operator = (const Peer &pRight)
@@ -46,7 +70,7 @@ namespace BitCoin
             return *this;
         }
 
-        int32_t time;
+        Time time;
         uint64_t services;
         NextCash::String userAgent;
         int32_t rating;

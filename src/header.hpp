@@ -19,23 +19,23 @@
 namespace BitCoin
 {
     // Statistical information needed from each header.
-    class BlockStat
+    class HeaderStat
     {
     public:
 
-        BlockStat() : accumulatedWork(32)
+        HeaderStat() : accumulatedWork(32)
         {
             version = 0;
             time = 0;
             targetBits = 0;
         }
-        BlockStat(const BlockStat &pCopy) : accumulatedWork(pCopy.accumulatedWork)
+        HeaderStat(const HeaderStat &pCopy) : accumulatedWork(pCopy.accumulatedWork)
         {
             version = pCopy.version;
             time = pCopy.time;
             targetBits = pCopy.targetBits;
         }
-        BlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits) : accumulatedWork(32)
+        HeaderStat(int32_t pVersion, Time pTime, uint32_t pTargetBits) : accumulatedWork(32)
         {
             version = pVersion;
             time = pTime;
@@ -45,7 +45,7 @@ namespace BitCoin
             target.setDifficulty(pTargetBits);
             target.getWork(accumulatedWork);
         }
-        BlockStat(int32_t pVersion, int32_t pTime, uint32_t pTargetBits,
+        HeaderStat(int32_t pVersion, Time pTime, uint32_t pTargetBits,
           NextCash::Hash &pPreviousAccumulatedWork) : accumulatedWork(32)
         {
             version = pVersion;
@@ -59,7 +59,7 @@ namespace BitCoin
             accumulatedWork += pPreviousAccumulatedWork;
         }
 
-        BlockStat &operator = (const BlockStat &pRight)
+        HeaderStat &operator = (const HeaderStat &pRight)
         {
             version = pRight.version;
             time = pRight.time;
@@ -69,7 +69,7 @@ namespace BitCoin
         }
 
         int32_t        version;
-        int32_t        time;
+        Time           time;
         uint32_t       targetBits;
         NextCash::Hash accumulatedWork;
     };
@@ -89,8 +89,8 @@ namespace BitCoin
             nonce = 0;
             transactionCount = 0;
         }
-        Header(const Header &pCopy) : hash(pCopy.hash), previousHash(pCopy.previousHash),
-          merkleHash(pCopy.merkleHash)
+        Header(const Header &pCopy) : previousHash(pCopy.previousHash),
+          merkleHash(pCopy.merkleHash), mHash(pCopy.mHash)
         {
             version = pCopy.version;
             time = pCopy.time;
@@ -101,7 +101,7 @@ namespace BitCoin
 
         Header &operator = (const Header &pRight)
         {
-            hash = pRight.hash;
+            mHash = pRight.mHash;
             version = pRight.version;
             previousHash = pRight.previousHash;
             merkleHash = pRight.merkleHash;
@@ -118,21 +118,20 @@ namespace BitCoin
         void write(NextCash::OutputStream *pStream, bool pIncludeTransactionCount) const;
 
         // pCalculateHash will calculate the hash of the block data while it reads it
-        bool read(NextCash::InputStream *pStream, bool pIncludeTransactionCount, bool pCalculateHash);
+        bool read(NextCash::InputStream *pStream, bool pIncludeTransactionCount);
 
         void clear();
 
         // Print human readable version to log.
         void print(NextCash::Log::Level pLevel = NextCash::Log::DEBUG);
 
-        // Hash
-        NextCash::Hash hash;
+        const NextCash::Hash &hash() { if(mHash.isEmpty()) calculateHash(); return mHash; }
 
         // Header
         int32_t version;
         NextCash::Hash previousHash;
         NextCash::Hash merkleHash;
-        uint32_t time;
+        Time     time;
         uint32_t targetBits;
         uint32_t nonce;
 
@@ -160,11 +159,11 @@ namespace BitCoin
           std::vector<uint32_t> &pTargetBits);
 
         // Get block stats (in reverse order)
-        static bool getBlockStatsReverse(unsigned int pStartHeight, unsigned int pCount,
-          std::list<BlockStat> &pBlockStats);
+        static bool getHeaderStatsReverse(unsigned int pStartHeight, unsigned int pCount,
+          std::list<HeaderStat> &pHeaderStats);
 
         // Add header to appropriate header file.
-        static bool add(unsigned int pHeight, const Header &pHeader);
+        static bool add(unsigned int pHeight, Header &pHeader);
 
         static bool revertToHeight(unsigned int pHeight);
 
@@ -176,6 +175,8 @@ namespace BitCoin
         static void clean();  // Release any static cache data
 
     private:
+
+        NextCash::Hash mHash;
 
     };
 }

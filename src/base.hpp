@@ -10,16 +10,16 @@
 
 #include "stream.hpp"
 #include "network.hpp"
+#include "hash_set.hpp"
 
 #include <chrono>
 #include <cstdint>
-#include <ctime>
 
 // BIP-0014 Specifies User Agent Format
 #ifdef ANDROID
-#define BITCOIN_USER_AGENT "/NextCash:0.11.0/NextCashWallet:0.12.3(Android)/"
+#define BITCOIN_USER_AGENT "/NextCash:0.13.0/NextCashWallet:0.12.3(Android)/"
 #else
-#define BITCOIN_USER_AGENT "/NextCash:0.11.0/"
+#define BITCOIN_USER_AGENT "/NextCash:0.13.0/"
 #endif
 
 #define PROTOCOL_VERSION 70015
@@ -57,20 +57,23 @@ namespace BitCoin
     enum Network { MAINNET, TESTNET };
 
     Network network();
-    typedef int32_t seconds;
     void setNetwork(Network pNetwork);
 
+    typedef uint32_t Time;
+    typedef uint64_t Milliseconds;
+    typedef uint64_t Microseconds;
+
     // Seconds since epoch
-    inline int32_t getTime()
+    inline Time getTime()
     {
-        return std::time(NULL);
+        return (Time)std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::system_clock::now().time_since_epoch()).count();
     }
 
     // Milliseconds since epoch
-    typedef int64_t milliseconds;
-    inline int64_t getTimeMilliseconds()
+    inline Milliseconds getTimeMilliseconds()
     {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(
+        return (Milliseconds)std::chrono::duration_cast<std::chrono::milliseconds>(
           std::chrono::system_clock::now().time_since_epoch()).count();
     }
 
@@ -222,6 +225,23 @@ namespace BitCoin
     unsigned int compactIntegerSize(uint64_t pValue);
     unsigned int writeCompactInteger(NextCash::OutputStream *pStream, uint64_t pValue);
     uint64_t readCompactInteger(NextCash::InputStream *pStream);
+
+    // Object used to save hashes with times in a HashSet.
+    class HashTime : public NextCash::HashObject
+    {
+    public:
+
+        HashTime(const NextCash::Hash &pHash) : mHash(pHash) { time = getTime(); }
+        HashTime(HashTime &pCopy) : mHash(pCopy.mHash) { time = pCopy.time; }
+        ~HashTime() {}
+
+        Time time;
+
+        const NextCash::Hash &getHash() { return mHash; }
+
+    private:
+        NextCash::Hash mHash;
+    };
 
     namespace Base
     {

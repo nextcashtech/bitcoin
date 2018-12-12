@@ -57,14 +57,14 @@ namespace BitCoin
 
         void setSize(NextCash::stream_size pSize) { mSize = pSize; }
 
-        uint64_t actualCoinbaseAmount(); // Amount from coinbase transaction
+        uint64_t actualCoinbaseAmount() const; // Amount from coinbase transaction
 
         void calculateMerkleHash(NextCash::Hash &pMerkleHash);
 
         bool checkSize(Chain *pChain, unsigned int pHeight);
 
         // Validate anything that doesn't require UTXO.
-        bool validate(Chain *pChain, unsigned int pHeight);
+        bool validate();
 
         // Validate transactions and update outputs.
         bool processSingleThreaded(Chain *pChain, unsigned int pHeight);
@@ -90,7 +90,7 @@ namespace BitCoin
           unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput);
 
         // Add block to appropriate block file.
-        static bool add(unsigned int pHeight, const Block &pBlock);
+        static bool add(unsigned int pHeight, Block &pBlock);
 
         static bool revertToHeight(unsigned int pHeight);
 
@@ -116,7 +116,7 @@ namespace BitCoin
 
             ProcessThreadData(Chain *pChain, Block *pBlock, unsigned int pHeight,
               std::vector<Transaction *>::iterator pTransactionsBegin, unsigned int pCount) :
-              mutex("ProcessThreadData"), spentAgeLock("Spent Age")
+              mutex("ProcessThreadData"), spentAgeLock("Spent Age"), timeLock("Time")
             {
                 chain = pChain;
                 block = pBlock;
@@ -127,6 +127,10 @@ namespace BitCoin
                 success = true;
                 complete = new bool[count];
                 std::memset(complete, 0, count);
+                checkDupTime = 0L;
+                outputsTime = 0L;
+                sigTime = 0L;
+                fullTime = 0L;
             }
             ~ProcessThreadData()
             {
@@ -142,6 +146,8 @@ namespace BitCoin
             std::vector<unsigned int> spentAges;
             bool success;
             bool *complete;
+            NextCash::Mutex timeLock;
+            uint64_t checkDupTime, outputsTime, sigTime, fullTime;
 
             Transaction *getNext(unsigned int &pOffset)
             {
@@ -168,8 +174,8 @@ namespace BitCoin
 
         };
 
-        static void processThreadRun(); // Thread for process tasks
-        static void updateOutputsThreadRun(); // Thread for update outputs tasks
+        static void processThreadRun(void *pParameter); // Thread for process tasks
+        static void updateOutputsThreadRun(void *pParameter); // Thread for update outputs tasks
 
     };
 
@@ -207,13 +213,13 @@ namespace BitCoin
             right = NULL;
             matches = false;
         }
-        MerkleNode(Transaction *pTransaction, bool pMatches) : hash(pTransaction->hash)
+        MerkleNode(Transaction *pTransaction, bool pMatches) : hash(pTransaction->hash())
         {
             transaction = pTransaction;
             left = NULL;
             right = NULL;
             matches = pMatches;
-            hash = transaction->hash;
+            hash = transaction->hash();
         }
         MerkleNode(MerkleNode *pLeft, MerkleNode *pRight, bool pMatches)
         {
@@ -246,6 +252,49 @@ namespace BitCoin
     MerkleNode *buildMerkleTree(std::vector<Transaction *> &pBlockTransactions,
       BloomFilter &pFilter);
     MerkleNode *buildEmptyMerkleTree(unsigned int pNodeCount);
+
+    class BlockStat
+    {
+    public:
+
+        BlockStat() : hash(BLOCK_HASH_SIZE)
+        {
+            time = 0;
+            size = 0UL;
+            transactionCount = 0;
+            inputCount = 0;
+            outputCount = 0;
+            fees = 0UL;
+            amount = 0UL;
+        }
+        BlockStat(const BlockStat &pCopy) : hash(pCopy.hash)
+        {
+            time = pCopy.time;
+            size = pCopy.size;
+            transactionCount = pCopy.transactionCount;
+            inputCount = pCopy.inputCount;
+            outputCount = pCopy.outputCount;
+            fees = pCopy.fees;
+            amount = pCopy.amount;
+        }
+        BlockStat(Block &pBlock, unsigned int pHeight);
+
+        void set(Block &pBlock, unsigned int pHeight);
+
+        static const NextCash::stream_size DATA_SIZE = BLOCK_HASH_SIZE + 40;
+
+        NextCash::Hash        hash;
+        Time                  time;
+        NextCash::stream_size size;
+        unsigned int          transactionCount, inputCount, outputCount;
+        uint64_t              fees, amount;
+
+        uint64_t feeRate() const { return (fees * 1000L) / size; }
+
+        void write(NextCash::OutputStream *pStream) const;
+        bool read(NextCash::InputStream *pStream);
+
+    };
 }
 
 #endif

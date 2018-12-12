@@ -52,15 +52,15 @@ namespace BitCoin
         };
 
         // Threads
-        static void runConnections();
+        static void runConnections(void *pParameter);
 
-        static void runRequests();
+        static void runRequests(void *pParameter);
 
-        static void runManage();
+        static void runManage(void *pParameter);
 
-        static void runProcess();
+        static void runProcess(void *pParameter);
 
-        static void runScan();
+        static void runScan(void *pParameter);
 
         void run(bool pInDaemonMode = true);
 
@@ -96,7 +96,7 @@ namespace BitCoin
 
         void setFinishMode(int pMode);
 
-        void setFinishTime(int32_t pTime); // Set time to stop daemon (zero clears)
+        void setFinishTime(Time pTime); // Set time to stop daemon (zero clears)
         void requestStop()
         {
             mStopRequested = true;
@@ -148,19 +148,15 @@ namespace BitCoin
         {
             mLastConnectionActive = getTime();
             if(pConnectionType & Node::INCOMING)
-            {
                 ++mStatistics.incomingConnections;
-            }
             else if(!(pConnectionType & Node::SEED))
-            {
                 ++mStatistics.outgoingConnections;
-            }
         }
 
-        bool loadKeyStore(const uint8_t *pPassword = (const uint8_t *)"",
-                          unsigned int pPasswordLength = 0);
-        bool saveKeyStore(const uint8_t *pPassword = (const uint8_t *)"",
-                          unsigned int pPasswordLength = 0);
+        bool loadKeyStore(const uint8_t *pPassword = (const uint8_t *)"NextCash",
+                          unsigned int pPasswordLength = 8);
+        bool saveKeyStore(const uint8_t *pPassword = (const uint8_t *)"NextCash",
+                          unsigned int pPasswordLength = 8);
         void resetKeysSynchronized();
 
         enum Status { INACTIVE, LOADING_WALLETS, LOADING_CHAIN, FINDING_PEERS, CONNECTING_TO_PEERS,
@@ -195,13 +191,13 @@ namespace BitCoin
 #endif
 
         // Timers
-        int32_t mLastHeaderRequestTime;
-        int32_t mLastConnectionActive;
-        int32_t mLastDataSaveTime;
-        int32_t mLastMemPoolCheckPending;
-        int32_t mLastMonitorProcess;
-        int32_t mLastCleanTime, mLastRequestCleanTime;
-        int32_t mFinishTime;
+        Time mLastHeaderRequestTime;
+        Time mLastConnectionActive;
+        Time mLastDataSaveTime;
+        Time mLastMonitorProcess;
+        Time mLastCleanTime, mLastRequestCleanTime;
+        Time mFinishTime;
+        Time mLastMemPoolProcessTime;
 
         NextCash::Hash mLastHeaderHash;
         NextCash::Network::Listener *mNodeListener;
@@ -255,14 +251,15 @@ namespace BitCoin
         void addRejectedIP(const uint8_t *pIP);
         bool isRejectedIP(const uint8_t *pIP);
 
-        bool addNode(NextCash::IPAddress &pIPAddress, uint32_t pType, uint64_t pServices);
+        bool addNode(NextCash::IPAddress &pIPAddress, uint32_t pType, uint64_t pServices,
+          bool pAnnounceCompact);
         bool addNode(NextCash::Network::Connection *pConnection, uint32_t pType,
-          uint64_t pServices);
+          uint64_t pServices, bool pAnnounceCompact);
         unsigned int recruitPeers();
         void cleanNodes();
 
         void checkSync();
-        void sendRequests();
+        void sendBlockRequests();
         void sendHeaderRequest();
         void sendTransactionRequests();
         void improvePing();

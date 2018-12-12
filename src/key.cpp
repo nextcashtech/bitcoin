@@ -196,7 +196,7 @@ namespace BitCoin
 
         // Encode with base 58
         NextCash::String result;
-        result.writeBase58(data.startPointer(), (unsigned int)data.length());
+        result.writeBase58(data.begin(), (unsigned int)data.length());
         return result;
     }
 
@@ -207,7 +207,17 @@ namespace BitCoin
         // Parse address into public key hash
         data.writeBase58AsBinary(pText);
 
-        pType = static_cast<AddressType>(data.readByte());
+        if(data.length () == 0)
+            return false;
+
+        try
+        {
+            pType = static_cast<AddressType>(data.readByte());
+        }
+        catch(...)
+        {
+            return false;
+        }
 
         if(pType == MAIN_PRIVATE_KEY || pType == TEST_PRIVATE_KEY)
             return false;
@@ -292,7 +302,7 @@ namespace BitCoin
 
         // Encode with base 32
         NextCash::String encodedPayload;
-        encodedPayload.writeBase32(data.startPointer(), (unsigned int)data.length());
+        encodedPayload.writeBase32(data.begin(), (unsigned int)data.length());
 
         // Build check sum data
         NextCash::Buffer checkSumData;
@@ -398,7 +408,7 @@ namespace BitCoin
 
         payload.write(character, remainingLength - 8);
         payload.writeByte(0); // Write null byte for base 32 convert
-        decodedPayload.writeBase32AsBinary((const char *)payload.startPointer());
+        decodedPayload.writeBase32AsBinary((const char *)payload.begin());
 
         while(payload.remaining() > 1) // Don't include null byte
         {
@@ -715,11 +725,18 @@ namespace BitCoin
         std::memset(mData, 0, 64);
 
         pStream->read(input, totalLength);
-        mHashType = static_cast<Signature::HashType>(pStream->readByte());
-
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Signature Read");
-#endif
+        try
+        {
+            mHashType = static_cast<Signature::HashType>(pStream->readByte());
+        }
+        catch(...)
+        {
+            NextCash::String hex;
+            hex.writeHex(input, totalLength);
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+              "Invalid signature hash type : %s", totalLength, hex.text());
+            return false;
+        }
 
         if(!pStrictECDSA_DER_Sigs)
         {
@@ -1312,7 +1329,7 @@ namespace BitCoin
         data.writeStream(&checkSum, 4);
 
         // Convert to base58
-        result.writeBase58(data.startPointer(), data.length());
+        result.writeBase58(data.begin(), data.length());
 
         return result;
     }
@@ -1364,7 +1381,17 @@ namespace BitCoin
             return false;
         }
 
-        AddressType type = static_cast<AddressType>(data.readByte());
+        AddressType type;
+        try
+        {
+            type = static_cast<AddressType>(data.readByte());
+        }
+        catch(...)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+              "Invalid address type");
+            return false;
+        }
 
         if(type != MAIN_PRIVATE_KEY && type != TEST_PRIVATE_KEY)
         {
@@ -1819,6 +1846,10 @@ namespace BitCoin
 
     bool Key::sign(const NextCash::Hash &pHash, Signature &pSignature) const
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_KEY_SIGN_ID, PROFILER_KEY_SIGN_NAME), true);
+#endif
         if(!isPrivate())
             return false;
 
@@ -1842,6 +1873,10 @@ namespace BitCoin
 
     bool Key::verify(const Signature &pSignature, const NextCash::Hash &pHash) const
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_KEY_VERIFY_SIG_ID, PROFILER_KEY_VERIFY_SIG_NAME), true);
+#endif
         if(isPrivate())
         {
             if(mPublicKey == NULL)
@@ -1865,7 +1900,7 @@ namespace BitCoin
         if(!secp256k1_ec_pubkey_parse(thisContext, &publicKey, mKey, 33))
         {
             NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-              "Failed to parse KeyTree Key public key");
+              "Failed to parse public key");
             return false;
         }
 
@@ -2494,7 +2529,16 @@ namespace BitCoin
 
             flags = pStream->readUnsignedInt();
 
-            derivationPathMethod = static_cast<Key::DerivationPathMethod>(pStream->readByte());
+            try
+            {
+                derivationPathMethod = static_cast<Key::DerivationPathMethod>(pStream->readByte());
+            }
+            catch(...)
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_KEY_LOG_NAME,
+                  "Invalid derivation path method");
+                return false;
+            }
 
             if(pVersion > 1)
                 createdDate = pStream->readInt();
@@ -2599,8 +2643,7 @@ namespace BitCoin
         Key *key;
     };
 
-    static const char sEncryptKeyInitVector[] =
-      "0daf9958eec1c536d8bed3608942b56098ed723b0e26713b1ba8f83e85f1525d";
+    static const char sEncryptKeyInitVector[] = "0daf9958eec1c536d8bed3608942b560";
 
     KeyStore::KeyStore()
     {
@@ -2892,7 +2935,7 @@ namespace BitCoin
 
         initVector.writeHex(sEncryptKeyInitVector);
 
-        encryptor.setup(pKey, pKeyLength, initVector.startPointer(), initVector.length());
+        encryptor.setup(pKey, pKeyLength, initVector.begin(), initVector.length());
 
         // Private Keys
         encryptor.writeUnsignedInt(mPrivateKeys.size());
@@ -2925,7 +2968,7 @@ namespace BitCoin
 
         initVector.writeHex(sEncryptKeyInitVector);
 
-        decryptor.setup(pKey, pKeyLength, initVector.startPointer(), initVector.length());
+        decryptor.setup(pKey, pKeyLength, initVector.begin(), initVector.length());
 
         // Read private keys
         unsigned int count = decryptor.readUnsignedInt();

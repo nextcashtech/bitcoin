@@ -13,6 +13,8 @@
 
 #include "key.hpp"
 #include "info.hpp"
+#include "mem_pool.hpp"
+#include "interpreter.hpp"
 
 #include <algorithm>
 
@@ -63,9 +65,9 @@ namespace BitCoin
         mConnectionMutex.unlock();
     }
 
-    void RequestChannel::run()
+    void RequestChannel::run(void *pParameter)
     {
-        RequestChannel *requestChannel = (RequestChannel *)NextCash::Thread::getParameter();
+        RequestChannel *requestChannel = (RequestChannel *)pParameter;
         if(requestChannel == NULL)
         {
             NextCash::Log::add(NextCash::Log::ERROR, "Request", "Thread parameter is null. Stopping");
@@ -105,6 +107,17 @@ namespace BitCoin
         mConnectionMutex.unlock();
         mStop = true;
     }
+
+    bool sortBySize(BlockStat &pLeft, BlockStat &pRight) { return pLeft.size < pRight.size; }
+    bool sortByTransactionCount(BlockStat &pLeft, BlockStat &pRight)
+      { return pLeft.transactionCount < pRight.transactionCount; }
+    bool sortByInputCount(BlockStat &pLeft, BlockStat &pRight)
+      { return pLeft.inputCount < pRight.inputCount; }
+    bool sortByOutputCount(BlockStat &pLeft, BlockStat &pRight)
+      { return pLeft.outputCount < pRight.outputCount; }
+    bool sortByAmount(BlockStat &pLeft, BlockStat &pRight) { return pLeft.amount < pRight.amount; }
+    bool sortByFees(BlockStat &pLeft, BlockStat &pRight) { return pLeft.fees < pRight.fees; }
+    bool sortByFeeRates(BlockStat &pLeft, BlockStat &pRight) { return pLeft.feeRate() < pRight.feeRate(); }
 
     void RequestChannel::process()
     {
@@ -176,7 +189,7 @@ namespace BitCoin
                 return;
 
             // Generate hashes to check
-            uint32_t value = getTime();
+            Time value = getTime();
             value -= value % 10;
             value -= 30;
             NextCash::Hash hashes[5];
@@ -378,9 +391,11 @@ namespace BitCoin
                 sendData.writeByte(-1);
             else
                 sendData.writeByte(0);
-            sendData.writeUnsignedInt(mChain->memPool().count());
-            sendData.writeUnsignedInt(mChain->memPool().size());
             sendData.writeUnsignedLong(currentSupply(mChain->headerHeight()));
+            sendData.writeUnsignedInt(mChain->memPool().count());
+            sendData.writeUnsignedLong(mChain->memPool().size());
+            sendData.writeUnsignedInt(mChain->memPool().pendingCount());
+            sendData.writeUnsignedLong(mChain->memPool().pendingSize());
 
             NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Sending status");
         }
@@ -457,66 +472,56 @@ namespace BitCoin
         }
         else if(command == "blkd")
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received block details request");
-
-            // Return block details
-            int height = mReceiveBuffer.readInt(); // Start height
-            int count = mReceiveBuffer.readByte(); // Number of blocks to include
-            Block block;
-            unsigned int resultCount = 0, inputCount, outputCount;
-            uint64_t amountSent;
-
-            if(height < 0)
-                height = mChain->blockHeight();
-
-            sendData.writeString("blkd:");
-            sendData.writeByte(0);
-
-            // Height, Hash, Size, Transaction Count, Input Count, Output Count
-            for(int i = 0; i < count; ++i)
+            if(mReceiveBuffer.remaining() < 5)
+                NextCash::Log::add(NextCash::Log::WARNING, mName,
+                  "Received short block details request");
+            else
             {
-                // Get Block at height - i
-                if(!mChain->getBlock((unsigned int)(height - i), block))
-                    continue;
+                NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received block details request");
 
-                sendData.writeUnsignedInt(height - i); // Height
-                block.header.hash.write(&sendData); // Hash
-                sendData.writeUnsignedInt(block.header.time); // Time
-                sendData.writeUnsignedInt(block.size()); // Size
-                sendData.writeUnsignedLong(block.actualCoinbaseAmount() - coinBaseAmount(height - i)); // Fees
-                sendData.writeUnsignedInt(block.transactions.size()); // Transaction Count
+                // Return block details
+                unsigned int height = mReceiveBuffer.readUnsignedInt(); // Start height
+                unsigned int count = mReceiveBuffer.readByte(); // Number of blocks to include
+                BlockStat stat;
+                unsigned int resultCount = 0;
 
-                inputCount = 0;
-                outputCount = 0;
-                amountSent = 0;
-                bool skip = true;
-                for(std::vector<Transaction *>::iterator trans = block.transactions.begin();
-                  trans != block.transactions.end(); ++trans)
+                if(height < 0)
+                    height = mChain->blockHeight();
+
+                sendData.writeString("blkd:");
+                sendData.writeByte(0);
+
+                // Height, Hash, Size, Transaction Count, Input Count, Output Count
+                for(unsigned int i = 0; i < count; ++i)
                 {
-                    if(skip)
-                    {
-                        skip = false;
+                    if(i > height)
+                        break;
+
+                    // Get Block at height - i
+                    if(!mChain->getBlockStat(height - i, stat))
                         continue;
-                    }
-                    inputCount += (*trans)->inputs.size();
-                    outputCount += (*trans)->outputs.size();
-                    for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
-                      output != (*trans)->outputs.end(); ++output)
-                        amountSent += output->amount;
+
+                    sendData.writeUnsignedInt(height - i); // Height
+                    stat.hash.write(&sendData); // Hash
+                    sendData.writeUnsignedInt(stat.time); // Time
+                    sendData.writeUnsignedInt(stat.size); // Size
+                    sendData.writeUnsignedLong(stat.fees); // Fees
+                    sendData.writeUnsignedInt(stat.transactionCount); // Transaction Count
+
+                    sendData.writeUnsignedInt(stat.inputCount); // Input Count
+                    sendData.writeUnsignedInt(stat.outputCount); // Output Count
+                    sendData.writeUnsignedLong(stat.amount); // Amount
+
+                    ++resultCount;
                 }
-                sendData.writeUnsignedInt(inputCount); // Input Count
-                sendData.writeUnsignedInt(outputCount); // Output Count
-                sendData.writeUnsignedLong(amountSent); // Amount Sent
 
-                ++resultCount;
+                // Update result count
+                sendData.setWriteOffset(5);
+                sendData.writeByte(resultCount);
+
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                  "Sending %d block details starting at height %d", resultCount, height);
             }
-
-            // Update result count
-            sendData.setWriteOffset(5);
-            sendData.writeByte(resultCount);
-
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-              "Sending %d block details starting at height %d", resultCount, height);
         }
         else if(command == "bkst")
         {
@@ -526,7 +531,7 @@ namespace BitCoin
             else
             {
                 // Return statistics
-                int height = mReceiveBuffer.readInt(); // Start height
+                unsigned int height = mReceiveBuffer.readUnsignedInt(); // Start height
                 unsigned int hours = mReceiveBuffer.readUnsignedInt(); // Number of hours back in time to include
 
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
@@ -544,124 +549,91 @@ namespace BitCoin
                 }
                 else
                 {
-                    uint32_t stopTime = 0;
-                    unsigned int blockCount = 0, totalTransactionCount = 0, totalInputCount = 0,
+                    Time stopTime = 0;
+                    unsigned int totalTransactionCount = 0, totalInputCount = 0,
                       totalOutputCount = 0;
-                    unsigned int inputCount, outputCount;
-                    uint64_t totalBlockSize = 0, totalFees = 0, fee, totalAmountSent = 0,
-                      amountSent;
-                    std::vector<uint64_t> blockSizes, fees, amountsSent;
-                    std::vector<unsigned int> transactionCounts, inputCounts, outputCounts;
-                    Block block;
+                    NextCash::stream_size totalBlockSize = 0UL;
+                    uint64_t totalFees = 0UL, totalAmount = 0UL;
+                    std::vector<BlockStat> stats;
+                    BlockStat stat;
 
-                    fees.reserve(256);
-                    blockSizes.reserve(256);
-                    transactionCounts.reserve(256);
-                    inputCounts.reserve(256);
-                    outputCounts.reserve(256);
+                    stats.reserve(hours * 6);
 
                     if(hours <= 168) // Week max
                     {
                         if(height < 0)
                             height = mChain->blockHeight();
 
-                        int currentHeight = height;
+                        unsigned int currentHeight = height;
 
-                        while(currentHeight > 0)
+                        while(true)
                         {
                             // Get Block at current height
-                            if(!mChain->getBlock((unsigned int)currentHeight--, block))
+                            if(!mChain->getBlockStat(currentHeight--, stat))
                                 continue;
 
                             if(stopTime == 0)
-                                stopTime = block.header.time - (hours * 3600);
-                            else if(block.header.time < stopTime)
+                                stopTime = stat.time - (hours * 3600);
+                            else if(stat.time < stopTime)
                                 break;
 
-                            // Count inputs and outputs
-                            inputCount = 0;
-                            outputCount = 0;
-                            amountSent = 0;
-                            bool skip = true;
-                            for(std::vector<Transaction *>::iterator trans =
-                              block.transactions.begin(); trans != block.transactions.end();
-                              ++trans)
-                            {
-                                if(skip)
-                                {
-                                    skip = false;
-                                    continue;
-                                }
-                                inputCount += (*trans)->inputs.size();
-                                outputCount += (*trans)->outputs.size();
-                                for(std::vector<Output>::iterator output =
-                                  (*trans)->outputs.begin(); output != (*trans)->outputs.end();
-                                  ++output)
-                                    amountSent += output->amount;
-                            }
+                            stats.emplace_back(stat);
+                            totalBlockSize += stat.size;
+                            totalTransactionCount += stat.transactionCount;
+                            totalInputCount += stat.inputCount;
+                            totalOutputCount += stat.outputCount;
+                            totalAmount += stat.amount;
+                            totalFees += stat.fees;
 
-                            totalBlockSize += block.size();
-                            blockSizes.push_back(block.size());
-
-                            totalTransactionCount += block.transactions.size();
-                            transactionCounts.push_back(block.transactions.size());
-
-                            totalInputCount += inputCount;
-                            inputCounts.push_back(inputCount);
-
-                            totalOutputCount += outputCount;
-                            outputCounts.push_back(outputCount);
-
-                            totalAmountSent += amountSent;
-                            amountsSent.push_back(amountSent);
-
-                            fee = block.actualCoinbaseAmount() - coinBaseAmount(currentHeight + 1);
-                            totalFees += fee;
-                            fees.push_back(fee);
-
-                            ++blockCount;
+                            if(currentHeight == 0)
+                                break;
                         }
                     }
 
-                    uint64_t medianBlockSize = 0;
+                    NextCash::stream_size medianBlockSize = 0UL;
                     unsigned int medianTransactionCount = 0;
                     unsigned int medianInputCount = 0;
                     unsigned int medianOutputCount = 0;
-                    uint64_t medianFees = 0;
-                    uint64_t medianAmountSent = 0;
+                    uint64_t medianFees = 0UL;
+                    uint64_t medianAmount = 0UL;
+                    uint64_t medianFeeRate = 0UL;
 
-                    if(blockCount > 1)
+                    if(stats.size() > 1)
                     {
-                        std::sort(blockSizes.begin(), blockSizes.end());
-                        medianBlockSize = blockSizes[blockSizes.size()/2];
+                        std::sort(stats.begin(), stats.end(), sortBySize);
+                        medianBlockSize = stats[stats.size()/2].size;
 
-                        std::sort(transactionCounts.begin(), transactionCounts.end());
-                        medianTransactionCount = transactionCounts[transactionCounts.size()/2];
+                        std::sort(stats.begin(), stats.end(), sortByTransactionCount);
+                        medianTransactionCount = stats[stats.size()/2].transactionCount;
 
-                        std::sort(inputCounts.begin(), inputCounts.end());
-                        medianInputCount = inputCounts[inputCounts.size()/2];
+                        std::sort(stats.begin(), stats.end(), sortByInputCount);
+                        medianInputCount = stats[stats.size()/2].inputCount;
 
-                        std::sort(outputCounts.begin(), outputCounts.end());
-                        medianOutputCount = outputCounts[outputCounts.size()/2];
+                        std::sort(stats.begin(), stats.end(), sortByOutputCount);
+                        medianOutputCount = stats[stats.size()/2].outputCount;
 
-                        std::sort(amountsSent.begin(), amountsSent.end());
-                        medianAmountSent = amountsSent[amountsSent.size()/2];
+                        std::sort(stats.begin(), stats.end(), sortByAmount);
+                        medianAmount = stats[stats.size()/2].amount;
 
-                        std::sort(fees.begin(), fees.end());
-                        medianFees = fees[fees.size()/2];
+                        std::sort(stats.begin(), stats.end(), sortByFees);
+                        medianFees = stats[stats.size()/2].fees;
+
+                        std::sort(stats.begin(), stats.end(), sortByFeeRates);
+                        medianFeeRate = stats[stats.size()/2].feeRate();
                     }
-                    else if(blockCount == 1)
+                    else if(stats.size() == 1)
                     {
                         medianBlockSize = totalBlockSize;
                         medianTransactionCount = totalTransactionCount;
                         medianInputCount = totalInputCount;
                         medianOutputCount = totalOutputCount;
-                        medianAmountSent = totalAmountSent;
+                        medianAmount = totalAmount;
                         medianFees = totalFees;
+                        medianFeeRate = (totalFees * 1000L) / totalBlockSize;
                     }
 
                     sendData.writeString("bkst:");
-                    sendData.writeUnsignedInt(blockCount); // Total blocks
+                    sendData.writeUnsignedInt(stats.size()); // Total blocks
 
                     sendData.writeUnsignedLong(totalBlockSize); // Total block size
                     sendData.writeUnsignedLong(medianBlockSize); // Median block size
@@ -675,11 +647,16 @@ namespace BitCoin
                     sendData.writeUnsignedInt(totalOutputCount); // Total Output Count
                     sendData.writeUnsignedInt(medianOutputCount); // Median Output Count
 
-                    sendData.writeUnsignedLong(totalAmountSent); // Total Amount Sent
-                    sendData.writeUnsignedLong(medianAmountSent); // Median Amount Sent
+                    sendData.writeLong(totalAmount); // Total Amount
+                    sendData.writeLong(medianAmount); // Median Amount
 
                     sendData.writeUnsignedLong(totalFees); // Total Fees
                     sendData.writeUnsignedLong(medianFees); // Median Fees
+
+                    // Total Fee Rate
+                    sendData.writeUnsignedLong((totalFees * 1000L) / totalBlockSize);
+                    // Median Fee Rate
+                    sendData.writeUnsignedLong(medianFeeRate);
 
                     // Save result
                     mPreviousStatisticsHeight = height;
@@ -691,14 +668,119 @@ namespace BitCoin
 
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                       "Sending block statistics for %d blocks starting at height %d going back %d hours",
-                      blockCount, height, hours);
+                      stats.size(), height, hours);
                 }
             }
         }
-        else if(command == "trxn")
+        else if(command == "memp")
         {
-            // Return transaction
+            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received mempool request");
 
+            MemPool::RequestData requestData;
+            mChain->memPool().getRequestData(requestData);
+
+            sendData.writeString("memp:");
+            sendData.writeUnsignedInt(requestData.count); // Number of transactions
+            sendData.writeUnsignedLong(requestData.totalFee); // Total of fees
+            sendData.writeUnsignedLong(requestData.size); // Size in bytes
+            sendData.writeUnsignedLong(requestData.zero); // Zero fee
+            sendData.writeUnsignedLong(requestData.low); // Low fee
+            sendData.writeUnsignedLong(requestData.one); // 1 sat/B
+            sendData.writeUnsignedLong(requestData.two); // 2 sat/B
+            sendData.writeUnsignedLong(requestData.five); // 5 sat/B
+            sendData.writeUnsignedLong(requestData.remainingSize); // Total size of remaining
+            sendData.writeUnsignedLong(requestData.remainingFee); // Total fee of remaining
+            sendData.writeUnsignedInt(requestData.pendingCount); // Number of pending transactions
+            sendData.writeUnsignedLong(requestData.pendingSize); // Pending size in bytes
+
+            Info &info = Info::instance();
+            sendData.writeUnsignedLong(info.minFee); // Minimum fee
+            sendData.writeUnsignedLong(info.lowFee); // Low fee
+            sendData.writeUnsignedLong(info.memPoolLowFeeSize); // Low fee size
+
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+              "Sending mempool data : %d trans (%d KB)", requestData.count, requestData.size / 1000L);
+        }
+        else if(command == "tran")
+        {
+            // Return transaction for specified hash
+            if(mReceiveBuffer.remaining() < TRANSACTION_HASH_SIZE)
+                NextCash::Log::add(NextCash::Log::WARNING, mName,
+                  "Received short transaction request");
+            else
+            {
+                NextCash::Hash hash(TRANSACTION_HASH_SIZE);
+                hash.read(&mReceiveBuffer);
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                  "Received transaction request for hash %s", hash.hex().text());
+
+                // Find block height
+                unsigned int height = mChain->outputs().getBlockHeight(hash);
+
+                if(height == 0xffffffff)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                      "Block height not found for transaction %s", hash.hex().text());
+                }
+                else
+                {
+                    // Get Block at height
+                    Block block;
+                    if(mChain->getBlock(height, block))
+                    {
+                        unsigned int offset = 0;
+                        for(std::vector<Transaction *>::iterator trans =
+                          block.transactions.begin(); trans != block.transactions.end(); ++trans,
+                          ++offset)
+                            if((*trans)->hash() == hash)
+                            {
+                                sendData.writeString("tran:");
+                                sendData.writeUnsignedInt(0);
+
+                                sendData.writeUnsignedInt(height); // Block height
+                                (*trans)->hash().write(&sendData); // Hash
+                                sendData.writeUnsignedInt((*trans)->size()); // Size
+                                sendData.writeUnsignedInt((*trans)->lockTime); // Lock Time
+
+                                // Inputs
+                                sendData.writeUnsignedInt((*trans)->inputs.size());
+                                for(std::vector<Input>::iterator input = (*trans)->inputs.begin();
+                                  input != (*trans)->inputs.end(); ++input)
+                                {
+                                    input->outpoint.transactionID.write(&sendData);
+                                    sendData.writeUnsignedInt(input->outpoint.index);
+                                    input->script.setReadOffset(0);
+                                    if(offset == 0)
+                                        sendData.writeString(ScriptInterpreter::coinBaseText(
+                                          input->script, block.header.version), true);
+                                    else
+                                        sendData.writeString(ScriptInterpreter::scriptText(
+                                          input->script, mChain->forks(), height), true);
+                                    sendData.writeUnsignedInt(input->sequence);
+                                }
+
+                                // Outputs
+                                sendData.writeUnsignedInt((*trans)->outputs.size());
+                                for(std::vector<Output>::iterator output =
+                                  (*trans)->outputs.begin(); output != (*trans)->outputs.end();
+                                  ++output)
+                                {
+                                    sendData.writeLong(output->amount);
+                                    output->script.setReadOffset(0);
+                                    sendData.writeString(ScriptInterpreter::scriptText(
+                                      output->script, mChain->forks(), height), true);
+                                }
+
+                                // Update result size
+                                sendData.setWriteOffset(5);
+                                sendData.writeUnsignedInt(sendData.length() - 9);
+
+                                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                                  "Sending transaction data : %d B", sendData.length());
+                            }
+                    }
+                }
+            }
         }
         else if(command == "head")
         {
@@ -707,12 +789,80 @@ namespace BitCoin
         }
         else if(command == "blok")
         {
-            // Return block for specified hash
+            // Return block for specified height
+            if(mReceiveBuffer.remaining() < 4)
+                NextCash::Log::add(NextCash::Log::WARNING, mName,
+                  "Received short block request");
+            else
+            {
+                unsigned int height = mReceiveBuffer.readUnsignedInt(); // Height
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                  "Received block request for height %d", height);
+
+                // Get Block at height
+                Block block;
+                unsigned int inputCount, outputCount;
+                int64_t amountSent;
+                if(mChain->getBlock(height, block))
+                {
+                    sendData.writeString("blok:");
+                    sendData.writeUnsignedLong(0UL);
+
+                    sendData.writeUnsignedInt(height); // Height
+                    block.header.hash().write(&sendData); // Hash
+                    sendData.writeUnsignedInt(block.header.time); // Time
+                    sendData.writeUnsignedInt(block.size()); // Size
+                    sendData.writeUnsignedLong(block.actualCoinbaseAmount() -
+                      coinBaseAmount(height)); // Fees
+                    sendData.writeUnsignedInt(block.transactions.size()); // Transaction Count
+
+                    inputCount = 0;
+                    outputCount = 0;
+                    amountSent = 0L;
+                    for(std::vector<Transaction *>::iterator trans = block.transactions.begin();
+                      trans != block.transactions.end(); ++trans)
+                    {
+                        inputCount += (*trans)->inputs.size();
+                        outputCount += (*trans)->outputs.size();
+                        for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
+                          output != (*trans)->outputs.end(); ++output)
+                            amountSent += output->amount;
+                    }
+                    sendData.writeUnsignedInt(inputCount); // Input Count
+                    sendData.writeUnsignedInt(outputCount); // Output Count
+                    sendData.writeLong(amountSent); // Amount Sent
+
+                    for(std::vector<Transaction *>::iterator trans = block.transactions.begin();
+                      trans != block.transactions.end(); ++trans)
+                    {
+                        (*trans)->hash().write(&sendData); // Hash
+                        sendData.writeUnsignedInt((*trans)->size()); // Size
+                        sendData.writeUnsignedInt((*trans)->inputs.size()); // Input Count
+                        sendData.writeUnsignedInt((*trans)->outputs.size()); // Output Count
+                        amountSent = 0L;
+                        for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
+                          output != (*trans)->outputs.end(); ++output)
+                            amountSent += output->amount;
+                        sendData.writeLong(amountSent); // Amount Sent
+                    }
+
+                    // Update result size
+                    sendData.setWriteOffset(5);
+                    sendData.writeUnsignedLong(sendData.length() - 13);
+
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                      "Sending block data : %d KB", sendData.length() / 1000UL);
+                }
+            }
+        }
+        else if(command == "blkh")
+        {
+            // Return block hash at specified height
 
         }
         else if(command == "blkn")
         {
-            // Return block hash at specified height
+            // Return block height for specified hash
 
         }
         else

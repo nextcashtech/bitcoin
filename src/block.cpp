@@ -33,14 +33,14 @@ namespace BitCoin
                 delete *transaction;
     }
 
-    uint64_t Block::actualCoinbaseAmount()
+    uint64_t Block::actualCoinbaseAmount() const
     {
         if(transactions.size() == 0)
-            return 0;
+            return 0UL;
 
-        uint64_t result = 0;
+        uint64_t result = 0UL;
         Transaction *coinbase = transactions.front();
-        for(std::vector<Output>::iterator output = coinbase->outputs.begin();
+        for(std::vector<Output>::const_iterator output = coinbase->outputs.begin();
           output != coinbase->outputs.end(); ++output)
             result += output->amount;
 
@@ -66,10 +66,16 @@ namespace BitCoin
 
     bool Block::read(NextCash::InputStream *pStream)
     {
+#ifdef PROFILER_ON
+        NextCash::Profiler &profiler = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_READ_ID, PROFILER_BLOCK_READ_NAME);
+        NextCash::ProfilerReference profilerRef(profiler, true);
+#endif
+
         NextCash::stream_size startOffset = pStream->readOffset();
         mSize = 0;
 
-        if(!header.read(pStream, true, true))
+        if(!header.read(pStream, true))
             return false;
 
         clearTransactions();
@@ -86,7 +92,7 @@ namespace BitCoin
         for(unsigned int i = 0; i < header.transactionCount; ++i)
         {
             transaction = new Transaction();
-            if(transaction->read(pStream, true))
+            if(transaction->read(pStream))
                 transactions.push_back(transaction);
             else
             {
@@ -98,6 +104,9 @@ namespace BitCoin
         }
 
         mSize = pStream->readOffset() - startOffset;
+#ifdef PROFILER_ON
+        profiler.addHits(size() - 1); // One hit (byte) will be added by reference.
+#endif
         return true;
     }
 
@@ -155,7 +164,7 @@ namespace BitCoin
         digest.setOutputEndian(NextCash::Endian::LITTLE);
         pLeft.write(&digest);
         pRight.write(&digest);
-        pResult.setSize(32);
+        pResult.setSize(BLOCK_HASH_SIZE);
         digest.getResult(&pResult);
     }
 
@@ -209,18 +218,18 @@ namespace BitCoin
 
     void Block::calculateMerkleHash(NextCash::Hash &pMerkleHash)
     {
-        pMerkleHash.setSize(32);
+        pMerkleHash.setSize(BLOCK_HASH_SIZE);
         if(transactions.size() == 0)
             pMerkleHash.zeroize();
         else if(transactions.size() == 1)
-            pMerkleHash = transactions.front()->hash;
+            pMerkleHash = transactions.front()->hash();
         else
         {
             // Collect transaction hashes
             std::vector<NextCash::Hash> hashes;
             for(std::vector<Transaction *>::iterator trans = transactions.begin();
               trans != transactions.end(); ++trans)
-                hashes.push_back((*trans)->hash);
+                hashes.push_back((*trans)->hash());
 
             // Calculate the next level
             calculateMerkleHashLevel(hashes, pMerkleHash);
@@ -231,7 +240,7 @@ namespace BitCoin
     {
         if(left == NULL)
         {
-            hash.setSize(32);
+            hash.setSize(BLOCK_HASH_SIZE);
             hash.zeroize();
             return true;
         }
@@ -243,7 +252,7 @@ namespace BitCoin
         digest.setOutputEndian(NextCash::Endian::LITTLE);
         left->hash.write(&digest);
         right->hash.write(&digest);
-        hash.setSize(32);
+        hash.setSize(BLOCK_HASH_SIZE);
         digest.getResult(&hash);
         return true;
     }
@@ -388,10 +397,13 @@ namespace BitCoin
             return false;
         }
 
+        NextCash::Timer addTime(true);
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
+        addTime.stop();
 
+        NextCash::Timer fullTime;
         unsigned int transactionOffset = 0;
         NextCash::Mutex spentAgeLock("Spent Age");
         std::vector<unsigned int> spentAges;
@@ -399,6 +411,7 @@ namespace BitCoin
         for(std::vector<Transaction *>::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction)
         {
+            fullTime.start();
             if(!(*transaction)->updateOutputs(pChain, pHeight, transactionOffset == 0,
               spentAgeLock, spentAges))
             {
@@ -406,6 +419,7 @@ namespace BitCoin
                   "Transaction %d update failed", transactionOffset);
                 return false;
             }
+            fullTime.stop();
             ++transactionOffset;
         }
 
@@ -417,16 +431,16 @@ namespace BitCoin
                 totalSpentAge += *spentAge;
             unsigned int averageSpentAge = totalSpentAge / spentAges.size();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-              "Average spent age for block %d is %d for %d inputs", pHeight, averageSpentAge,
-              spentAges.size());
+              "Average spent age for block %d is %d for %d inputs (Add,%d,Full,%d)", pHeight, averageSpentAge,
+              spentAges.size(), addTime.milliseconds(), fullTime.milliseconds());
         }
 
         return true;
     }
 
-    void Block::updateOutputsThreadRun()
+    void Block::updateOutputsThreadRun(void *pParameter)
     {
-        ProcessThreadData *data = (ProcessThreadData *)NextCash::Thread::getParameter();
+        ProcessThreadData *data = (ProcessThreadData *)pParameter;
         if(data == NULL)
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
@@ -436,6 +450,7 @@ namespace BitCoin
 
         Transaction *transaction;
         unsigned int offset;
+        NextCash::Timer fullTime;
         while(true)
         {
             transaction = data->getNext(offset);
@@ -446,6 +461,7 @@ namespace BitCoin
                 break;
             }
 
+            fullTime.start();
             if(transaction->updateOutputs(data->chain, data->height, offset == 0,
               data->spentAgeLock, data->spentAges))
                 data->markComplete(offset, true);
@@ -456,7 +472,12 @@ namespace BitCoin
                 transaction->print(data->chain->forks(), NextCash::Log::WARNING);
                 data->markComplete(offset, false);
             }
+            fullTime.stop();
         }
+
+        data->timeLock.lock();
+        data->fullTime += fullTime.microseconds();
+        data->timeLock.unlock();
     }
 
     bool Block::updateOutputsMultiThreaded(Chain *pChain, unsigned int pHeight,
@@ -471,9 +492,11 @@ namespace BitCoin
             return false;
         }
 
+        NextCash::Timer addTime(true);
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
+        addTime.stop();
 
         ProcessThreadData threadData(pChain, this, pHeight, transactions.begin(),
           transactions.size());
@@ -580,8 +603,9 @@ namespace BitCoin
                 totalSpentAge += *spentAge;
             unsigned int averageSpentAge = totalSpentAge / threadData.spentAges.size();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-              "Average spent age for block %d is %d for %d inputs", pHeight, averageSpentAge,
-              threadData.spentAges.size());
+              "Average spent age for block %d is %d for %d inputs (Add,%d,Full,%d)", pHeight,
+              averageSpentAge, threadData.spentAges.size(), addTime.milliseconds(),
+              threadData.fullTime / 1000L);
         }
 
         return true;
@@ -610,7 +634,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Block::validate(Chain *pChain, unsigned int pHeight)
+    bool Block::validate()
     {
         if(transactions.size() == 0)
         {
@@ -618,6 +642,10 @@ namespace BitCoin
               "No transactions. At least a coin base is required");
             return false;
         }
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_MERKLE_CALC_ID, PROFILER_BLOCK_MERKLE_CALC_NAME), true);
+#endif
 
         // Validate Merkle Hash
         NextCash::Hash calculatedMerkleHash;
@@ -636,9 +664,15 @@ namespace BitCoin
         return true;
     }
 
-    void Block::processThreadRun()
+    void Block::processThreadRun(void *pParameter)
     {
-        ProcessThreadData *data = (ProcessThreadData *)NextCash::Thread::getParameter();
+#ifdef PROFILER_ON
+        NextCash::Profiler &profiler = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_PROCESS_ID, PROFILER_BLOCK_PROCESS_NAME);
+        NextCash::Timer profilerTimer(true);
+#endif
+
+        ProcessThreadData *data = (ProcessThreadData *)pParameter;
         if(data == NULL)
         {
             NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
@@ -648,6 +682,7 @@ namespace BitCoin
 
         Transaction *transaction;
         unsigned int offset;
+        NextCash::Timer checkDupTime, outputsTime, sigTime, fullTime;
         while(true)
         {
             transaction = data->getNext(offset);
@@ -658,31 +693,55 @@ namespace BitCoin
                 break;
             }
 
-            if(transaction->process(data->chain, data->block->header.hash, data->height,
-              offset == 0, data->block->header.version, data->spentAgeLock, data->spentAges))
+            fullTime.start();
+            transaction->check(data->chain, data->block->header.hash(), data->height, offset == 0,
+              data->block->header.version, data->spentAgeLock, data->spentAges, checkDupTime,
+              outputsTime, sigTime);
+            if(transaction->isVerified())
                 data->markComplete(offset, true);
             else
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-                  "Transaction %d failed : %s", offset, transaction->hash.hex().text());
+                  "Transaction %d failed : %s", offset, transaction->hash().hex().text());
                 transaction->print(data->chain->forks(), NextCash::Log::WARNING);
                 data->markComplete(offset, false);
             }
+            fullTime.stop();
         }
+
+        data->timeLock.lock();
+        data->checkDupTime += checkDupTime.microseconds();
+        data->outputsTime += outputsTime.microseconds();
+        data->sigTime += sigTime.microseconds();
+        data->fullTime += fullTime.microseconds();
+        data->timeLock.unlock();
+
+#ifdef PROFILER_ON
+        profilerTimer.stop();
+        profiler.addTime(profilerTimer.microseconds());
+#endif
     }
 
     bool Block::processMultiThreaded(Chain *pChain, unsigned int pHeight,
       unsigned int pThreadCount)
     {
+#ifdef PROFILER_ON
+        NextCash::Profiler &profiler = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_PROCESS_ID, PROFILER_BLOCK_PROCESS_NAME);
+        profiler.addHits(size());
+#endif
+
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block %d (multi-threaded) (%d trans) (%d KB) : %s", pHeight,
-          transactions.size(), size() / 1000, header.hash.hex().text());
+          transactions.size(), size() / 1000, header.hash().hex().text());
 
         mFees = 0;
 
+        NextCash::Timer addTime(true);
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
+        addTime.stop();
 
         ProcessThreadData threadData(pChain, this, pHeight, transactions.begin(),
           transactions.size());
@@ -762,6 +821,11 @@ namespace BitCoin
         if(!threadData.success)
             return false;
 
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+          "Multi threaded block times Threads,%d,Add,%d,Dup,%d,Out,%d,Sig,%d,Full,%d", pThreadCount,
+          addTime.milliseconds(), threadData.checkDupTime / 1000L, threadData.outputsTime / 1000L,
+          threadData.sigTime / 1000L, threadData.fullTime / 1000L);
+
         if(threadData.spentAges.size() > 0)
         {
             unsigned int totalSpentAge = 0;
@@ -799,15 +863,21 @@ namespace BitCoin
     bool Block::processSingleThreaded(Chain *pChain, unsigned int pHeight)
     {
 #ifdef PROFILER_ON
-        NextCash::Profiler profiler("Block Process");
+        NextCash::Profiler &profiler = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_PROCESS_ID, PROFILER_BLOCK_PROCESS_NAME);
+        profiler.addHits(size() - 1); // One hit (byte) will be added by reference.
+        NextCash::ProfilerReference profilerRef(profiler, true);
 #endif
+
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
           "Processing block %d (%d trans) (%d KB) : %s", pHeight,
-          transactions.size(), size() / 1000, header.hash.hex().text());
+          transactions.size(), size() / 1000, header.hash().hex().text());
 
+        NextCash::Timer addTime(true);
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
+        addTime.stop();
 
         // Validate and process transactions
         mFees = 0;
@@ -815,22 +885,31 @@ namespace BitCoin
         std::vector<unsigned int> spentAges;
         spentAges.reserve(transactions.size() * 2);
         NextCash::Mutex spentAgeLock("Spent Age");
+        NextCash::Timer checkDupTime, outputsTime, sigTime, fullTime;
         for(std::vector<Transaction *>::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction, ++transactionOffset)
         {
             // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
               // "Processing transaction %d", transactionOffset);
-            if(!(*transaction)->process(pChain, header.hash, pHeight, transactionOffset == 0,
-              header.version, spentAgeLock, spentAges))
+            fullTime.start();
+            (*transaction)->check(pChain, header.hash(), pHeight, transactionOffset == 0,
+              header.version, spentAgeLock, spentAges, checkDupTime, outputsTime, sigTime);
+            if(!(*transaction)->isVerified())
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Transaction %d failed", transactionOffset);
                 (*transaction)->print(pChain->forks(), NextCash::Log::WARNING);
                 return false;
             }
+            fullTime.stop();
             if(transactionOffset != 0)
                 mFees += (*transaction)->fee();
         }
+
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+          "Single threaded block times Threads,1,Add,%d,Dup,%d,Out,%d,Sig,%d,Full,%d",
+          addTime.milliseconds(), checkDupTime.milliseconds(), outputsTime.milliseconds(),
+          sigTime.milliseconds(), fullTime.milliseconds());
 
         if(spentAges.size() > 0)
         {
@@ -983,14 +1062,14 @@ namespace BitCoin
         bool validate(); // Validate CRC
 
         // Add a block to the file
-        bool writeBlock(const Block &pBlock);
+        bool writeBlock(Block &pBlock);
 
         // Remove blocks from file above a specific offset in the file
         bool removeBlocksAbove(unsigned int pOffset);
 
         // Read block at specified offset in file. Return false if the offset is too high.
         bool readTransactions(unsigned int pOffset, std::vector<Transaction *> &pTransactions,
-          NextCash::stream_size *pDataSize = NULL);
+          Time pBlockTime, NextCash::stream_size *pDataSize = NULL);
 
         bool readOutput(unsigned int pBlockOffset, unsigned int pTransactionOffset,
           unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput);
@@ -1274,7 +1353,7 @@ namespace BitCoin
         // Write empty index entries
         NextCash::Digest digest(NextCash::Digest::CRC32);
         digest.setOutputEndian(NextCash::Endian::LITTLE);
-        NextCash::Hash zeroHash(32);
+        NextCash::Hash zeroHash(BLOCK_HASH_SIZE);
         for(unsigned int i = 0; i < MAX_COUNT; ++i)
         {
             zeroHash.write(outputFile); // Block hash
@@ -1314,10 +1393,6 @@ namespace BitCoin
         if(!mModified || !mValid)
             return;
 
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Block Update CRC", false);
-        profiler.start();
-#endif
         if(!openFile())
         {
             mValid = false;
@@ -1376,13 +1451,158 @@ namespace BitCoin
         uint32_t calculatedCRC = crcBuffer.readUnsignedInt();
 
         // Check CRC
-        if(crc != calculatedCRC)
+        if(crc == calculatedCRC)
+            return true;
+
+        // Attempt to verify the data in the file.
+        mValid = true;
+
+        NextCash::Hash hash(BLOCK_HASH_SIZE);
+        uint32_t dataOffset;
+        Block block;
+        Transaction *transaction;
+        uint32_t transactionCount;
+        unsigned int lastGoodCount = 0;
+        NextCash::stream_size lastGoodOffset = 0;
+        unsigned int previousCount = 0;
+
+        // Find current block count.
+        mInputFile->setReadOffset(HEADER_START_OFFSET);
+        while(previousCount < MAX_COUNT)
+        {
+            if(!hash.read(mInputFile))
+                break;
+
+            if(hash.isZero())
+                break;
+
+            mInputFile->skip(4);
+            ++previousCount;
+        }
+
+        while(lastGoodCount < MAX_COUNT)
+        {
+            mInputFile->setReadOffset(HEADER_START_OFFSET + (lastGoodCount * HEADER_ITEM_SIZE));
+            if(!hash.read(mInputFile))
+                break;
+
+            if(hash.isZero())
+                break;
+
+            if(mInputFile->remaining() < 4)
+                break;
+            dataOffset = mInputFile->readUnsignedInt();
+
+            if(dataOffset + 4 > mInputFile->length())
+                break;
+
+            if(!Header::getHeader((mID * MAX_COUNT) + lastGoodCount, block.header))
+                break;
+
+            mInputFile->setReadOffset(dataOffset);
+
+            if(mInputFile->remaining() < 4)
+                break;
+            transactionCount = mInputFile->readUnsignedInt();
+
+            block.transactions.reserve(transactionCount);
+
+            for(unsigned int i = 0; i < transactionCount; ++i)
+            {
+                transaction = new Transaction();
+                if(transaction->read(mInputFile))
+                    block.transactions.push_back(transaction);
+                else
+                {
+                    delete transaction;
+                    break;
+                }
+            }
+
+            if(!block.validate())
+                break;
+
+            block.clear();
+            lastGoodOffset = mInputFile->readOffset();
+            ++lastGoodCount;
+        }
+
+        if(lastGoodOffset == 0)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_BLOCK_LOG_NAME,
-              "Block file %08x has invalid CRC : 0x%08x != 0x%08x", mID, crc, calculatedCRC);
+              "Block file %08x has no good blocks", mID);
             return false;
         }
 
+        NextCash::stream_size truncateSize = mInputFile->length() - lastGoodOffset;
+        if(truncateSize != 0)
+        {
+            // Truncate end of file.
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x reverting to count of %d", mID, lastGoodCount);
+
+            NextCash::String swapFilePathName = mFilePathName + ".swap";
+            NextCash::FileOutputStream *swapFile = new NextCash::FileOutputStream(swapFilePathName,
+              true);
+
+            if(!swapFile->isValid())
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+                  "Failed to repair block file %08x. Failed to open swap file", mID);
+                delete swapFile;
+                return false;
+            }
+
+            // Write start string
+            swapFile->writeString(START_STRING);
+
+            // Write empty CRC
+            swapFile->writeUnsignedInt(0);
+
+            mInputFile->setReadOffset(HEADER_START_OFFSET);
+
+            // Transfer block to swap file
+            for(unsigned int i = 0; i <= lastGoodCount; ++i)
+            {
+                if(!hash.read(mInputFile))
+                    return false;
+                hash.write(swapFile);
+                swapFile->writeUnsignedInt(mInputFile->readUnsignedInt());
+            }
+
+            mLastHash = hash;
+
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+              "Block file %08x new last hash : %s", mID, mLastHash.hex().text());
+
+            // Write the rest of the block as empty
+            hash.zeroize();
+            for(unsigned int i = lastGoodCount + 1; i < MAX_COUNT; ++i)
+            {
+                hash.write(swapFile);
+                swapFile->writeUnsignedInt(0);
+            }
+
+            // Copy block data to swap file
+            mInputFile->setReadOffset(DATA_START_OFFSET);
+            swapFile->writeStream(mInputFile, lastGoodOffset - swapFile->writeOffset());
+
+            delete mInputFile;
+            mInputFile = NULL;
+            delete swapFile;
+
+            if(!NextCash::renameFile(swapFilePathName, mFilePathName))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+                  "Failed to repair block file %08x. Failed to rename swap file", mID);
+                return false;
+            }
+        }
+
+        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
+          "Repaired block file %08x. Truncated %d blocks", mID, previousCount - lastGoodCount);
+        mModified = true;
+        updateCRC();
         return true;
     }
 
@@ -1402,7 +1622,7 @@ namespace BitCoin
 
         // Go to the last data offset in the header
         mInputFile->setReadOffset(HEADER_START_OFFSET + ((MAX_COUNT - 1) * HEADER_ITEM_SIZE) +
-          32);
+          BLOCK_HASH_SIZE);
 
         // Check each data offset until it is not empty
         for(mCount = MAX_COUNT; mCount > 0; --mCount)
@@ -1411,7 +1631,7 @@ namespace BitCoin
             {
                 // Back up to hash for this data offset
                 mInputFile->setReadOffset(mInputFile->readOffset() - HEADER_ITEM_SIZE);
-                if(!mLastHash.read(mInputFile, 32))
+                if(!mLastHash.read(mInputFile, BLOCK_HASH_SIZE))
                 {
                     mLastHash.clear();
                     mValid = false;
@@ -1423,11 +1643,8 @@ namespace BitCoin
         }
     }
 
-    bool BlockFile::writeBlock(const Block &pBlock)
+    bool BlockFile::writeBlock(Block &pBlock)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Block Add");
-#endif
         if(!openFile())
             return false;
 
@@ -1459,7 +1676,7 @@ namespace BitCoin
 
         // Write hash and offset to file
         outputFile->setWriteOffset(HEADER_START_OFFSET + (count * HEADER_ITEM_SIZE));
-        pBlock.header.hash.write(outputFile);
+        pBlock.header.hash().write(outputFile);
         outputFile->writeUnsignedInt(nextBlockOffset);
 
         // Write block data at end of file
@@ -1475,7 +1692,7 @@ namespace BitCoin
 
         delete outputFile;
 
-        mLastHash = pBlock.header.hash;
+        mLastHash = pBlock.header.hash();
         ++mCount;
         mModified = true;
 
@@ -1485,7 +1702,7 @@ namespace BitCoin
         return true;
     }
 
-    bool Block::add(unsigned int pHeight, const Block &pBlock)
+    bool Block::add(unsigned int pHeight, Block &pBlock)
     {
         BlockFile *file = BlockFile::get(BlockFile::fileID(pHeight), true, true);
         if(file == NULL)
@@ -1547,9 +1764,6 @@ namespace BitCoin
 
     bool BlockFile::removeBlocksAbove(unsigned int pOffset)
     {
-#ifdef PROFILER_ON
-        NextCash::Profiler profiler("Block Remove Above");
-#endif
         if(!openFile())
             return false;
 
@@ -1583,7 +1797,7 @@ namespace BitCoin
         swapFile->writeUnsignedInt(0);
 
         mInputFile->setReadOffset(HEADER_START_OFFSET);
-        NextCash::Hash hash(32);
+        NextCash::Hash hash(BLOCK_HASH_SIZE);
 
         // Transafer block to swap file
         for(unsigned int i = 0; i <= pOffset; ++i)
@@ -1630,6 +1844,7 @@ namespace BitCoin
             return false;
         }
 
+        updateCRC();
         return true;
     }
 
@@ -1663,7 +1878,7 @@ namespace BitCoin
     }
 
     bool BlockFile::readTransactions(unsigned int pOffset,
-      std::vector<Transaction *> &pTransactions, NextCash::stream_size *pDataSize)
+      std::vector<Transaction *> &pTransactions, Time pBlockTime, NextCash::stream_size *pDataSize)
     {
         if(!openFile())
         {
@@ -1672,7 +1887,8 @@ namespace BitCoin
         }
 
         // Go to location in header where the data offset to the block is
-        mInputFile->setReadOffset(HEADER_START_OFFSET + (pOffset * HEADER_ITEM_SIZE) + 32);
+        mInputFile->setReadOffset(HEADER_START_OFFSET + (pOffset * HEADER_ITEM_SIZE) +
+          BLOCK_HASH_SIZE);
 
         NextCash::stream_size offset = mInputFile->readUnsignedInt();
         if(offset == 0)
@@ -1693,7 +1909,8 @@ namespace BitCoin
         for(unsigned int i = 0; i < transactionCount; ++i)
         {
             transaction = new Transaction();
-            if(transaction->read(mInputFile, true))
+            transaction->setTime(pBlockTime);
+            if(transaction->read(mInputFile))
                 pTransactions.push_back(transaction);
             else
             {
@@ -1721,7 +1938,7 @@ namespace BitCoin
 
         NextCash::stream_size dataSize = 0;
         bool success = file->readTransactions(BlockFile::fileOffset(pHeight),
-          pBlock.transactions, &dataSize);
+          pBlock.transactions, pBlock.header.time, &dataSize);
         file->unlock(false);
 
         pBlock.header.transactionCount = pBlock.transactions.size();
@@ -1743,7 +1960,7 @@ namespace BitCoin
         }
 
         // Go to location in header where the data offset to the block is
-        mInputFile->setReadOffset(HEADER_START_OFFSET + (pBlockOffset * HEADER_ITEM_SIZE) + 32);
+        mInputFile->setReadOffset(HEADER_START_OFFSET + (pBlockOffset * HEADER_ITEM_SIZE) + BLOCK_HASH_SIZE);
 
         unsigned int offset = mInputFile->readUnsignedInt();
         if(offset == 0)
@@ -1863,5 +2080,65 @@ namespace BitCoin
         }
 
         return result;
+    }
+
+    BlockStat::BlockStat(Block &pBlock, unsigned int pHeight) : hash(BLOCK_HASH_SIZE)
+    {
+        set(pBlock, pHeight);
+    }
+
+    void BlockStat::set(Block &pBlock, unsigned int pHeight)
+    {
+        hash = pBlock.header.hash();
+        time = pBlock.header.time;
+        size = pBlock.size();
+        transactionCount = pBlock.transactions.size();
+        inputCount = 0;
+        outputCount = 0;
+        fees = 0UL;
+        amount = 0UL;
+
+        if(pBlock.transactions.size() == 0)
+            return;
+
+        fees = pBlock.actualCoinbaseAmount() - coinBaseAmount(pHeight);
+
+        for(std::vector<Transaction *>::const_iterator trans = pBlock.transactions.begin() + 1;
+          trans != pBlock.transactions.end(); ++trans)
+        {
+            inputCount += (*trans)->inputs.size();
+            outputCount += (*trans)->outputs.size();
+            for(std::vector<Output>::iterator output = (*trans)->outputs.begin();
+              output != (*trans)->outputs.end(); ++output)
+                amount += output->amount;
+        }
+    }
+
+    void BlockStat::write(NextCash::OutputStream *pStream) const
+    {
+        hash.write(pStream);
+        pStream->writeUnsignedInt(time);
+        pStream->writeUnsignedLong(size);
+        pStream->writeUnsignedInt(transactionCount);
+        pStream->writeUnsignedInt(inputCount);
+        pStream->writeUnsignedInt(outputCount);
+        pStream->writeUnsignedLong(fees);
+        pStream->writeUnsignedLong(amount);
+    }
+
+    bool BlockStat::read(NextCash::InputStream *pStream)
+    {
+        if(pStream->remaining() < DATA_SIZE)
+            return false;
+        if(!hash.read(pStream, BLOCK_HASH_SIZE))
+            return false;
+        time = pStream->readUnsignedInt();
+        size = pStream->readUnsignedLong();
+        transactionCount = pStream->readUnsignedInt();
+        inputCount = pStream->readUnsignedInt();
+        outputCount = pStream->readUnsignedInt();
+        fees = pStream->readUnsignedLong();
+        amount = pStream->readUnsignedLong();
+        return true;
     }
 }
