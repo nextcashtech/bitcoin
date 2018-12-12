@@ -198,7 +198,7 @@ namespace BitCoin
           const NextCash::Hash &pHash);
         bool sendBlock(BlockReference &pBlock);
         bool sendBloomFilter();
-        bool sendMerkleBlock(const NextCash::Hash &pBlockHash);
+        bool sendMerkleBlock(BlockReference &pBlock);
 
         unsigned int mID;
         NextCash::String mName;

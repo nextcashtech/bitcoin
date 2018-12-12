@@ -216,12 +216,32 @@ namespace BitCoin
             threadCount = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "approved_hash") == 0)
         {
-            approvedHash.setHex(value);
-            if(approvedHash.size() != 32)
-                approvedHash.clear();
+            NextCash::Hash newHash;
+            newHash.setHex(value);
+            if(newHash.size() == BLOCK_HASH_SIZE)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_INFO_LOG_NAME,
+                  "Setting approved hash : %s", newHash.hex().text());
+                approvedHash = newHash;
+            }
+        }
+        else if(std::strcmp(name, "invalid_hash") == 0)
+        {
+            NextCash::Hash newHash;
+            newHash.setHex(value);
+            if(newHash.size() == BLOCK_HASH_SIZE)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_INFO_LOG_NAME,
+                  "Adding invalid hash : %s", newHash.hex().text());
+                invalidHashes.emplace_back(newHash);
+            }
         }
         else if(std::strcmp(name, "notify_email") == 0)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_INFO_LOG_NAME,
+              "Using notification email : %s", value);
             notifyEmail = value;
+        }
 
         delete[] name;
         delete[] value;

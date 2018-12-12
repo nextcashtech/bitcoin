@@ -769,22 +769,13 @@ namespace BitCoin
         return success;
     }
 
-    bool Node::sendMerkleBlock(const NextCash::Hash &pBlockHash)
+    bool Node::sendMerkleBlock(BlockReference &pBlock)
     {
-        BlockReference block(mChain->getBlock(pBlockHash));
-
-        if(!block)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-              "Merkle block not found : %s", pBlockHash.hex().text());
-            return false;
-        }
-
         TransactionList includedTransactions;
-        Message::MerkleBlockData merkleMessage(block, mFilter, includedTransactions);
+        Message::MerkleBlockData merkleMessage(pBlock, mFilter, includedTransactions);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
           "Sending merkle block with %d trans : %s", includedTransactions.size(),
-          pBlockHash.hex().text());
+          pBlock->header.hash().hex().text());
         if(!sendMessage(&merkleMessage))
             return false;
 
@@ -2192,29 +2183,19 @@ namespace BitCoin
                     case Message::InventoryHash::BLOCK:
                     {
                         unsigned int height = mChain->hashHeight((*item)->hash);
-                        if(height == 0xffffffff)
-                            notFoundData.inventory.push_back(new Message::InventoryHash(**item));
-                        else if(mReceivedVersionData->startBlockHeight > 1000 &&
-                          height < mReceivedVersionData->startBlockHeight - 1000)
+                        NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
+                          "Requested block (%d) : %s", height, (*item)->hash.hex().text());
+                        block = mChain->getBlock((*item)->hash);
+                        if(block)
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                              "Not sending block. Block height %d below node's start block height %d : %s",
-                              height, mReceivedVersionData->startBlockHeight, (*item)->hash.hex().text());
+                            if(!sendBlock(block))
+                                fail = true;
                         }
                         else
                         {
-                            block = mChain->getBlock((*item)->hash);
-                            if(block)
-                            {
-                                if(!sendBlock(block))
-                                    fail = true;
-                            }
-                            else
-                            {
-                                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                                  "Block not found : %s", (*item)->hash.hex().text());
-                                notFoundData.inventory.push_back(new Message::InventoryHash(**item));
-                            }
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                              "Block not found : %s", (*item)->hash.hex().text());
+                            notFoundData.inventory.push_back(new Message::InventoryHash(**item));
                         }
                         break;
                     }
@@ -2231,60 +2212,68 @@ namespace BitCoin
                             sendMessage(&transactionData);
                         }
                         else
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                              "Transaction not found : %s", (*item)->hash.hex().text());
                             notFoundData.inventory.push_back(new Message::InventoryHash(**item));
+                        }
                         break;
                     }
                     case Message::InventoryHash::FILTERED_BLOCK:
-                        sendMerkleBlock((*item)->hash);
-                        break;
-                    case Message::InventoryHash::COMPACT_BLOCK:
                     {
                         unsigned int height = mChain->hashHeight((*item)->hash);
-                        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                          "Requested compact block (%d) : %s", height, (*item)->hash.hex().text());
+                        NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
+                          "Requested merkle block (%d) : %s", height, (*item)->hash.hex().text());
 
-                        if(height == 0xffffffff)
-                            notFoundData.inventory.push_back(new Message::InventoryHash(**item));
-                        else if(mReceivedVersionData->startBlockHeight > 1000 &&
-                          height < mReceivedVersionData->startBlockHeight - 1000)
+                        block = mChain->getBlock((*item)->hash);
+                        if(block)
                         {
-                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                              "Not sending block. Block height %d below node's start block height %d : %s",
-                              height, mReceivedVersionData->startBlockHeight,
-                              (*item)->hash.hex().text());
+                            if(!sendMerkleBlock(block))
+                                fail = true;
                         }
                         else
                         {
-                            block = mChain->getBlock((*item)->hash);
-                            if(block)
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                              "Block not found : %s", (*item)->hash.hex().text());
+                            notFoundData.inventory.push_back(new Message::InventoryHash(**item));
+                        }
+                        break;
+                    }
+                    case Message::InventoryHash::COMPACT_BLOCK:
+                    {
+                        unsigned int height = mChain->hashHeight((*item)->hash);
+                        NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
+                          "Requested compact block (%d) : %s", height, (*item)->hash.hex().text());
+
+                        block = mChain->getBlock((*item)->hash);
+                        if(block)
+                        {
+                            if(mSendCompactBlocksVersion != 0L &&
+                              mChain->headerHeight() - height < 10)
                             {
-                                if(mSendCompactBlocksVersion != 0L &&
-                                  mChain->headerHeight() - height < 10)
-                                {
-                                    Message::CompactBlockData *compactBlock =
-                                      new Message::CompactBlockData(block);
-                                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                                     "Sending compact block (%d/%d prefilled) (%d) : %s",
-                                     compactBlock->prefilled.size(),
-                                     compactBlock->block->transactions.size(), height,
-                                     compactBlock->block->header.hash().hex().text());
-                                    if(sendMessage(compactBlock))
-                                        mOutgoingCompactBlocks.push_back(compactBlock);
-                                    else
-                                        delete compactBlock;
-                                }
+                                Message::CompactBlockData *compactBlock =
+                                  new Message::CompactBlockData(block);
+                                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                                 "Sending compact block (%d/%d prefilled) (%d) : %s",
+                                 compactBlock->prefilled.size(),
+                                 compactBlock->block->transactions.size(), height,
+                                 compactBlock->block->header.hash().hex().text());
+                                if(sendMessage(compactBlock))
+                                    mOutgoingCompactBlocks.push_back(compactBlock);
                                 else
-                                {
-                                    if(!sendBlock(block))
-                                        fail = true;
-                                }
+                                    delete compactBlock;
                             }
                             else
                             {
-                                NextCash::Log::addFormatted(NextCash::Log::WARNING, mName,
-                                  "Failed to get block (%d) : %s", height,
-                                  (*item)->hash.hex().text());
+                                if(!sendBlock(block))
+                                    fail = true;
                             }
+                        }
+                        else
+                        {
+                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                              "Block not found : %s", (*item)->hash.hex().text());
+                            notFoundData.inventory.push_back(new Message::InventoryHash(**item));
                         }
                         break;
                     }

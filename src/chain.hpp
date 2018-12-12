@@ -279,6 +279,7 @@ namespace BitCoin
         static const uint8_t LOCK_HEADERS  = 0x01;
         static const uint8_t LOCK_PENDING  = 0x02;
         static const uint8_t LOCK_BRANCHES = 0x04;
+        static const uint8_t LOCK_PROCESS  = 0x08;
 
         // Add header/block to queue to be processed and added to top of chain
         //   Parameter pMainBranchOnly : True when no branches should be checked.
@@ -441,7 +442,7 @@ namespace BitCoin
         BlockReference mAnnounceBlock;
 
         // Block header hashes that have been proven invalid.
-        NextCash::HashList mBlackListHashes;
+        NextCash::HashList mInvalidHashes;
         std::vector<unsigned int> mBlackListedNodeIDs;
 
         void addBlackListedHash(const NextCash::Hash &pHash);

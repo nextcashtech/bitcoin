@@ -831,8 +831,15 @@ namespace BitCoin
                     sendData.writeUnsignedInt(outputCount); // Output Count
                     sendData.writeLong(amountSent); // Amount Sent
 
+                    // Included Tran Count
+                    if(block->transactions.size() > 100)
+                        sendData.writeUnsignedInt(100);
+                    else
+                        sendData.writeUnsignedInt(block->transactions.size());
+
+                    unsigned int count = 0;
                     for(TransactionList::iterator trans = block->transactions.begin();
-                      trans != block->transactions.end(); ++trans)
+                      trans != block->transactions.end() && count < 100; ++trans, ++count)
                     {
                         (*trans)->hash().write(&sendData); // Hash
                         sendData.writeUnsignedInt((*trans)->size()); // Size

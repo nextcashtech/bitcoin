@@ -151,14 +151,14 @@ namespace BitCoin
 
     void Chain::addBlackListedHash(const NextCash::Hash &pHash)
     {
-        if(!mBlackListHashes.contains(pHash))
+        if(!mInvalidHashes.contains(pHash))
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
               "Added block to black list : %s", pHash.hex().text());
             // Keep list at 1024 or less
-            if(mBlackListHashes.size() > 1024)
-                mBlackListHashes.erase(mBlackListHashes.begin());
-            mBlackListHashes.push_back(pHash);
+            if(mInvalidHashes.size() > 1024)
+                mInvalidHashes.erase(mInvalidHashes.begin());
+            mInvalidHashes.push_back(pHash);
         }
     }
 
@@ -356,29 +356,34 @@ namespace BitCoin
             mPendingBlockCount = 0;
         }
 
-        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-          "Main converted to branch at height %d (%d blocks)", newBranch->height,
-          newBranch->pendingBlocks.size());
+        if(newBranch->pendingBlocks.size() > 0)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Main converted to branch at height %d (%d blocks)", newBranch->height,
+              newBranch->pendingBlocks.size());
 
-        // Add the previous main branch as a new branch
-        mBranches.push_back(newBranch);
+            // Add the previous main branch as a new branch
+            mBranches.push_back(newBranch);
+        }
+        else
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
+              "Main branch has no blocks left");
 
         // Revert the main chain to the before branch height.
+
+        uint8_t locks = LOCK_HEADERS | LOCK_BRANCHES | LOCK_PROCESS;
+        if(!info.spvMode)
+            locks |= LOCK_PENDING;
         mProcessMutex.lock();
-        if(!revert(longestBranch->height - 1, true))
+        if(!revert(longestBranch->height - 1, locks))
         {
             mProcessMutex.unlock();
-            delete newBranch;
             mBranchLock.unlock();
             mHeadersLock.writeUnlock();
             if(!info.spvMode)
                 mPendingLock.writeUnlock();
             return false;
         }
-
-        uint8_t locks = LOCK_HEADERS | LOCK_BRANCHES;
-        if(!info.spvMode)
-            locks |= LOCK_PENDING;
 
         // Add headers from branch.
         bool success = true;
@@ -437,8 +442,15 @@ namespace BitCoin
 
     Chain::HashStatus Chain::addPendingHash(const NextCash::Hash &pHash, unsigned int pNodeID)
     {
+        if(mInfo.invalidHashes.contains(pHash))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "Predefined invalid hash : %s", pHash.hex().text());
+            return INVALID;
+        }
+
         mHeadersLock.readLock();
-        if(mBlackListHashes.contains(pHash))
+        if(mInvalidHashes.contains(pHash))
         {
             mHeadersLock.readUnlock();
             return INVALID;
@@ -544,13 +556,15 @@ namespace BitCoin
         // Revert pending blocks
         if(mNextBlockHeight - 1 < pHeight)
         {
-            mPendingLock.writeLock("Revert");
+            if(!(pLocks & LOCK_PENDING))
+                mPendingLock.writeLock("Revert");
             while(mNextBlockHeight + mPendingBlocks.size() - 1 > pHeight)
             {
                 delete mPendingBlocks.back();
                 mPendingBlocks.pop_back();
             }
-            mPendingLock.writeUnlock();
+            if(!(pLocks & LOCK_PENDING))
+                mPendingLock.writeUnlock();
         }
 
         NextCash::Hash hash;
@@ -954,6 +968,13 @@ namespace BitCoin
     Chain::HashStatus Chain::addHeader(Header &pHeader, unsigned int pMarkNodeID, uint8_t pLocks,
       bool pMainBranchOnly)
     {
+        if(mInfo.invalidHashes.contains(pHeader.hash()))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
+              "Predefined invalid hash : %s", pHeader.hash().hex().text());
+            return INVALID;
+        }
+
         if(!(pLocks & LOCK_PENDING))
             mPendingLock.writeLock("Add Pending Header");
         if(!(pLocks & LOCK_HEADERS))
@@ -985,7 +1006,7 @@ namespace BitCoin
                 break;
             }
 
-        if(mBlackListHashes.contains(pHeader.hash()))
+        if(mInvalidHashes.contains(pHeader.hash()))
         {
             if(!(pLocks & LOCK_HEADERS))
                 mHeadersLock.writeUnlock();
@@ -1440,7 +1461,7 @@ namespace BitCoin
         {
             mMemPool.revert(pBlock->transactions, true);
             mOutputs.revert(pBlock->transactions, mNextBlockHeight);
-            revert(mNextBlockHeight - 1);
+            revert(mNextBlockHeight - 1, LOCK_PROCESS);
             mProcessMutex.unlock();
             return false;
         }
@@ -1453,7 +1474,7 @@ namespace BitCoin
 #ifndef DISABLE_ADDRESSES
             mAddresses.remove(pBlock->transactions, mNextBlockHeight);
 #endif
-            revert(mNextBlockHeight - 1);
+            revert(mNextBlockHeight - 1, LOCK_PROCESS);
             mProcessMutex.unlock();
             return false;
         }
@@ -1544,7 +1565,7 @@ namespace BitCoin
                         mPendingLock.writeUnlock();
                         addBlackListedHash(pBlock->header.hash());
                         mProcessMutex.lock();
-                        revert(mNextBlockHeight + offset);
+                        revert(mNextBlockHeight + offset, LOCK_PROCESS);
                         mProcessMutex.unlock();
                         return INVALID;
                     }

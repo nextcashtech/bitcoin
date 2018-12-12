@@ -850,13 +850,13 @@ namespace BitCoin
                 return;
             }
 
-            if(pChain->forks().cashFork201811IsActive(pHeight) && size() < 100)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Transaction below min size of 100 (%d bytes) : trans %s", size(),
-                  hash().hex().text());
-                return;
-            }
+            // if(pChain->forks().cashFork201811IsActive(pHeight) && size() < 100)
+            // { // Not SV Compatible
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  // "Transaction below min size of 100 (%d bytes) : trans %s", size(),
+                  // hash().hex().text());
+                // return;
+            // }
 
             if(inputs.size() == 0)
             {
