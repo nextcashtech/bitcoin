@@ -14,7 +14,6 @@
 #include "block.hpp"
 #include "transaction.hpp"
 #include "chain.hpp"
-#include "message.hpp"
 #include "bloom_filter.hpp"
 
 #include <vector>
@@ -115,13 +114,14 @@ namespace BitCoin
 
         // Used for zero confirmation approval
         // Returns true if transaction should be requested
-        bool addTransactionAnnouncement(const NextCash::Hash &pTransactionHash, unsigned int pNodeID);
+        bool addTransactionAnnouncement(const NextCash::Hash &pTransactionHash,
+          unsigned int pNodeID);
 
         // Add data from a received merkle block
         bool addMerkleBlock(Chain &pChain, Message::MerkleBlockData *pData, unsigned int pNodeID);
 
         // Add a received transaction if it was confirmed in a merkle block
-        void addTransaction(Chain &pChain, Message::TransactionData *pTransactionData);
+        void addTransaction(Chain &pChain, TransactionReference &pTransaction);
 
         bool isConfirmed(const NextCash::Hash &pTransactionID, bool pIsLocked = false)
         {
@@ -152,21 +152,15 @@ namespace BitCoin
             SPVTransactionData()
             {
                 blockHeight = 0xffffffff;
-                transaction = NULL;
                 amount = 0;
                 announceTime = getTime();
             }
-            SPVTransactionData(const SPVTransactionData &pCopy) :
+            SPVTransactionData(const SPVTransactionData &pCopy) : transaction(pCopy.transaction),
               payOutputs(pCopy.payOutputs), spendInputs(pCopy.spendInputs), nodes(pCopy.nodes)
             {
                 blockHash = pCopy.blockHash;
                 blockHeight = pCopy.blockHeight;
-                if(pCopy.transaction == NULL)
-                    transaction = NULL;
-                else
-                {
-                    transaction = new Transaction(*pCopy.transaction);
-                }
+
                 amount = pCopy.amount;
                 announceTime = pCopy.announceTime;
             }
@@ -174,12 +168,11 @@ namespace BitCoin
             {
                 blockHash = pBlockHash;
                 blockHeight = pBlockHeight;
-                transaction = NULL;
                 amount = 0;
                 announceTime = getTime();
             }
             SPVTransactionData(const NextCash::Hash &pBlockHash, unsigned int pBlockHeight,
-              Transaction *pTransaction)
+              TransactionReference &pTransaction) : transaction(pTransaction)
             {
                 blockHash = pBlockHash;
                 blockHeight = pBlockHeight;
@@ -187,7 +180,6 @@ namespace BitCoin
                 amount = 0;
                 announceTime = getTime();
             }
-            ~SPVTransactionData() { if(transaction != NULL) delete transaction; }
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pVersion);
@@ -207,7 +199,7 @@ namespace BitCoin
 
             NextCash::Hash blockHash; // Hash of block containing transaction
             unsigned int blockHeight;
-            Transaction *transaction;
+            TransactionReference transaction;
             int64_t amount;
             std::vector<unsigned int> payOutputs, spendInputs;
 

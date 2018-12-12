@@ -16,6 +16,7 @@
 #include "buffer.hpp"
 #include "file_stream.hpp"
 #include "base.hpp"
+#include "transaction.hpp"
 #include "forks.hpp"
 #include "profiler_setup.hpp"
 
@@ -27,57 +28,12 @@
 
 namespace BitCoin
 {
-    class Transaction; // Work around circular reference
-
-    class Output
-    {
-    public:
-
-        Output() { }
-        Output(const Output &pCopy) : script(pCopy.script)
-        {
-            amount = pCopy.amount;
-        }
-
-        Output &operator = (const Output &pRight)
-        {
-            amount = pRight.amount;
-            script = pRight.script;
-            return *this;
-        }
-
-        bool operator == (const Output &pRight)
-        {
-            return amount == pRight.amount && script == pRight.script;
-        }
-
-        // 8 amount + script length size + script length
-        NextCash::stream_size size() const
-          { return 8 + compactIntegerSize(script.length()) + script.length(); }
-
-        void write(NextCash::OutputStream *pStream);
-        bool read(NextCash::InputStream *pStream);
-
-        // Skip over output in stream
-        //   (The input stream's read offset must be at the beginning of an output)
-        static bool skip(NextCash::InputStream *pInputStream,
-          NextCash::OutputStream *pOutputStream = NULL);
-
-        // Print human readable version to log
-        void print(const Forks &pForks, const char *pLogName = BITCOIN_OUTPUTS_LOG_NAME,
-          NextCash::Log::Level pLevel = NextCash::Log::VERBOSE);
-
-        int64_t amount; // Number of Satoshis spent (documentation says this should be signed)
-        NextCash::Buffer script;
-
-    };
-
     // Reference to a transaction's outputs with information to get them quickly
-    class TransactionReference : public NextCash::HashObject
+    class TransactionOutputs : public NextCash::HashObject
     {
     public:
 
-        TransactionReference()
+        TransactionOutputs()
         {
             cacheFlags = 0;
             dataFlags = 0;
@@ -86,7 +42,7 @@ namespace BitCoin
             mOutputCount = 0;
             mSpentHeights = NULL;
         }
-        TransactionReference(const NextCash::Hash &pHash) : mHash(pHash)
+        TransactionOutputs(const NextCash::Hash &pHash) : mHash(pHash)
         {
             cacheFlags = 0;
             dataFlags = 0;
@@ -95,7 +51,7 @@ namespace BitCoin
             mOutputCount = 0;
             mSpentHeights = NULL;
         }
-        TransactionReference(const NextCash::Hash &pHash, bool pIsCoinBase, uint32_t pBlockHeight,
+        TransactionOutputs(const NextCash::Hash &pHash, bool pIsCoinBase, uint32_t pBlockHeight,
           uint32_t pOutputCount) : mHash(pHash)
         {
             cacheFlags = 0;
@@ -114,7 +70,7 @@ namespace BitCoin
             else
                 mSpentHeights = NULL;
         }
-        ~TransactionReference()
+        ~TransactionOutputs()
         {
             if(mSpentHeights != NULL)
                 delete[] mSpentHeights;
@@ -155,11 +111,11 @@ namespace BitCoin
         // Negative means this object is older than pRight.
         // Zero means both objects are the same age.
         // Positive means this object is newer than pRight.
-        int compareAge(TransactionReference *pRight)
+        int compareAge(TransactionOutputs *pRight)
         {
             // Spent transactions are "older" than unspent transactions
             bool spent = !hasUnspent();
-            bool rightSpent = ((TransactionReference *)pRight)->hasUnspent();
+            bool rightSpent = ((TransactionOutputs *)pRight)->hasUnspent();
 
             if(spent != rightSpent)
             {
@@ -170,9 +126,9 @@ namespace BitCoin
             }
 
             // If both transactions are spent or both unspent then use block height.
-            if(blockHeight < ((TransactionReference *)pRight)->blockHeight)
+            if(blockHeight < ((TransactionOutputs *)pRight)->blockHeight)
                 return -1;
-            if(blockHeight > ((TransactionReference *)pRight)->blockHeight)
+            if(blockHeight > ((TransactionOutputs *)pRight)->blockHeight)
                 return 1;
             return 0;
         }
@@ -182,7 +138,7 @@ namespace BitCoin
         bool readData(NextCash::InputStream *pStream);
         bool readOutput(NextCash::InputStream *pStream, uint32_t pIndex, Output &pOutput);
         void writeInitialData(const NextCash::Hash &pHash, NextCash::OutputStream *pStream,
-          Transaction &pTransaction);
+          TransactionReference &pTransaction);
         void writeModifiedData(NextCash::OutputStream *pStream);
 
         bool spendInternal(uint32_t pBlockHeight, uint32_t pIndex)
@@ -251,7 +207,7 @@ namespace BitCoin
                 // Since more than one transaction with the same hash will never be in the same
                 //   block.
                 return blockHeight ==
-                  dynamic_cast<const TransactionReference *>(pRight)->blockHeight;
+                  dynamic_cast<const TransactionOutputs *>(pRight)->blockHeight;
             }
             catch(...)
             {
@@ -303,8 +259,8 @@ namespace BitCoin
 
         NextCash::Hash mHash;
 
-        TransactionReference(const TransactionReference &pCopy);
-        const TransactionReference &operator = (const TransactionReference &pRight);
+        TransactionOutputs(const TransactionOutputs &pCopy);
+        const TransactionOutputs &operator = (const TransactionOutputs &pRight);
 
     };
 
@@ -344,10 +300,10 @@ namespace BitCoin
 
         // Add all the outputs from a block (pending since they have no block file IDs or offsets yet)
         // Returns false if one of the transaction IDs is currently unspent BIP-0030
-        bool add(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
+        bool add(TransactionList &pBlockTransactions, unsigned int pBlockHeight);
 
         // Revert transactions in a block.
-        bool revert(const std::vector<Transaction *> &pBlockTransactions, unsigned int pBlockHeight);
+        bool revert(TransactionList &pBlockTransactions, unsigned int pBlockHeight);
 
         // bool revertToHeight(unsigned int pBlockHeight);
 
@@ -446,7 +402,7 @@ namespace BitCoin
             SubSetIterator get(const NextCash::Hash &pTransactionID);
 
             // Inserts a new item corresponding to the lookup.
-            bool insert(TransactionReference *pReference, Transaction &pTransaction);
+            bool insert(TransactionOutputs *pReference, TransactionReference &pTransaction);
 
             bool getOutput(const NextCash::Hash &pTransactionID, uint32_t pIndex, uint8_t pFlags,
               uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight);
@@ -465,7 +421,7 @@ namespace BitCoin
             // Pull all items with matching hashes from the file and put them in the cache.
             //   Returns true if any items were added to the cache.
             // If pPullMatchingFunction then only items that return true will be pulled.
-            bool pull(const NextCash::Hash &pTransactionID, TransactionReference *pMatching = NULL);
+            bool pull(const NextCash::Hash &pTransactionID, TransactionOutputs *pMatching = NULL);
 
             bool load(const char *pFilePath, unsigned int pID, unsigned int &pLoadedCount);
             bool save(NextCash::stream_size pMaxCacheDataSize, bool pAutoTrimCache,
@@ -551,8 +507,8 @@ namespace BitCoin
                 mIterator = pIterator;
             }
 
-            TransactionReference *operator *() { return (TransactionReference *)*mIterator; }
-            TransactionReference *operator ->() { return (TransactionReference *)*mIterator; }
+            TransactionOutputs *operator *() { return (TransactionOutputs *)*mIterator; }
+            TransactionOutputs *operator ->() { return (TransactionOutputs *)*mIterator; }
 
             const NextCash::Hash &hash() { return (*mIterator)->getHash(); }
 
@@ -650,8 +606,8 @@ namespace BitCoin
 
         // Inserts a new item corresponding to the lookup.
         // Returns false if the pReference matches an existing value under the same hash according
-        //   to the TransactionReference::valuesMatch function.
-        bool insert(TransactionReference *pReference, Transaction &pTransaction);
+        //   to the TransactionOutputs::valuesMatch function.
+        bool insert(TransactionOutputs *pReference, TransactionReference &pTransaction);
 
         Iterator begin();
         Iterator end();

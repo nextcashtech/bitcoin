@@ -12,6 +12,7 @@
 #include "log.hpp"
 #include "stream.hpp"
 #include "file_stream.hpp"
+#include "reference_counter.hpp"
 #include "base.hpp"
 #include "forks.hpp"
 #include "header.hpp"
@@ -36,20 +37,18 @@ namespace BitCoin
             mFees = 0;
             mSize = 0;
         }
-        ~Block();
 
         void write(NextCash::OutputStream *pStream);
         bool read(NextCash::InputStream *pStream);
 
         void clear();
-        void clearTransactions();
 
         // Print human readable version to log
         void print(Forks &pForks, bool pIncludeTransactions,
           NextCash::Log::Level pLevel = NextCash::Log::DEBUG);
 
         Header header;
-        std::vector<Transaction *> transactions;
+        TransactionList transactions;
 
         // Total of fees collected from transactions (set during process), not including coin base
         uint64_t fees() const { return mFees; }
@@ -83,14 +82,14 @@ namespace BitCoin
         static unsigned int totalCount();
 
         // Get block from appropriate block file.
-        static bool getBlock(unsigned int pHeight, Block &pBlock);
+        static Block *getBlock(unsigned int pHeight);
 
         // Read output from block file.
         static bool getOutput(unsigned int pHeight, unsigned int pTransactionOffset,
           unsigned int pOutputIndex, NextCash::Hash &pTransactionID, Output &pOutput);
 
         // Add block to appropriate block file.
-        static bool add(unsigned int pHeight, Block &pBlock);
+        static bool add(unsigned int pHeight, Block *pBlock);
 
         static bool revertToHeight(unsigned int pHeight);
 
@@ -115,7 +114,7 @@ namespace BitCoin
         public:
 
             ProcessThreadData(Chain *pChain, Block *pBlock, unsigned int pHeight,
-              std::vector<Transaction *>::iterator pTransactionsBegin, unsigned int pCount) :
+              TransactionList::iterator pTransactionsBegin, unsigned int pCount) :
               mutex("ProcessThreadData"), spentAgeLock("Spent Age"), timeLock("Time")
             {
                 chain = pChain;
@@ -141,7 +140,7 @@ namespace BitCoin
             Chain *chain;
             Block *block;
             unsigned int height, offset, count;
-            std::vector<Transaction *>::iterator transaction;
+            TransactionList::iterator transaction;
             NextCash::Mutex spentAgeLock;
             std::vector<unsigned int> spentAges;
             bool success;
@@ -156,7 +155,8 @@ namespace BitCoin
                 if(success && offset < count)
                 {
                     pOffset = offset;
-                    result = *transaction++;
+                    result = transaction->pointer();
+                    ++transaction;
                     ++offset;
                 }
                 else
@@ -178,6 +178,8 @@ namespace BitCoin
         static void updateOutputsThreadRun(void *pParameter); // Thread for update outputs tasks
 
     };
+
+    typedef NextCash::ReferenceCounter<Block> BlockReference;
 
     class BlockList : public std::vector<Block *>
     {
@@ -208,22 +210,19 @@ namespace BitCoin
 
         MerkleNode()
         {
-            transaction = NULL;
             left = NULL;
             right = NULL;
             matches = false;
         }
-        MerkleNode(Transaction *pTransaction, bool pMatches) : hash(pTransaction->hash())
+        MerkleNode(TransactionReference &pTransaction, bool pMatches) : transaction(pTransaction),
+          hash(pTransaction->hash())
         {
-            transaction = pTransaction;
             left = NULL;
             right = NULL;
             matches = pMatches;
-            hash = transaction->hash();
         }
         MerkleNode(MerkleNode *pLeft, MerkleNode *pRight, bool pMatches)
         {
-            transaction = NULL;
             left = pLeft;
             right = pRight;
             matches = pMatches;
@@ -242,15 +241,15 @@ namespace BitCoin
 
         void print(unsigned int pDepth = 0);
 
+        TransactionReference transaction;
         NextCash::Hash hash;
-        Transaction *transaction;
+        bool leaf;
         MerkleNode *left, *right;
         bool matches;
 
     };
 
-    MerkleNode *buildMerkleTree(std::vector<Transaction *> &pBlockTransactions,
-      BloomFilter &pFilter);
+    MerkleNode *buildMerkleTree(TransactionList &pBlockTransactions, BloomFilter &pFilter);
     MerkleNode *buildEmptyMerkleTree(unsigned int pNodeCount);
 
     class BlockStat
@@ -277,9 +276,10 @@ namespace BitCoin
             fees = pCopy.fees;
             amount = pCopy.amount;
         }
-        BlockStat(Block &pBlock, unsigned int pHeight);
+        BlockStat(BlockReference &pBlock, unsigned int pHeight) : hash(BLOCK_HASH_SIZE)
+          { set(pBlock, pHeight); }
 
-        void set(Block &pBlock, unsigned int pHeight);
+        void set(BlockReference &pBlock, unsigned int pHeight);
 
         static const NextCash::stream_size DATA_SIZE = BLOCK_HASH_SIZE + 40;
 

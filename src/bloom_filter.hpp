@@ -95,6 +95,7 @@ namespace BitCoin
         bool contains(const NextCash::Hash &pHash) const;
         bool contains(Outpoint &pOutpoint) const;
         bool contains(Transaction &pTransaction) const;
+        bool contains(TransactionReference &pTransaction) const;
         bool containsScript(NextCash::Buffer &pScript) const;
 
         void write(NextCash::OutputStream *pStream) const;

@@ -9,6 +9,7 @@
 
 #ifdef PROFILER_ON
 #include "profiler.hpp"
+#include "profiler_setup.hpp"
 #endif
 
 #include "endian.hpp"
@@ -849,13 +850,13 @@ namespace BitCoin
                 return;
             }
 
-            if(pChain->forks().cashFork201811IsActive(pHeight) && size() < 100)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Transaction below min size of 100 (%d bytes) : trans %s", size(),
-                  hash().hex().text());
-                return;
-            }
+            // if(pChain->forks().cashFork201811IsActive(pHeight) && size() < 100)
+            // { // Not SV Compatible
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
+                  // "Transaction below min size of 100 (%d bytes) : trans %s", size(),
+                  // hash().hex().text());
+                // return;
+            // }
 
             if(inputs.size() == 0)
             {
@@ -2071,14 +2072,7 @@ namespace BitCoin
         return result;
     }
 
-    TransactionList::~TransactionList()
-    {
-        for(std::vector<Transaction *>::iterator item = begin(); item != end(); ++item)
-            if(*item != NULL)
-                delete *item;
-    }
-
-    Transaction *TransactionList::getSorted(const NextCash::Hash &pHash)
+    TransactionReference TransactionList::getSorted(const NextCash::Hash &pHash)
     {
         // Search sorted
         if(size() == 0 || back()->hash() < pHash)
@@ -2088,9 +2082,9 @@ namespace BitCoin
             return NULL; // Item would be before beginning
 
         int compare;
-        Transaction **bottom = data();
-        Transaction **top    = data() + size() - 1;
-        Transaction **current;
+        TransactionReference *bottom = data();
+        TransactionReference *top    = data() + size() - 1;
+        TransactionReference *current;
 
         while(true)
         {
@@ -2123,7 +2117,7 @@ namespace BitCoin
         return *current;
     }
 
-    bool TransactionList::insertSorted(Transaction *pTransaction)
+    bool TransactionList::insertSorted(TransactionReference pTransaction)
     {
         // Insert sorted
         if(size() == 0)
@@ -2153,9 +2147,9 @@ namespace BitCoin
             return true;
         }
 
-        Transaction **bottom = data();
-        Transaction **top    = data() + size() - 1;
-        Transaction **current;
+        TransactionReference *bottom = data();
+        TransactionReference *top    = data() + size() - 1;
+        TransactionReference *current;
 
         while(true)
         {
@@ -2173,7 +2167,7 @@ namespace BitCoin
                 else
                     current = top + 1; // Insert after top
 
-                if(*current != NULL && (*current)->hash() == pTransaction->hash())
+                if(*current && (*current)->hash() == pTransaction->hash())
                     return false;
 
                 break;
@@ -2203,9 +2197,9 @@ namespace BitCoin
             return false; // Item would be before beginning
 
         int compare;
-        Transaction **bottom = data();
-        Transaction **top    = data() + size() - 1;
-        Transaction **current;
+        TransactionReference *bottom = data();
+        TransactionReference *top    = data() + size() - 1;
+        TransactionReference *current;
 
         while(true)
         {
@@ -2235,14 +2229,13 @@ namespace BitCoin
         }
 
         // Current is the matching item
-        std::vector<Transaction *>::iterator item = begin();
+        iterator item = begin();
         item += (current - data());
-        delete *item;
         erase(item);
         return true;
     }
 
-    Transaction *TransactionList::getAndRemoveSorted(const NextCash::Hash &pHash)
+    TransactionReference TransactionList::getAndRemoveSorted(const NextCash::Hash &pHash)
     {
         // Remove sorted
         if(size() == 0 || back()->hash() < pHash)
@@ -2252,9 +2245,9 @@ namespace BitCoin
             return NULL; // Item would be before beginning
 
         int compare;
-        Transaction **bottom = data();
-        Transaction **top    = data() + size() - 1;
-        Transaction **current;
+        TransactionReference *bottom = data();
+        TransactionReference *top    = data() + size() - 1;
+        TransactionReference *current;
 
         while(true)
         {
@@ -2284,34 +2277,22 @@ namespace BitCoin
         }
 
         // Current is the matching item
-        std::vector<Transaction *>::iterator item = begin();
+        iterator item = begin();
         item += (current - data());
-        Transaction *result = *item;
+        TransactionReference result = *item;
         erase(item);
         return result;
     }
 
-    Transaction *TransactionList::getAndRemoveAt(unsigned int pOffset)
+    TransactionReference TransactionList::getAndRemoveAt(unsigned int pOffset)
     {
         if(pOffset >= size())
             return NULL;
 
         iterator iter = begin() + pOffset;
-        Transaction *result = *iter;
+        TransactionReference result = *iter;
         erase(iter);
         return result;
-    }
-
-    void TransactionList::clear()
-    {
-        for(std::vector<Transaction *>::iterator item=begin();item!=end();++item)
-            delete *item;
-        std::vector<Transaction *>::clear();
-    }
-
-    void TransactionList::clearNoDelete()
-    {
-        std::vector<Transaction *>::clear();
     }
 
     bool Transaction::test()

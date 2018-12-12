@@ -158,7 +158,7 @@ namespace BitCoin
 
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           transactions.begin(); trans != transactions.end(); ++trans)
-            if(*trans != NULL && (*trans)->transaction == NULL)
+            if(*trans != NULL && !(*trans)->transaction)
                 return false;
 
         complete = true;
@@ -365,12 +365,12 @@ namespace BitCoin
             return false;
 
         // Transaction
-        if(transaction != NULL)
-            delete transaction;
-
         transaction = new Transaction();
         if(!transaction->read(pStream))
+        {
+            transaction.clear();
             return false;
+        }
 
         if(pStream->remaining() < 16)
             return false;
@@ -459,8 +459,7 @@ namespace BitCoin
     {
         NextCash::HashContainerList<SPVTransactionData *>::Iterator confirmedTransaction =
           mTransactions.get(pTransactionHash);
-        if(confirmedTransaction != mTransactions.end() &&
-          (*confirmedTransaction)->transaction != NULL &&
+        if(confirmedTransaction != mTransactions.end() && (*confirmedTransaction)->transaction &&
           (*confirmedTransaction)->transaction->outputs.size() > pIndex)
         {
             pOutput = (*confirmedTransaction)->transaction->outputs[pIndex];
@@ -473,7 +472,7 @@ namespace BitCoin
         NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction =
           mPendingTransactions.get(pTransactionHash);
         if(pendingTransaction != mPendingTransactions.end() &&
-          (*pendingTransaction)->transaction != NULL &&
+          (*pendingTransaction)->transaction &&
           (*pendingTransaction)->transaction->outputs.size() > pIndex)
         {
             pOutput = (*pendingTransaction)->transaction->outputs[pIndex];
@@ -515,7 +514,7 @@ namespace BitCoin
         pTransaction->payOutputs.clear();
         pTransaction->spendInputs.clear();
 
-        if(pTransaction->transaction == NULL)
+        if(!pTransaction->transaction)
             return false;
 
         // Check for spends
@@ -871,7 +870,7 @@ namespace BitCoin
           mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
             for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
               index != (*trans)->payOutputs.end(); ++index)
-                if((*trans)->transaction != NULL)
+                if((*trans)->transaction)
                     outpoints.emplace_back((*trans)->transaction->hash(), *index);
 
         // Add confirmed outpoints to monitor for being spent.
@@ -1851,11 +1850,11 @@ namespace BitCoin
         return result;
     }
 
-    void Monitor::addTransaction(Chain &pChain, Message::TransactionData *pTransactionData)
+    void Monitor::addTransaction(Chain &pChain, TransactionReference &pTransaction)
     {
         mMutex.lock();
 
-        if(isConfirmed(pTransactionData->transaction->hash(), true))
+        if(isConfirmed(pTransaction->hash(), true))
         {
             mMutex.unlock();
             return; // Already confirmed this transaction
@@ -1871,13 +1870,12 @@ namespace BitCoin
               mMerkleRequests.begin(); requestIter != mMerkleRequests.end(); ++requestIter)
             {
                 request = *requestIter;
-                transactionIter = request->transactions.get(pTransactionData->transaction->hash());
+                transactionIter = request->transactions.get(pTransaction->hash());
                 if(transactionIter != request->transactions.end())
                 {
-                    if(*transactionIter != NULL && (*transactionIter)->transaction == NULL)
+                    if(*transactionIter != NULL && !(*transactionIter)->transaction)
                     {
-                        (*transactionIter)->transaction = pTransactionData->transaction;
-                        pTransactionData->transaction = NULL; // Prevent it from being deleted
+                        (*transactionIter)->transaction = pTransaction;
                         if(!confirmTransaction(*transactionIter))
                             delete *transactionIter; // Unrelated transaction
 
@@ -1895,12 +1893,11 @@ namespace BitCoin
 
             // Check pending transactions
             NextCash::HashContainerList<SPVTransactionData *>::Iterator pendingTransaction =
-              mPendingTransactions.get(pTransactionData->transaction->hash());
+              mPendingTransactions.get(pTransaction->hash());
             if(pendingTransaction != mPendingTransactions.end() &&
-               (*pendingTransaction)->transaction == NULL)
+               !(*pendingTransaction)->transaction)
             {
-                (*pendingTransaction)->transaction = pTransactionData->transaction;
-                pTransactionData->transaction = NULL; // Prevent it from being deleted
+                (*pendingTransaction)->transaction = pTransaction;
                 refreshTransaction(*pendingTransaction, true);
 
                 if((*pendingTransaction)->payOutputs.size() > 0 ||
@@ -2000,7 +1997,7 @@ namespace BitCoin
             else
             {
                 // Set true if still need transaction
-                result = (*pendingTransaction)->transaction == NULL;
+                result = !(*pendingTransaction)->transaction;
 
                 // Add node as accepting node
                 (*pendingTransaction)->addNode(pNodeID);
@@ -2104,7 +2101,7 @@ namespace BitCoin
 
     bool Monitor::confirmTransaction(SPVTransactionData *pTransaction)
     {
-        if(pTransaction->transaction == NULL)
+        if(!pTransaction->transaction)
             return false;
 
         // Remove from pending (in case some how duplicated)

@@ -267,6 +267,29 @@ namespace BitCoin
         return false;
     }
 
+    bool BloomFilter::contains(TransactionReference &pTransaction) const
+    {
+        if(mIsFull)
+            return true;
+        if(mIsEmpty || mDataSize == 0)
+            return false;
+
+        if(contains(pTransaction->hash()))
+            return true;
+
+        for(std::vector<Input>::iterator input = pTransaction->inputs.begin();
+          input != pTransaction->inputs.end(); ++input)
+            if(contains(input->outpoint))
+                return true;
+
+        for(std::vector<Output>::iterator output = pTransaction->outputs.begin();
+          output != pTransaction->outputs.end(); ++output)
+            if(containsScript(output->script))
+                return true;
+
+        return false;
+    }
+
     bool BloomFilter::containsScript(NextCash::Buffer &pScript) const
     {
         if(mIsFull)

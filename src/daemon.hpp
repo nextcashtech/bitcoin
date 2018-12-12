@@ -135,10 +135,10 @@ namespace BitCoin
         //   6 : Amount below dust
         int sendStandardPayment(unsigned int pKeyOffset, AddressType pHashType,
           NextCash::Hash pHash, uint64_t pAmount, double pFeeRate, bool pUsePending, bool pSendAll,
-          bool pTransmit, Transaction *&pTransaction);
+          bool pTransmit, TransactionReference &pTransaction);
 
         int sendSpecifiedOutputsPayment(unsigned int pKeyOffset, std::vector<Output> pOutputs,
-          double pFeeRate, bool pUsePending, bool pTransmit, Transaction *&pTransaction);
+          double pFeeRate, bool pUsePending, bool pTransmit, TransactionReference &pTransaction);
 
         bool loadMonitor();
 
@@ -272,7 +272,7 @@ namespace BitCoin
         Monitor mMonitor;
 
         NextCash::Mutex mTransmitMutex;
-        std::vector<Transaction *> mTransactionsToTransmit;
+        TransactionList mTransactionsToTransmit;
         bool mTransmittedTransToLastNode;
 
         // Transmit any created transactions

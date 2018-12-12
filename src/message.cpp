@@ -1084,7 +1084,7 @@ namespace BitCoin
         // Recursively add hashes to the merkle block data
         void MerkleBlockData::addNode(MerkleNode *pNode, unsigned int pDepth,
           unsigned int &pNextBitOffset, unsigned char &pNextByte,
-          std::vector<Transaction *> &pIncludedTransactions)
+          TransactionList &pIncludedTransactions)
         {
             // NextCash::String padding;
             // for(unsigned int i=0;i<pDepth;i++)
@@ -1113,7 +1113,7 @@ namespace BitCoin
                 }
             }
 
-            if(pNode->matches && pNode->transaction == NULL)
+            if(pNode->matches && !pNode->transaction)
             {
                 // Descend into children
                 // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_MESSAGE_LOG_NAME,
@@ -1138,8 +1138,8 @@ namespace BitCoin
             }
         }
 
-        MerkleBlockData::MerkleBlockData(Block *pBlock, BloomFilter &pFilter,
-          std::vector<Transaction *> &pIncludedTransactions) : Data(MERKLE_BLOCK)
+        MerkleBlockData::MerkleBlockData(BlockReference &pBlock, BloomFilter &pFilter,
+          TransactionList &pIncludedTransactions) : Data(MERKLE_BLOCK)
         {
             header = pBlock->header;
 
@@ -1379,27 +1379,13 @@ namespace BitCoin
             return true;
         }
 
-        void TransactionData::write(NextCash::OutputStream *pStream)
-        {
-            if(transaction != NULL)
-                transaction->write(pStream);
-        }
-
-        bool TransactionData::read(NextCash::InputStream *pStream, unsigned int pSize,
-          int32_t pVersion)
-        {
-            if(transaction == NULL)
-                transaction = new Transaction();
-            return transaction->read(pStream);
-        }
-
         void PrefilledTransaction::write(NextCash::OutputStream *pStream)
         {
             // Offset
             writeCompactInteger(pStream, offset);
 
             // Transaction
-            if(transaction != NULL)
+            if(transaction)
                 transaction->write(pStream);
         }
 
@@ -1411,8 +1397,6 @@ namespace BitCoin
                 return false;
 
             // Transaction
-            if(transaction != NULL)
-                delete transaction;
             transaction = new Transaction();
             return transaction->read(pStream);
         }
@@ -1420,17 +1404,14 @@ namespace BitCoin
         CompactBlockData::CompactBlockData() : Data(COMPACT_BLOCK)
         {
             time = getTime();
-            block = NULL;
-            deleteBlock = true;
             nonce = NextCash::Math::randomLong();
         }
 
-        CompactBlockData::CompactBlockData(Block *pBlock, bool pDelete) : Data(COMPACT_BLOCK)
+        CompactBlockData::CompactBlockData(BlockReference &pBlock) :
+          Data(COMPACT_BLOCK), block(pBlock)
         {
             // Block
             time = getTime();
-            block = pBlock;
-            deleteBlock = pDelete;
 
             // Nonce
             nonce = NextCash::Math::randomLong();
@@ -1445,7 +1426,7 @@ namespace BitCoin
 
             Time time = getTime();
             unsigned int offset = 0;
-            for(std::vector<Transaction *>::iterator trans = block->transactions.begin() + 1;
+            for(TransactionList::iterator trans = block->transactions.begin() + 1;
               trans != block->transactions.end(); ++trans)
             {
                 if(time - (*trans)->time() < 10)
@@ -1459,12 +1440,6 @@ namespace BitCoin
                     ++offset;
                 }
             }
-        }
-
-        CompactBlockData::~CompactBlockData()
-        {
-            if(deleteBlock && block != NULL)
-                delete block;
         }
 
         void CompactBlockData::calculateSipHashKeys()
@@ -1503,7 +1478,7 @@ namespace BitCoin
 
         void CompactBlockData::write(NextCash::OutputStream *pStream)
         {
-            if(block == NULL)
+            if(!block)
                 return;
 
             // Block header without transaction count
@@ -1541,10 +1516,7 @@ namespace BitCoin
 
             NextCash::stream_size startOffset = pStream->readOffset();
 
-            if(block != NULL)
-                delete block;
             block = new Block();
-            deleteBlock = true;
 
             // Block header without transaction count
             if(!block->header.read(pStream, false))

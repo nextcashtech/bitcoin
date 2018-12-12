@@ -82,6 +82,10 @@ namespace BitCoin
         //   the address database.
         NextCash::Hash approvedHash;
 
+        // Block header hashes that will never be considered valid. These can be used to follow a
+        //   minority proof of work chain.
+        NextCash::HashList invalidHashes;
+
         // Email address to send notifications to.
         NextCash::String notifyEmail;
 

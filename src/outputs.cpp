@@ -15,77 +15,14 @@
 #include "info.hpp"
 #include "interpreter.hpp"
 #include "block.hpp"
+#include "transaction.hpp"
 
 #include <cstring>
 
 
 namespace BitCoin
 {
-    void Output::write(NextCash::OutputStream *pStream)
-    {
-        pStream->writeLong(amount);
-        writeCompactInteger(pStream, script.length());
-        script.setReadOffset(0);
-        pStream->writeStream(&script, script.length());
-    }
-
-    bool Output::read(NextCash::InputStream *pStream)
-    {
-        if(pStream->remaining() < 8)
-            return false;
-
-        amount = pStream->readLong();
-
-        NextCash::stream_size bytes = readCompactInteger(pStream);
-        if(bytes > MAX_SCRIPT_SIZE)
-        {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_OUTPUTS_LOG_NAME,
-              "Failed to read output. Script too long : %d", bytes);
-            return false;
-        }
-        if(pStream->remaining() < bytes)
-            return false;
-        script.setSize(bytes);
-        script.reset();
-        script.writeStreamCompact(*pStream, bytes);
-
-        return true;
-    }
-
-    bool Output::skip(NextCash::InputStream *pInputStream, NextCash::OutputStream *pOutputStream)
-    {
-        // Amount
-        if(pInputStream->remaining() < 8)
-            return false;
-        if(pOutputStream == NULL)
-            pInputStream->setReadOffset(pInputStream->readOffset() + 8);
-        else
-            pOutputStream->writeLong(pInputStream->readLong());
-
-        // Script
-        NextCash::stream_size bytes = readCompactInteger(pInputStream);
-        if(pOutputStream != NULL)
-            writeCompactInteger(pOutputStream, bytes);
-        if(pInputStream->remaining() < bytes)
-            return false;
-        if(pOutputStream == NULL)
-            pInputStream->setReadOffset(pInputStream->readOffset() + bytes);
-        else
-            pInputStream->readStream(pOutputStream, bytes);
-        return true;
-    }
-
-    void Output::print(const Forks &pForks, const char *pLogName, NextCash::Log::Level pLevel)
-    {
-        NextCash::Log::addFormatted(pLevel, pLogName, "  Amount : %.08f",
-          bitcoins(amount));
-        NextCash::Log::addFormatted(pLevel, pLogName, "  Script : (%d bytes)",
-          script.length());
-        script.setReadOffset(0);
-        ScriptInterpreter::printScript(script, pForks, pLevel);
-    }
-
-    bool TransactionReference::allocateOutputs(uint32_t pCount)
+    bool TransactionOutputs::allocateOutputs(uint32_t pCount)
     {
         // Allocate the number of outputs needed
         if(mOutputCount != pCount)
@@ -114,14 +51,14 @@ namespace BitCoin
         return true;
     }
 
-    void TransactionReference::clearSpends()
+    void TransactionOutputs::clearSpends()
     {
         uint32_t *spentHeight = mSpentHeights;
         for(unsigned int i = 0; i < mOutputCount; ++i, ++spentHeight)
             *spentHeight = 0;
     }
 
-    void TransactionReference::clearOutputs()
+    void TransactionOutputs::clearOutputs()
     {
         if(mSpentHeights != NULL)
             delete[] mSpentHeights;
@@ -129,7 +66,7 @@ namespace BitCoin
         mSpentHeights = NULL;
     }
 
-    bool TransactionReference::read(NextCash::InputStream *pStream)
+    bool TransactionOutputs::read(NextCash::InputStream *pStream)
     {
         if(pStream->remaining() < 9)
             return false;
@@ -166,7 +103,7 @@ namespace BitCoin
         return true;
     }
 
-    void TransactionReference::write(NextCash::OutputStream *pStream)
+    void TransactionOutputs::write(NextCash::OutputStream *pStream)
     {
         pStream->writeByte(dataFlags);
         pStream->writeUnsignedInt(blockHeight);
@@ -174,7 +111,7 @@ namespace BitCoin
         pStream->write(mSpentHeights, sizeof(uint32_t) * mOutputCount);
     }
 
-    bool TransactionReference::readData(NextCash::InputStream *pStream)
+    bool TransactionOutputs::readData(NextCash::InputStream *pStream)
     {
         // Hash has already been read from the file so set the file offset to the current location
         //   minus hash size.
@@ -185,7 +122,7 @@ namespace BitCoin
         return true;
     }
 
-    bool TransactionReference::readOutput(NextCash::InputStream *pStream, uint32_t pIndex,
+    bool TransactionOutputs::readOutput(NextCash::InputStream *pStream, uint32_t pIndex,
       Output &pOutput)
     {
         if(pIndex >= mOutputCount)
@@ -200,8 +137,8 @@ namespace BitCoin
         return pOutput.read(pStream);
     }
 
-    void TransactionReference::writeInitialData(const NextCash::Hash &pHash,
-      NextCash::OutputStream *pStream, Transaction &pTransaction)
+    void TransactionOutputs::writeInitialData(const NextCash::Hash &pHash,
+      NextCash::OutputStream *pStream, TransactionReference &pTransaction)
     {
         if(mDataOffset == NextCash::INVALID_STREAM_SIZE)
         {
@@ -212,8 +149,8 @@ namespace BitCoin
 
             write(pStream);
 
-            for(std::vector<Output>::iterator output = pTransaction.outputs.begin();
-              output != pTransaction.outputs.end(); ++output)
+            for(std::vector<Output>::iterator output = pTransaction->outputs.begin();
+              output != pTransaction->outputs.end(); ++output)
                 output->write(pStream);
 
             clearModified();
@@ -231,7 +168,7 @@ namespace BitCoin
         clearModified();
     }
 
-    void TransactionReference::writeModifiedData(NextCash::OutputStream *pStream)
+    void TransactionOutputs::writeModifiedData(NextCash::OutputStream *pStream)
     {
         // Only spent heights will be modified.
         pStream->setWriteOffset(mDataOffset + TRANSACTION_HASH_SIZE + mBaseSize);
@@ -240,13 +177,13 @@ namespace BitCoin
         clearModified();
     }
 
-    NextCash::stream_size TransactionReference::memorySize() const
+    NextCash::stream_size TransactionOutputs::memorySize() const
     {
         // Add spent height array size
         return mBaseMemorySize + (sizeof(uint32_t) * mOutputCount);
     }
 
-    uint32_t TransactionReference::spentOutputCount() const
+    uint32_t TransactionOutputs::spentOutputCount() const
     {
         if(mSpentHeights == NULL)
             return 0;
@@ -258,7 +195,7 @@ namespace BitCoin
         return result;
     }
 
-    bool TransactionReference::wasModifiedInOrAfterBlock(uint32_t pBlockHeight) const
+    bool TransactionOutputs::wasModifiedInOrAfterBlock(uint32_t pBlockHeight) const
     {
         if(blockHeight >= pBlockHeight)
             return true;
@@ -274,7 +211,7 @@ namespace BitCoin
         return false;
     }
 
-    uint32_t TransactionReference::spentBlockHeight() const
+    uint32_t TransactionOutputs::spentBlockHeight() const
     {
         uint32_t result = 0;
         uint32_t *spentHeight = mSpentHeights;
@@ -288,7 +225,7 @@ namespace BitCoin
         return result;
     }
 
-    void TransactionReference::print(NextCash::Log::Level pLevel)
+    void TransactionOutputs::print(NextCash::Log::Level pLevel)
     {
         NextCash::Log::add(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "Transaction Reference");
         NextCash::Log::addFormatted(pLevel, BITCOIN_OUTPUTS_LOG_NAME, "  Height         : %d",
@@ -352,8 +289,7 @@ namespace BitCoin
         return Iterator(subSet, result);
     }
 
-    bool Outputs::add(const std::vector<Transaction *> &pBlockTransactions,
-      unsigned int pBlockHeight)
+    bool Outputs::add(TransactionList &pBlockTransactions, unsigned int pBlockHeight)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -367,19 +303,19 @@ namespace BitCoin
             return false;
         }
 
-        TransactionReference *transactionReference;
+        TransactionOutputs *transactionReference;
         Iterator item;
         unsigned int count = 0;
         bool success = true, valid;
-        for(std::vector<Transaction *>::const_iterator transaction = pBlockTransactions.begin();
+        for(TransactionList::iterator transaction = pBlockTransactions.begin();
           transaction != pBlockTransactions.end(); ++transaction)
         {
             // Get references set for transaction ID.
-            transactionReference = new TransactionReference((*transaction)->hash(), count == 0,
+            transactionReference = new TransactionOutputs((*transaction)->hash(), count == 0,
               pBlockHeight, (*transaction)->outputs.size());
 
             valid = true;
-            if(!insert(transactionReference, **transaction))
+            if(!insert(transactionReference, *transaction))
             {
                 // Check for matching transaction marked for removal.
                 Iterator item = get((*transaction)->hash());
@@ -397,7 +333,7 @@ namespace BitCoin
                         (*item)->clearSpends();
                         valid = true;
                         delete transactionReference;
-                        transactionReference = (TransactionReference *)*item;
+                        transactionReference = (TransactionOutputs *)*item;
                         break;
                     }
                     ++item;
@@ -420,8 +356,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Outputs::revert(const std::vector<Transaction *> &pBlockTransactions,
-      unsigned int pHeight)
+    bool Outputs::revert(TransactionList &pBlockTransactions, unsigned int pHeight)
     {
         if(!mIsValid)
             return false;
@@ -442,10 +377,8 @@ namespace BitCoin
         bool success = true;
         bool found;
 
-        // Process transactions in reverse since they can unspend previous transactions in the same
-        //   block
-        for(std::vector<Transaction *>::const_reverse_iterator transaction =
-          pBlockTransactions.rbegin(); transaction != pBlockTransactions.rend(); ++transaction)
+        for(TransactionList::reverse_iterator transaction = pBlockTransactions.rbegin();
+          transaction != pBlockTransactions.rend(); ++transaction)
         {
             // Unspend inputs
             for(input = (*transaction)->inputs.begin(); input != (*transaction)->inputs.end();
@@ -488,7 +421,7 @@ namespace BitCoin
             found = false;
             while(reference && reference.hash() == (*transaction)->hash())
             {
-                if(!((TransactionReference *)(*reference))->markedRemove())
+                if(!((TransactionOutputs *)(*reference))->markedRemove())
                 {
                     NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
                       "Removing transaction : %s", (*transaction)->hash().hex().text());
@@ -525,7 +458,7 @@ namespace BitCoin
             // return false;
         // }
 
-        // for(NextCash::HashContainerList<NextCash::TransactionReference *>::Iterator item = mCache.begin();
+        // for(NextCash::HashContainerList<NextCash::TransactionOutputs *>::Iterator item = mCache.begin();
           // item != mCache.end(); ++item)
         // {
 
@@ -793,7 +726,7 @@ namespace BitCoin
         return success;
     }
 
-    bool Outputs::insert(TransactionReference *pValue, Transaction &pTransaction)
+    bool Outputs::insert(TransactionOutputs *pValue, TransactionReference &pTransaction)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -1016,7 +949,7 @@ namespace BitCoin
         if(item == mCache.end() && pull(pTransactionID))
             item = mCache.find(pTransactionID);
         if(item != mCache.end())
-            result = ((TransactionReference *)*item)->blockHeight;
+            result = ((TransactionOutputs *)*item)->blockHeight;
 
         mLock.unlock();
         return result;
@@ -1034,7 +967,7 @@ namespace BitCoin
         return result;
     }
 
-    bool Outputs::SubSet::insert(TransactionReference *pReference, Transaction &pTransaction)
+    bool Outputs::SubSet::insert(TransactionOutputs *pReference, TransactionReference &pTransaction)
     {
         mLock.lock();
 
@@ -1084,16 +1017,16 @@ namespace BitCoin
 
         while(item != mCache.end() && (*item)->getHash() == pTransactionID)
         {
-            if(!((TransactionReference *)*item)->markedRemove())
+            if(!((TransactionOutputs *)*item)->markedRemove())
             {
-                pPreviousBlockHeight = ((TransactionReference *)*item)->blockHeight;
+                pPreviousBlockHeight = ((TransactionOutputs *)*item)->blockHeight;
 
                 if(pFlags & MARK_SPENT)
                     result =
-                      ((TransactionReference *)*item)->spendInternal(pSpentBlockHeight, pIndex) ||
+                      ((TransactionOutputs *)*item)->spendInternal(pSpentBlockHeight, pIndex) ||
                       !(pFlags & REQUIRE_UNSPENT);
                 else if(pFlags & REQUIRE_UNSPENT)
-                    result = ((TransactionReference *)*item)->isUnspent(pIndex);
+                    result = ((TransactionOutputs *)*item)->isUnspent(pIndex);
 
                 if(result)
                 {
@@ -1103,7 +1036,7 @@ namespace BitCoin
                     NextCash::FileInputStream *dataInFile =
                       new NextCash::FileInputStream(filePathName);
                     result = dataInFile->isValid() &&
-                      ((TransactionReference *)*item)->readOutput(dataInFile, pIndex, pOutput);
+                      ((TransactionOutputs *)*item)->readOutput(dataInFile, pIndex, pOutput);
                     delete dataInFile;
                 }
 
@@ -1128,9 +1061,9 @@ namespace BitCoin
 
         while(item != mCache.end() && (*item)->getHash() == pTransactionID)
         {
-            if(!((TransactionReference *)*item)->markedRemove())
+            if(!((TransactionOutputs *)*item)->markedRemove())
             {
-                result = ((TransactionReference *)*item)->isUnspent(pIndex);
+                result = ((TransactionOutputs *)*item)->isUnspent(pIndex);
                 break;
             }
 
@@ -1152,10 +1085,10 @@ namespace BitCoin
 
         while(item != mCache.end() && (*item)->getHash() == pTransactionID)
         {
-            if(!((TransactionReference *)*item)->markedRemove())
+            if(!((TransactionOutputs *)*item)->markedRemove())
             {
                 result |= UNSPENT_STATUS_EXISTS;
-                if(((TransactionReference *)*item)->isUnspent(pIndex))
+                if(((TransactionOutputs *)*item)->isUnspent(pIndex))
                     result |= UNSPENT_STATUS_UNSPENT;
                 break;
             }
@@ -1179,11 +1112,11 @@ namespace BitCoin
 
         while(item != mCache.end() && (*item)->getHash() == pTransactionID)
         {
-            if(!((TransactionReference *)*item)->markedRemove())
+            if(!((TransactionOutputs *)*item)->markedRemove())
             {
-                pPreviousBlockHeight = ((TransactionReference *)*item)->blockHeight;
+                pPreviousBlockHeight = ((TransactionOutputs *)*item)->blockHeight;
                 result =
-                  ((TransactionReference *)*item)->spendInternal(pSpentBlockHeight, pIndex) ||
+                  ((TransactionOutputs *)*item)->spendInternal(pSpentBlockHeight, pIndex) ||
                   !pRequireUnspent;
                 break;
             }
@@ -1204,11 +1137,11 @@ namespace BitCoin
         SubSetIterator item = mCache.find(pTransactionID);
         while(item != mCache.end() && (*item)->getHash() == pTransactionID)
         {
-            if(!((TransactionReference *)*item)->markedRemove() &&
+            if(!((TransactionOutputs *)*item)->markedRemove() &&
               (pSpentBlockHeight == 0xffffffff || pSpentBlockHeight !=
-              ((TransactionReference *)*item)->blockHeight))
+              ((TransactionOutputs *)*item)->blockHeight))
             {
-                result = ((TransactionReference *)*item)->hasUnspent();
+                result = ((TransactionOutputs *)*item)->hasUnspent();
                 break;
             }
 
@@ -1232,9 +1165,9 @@ namespace BitCoin
         SubSetIterator item = mCache.find(pTransactionID);
         while(item != mCache.end() && (*item)->getHash() == pTransactionID)
         {
-            if(!((TransactionReference *)*item)->markedRemove() &&
-              ((TransactionReference *)*item)->blockHeight != pBlockHeight &&
-              ((TransactionReference *)*item)->hasUnspent())
+            if(!((TransactionOutputs *)*item)->markedRemove() &&
+              ((TransactionOutputs *)*item)->blockHeight != pBlockHeight &&
+              ((TransactionOutputs *)*item)->hasUnspent())
             {
                 bool exceptionFound = false;
                 for(unsigned int i = 0; i < BIP0030_HASH_COUNT; ++i)
@@ -1244,13 +1177,13 @@ namespace BitCoin
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
                       "BIP-0030 Exception for duplicate transaction ID in block %d : %s",
-                      ((TransactionReference *)*item)->blockHeight, pTransactionID.hex().text());
+                      ((TransactionOutputs *)*item)->blockHeight, pTransactionID.hex().text());
                 }
                 else
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_OUTPUTS_LOG_NAME,
                       "Matching transaction hash from block %d has unspent outputs : %s",
-                      ((TransactionReference *)*item)->blockHeight, pTransactionID.hex().text());
+                      ((TransactionOutputs *)*item)->blockHeight, pTransactionID.hex().text());
                     result = false;
                     break;
                 }
@@ -1274,7 +1207,7 @@ namespace BitCoin
 
         while(item != mCache.end() && (*item)->getHash() == pTransactionID)
         {
-            if(!((TransactionReference *)*item)->markedRemove())
+            if(!((TransactionOutputs *)*item)->markedRemove())
             {
                 result = true;
                 break;
@@ -1288,7 +1221,7 @@ namespace BitCoin
     }
 
     bool Outputs::SubSet::pull(const NextCash::Hash &pTransactionID,
-      TransactionReference *pMatching)
+      TransactionOutputs *pMatching)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -1419,7 +1352,7 @@ namespace BitCoin
 
         // Read in all matching
         bool result = false;
-        TransactionReference *next;
+        TransactionOutputs *next;
         while(current <= last)
         {
             indexFile.setReadOffset(current);
@@ -1431,7 +1364,7 @@ namespace BitCoin
             if(hash != pTransactionID)
                 break;
 
-            next = new TransactionReference(hash);
+            next = new TransactionOutputs(hash);
             if(!next->readData(&dataFile))
             {
                 delete next;
@@ -1592,13 +1525,13 @@ namespace BitCoin
         }
 
         bool success = true;
-        TransactionReference *next;
+        TransactionOutputs *next;
         NextCash::Hash hash(TRANSACTION_HASH_SIZE);
         cacheFile->setReadOffset(0);
         while(cacheFile->remaining())
         {
             // Read data from cache file
-            next = new TransactionReference();
+            next = new TransactionOutputs();
 
             // Read data offset from cache file
             next->setDataOffset(cacheFile->readUnsignedLong());
@@ -1664,10 +1597,10 @@ namespace BitCoin
 
         for(SubSetIterator item = mCache.begin(); item != mCache.end(); ++item)
         {
-            cacheFile->writeUnsignedLong(((TransactionReference *)*item)->dataOffset());
-            cacheFile->writeByte(((TransactionReference *)*item)->cacheFlags);
+            cacheFile->writeUnsignedLong(((TransactionOutputs *)*item)->dataOffset());
+            cacheFile->writeByte(((TransactionOutputs *)*item)->cacheFlags);
             (*item)->getHash().write(cacheFile);
-            ((TransactionReference *)*item)->write(cacheFile);
+            ((TransactionOutputs *)*item)->write(cacheFile);
             ++pSavedCount;
         }
 
@@ -1680,8 +1613,8 @@ namespace BitCoin
     }
 
     // Insert sorted, oldest first
-    inline void insertOldest(TransactionReference *pItem,
-      std::vector<TransactionReference *> &pList, unsigned int pMaxCount)
+    inline void insertOldest(TransactionOutputs *pItem,
+      std::vector<TransactionOutputs *> &pList, unsigned int pMaxCount)
     {
         if(pList.size() == 0)
         {
@@ -1699,9 +1632,9 @@ namespace BitCoin
 
         // Insert sorted
         bool inserted = false;
-        for(std::vector<TransactionReference *>::iterator item = pList.begin();
+        for(std::vector<TransactionOutputs *>::iterator item = pList.begin();
           item != pList.end(); ++item)
-            if(((TransactionReference *)*item)->compareAge(pItem) > 0)
+            if(((TransactionOutputs *)*item)->compareAge(pItem) > 0)
             {
                 inserted = true;
                 pList.insert(item, pItem);
@@ -1770,7 +1703,7 @@ namespace BitCoin
         if(pDataSize == 0)
         {
             for(SubSetIterator item = mCache.begin(); item != mCache.end(); ++item)
-                ((TransactionReference *)*item)->setOld();
+                ((TransactionOutputs *)*item)->setOld();
             return;
         }
 
@@ -1781,7 +1714,7 @@ namespace BitCoin
         double targetPercent = ((double)currentSize - ((double)pDataSize * 0.9)) /
           (double)currentSize;
         unsigned int targetCount = (unsigned int)((double)mCache.size() * targetPercent);
-        std::vector<TransactionReference *> oldestList;
+        std::vector<TransactionOutputs *> oldestList;
         if(targetCount == 0)
         {
             NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_OUTPUTS_LOG_NAME,
@@ -1791,7 +1724,7 @@ namespace BitCoin
 
         // Build list of oldest items.
         for(SubSetIterator item = mCache.begin(); item != mCache.end(); ++item)
-            insertOldest((TransactionReference *)*item, oldestList, targetCount);
+            insertOldest((TransactionOutputs *)*item, oldestList, targetCount);
 
         // Remove all items below age of newest item in old list.
         if(oldestList.size() == 0)
@@ -1802,22 +1735,22 @@ namespace BitCoin
         }
 
         unsigned int markedCount = 0;
-        TransactionReference *cutoff = oldestList.back();
+        TransactionOutputs *cutoff = oldestList.back();
         NextCash::stream_size markedSize = 0;
         for(SubSetIterator item = mCache.begin(); item != mCache.end(); ++item)
         {
-            if(((TransactionReference *)*item)->isOld())
+            if(((TransactionOutputs *)*item)->isOld())
             {
                 ++markedCount;
-                markedSize += ((TransactionReference *)*item)->memorySize() + staticCacheItemSize;
+                markedSize += ((TransactionOutputs *)*item)->memorySize() + staticCacheItemSize;
                 if(currentSize - markedSize < pDataSize)
                     break;
             }
-            else if(((TransactionReference *)*item)->compareAge(cutoff) < 0)
+            else if(((TransactionOutputs *)*item)->compareAge(cutoff) < 0)
             {
-                ((TransactionReference *)*item)->setOld();
+                ((TransactionOutputs *)*item)->setOld();
                 ++markedCount;
-                markedSize += ((TransactionReference *)*item)->memorySize() + staticCacheItemSize;
+                markedSize += ((TransactionOutputs *)*item)->memorySize() + staticCacheItemSize;
                 if(currentSize - markedSize < pDataSize)
                     break;
             }
@@ -1829,11 +1762,11 @@ namespace BitCoin
             bool markThisOld = false;
             for(SubSetIterator item = mCache.begin(); item != mCache.end(); ++item)
             {
-                if(markThisOld && !((TransactionReference *)*item)->isOld())
+                if(markThisOld && !((TransactionOutputs *)*item)->isOld())
                 {
                     ++markedCount;
-                    ((TransactionReference *)*item)->setOld();
-                    markedSize += ((TransactionReference *)*item)->memorySize() +
+                    ((TransactionOutputs *)*item)->setOld();
+                    markedSize += ((TransactionOutputs *)*item)->memorySize() +
                       staticCacheItemSize;
                     if(currentSize - markedSize < pDataSize)
                         break;
@@ -1860,9 +1793,9 @@ namespace BitCoin
         // Remove old items from the cache.
         for(SubSetIterator item = mCache.begin(); item != mCache.end();)
         {
-            if(((TransactionReference *)*item)->isOld())
+            if(((TransactionOutputs *)*item)->isOld())
             {
-                mCacheRawDataSize -= ((TransactionReference *)*item)->memorySize();
+                mCacheRawDataSize -= ((TransactionOutputs *)*item)->memorySize();
                 item = mCache.eraseDelete(item);
             }
             else
@@ -1895,24 +1828,24 @@ namespace BitCoin
         // Write all cached/modified data to file.
         for(item = mCache.begin(); item != mCache.end();)
         {
-            if(((TransactionReference *)*item)->markedRemove())
+            if(((TransactionOutputs *)*item)->markedRemove())
             {
-                if(!((TransactionReference *)*item)->isNew())
+                if(!((TransactionOutputs *)*item)->isNew())
                 {
                     indexNeedsUpdated = true;
                     ++item;
                 }
                 else
                 {
-                    mCacheRawDataSize -= ((TransactionReference *)*item)->memorySize();
+                    mCacheRawDataSize -= ((TransactionOutputs *)*item)->memorySize();
                     item = mCache.eraseDelete(item);
                 }
             }
             else
             {
-                if(((TransactionReference *)*item)->isModified())
-                    ((TransactionReference *)*item)->writeModifiedData(dataOutFile);
-                if(((TransactionReference *)*item)->isNew())
+                if(((TransactionOutputs *)*item)->isModified())
+                    ((TransactionOutputs *)*item)->writeModifiedData(dataOutFile);
+                if(((TransactionOutputs *)*item)->isNew())
                 {
                     ++newCount;
                     indexNeedsUpdated = true;
@@ -2005,18 +1938,18 @@ namespace BitCoin
                 lastReport = getTime();
             }
 
-            if(((TransactionReference *)*item)->markedRemove())
+            if(((TransactionOutputs *)*item)->markedRemove())
             {
                 // Check that it was previously added to the index and data file.
                 // Otherwise it isn't in current indices and doesn't need removed.
-                if(!((TransactionReference *)*item)->isNew())
+                if(!((TransactionOutputs *)*item)->isNew())
                 {
                     // Remove from indices.
                     // They aren't sorted by file offset so in this scenario a linear search is
                     //   required since not all hashes are read and reading them for a binary
                     //   search would presumably be more expensive since it requires reading hashes.
                     found = false;
-                    dataOffset = ((TransactionReference *)*item)->dataOffset();
+                    dataOffset = ((TransactionOutputs *)*item)->dataOffset();
                     hash = hashes.begin();
                     for(index = indices.begin(); index != indices.end(); ++index, ++hash)
                         if(*index == dataOffset)
@@ -2037,10 +1970,10 @@ namespace BitCoin
                     }
                 }
 
-                mCacheRawDataSize -= ((TransactionReference *)*item)->memorySize();
+                mCacheRawDataSize -= ((TransactionOutputs *)*item)->memorySize();
                 item = mCache.eraseDelete(item);
             }
-            else if(((TransactionReference *)*item)->isNew())
+            else if(((TransactionOutputs *)*item)->isNew())
             {
                 // For new items perform insert sort into existing indices.
                 // This costs more processor time to do the insert for every new item.
@@ -2049,9 +1982,9 @@ namespace BitCoin
                 if(indices.size () == 0)
                 {
                     // Add as only item
-                    indices.push_back(((TransactionReference *)*item)->dataOffset());
+                    indices.push_back(((TransactionOutputs *)*item)->dataOffset());
                     hashes.push_back((*item)->getHash());
-                    ((TransactionReference *)*item)->clearNew();
+                    ((TransactionOutputs *)*item)->clearNew();
                     ++item;
                     continue;
                 }
@@ -2074,9 +2007,9 @@ namespace BitCoin
                 if(compare <= 0)
                 {
                     // Insert as first
-                    indices.insert(index, ((TransactionReference *)*item)->dataOffset());
+                    indices.insert(index, ((TransactionOutputs *)*item)->dataOffset());
                     hashes.insert(hash, (*item)->getHash());
-                    ((TransactionReference *)*item)->clearNew();
+                    ((TransactionOutputs *)*item)->clearNew();
                     ++item;
                     continue;
                 }
@@ -2099,9 +2032,9 @@ namespace BitCoin
                 if(compare >= 0)
                 {
                     // Add to end
-                    indices.push_back(((TransactionReference *)*item)->dataOffset());
+                    indices.push_back(((TransactionOutputs *)*item)->dataOffset());
                     hashes.push_back((*item)->getHash());
-                    ((TransactionReference *)*item)->clearNew();
+                    ((TransactionOutputs *)*item)->clearNew();
                     ++item;
                     continue;
                 }
@@ -2134,9 +2067,9 @@ namespace BitCoin
                         if(compare < 0)
                         {
                             // Insert before current
-                            indices.insert(index, ((TransactionReference *)*item)->dataOffset());
+                            indices.insert(index, ((TransactionOutputs *)*item)->dataOffset());
                             hashes.insert(hash, (*item)->getHash());
-                            ((TransactionReference *)*item)->clearNew();
+                            ((TransactionOutputs *)*item)->clearNew();
                             break;
                         }
                         else //if(compare >= 0)
@@ -2144,9 +2077,9 @@ namespace BitCoin
                             // Insert after current
                             ++index;
                             ++hash;
-                            indices.insert(index, ((TransactionReference *)*item)->dataOffset());
+                            indices.insert(index, ((TransactionOutputs *)*item)->dataOffset());
                             hashes.insert(hash, (*item)->getHash());
-                            ((TransactionReference *)*item)->clearNew();
+                            ((TransactionOutputs *)*item)->clearNew();
                             break;
                         }
                     }
@@ -2225,10 +2158,10 @@ namespace BitCoin
 
         bool success = true;
         NextCash::Hash hash(32);
-        TransactionReference *data;
+        TransactionOutputs *data;
         NextCash::Digest digest(NextCash::Digest::SHA256);
         Outputs::Iterator found;
-        Transaction transaction;
+        TransactionReference transaction;
         bool checkSuccess;
         unsigned int markedOldCount = 0;
         unsigned int removedSize = 0;
@@ -2242,7 +2175,7 @@ namespace BitCoin
         if(success)
         {
             Outputs testOutputs;
-            TransactionReference *lowest = NULL, *highest = NULL;
+            TransactionOutputs *lowest = NULL, *highest = NULL;
             NextCash::Hash lowestHash, highestHash;
 
             testOutputs.load("test_outputs", 5000000UL, 5000000UL);
@@ -2257,7 +2190,7 @@ namespace BitCoin
                 digest.getResult(&hash);
 
                 // Create new value
-                data = new TransactionReference(hash, i == 0, i, (i % 10) + 1);
+                data = new TransactionOutputs(hash, i == 0, i, (i % 10) + 1);
 
                 if(lowest == NULL || lowestHash > hash)
                 {
@@ -2271,10 +2204,11 @@ namespace BitCoin
                     highest = data;
                 }
 
-                while(transaction.outputs.size() < data->outputCount())
-                    transaction.outputs.emplace_back();
-                while(transaction.outputs.size() > data->outputCount())
-                    transaction.outputs.pop_back();
+                transaction = new Transaction();
+                while(transaction->outputs.size() < data->outputCount())
+                    transaction->outputs.emplace_back();
+                while(transaction->outputs.size() > data->outputCount())
+                    transaction->outputs.pop_back();
 
                 // Add to set
                 if(!testOutputs.insert(data, transaction))
@@ -2293,15 +2227,16 @@ namespace BitCoin
 
             // Create duplicate value
             // Make sure to use a different height to prevent dup check from rejecting insert.
-            data = new TransactionReference(hash, false, (testSize / 2) + 2,
+            data = new TransactionOutputs(hash, false, (testSize / 2) + 2,
               (((testSize / 2) + 2) % 10) + 1);
             dupValue = (testSize / 2) + 2;
             nonDupValue = dupValue;
 
-            while(transaction.outputs.size() < data->outputCount())
-                transaction.outputs.emplace_back();
-            while(transaction.outputs.size() > data->outputCount())
-                transaction.outputs.pop_back();
+            transaction = new Transaction();
+            while(transaction->outputs.size() < data->outputCount())
+                transaction->outputs.emplace_back();
+            while(transaction->outputs.size() > data->outputCount())
+                transaction->outputs.pop_back();
 
             // Add to set
             if(!testOutputs.insert(data, transaction))
@@ -2316,7 +2251,8 @@ namespace BitCoin
 
             // Make sure to use a different height to prevent dup check from rejecting insert.
             data->blockHeight = (testSize / 2) + 3;
-            if(testOutputs.insert(data, transaction))
+            TransactionReference transactionDup(new Transaction(*transaction));
+            if(testOutputs.insert(data, transactionDup))
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
                   "Passed insert duplicate sort");
             else
@@ -2343,15 +2279,15 @@ namespace BitCoin
                   "Failed lowest : not found : %s", lowestHash.hex().text());
                 success = false;
             }
-            else if(((TransactionReference *)(*found))->blockHeight == lowest->blockHeight)
+            else if(((TransactionOutputs *)(*found))->blockHeight == lowest->blockHeight)
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Passed lowest : %d - %s", ((TransactionReference *)(*found))->blockHeight,
+                  "Passed lowest : %d - %s", ((TransactionOutputs *)(*found))->blockHeight,
                   found.hash().hex().text());
             else
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                   "Failed lowest : wrong entry : %d - %s",
-                  ((TransactionReference *)(*found))->blockHeight, found.hash().hex().text());
+                  ((TransactionOutputs *)(*found))->blockHeight, found.hash().hex().text());
                 success = false;
             }
 
@@ -2362,15 +2298,15 @@ namespace BitCoin
                   "Failed highest : not found : %s", highestHash.hex().text());
                 success = false;
             }
-            else if(((TransactionReference *)(*found))->blockHeight == highest->blockHeight)
+            else if(((TransactionOutputs *)(*found))->blockHeight == highest->blockHeight)
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
-                  "Passed highest : %d - %s", ((TransactionReference *)(*found))->blockHeight,
+                  "Passed highest : %d - %s", ((TransactionOutputs *)(*found))->blockHeight,
                   found.hash().hex().text());
             else
             {
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                   "Failed highest : wrong entry : %d - %s",
-                  ((TransactionReference *)(*found))->blockHeight, found.hash().hex().text());
+                  ((TransactionOutputs *)(*found))->blockHeight, found.hash().hex().text());
                 success = false;
             }
 
@@ -2384,20 +2320,20 @@ namespace BitCoin
             }
             else
             {
-                TransactionReference *firstData = *found;
+                TransactionOutputs *firstData = *found;
                 if(found.hash() == hash)
                 {
-                    if(((TransactionReference *)(*found))->blockHeight == dupValue ||
-                      ((TransactionReference *)(*found))->blockHeight == nonDupValue ||
-                      ((TransactionReference *)(*found))->blockHeight == data->blockHeight)
+                    if(((TransactionOutputs *)(*found))->blockHeight == dupValue ||
+                      ((TransactionOutputs *)(*found))->blockHeight == nonDupValue ||
+                      ((TransactionOutputs *)(*found))->blockHeight == data->blockHeight)
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
                           "Passed duplicate first : %d - %s",
-                          ((TransactionReference *)(*found))->blockHeight, found.hash().hex().text());
+                          ((TransactionOutputs *)(*found))->blockHeight, found.hash().hex().text());
                     else
                     {
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                           "Failed duplicate first : wrong entry : %d - %s",
-                          ((TransactionReference *)(*found))->blockHeight, found.hash().hex().text());
+                          ((TransactionOutputs *)(*found))->blockHeight, found.hash().hex().text());
                         success = false;
                     }
                 }
@@ -2428,17 +2364,17 @@ namespace BitCoin
 
                     if(found.hash() == hash)
                     {
-                        if(((TransactionReference *)(*found))->blockHeight == dupValue ||
-                          ((TransactionReference *)(*found))->blockHeight == nonDupValue ||
-                          ((TransactionReference *)(*found))->blockHeight == data->blockHeight)
+                        if(((TransactionOutputs *)(*found))->blockHeight == dupValue ||
+                          ((TransactionOutputs *)(*found))->blockHeight == nonDupValue ||
+                          ((TransactionOutputs *)(*found))->blockHeight == data->blockHeight)
                             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
                               "Passed duplicate second : %d - %s",
-                              ((TransactionReference *)(*found))->blockHeight, found.hash().hex().text());
+                              ((TransactionOutputs *)(*found))->blockHeight, found.hash().hex().text());
                         else
                         {
                             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                               "Failed duplicate second : wrong entry : %d - %s",
-                              ((TransactionReference *)(*found))->blockHeight, found.hash().hex().text());
+                              ((TransactionOutputs *)(*found))->blockHeight, found.hash().hex().text());
                             success = false;
                         }
                     }
@@ -2496,7 +2432,7 @@ namespace BitCoin
                 digest.getResult(&hash);
 
                 // Create new value
-                data = new TransactionReference(hash, i == 0, i, (i % 10) + 1);
+                data = new TransactionOutputs(hash, i == 0, i, (i % 10) + 1);
 
                 found = testOutputs.get(hash);
                 if(!found)
@@ -2516,13 +2452,13 @@ namespace BitCoin
                         checkSuccess = false;
                         success = false;
                     }
-                    else if(((TransactionReference *)(*found))->blockHeight != data->blockHeight &&
-                      ((TransactionReference *)(*found))->blockHeight != dupValue &&
-                      ((TransactionReference *)(*found))->blockHeight != nonDupValue)
+                    else if(((TransactionOutputs *)(*found))->blockHeight != data->blockHeight &&
+                      ((TransactionOutputs *)(*found))->blockHeight != dupValue &&
+                      ((TransactionOutputs *)(*found))->blockHeight != nonDupValue)
                     {
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                           "Failed load : wrong value : %d - %s",
-                          ((TransactionReference *)(*found))->blockHeight, found.hash().hex().text());
+                          ((TransactionOutputs *)(*found))->blockHeight, found.hash().hex().text());
                         checkSuccess = false;
                         success = false;
                     }
@@ -2544,15 +2480,17 @@ namespace BitCoin
                 digest.getResult(&hash);
 
                 // Create new value
-                data = new TransactionReference(hash, i == 0, i, (i % 10) + 1);
+                data = new TransactionOutputs(hash, i == 0, i, (i % 10) + 1);
 
-                while(transaction.outputs.size() < data->outputCount())
-                    transaction.outputs.emplace_back();
-                while(transaction.outputs.size() > data->outputCount())
-                    transaction.outputs.pop_back();
+                transaction = new Transaction();
+                while(transaction->outputs.size() < data->outputCount())
+                    transaction->outputs.emplace_back();
+                while(transaction->outputs.size() > data->outputCount())
+                    transaction->outputs.pop_back();
 
                 // Add to set
-                if(!testOutputs.insert(data, transaction))
+                TransactionReference reference(transaction);
+                if(!testOutputs.insert(data, reference))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                       "Failed to insert : %s", data->getHash().hex().text());
@@ -2570,7 +2508,7 @@ namespace BitCoin
                 digest.getResult(&hash);
 
                 // Create new value
-                data = new TransactionReference(hash, i == 0, i, (i % 10) + 1);
+                data = new TransactionOutputs(hash, i == 0, i, (i % 10) + 1);
 
                 found = testOutputs.get(hash);
                 if(!found)
@@ -2589,13 +2527,13 @@ namespace BitCoin
                         checkSuccess = false;
                         success = false;
                     }
-                    else if(((TransactionReference *)(*found))->blockHeight != data->blockHeight &&
-                      ((TransactionReference *)(*found))->blockHeight != dupValue &&
-                      ((TransactionReference *)(*found))->blockHeight != nonDupValue)
+                    else if(((TransactionOutputs *)(*found))->blockHeight != data->blockHeight &&
+                      ((TransactionOutputs *)(*found))->blockHeight != dupValue &&
+                      ((TransactionOutputs *)(*found))->blockHeight != nonDupValue)
                     {
                         NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                           "Failed load : wrong value : %d - %s",
-                          ((TransactionReference *)(*found))->blockHeight, found.hash().hex().text());
+                          ((TransactionOutputs *)(*found))->blockHeight, found.hash().hex().text());
                         checkSuccess = false;
                         success = false;
                     }
@@ -2721,7 +2659,7 @@ namespace BitCoin
                 digest.getResult(&hash);
 
                 // Create new value
-                data = new TransactionReference(hash, i == 0, i, (i % 10) + 1);
+                data = new TransactionOutputs(hash, i == 0, i, (i % 10) + 1);
 
                 found = testOutputs.get(hash);
 
@@ -2758,13 +2696,13 @@ namespace BitCoin
                             checkSuccess = false;
                             success = false;
                         }
-                        else if(((TransactionReference *)(*found))->blockHeight != data->blockHeight &&
-                          ((TransactionReference *)(*found))->blockHeight != dupValue &&
-                          ((TransactionReference *)(*found))->blockHeight != nonDupValue)
+                        else if(((TransactionOutputs *)(*found))->blockHeight != data->blockHeight &&
+                          ((TransactionOutputs *)(*found))->blockHeight != dupValue &&
+                          ((TransactionOutputs *)(*found))->blockHeight != nonDupValue)
                         {
                             NextCash::Log::addFormatted(NextCash::Log::ERROR,
                               BITCOIN_OUTPUTS_LOG_NAME, "Failed load : wrong value : %d - %s",
-                              ((TransactionReference *)(*found))->blockHeight,
+                              ((TransactionOutputs *)(*found))->blockHeight,
                               found.hash().hex().text());
                             checkSuccess = false;
                             success = false;
@@ -2772,7 +2710,7 @@ namespace BitCoin
                         // else
                             // NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
                               // "Passed load : %d - %s",
-                              // ((TransactionReference *)(*found))->blockHeight, found.hash().hex().text());
+                              // ((TransactionOutputs *)(*found))->blockHeight, found.hash().hex().text());
                     }
                 }
 
