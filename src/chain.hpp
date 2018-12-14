@@ -438,8 +438,7 @@ namespace BitCoin
         MemPool mMemPool;
         unsigned int mMemPoolRequests;
 
-        NextCash::HashList mBlocksToAnnounce;
-        BlockReference mAnnounceBlock;
+        std::vector<BlockReference> mBlocksToAnnounce;
 
         // Block header hashes that have been proven invalid.
         NextCash::HashList mInvalidHashes;

@@ -169,25 +169,13 @@ namespace BitCoin
         mPendingLock.writeLock("Announce");
         if(mBlocksToAnnounce.size() > 0)
         {
-            hash = mBlocksToAnnounce.front();
+            result = mBlocksToAnnounce.front();
             mBlocksToAnnounce.erase(mBlocksToAnnounce.begin());
-            if(mAnnounceBlock && mAnnounceBlock->header.hash() == hash)
-            {
-                result = mAnnounceBlock;
-                mAnnounceBlock.clear();
-                mPendingLock.writeUnlock();
-            }
-            else
-            {
-                mPendingLock.writeUnlock();
-
-                // Get block from file
-                result = getBlock(hash);
-            }
         }
-        else
-            mPendingLock.writeUnlock();
+        mPendingLock.writeUnlock();
 
+        // Transaction hashes were already calculated during validation, so this block is safe to
+        //   hand out.
         return result;
     }
 
@@ -1706,8 +1694,7 @@ namespace BitCoin
             if(isInSync())
             {
                 mPendingLock.writeLock("Add Announce");
-                mBlocksToAnnounce.push_back(nextPending->block->header.hash());
-                mAnnounceBlock = nextPending->block;
+                mBlocksToAnnounce.push_back(nextPending->block);
                 mPendingLock.writeUnlock();
             }
 
