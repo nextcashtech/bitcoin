@@ -179,6 +179,10 @@ namespace BitCoin
 
     };
 
+    // WARNING: Be careful about handing out block references to multiple threads without
+    //   transaction hashes calculated. If multiple threads try to parse the transactions and
+    //   calculate hashes at the same time then they can overrun each other. There is no mutex
+    //   around transactions so the only function that can modify them (hash()) can cause problems.
     typedef NextCash::ReferenceCounter<Block> BlockReference;
 
     class BlockList : public std::vector<Block *>

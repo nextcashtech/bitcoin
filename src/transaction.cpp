@@ -1910,8 +1910,6 @@ namespace BitCoin
         NextCash::stream_size startOffset = pStream->readOffset();
         mSize = 0;
 
-        mHash.clear();
-
         if(pStream->remaining() < 5)
         {
             NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
@@ -1992,8 +1990,6 @@ namespace BitCoin
 
     void Transaction::calculateHash()
     {
-        mHash.clear();
-
         // Write into digest
         NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
         digest.setOutputEndian(NextCash::Endian::LITTLE);
