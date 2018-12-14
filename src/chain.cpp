@@ -1435,6 +1435,7 @@ namespace BitCoin
         }
         else // Fully validate block
         {
+#ifdef PROFILER_ON
             if(mNextBlockHeight == mApprovedBlockHeight + 1)
             {
                 NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
@@ -1442,6 +1443,7 @@ namespace BitCoin
                 NextCash::printProfilerDataToLog(NextCash::Log::VERBOSE);
                 NextCash::resetProfilers();
             }
+#endif
 
             if(pBlock->size() > 250000) // Enough to cover overhead of creating threads.
                 success = pBlock->processMultiThreaded(this, mNextBlockHeight, mInfo.threadCount);
