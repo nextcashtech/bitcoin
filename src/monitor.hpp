@@ -54,7 +54,7 @@ namespace BitCoin
         {
         public:
 
-            Transaction transaction;
+            TransactionReference transaction;
             NextCash::Hash blockHash;
             unsigned int blockHeight;
             unsigned int nodesVerified;
@@ -137,6 +137,9 @@ namespace BitCoin
         void revertBlockHash(NextCash::Hash &pHash);
         void revertToHeight(unsigned int pBlockHeight);
 
+        // Start a pass at the current height if no passes are active.
+        void ensurePassIsActive(unsigned int pBlockHeight);
+
         void process(Chain &pChain, bool pLocked);
 
         //TODO Add expiration of pending transactions when not related to prevent receiving them
@@ -160,7 +163,6 @@ namespace BitCoin
             {
                 blockHash = pCopy.blockHash;
                 blockHeight = pCopy.blockHeight;
-
                 amount = pCopy.amount;
                 announceTime = pCopy.announceTime;
             }
@@ -176,7 +178,6 @@ namespace BitCoin
             {
                 blockHash = pBlockHash;
                 blockHeight = pBlockHeight;
-                transaction = pTransaction;
                 amount = 0;
                 announceTime = getTime();
             }

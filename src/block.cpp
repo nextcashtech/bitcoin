@@ -1191,15 +1191,18 @@ namespace BitCoin
                 }
         }
 
-        sCacheLock.unlock();
-
         if(NextCash::removeFile(filePathName(pFileID)))
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
               "Removed block file %08x", pFileID);
+            sCacheLock.unlock();
             return true;
         }
+        else
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_BLOCK_LOG_NAME,
+              "Failed to remove block file %08x", pFileID);
 
+        sCacheLock.unlock();
         return false;
     }
 
@@ -1840,8 +1843,8 @@ namespace BitCoin
 
             file->removeBlocksAbove(fileOffset);
             file->unlock(true);
-            ++fileID;
         }
+        ++fileID;
 
         // Remove any files after that
         while(true)
@@ -1851,8 +1854,6 @@ namespace BitCoin
 
             ++fileID;
         }
-
-        return true;
     }
 
     bool BlockFile::readTransactions(unsigned int pOffset, TransactionList &pTransactions,

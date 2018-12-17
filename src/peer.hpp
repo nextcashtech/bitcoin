@@ -22,7 +22,7 @@ namespace BitCoin
 
         static constexpr const char *START_STRING = "NCPR";
 
-        Peer() { rating = 0; }
+        Peer() { rating = 0; chainID = CHAIN_UNKNOWN; }
         Peer(const Peer &pCopy)
         {
             time = pCopy.time;
@@ -30,10 +30,11 @@ namespace BitCoin
             userAgent = pCopy.userAgent;
             rating = pCopy.rating;
             address = pCopy.address;
+            chainID = pCopy.chainID;
         }
 
         void write(NextCash::OutputStream *pStream) const;
-        bool read(NextCash::InputStream *pStream);
+        bool read(NextCash::InputStream *pStream, unsigned int pVersion);
 
         // SortedObject virtual function.
         int compare(SortedObject *pRight)
@@ -67,6 +68,7 @@ namespace BitCoin
             userAgent = pRight.userAgent;
             rating = pRight.rating;
             address = pRight.address;
+            chainID = pRight.chainID;
             return *this;
         }
 
@@ -75,6 +77,7 @@ namespace BitCoin
         NextCash::String userAgent;
         int32_t rating;
         NextCash::IPAddress address;
+        ChainID chainID;
     };
 }
 

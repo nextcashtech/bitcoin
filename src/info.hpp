@@ -33,6 +33,8 @@ namespace BitCoin
         static void setPath(const char *pPath);
         static NextCash::String path() { return sPath; }
 
+        ChainID chainID;
+
         uint8_t ip[INET6_ADDRLEN];
         uint16_t port;
         bool spvMode;
@@ -89,14 +91,19 @@ namespace BitCoin
         // Email address to send notifications to.
         NextCash::String notifyEmail;
 
+        void configureChain(ChainID pChainID);
+
         // Return list of peers in random order
         void getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating,
-          uint64_t mServicesRequiredMask = 0, int pMaximumRating = 500000);
+          uint64_t mServicesRequiredMask, ChainID pChainID, int pMaximumRating = 500000);
         bool addPeer(const NextCash::IPAddress &pAddress, uint64_t pServices);
-        void updatePeer(const NextCash::IPAddress &pAddress, const char *pUserAgent, uint64_t pServices);
+        void updatePeer(const NextCash::IPAddress &pAddress, const char *pUserAgent,
+          uint64_t pServices);
+        void markPeerChain(const NextCash::IPAddress &pAddress, ChainID pChainID);
         void addPeerSuccess(const NextCash::IPAddress &pAddress, int pCount = 1);
         void addPeerFail(const NextCash::IPAddress &pAddress, int pCount = 1, int pMinimum = -500);
         unsigned int peerCount() const { return mPeers.size(); }
+        void resetPeers();
 
         bool initialBlockDownloadIsComplete() { return mInitialBlockDownloadComplete; }
         void setInitialBlockDownloadComplete()
@@ -128,7 +135,7 @@ namespace BitCoin
         bool readPeersFile();
 
         // Peers
-        bool mPeersModified;
+        bool mPeersModified, mPeersRead;
         NextCash::ReadersLock mPeerLock;
         NextCash::SortedSet mPeers;
 

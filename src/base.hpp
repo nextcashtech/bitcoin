@@ -59,6 +59,52 @@ namespace BitCoin
     Network network();
     void setNetwork(Network pNetwork);
 
+    enum ChainID { CHAIN_UNKNOWN, CHAIN_BTC, CHAIN_ABC, CHAIN_SV };
+
+    // First block of BTC split.
+    static NextCash::Hash BTC_SPLIT_HASH("00000000000000000019f112ec0a9982926f1258cdcc558dd7c3b7e5dc7fa148");
+    static unsigned int BTC_SPLIT_HEIGHT = 478559;
+
+    // First block of ABC split.
+    static NextCash::Hash ABC_SPLIT_HASH("0000000000000000004626ff6e3b936941d341c5932ece4357eeccac44e6d56c");
+    static unsigned int ABC_SPLIT_HEIGHT = 556767;
+
+    // First block of SV split.
+    static NextCash::Hash SV_SPLIT_HASH("000000000000000001d956714215d96ffc00e0afda4cd0a96c96f8d802b1662b");
+    static unsigned int SV_SPLIT_HEIGHT = 556767;
+
+    inline const char *chainName(ChainID pChainID)
+    {
+        switch(pChainID)
+        {
+        default:
+        case CHAIN_UNKNOWN:
+            return "Unknown";
+        case CHAIN_BTC:
+            return "BTC";
+        case CHAIN_ABC:
+            return "ABC";
+        case CHAIN_SV:
+            return "SV";
+        }
+    }
+
+    inline const unsigned int chainSplitHeight(ChainID pChainID)
+    {
+        switch(pChainID)
+        {
+        default:
+        case CHAIN_UNKNOWN:
+            return 0;
+        case CHAIN_BTC:
+            return BTC_SPLIT_HEIGHT;
+        case CHAIN_ABC:
+            return ABC_SPLIT_HEIGHT;
+        case CHAIN_SV:
+            return SV_SPLIT_HEIGHT;
+        }
+    }
+
     typedef uint32_t Time;
     typedef uint64_t Milliseconds;
     typedef uint64_t Microseconds;

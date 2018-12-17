@@ -216,6 +216,7 @@ namespace BitCoin
         Statistics mStatistics;
         bool mStarted, mIsInitialized, mStopRequested, mStopped;
         uint32_t mConnectionType;
+        ChainID mChainID;
         bool mIsGood;
         bool mAnnounceBlocksCompact, mRequestAnnounceCompact;
         uint64_t mSendCompactBlocksVersion;
@@ -232,7 +233,8 @@ namespace BitCoin
         NextCash::Mutex mMessagesToSendLock;
 
         Message::VersionData *mSentVersionData, *mReceivedVersionData;
-        bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared;
+        bool mVersionSent, mVersionAcknowledged, mVersionAcknowledgeSent, mSendHeaders, mPrepared,
+          mPeersRequested;
         Time mLastReceiveTime;
         Time mLastCheckTime;
         Milliseconds mLastPingTime;

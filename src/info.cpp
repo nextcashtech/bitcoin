@@ -70,6 +70,8 @@ namespace BitCoin
 
     Info::Info() : mPeerLock("Peer")
     {
+        chainID = CHAIN_SV;
+
         // Unknown IP Address
         std::memset(ip, 0, INET6_ADDRLEN);
         ip[10] = 255;
@@ -87,6 +89,7 @@ namespace BitCoin
 #endif
         maxConnections = 64;
         mPeersModified = false;
+        mPeersRead = false;
         pendingSize = 100000000UL; // 100 MB
         pendingBlocks = 256;
         outputsCacheSize = 1000000000UL; // 1 GB
@@ -161,6 +164,13 @@ namespace BitCoin
 
         if(std::strcmp(name, "spv_mode") == 0)
             spvMode = true;
+        else if(std::strcmp(name, "chain_id") == 0)
+        {
+            if(std::strcmp(value, "ABC") == 0)
+                configureChain(CHAIN_ABC);
+            else if(std::strcmp(value, "SV") == 0)
+                configureChain(CHAIN_SV);
+        }
         else if(std::strcmp(name, "max_connections") == 0)
         {
             maxConnections = std::strtol(value, NULL, 0);
@@ -363,6 +373,9 @@ namespace BitCoin
         NextCash::FileOutputStream file(dataFileTempPath, true);
         file.setOutputEndian(NextCash::Endian::LITTLE);
 
+        // Version
+        file.writeUnsignedInt(2);
+
         mPeerLock.readLock();
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
           "Writing peers file with %d peers", mPeers.size());
@@ -408,11 +421,41 @@ namespace BitCoin
         mPeerLock.writeLock("Load");
         mPeers.clear();
 
+        // Check for start string at beginning of file.
+        // If the file starts with a start string then it is version 1.
+        // If it doesn't then it starts with a version number.
+        static const char *match = Peer::START_STRING;
+        bool matchFound = false;
+        unsigned int matchOffset = 0;
+        unsigned int version;
+        for(unsigned int i = 0; i < 4; ++i)
+        {
+            if(file.readByte() == match[matchOffset])
+            {
+                ++matchOffset;
+                if(matchOffset == 4)
+                {
+                    matchFound = true;
+                    break;
+                }
+            }
+            else
+                break;
+        }
+
+        if(matchFound)
+            version = 1;
+        else
+        {
+            file.setReadOffset(0);
+            version = file.readUnsignedInt();
+        }
+
         Peer *newPeer;
         while(file.remaining())
         {
             newPeer = new Peer();
-            if(!newPeer->read(&file))
+            if(!newPeer->read(&file, version))
             {
                 delete newPeer;
                 break;
@@ -423,17 +466,49 @@ namespace BitCoin
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
           "Read peers file with %d peers", mPeers.size());
+        mPeersRead = true;
         mPeerLock.writeUnlock();
         return true;
     }
 
+    void Info::configureChain(ChainID pChainID)
+    {
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_INFO_LOG_NAME,
+          "Configuring for chain %s", chainName(pChainID));
+
+        NextCash::Hash desiredHash, invalidHash;
+        switch(pChainID)
+        {
+            case CHAIN_ABC:
+                desiredHash = ABC_SPLIT_HASH;
+                invalidHash = SV_SPLIT_HASH;
+                break;
+            case CHAIN_SV:
+                desiredHash = SV_SPLIT_HASH;
+                invalidHash = ABC_SPLIT_HASH;
+                break;
+            default:
+                chainID = pChainID;
+                return;
+        }
+
+        chainID = pChainID;
+
+        // Remove desired hash from invalid hashes.
+        invalidHashes.remove(desiredHash);
+
+        // Add invalid hash to invalid hashes.
+        if(!invalidHashes.contains(invalidHash))
+            invalidHashes.emplace_back(invalidHash);
+    }
+
     void Info::getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating,
-      uint64_t mServicesRequiredMask, int pMaximumRating)
+      uint64_t mServicesRequiredMask, ChainID pChainID, int pMaximumRating)
     {
         pPeers.clear();
 
         // For scenario when path was not set before loading instance
-        if(mPeers.size() == 0)
+        if(!mPeersRead)
             readPeersFile();
 
         mPeerLock.readLock();
@@ -444,7 +519,8 @@ namespace BitCoin
             {
                 peer = dynamic_cast<Peer *>(*iter);
                 if(peer->rating >= pMinimumRating && peer->rating <= pMaximumRating &&
-                  (peer->services & mServicesRequiredMask) == mServicesRequiredMask)
+                  (peer->services & mServicesRequiredMask) == mServicesRequiredMask &&
+                  (pChainID == CHAIN_UNKNOWN || peer->chainID == pChainID))
                     pPeers.push_back(peer);
             }
             catch(...)
@@ -464,7 +540,7 @@ namespace BitCoin
             return;
 
         // For scenario when path was not set before loading instance
-        if(mPeers.size() == 0)
+        if(!mPeersRead)
             readPeersFile();
 
         //bool remove = false;
@@ -508,15 +584,13 @@ namespace BitCoin
         // }
     }
 
-    void Info::updatePeer(const NextCash::IPAddress &pAddress, const char *pUserAgent,
-      uint64_t pServices)
+    void Info::markPeerChain(const NextCash::IPAddress &pAddress, ChainID pChainID)
     {
-        if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) ||
-          pServices == 0)
+        if(!pAddress.isValid())
             return;
 
         // For scenario when path was not set before loading instance
-        if(mPeers.size() == 0)
+        if(!mPeersRead)
             readPeersFile();
 
         mPeerLock.readLock();
@@ -527,7 +601,43 @@ namespace BitCoin
             Peer *peer = dynamic_cast<Peer *>(mPeers.get(lookup));
             if(peer != NULL)
             {
-                // Update existing
+                // Update
+                peer->updateTime();
+                if(peer->chainID != pChainID)
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
+                      "Peer marked for chain %s : %s", chainName(pChainID), pAddress.text().text());
+                    peer->chainID = pChainID;
+                    mPeersModified = true;
+                }
+            }
+        }
+        catch(...)
+        {
+        }
+        mPeerLock.readUnlock();
+    }
+
+    void Info::updatePeer(const NextCash::IPAddress &pAddress, const char *pUserAgent,
+      uint64_t pServices)
+    {
+        if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) ||
+          pServices == 0)
+            return;
+
+        // For scenario when path was not set before loading instance
+        if(!mPeersRead)
+            readPeersFile();
+
+        mPeerLock.readLock();
+        Peer lookup;
+        lookup.address = pAddress;
+        try
+        {
+            Peer *peer = dynamic_cast<Peer *>(mPeers.get(lookup));
+            if(peer != NULL)
+            {
+                // Update
                 peer->updateTime();
                 peer->services = pServices;
                 if(pUserAgent != NULL)
@@ -548,7 +658,7 @@ namespace BitCoin
             return;
 
         // For scenario when path was not set before loading instance
-        if(mPeers.size() == 0)
+        if(!mPeersRead)
             readPeersFile();
 
         mPeerLock.readLock();
@@ -578,7 +688,7 @@ namespace BitCoin
             return false;
 
         // For scenario when path was not set before loading instance
-        if(mPeers.size() == 0)
+        if(!mPeersRead)
             readPeersFile();
 
         // Add new
@@ -603,6 +713,14 @@ namespace BitCoin
         }
         mPeerLock.writeUnlock();
         return result;
+    }
+
+    void Info::resetPeers()
+    {
+        mPeerLock.writeLock("Reset");
+        mPeers.clear();
+        mPeerLock.writeUnlock();
+        writePeersFile();
     }
 
     bool Info::test()

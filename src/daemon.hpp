@@ -141,7 +141,6 @@ namespace BitCoin
           double pFeeRate, bool pUsePending, bool pTransmit, TransactionReference &pTransaction);
 
         bool loadMonitor();
-
         bool saveMonitor();
 
         void registerConnection(uint32_t pConnectionType)
@@ -150,7 +149,10 @@ namespace BitCoin
             if(pConnectionType & Node::INCOMING)
                 ++mStatistics.incomingConnections;
             else if(!(pConnectionType & Node::SEED))
+            {
+                ++mConnectionsSinceLastRecruit;
                 ++mStatistics.outgoingConnections;
+            }
         }
 
         bool loadKeyStore(const uint8_t *pPassword = (const uint8_t *)"NextCash",
@@ -158,6 +160,9 @@ namespace BitCoin
         bool saveKeyStore(const uint8_t *pPassword = (const uint8_t *)"NextCash",
                           unsigned int pPasswordLength = 8);
         void resetKeysSynchronized();
+
+        // Drop all nodes
+        void resetNodes();
 
         enum Status { INACTIVE, LOADING_WALLETS, LOADING_CHAIN, FINDING_PEERS, CONNECTING_TO_PEERS,
           SYNCHRONIZING, SYNCHRONIZED, FINDING_TRANSACTIONS };
@@ -210,12 +215,14 @@ namespace BitCoin
         void (*previousSigPipeHandler)(int);
 
         // Query peers from a seed
-        // Returns number of peers actually connected
-        unsigned int querySeed(const char *pName);
-        const char *getRandomSeed();
+        // Returns true if connection attempted.
+        bool querySeed(const uint8_t *pIP);
+        const uint8_t *getRandomSeed();
 
         bool mSeedsRandomized;
-        std::vector<const char *> mRandomSeeds;
+        ChainID mRandomSeedsChainID;
+        std::vector<const uint8_t *> mRandomSeeds;
+        unsigned int mConnectionsSinceLastRecruit;
 
         // Nodes
         NextCash::ReadersLock mNodeLock;

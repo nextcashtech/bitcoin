@@ -34,9 +34,12 @@ namespace BitCoin
 
         // Address
         address.write(pStream);
+
+        // Chain ID
+        pStream->writeUnsignedInt(chainID);
     }
 
-    bool Peer::read(NextCash::InputStream *pStream)
+    bool Peer::read(NextCash::InputStream *pStream, unsigned int pVersion)
     {
         static const char *match = START_STRING;
         bool matchFound = false;
@@ -80,6 +83,22 @@ namespace BitCoin
         services = pStream->readUnsignedLong();
 
         // Address
-        return address.read(pStream);
+        if(!address.read(pStream))
+            return false;
+
+        if(pVersion > 1)
+        {
+            try
+            {
+                chainID = static_cast<ChainID>(pStream->readUnsignedInt());
+            }
+            catch(...)
+            {
+                return false;
+            }
+        }
+        else
+            chainID = CHAIN_UNKNOWN;
+        return true;
     }
 }

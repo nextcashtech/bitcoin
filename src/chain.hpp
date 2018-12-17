@@ -341,6 +341,9 @@ namespace BitCoin
         // Returns true if it did something.
         bool process();
 
+        // Revert to a lower height
+        bool revert(unsigned int pHeight, uint8_t pLocks = 0x00);
+
         std::vector<unsigned int> blackListedNodeIDs();
 
         // Set flag to stop processing
@@ -354,8 +357,6 @@ namespace BitCoin
         void setMonitor(Monitor &pMonitor) { mMonitor = &pMonitor; }
 
     private:
-
-        static NextCash::Hash sBTCForkBlockHash;
 
         Outputs mOutputs;
 #ifndef DISABLE_ADDRESSES
@@ -413,8 +414,7 @@ namespace BitCoin
 
         void updatePendingBlocks();
 
-        // Revert to a lower height
-        bool revert(unsigned int pHeight, uint8_t pLocks = 0x00);
+        // Revert header and block files
         bool revertFileHeight(unsigned int pHeight);
 
         uint32_t calculateTargetBits(); // Calculate required target bits for new header.

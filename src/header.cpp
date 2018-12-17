@@ -352,15 +352,18 @@ namespace BitCoin
                 }
         }
 
-        sCacheLock.unlock();
-
         if(NextCash::removeFile(filePathName(pFileID)))
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_HEADER_LOG_NAME,
               "Removed header file %08x", pFileID);
+            sCacheLock.unlock();
             return true;
         }
+        else
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_HEADER_LOG_NAME,
+              "Failed to remove header file %08x", pFileID);
 
+        sCacheLock.unlock();
         return false;
     }
 
@@ -1198,7 +1201,7 @@ namespace BitCoin
             if(file->itemCount() == 0)
             {
                 // First header in file. Verify last hash of previous file.
-                HeaderFile *previousFile = HeaderFile::get(HeaderFile::fileID(pHeight) - 1, false);
+                HeaderFile *previousFile = HeaderFile::get(file->id() - 1, false);
                 if(previousFile == NULL)
                 {
                     file->unlock(true);
@@ -1211,7 +1214,7 @@ namespace BitCoin
                       "Header file %08x add header (%d) failed : Invalid previous hash : %s",
                       file->id(), pHeight, pHeader.previousHash.hex().text());
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
-                      "Does not match last hash of previous block file : %s",
+                      "Does not match last hash of previous header file : %s",
                       previousFile->lastHash().hex().text());
                     file->unlock(true);
                     previousFile->unlock(false);
@@ -1226,7 +1229,7 @@ namespace BitCoin
                   "Header file %08x add header (%d) failed : Invalid previous hash : %s",
                   file->id(), pHeight, pHeader.previousHash.hex().text());
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_HEADER_LOG_NAME,
-                  "Does not match last hash of block file : %s", file->lastHash().hex().text());
+                  "Does not match last hash of header file : %s", file->lastHash().hex().text());
                 file->unlock(true);
                 return false;
             }
@@ -1242,7 +1245,7 @@ namespace BitCoin
         unsigned int fileID = HeaderFile::fileID(pHeight);
         unsigned int fileOffset = HeaderFile::fileOffset(pHeight);
 
-        // Truncate latest file
+        // Truncate new latest file
         if(fileOffset != HeaderFile::MAX_COUNT - 1)
         {
             HeaderFile *file = HeaderFile::get(fileID, true);
@@ -1251,8 +1254,8 @@ namespace BitCoin
 
             file->removeHeadersAbove(fileOffset);
             file->unlock(true);
-            ++fileID;
         }
+        ++fileID;
 
         // Remove any files after that
         while(true)
@@ -1262,8 +1265,6 @@ namespace BitCoin
 
             ++fileID;
         }
-
-        return true;
     }
 
     unsigned int Header::totalCount()

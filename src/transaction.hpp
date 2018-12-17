@@ -19,6 +19,7 @@
 #include "forks.hpp"
 #include "key.hpp"
 #include "output.hpp"
+#include "timer.hpp"
 
 #include <vector>
 

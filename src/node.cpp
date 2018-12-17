@@ -37,6 +37,7 @@ namespace BitCoin
       mAnnounceBlockMutex("Node Announce Block")
     {
         mConnectionType = pConnectionType;
+        mChainID = CHAIN_UNKNOWN;
         mRequestAnnounceCompact = pAnnounceCompact;
         mConnection = pConnection;
         mAddress = *pConnection;
@@ -123,6 +124,7 @@ namespace BitCoin
       mAnnounceMutex("Node Announce"), mAnnounceBlockMutex("Node Announce Block")
     {
         mConnectionType = pConnectionType;
+        mChainID = CHAIN_UNKNOWN;
         mRequestAnnounceCompact = pAnnounceCompact;
         mAddress = pIPAddress;
         mConnection = NULL;
@@ -340,7 +342,7 @@ namespace BitCoin
                 info.addPeerSuccess(mAddress, 1);
                 NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                   "Peer scanned at %s", mAddress.text().text());
-                close();
+                requestHeaders();
             }
             else
             {
@@ -354,11 +356,12 @@ namespace BitCoin
                     Message::Data sendHeadersMessage(Message::SEND_HEADERS);
                     sendMessage(&sendHeadersMessage);
 
-                    requestPeers();
                     requestHeaders();
 
                     info.addPeerSuccess(mAddress, 1);
                 }
+                else if(isSeed())
+                    requestHeaders(); // Determine chain before requesting peers
             }
 
             mPrepared = true;
@@ -443,7 +446,8 @@ namespace BitCoin
             return false;
         }
 
-        if(mMemPoolRequested && !mMemPoolReceived && time - mMemPoolRequestedTime > 30)
+        if(!info.spvMode && mMemPoolRequested && !mMemPoolReceived &&
+           time - mMemPoolRequestedTime > 30)
         {
             NextCash::Log::add(NextCash::Log::INFO, mName, "Dropping. Didn't provide mempool.");
             mChain->subtractMemPoolRequest();
@@ -597,7 +601,7 @@ namespace BitCoin
 
     bool Node::requestHeaders()
     {
-        if(mStopRequested || !isReady() || !isOpen() || !isOutgoing() ||
+        if(mStopRequested || !isReady() || !isOpen() || isIncoming() ||
           waitingForHeaderRequests() || waitingForBlockRequests())
             return false;
 
@@ -746,8 +750,9 @@ namespace BitCoin
 
     bool Node::requestPeers()
     {
-        if(!isSeed() && !isGood() && Info::instance().peerCount() > 5000)
+        if(mPeersRequested || isIncoming())
             return false;
+        mPeersRequested = true;
         NextCash::Log::add(NextCash::Log::INFO, mName, "Sending peer request");
         Message::Data getAddresses(Message::GET_ADDRESSES);
         return sendMessage(&getAddresses);
@@ -1671,7 +1676,7 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   "Waiting for %d merkle blocks from %ds ago", mActiveMerkleRequests,
                   time - mLastMerkleRequest);
-                if(time - mLastMerkleReceive > 10)
+                if(time - mLastMerkleReceive > 30)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                       "Dropping. Took too long to return merkle blocks");
@@ -1872,81 +1877,60 @@ namespace BitCoin
                 info.updatePeer(mAddress, mReceivedVersionData->userAgent,
                   mReceivedVersionData->transmittingServices);
 
-                if(isSeed())
+                if(isOutgoing())
                 {
-                    if(mReceivedVersionData->transmittingServices &
-                      Message::VersionData::FULL_NODE_BIT)
+//                    if(!(mReceivedVersionData->transmittingServices &
+//                      Message::VersionData::FULL_NODE_BIT))
+//                    {
+//                        // Require full node bit for outgoing nodes
+//                        sendReject(Message::nameFor(message->type),
+//                          Message::RejectData::PROTOCOL,
+//                          "Full node bit (0x01) required in protocol version");
+//                        NextCash::Log::add(NextCash::Log::INFO, mName,
+//                          "Dropping. Missing full node bit");
+//                        info.addPeerFail(mAddress);
+//                        close();
+//                        success = false;
+//                        break;
+//                    }
+//                    else
+                    if(mReceivedVersionData->startBlockHeight + 2000 < mChain->headerHeight())
                     {
-                        // Send version acknowledge
-                        Message::Data versionAcknowledgeMessage(Message::VERACK);
-                        sendMessage(&versionAcknowledgeMessage);
-                        mVersionAcknowledgeSent = true;
-
-                        requestPeers(); // Request addresses from the
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::INFO, mName,
-                          "Dropping. Seed missing full node bit");
+                        NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                          "Dropping. Low block height (%d)",
+                          mReceivedVersionData->startBlockHeight);
                         info.addPeerFail(mAddress);
                         close();
                         success = false;
+                        break;
                     }
-                }
-                else
-                {
-                    if(isOutgoing())
+                    else if(info.spvMode && !(mReceivedVersionData->transmittingServices &
+                      Message::VersionData::BLOOM_NODE_BIT))
                     {
-                        if(!(mReceivedVersionData->transmittingServices &
-                          Message::VersionData::FULL_NODE_BIT))
-                        {
-                            // Require full node bit for outgoing nodes
-                            sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
-                              "Full node bit (0x01) required in protocol version");
-                            NextCash::Log::add(NextCash::Log::INFO, mName,
-                              "Dropping. Missing full node bit");
-                            info.addPeerFail(mAddress);
-                            close();
-                            success = false;
-                            break;
-                        }
-                        else if(mReceivedVersionData->startBlockHeight + 2000 < mChain->headerHeight())
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                              "Dropping. Low block height (%d)", mReceivedVersionData->startBlockHeight);
-                            info.addPeerFail(mAddress);
-                            close();
-                            success = false;
-                            break;
-                        }
-                        else if(info.spvMode && !(mReceivedVersionData->transmittingServices &
-                          Message::VersionData::BLOOM_NODE_BIT))
-                        {
-                            sendReject(Message::nameFor(message->type), Message::RejectData::PROTOCOL,
-                              "Bloom node bit (0x04) required in protocol version");
-                            NextCash::Log::add(NextCash::Log::INFO, mName,
-                              "Dropping. Missing bloom node bit");
-                            info.addPeerFail(mAddress);
-                            close();
-                            success = false;
-                            break;
-                        }
+                        sendReject(Message::nameFor(message->type),
+                          Message::RejectData::PROTOCOL,
+                          "Bloom node bit (0x04) required in protocol version");
+                        NextCash::Log::add(NextCash::Log::INFO, mName,
+                          "Dropping. Missing bloom node bit");
+                        info.addPeerFail(mAddress);
+                        close();
+                        success = false;
+                        break;
                     }
-
-                    // Send version acknowledge
-                    Message::Data versionAcknowledgeMessage(Message::VERACK);
-                    sendMessage(&versionAcknowledgeMessage);
-                    mVersionAcknowledgeSent = true;
-
-                    if(mVersionAcknowledged)
-                        prepare();
                 }
 
+                // Send version acknowledge
+                Message::Data versionAcknowledgeMessage(Message::VERACK);
+                sendMessage(&versionAcknowledgeMessage);
+                mVersionAcknowledgeSent = true;
+
+                if(mVersionAcknowledged)
+                    prepare();
                 break;
             }
             case Message::VERACK:
                 mVersionAcknowledged = true;
-                if(mReceivedVersionData != NULL && !isSeed())
+                if(mReceivedVersionData != NULL)
                     prepare();
                 break;
             case Message::PING:
@@ -1981,7 +1965,7 @@ namespace BitCoin
                         // NextCash::Log::add(NextCash::Log::VERBOSE, mName,
                           // "Received round trip pong");
                         mPingRoundTripTime = getTimeMilliseconds() - mLastPingTime;
-                        if(!isIncoming() && !isSeed())
+                        if(!isIncoming())
                         {
                             if(mPingRoundTripTime / 1000L > mPingCutoff)
                             {
@@ -2037,7 +2021,7 @@ namespace BitCoin
                 uint64_t servicesMask = Message::VersionData::FULL_NODE_BIT;
 
                 // Get list of peers
-                info.getRandomizedPeers(peers, 1, servicesMask);
+                info.getRandomizedPeers(peers, 1, servicesMask, info.chainID);
 
                 unsigned int count = peers.size();
                 if(count > 1000) // Maximum of 1000
@@ -2062,13 +2046,14 @@ namespace BitCoin
                 break;
             }
             case Message::ADDRESSES:
-                if(isSeed() || isOutgoing())
+                // Don't accept peer addresses unless the node is on the right chain.
+                if(!mLastHeaderHash.isEmpty() && !isIncoming())
                 {
                     Message::AddressesData *addressesData = (Message::AddressesData *)message;
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                       "Received %d peer addresses", addressesData->addresses.size());
-                    NextCash::IPAddress ip;
 
+                    NextCash::IPAddress ip;
                     for(std::vector<Message::Address>::iterator address =
                       addressesData->addresses.begin(); address != addressesData->addresses.end() &&
                       !mStopRequested; ++address)
@@ -2309,22 +2294,22 @@ namespace BitCoin
                     height = mChain->hashHeight(*hash);
                     if(height != 0xffffffff)
                     {
-                        if(height > HISTORY_BRANCH_CHECKING &&
-                          height < (unsigned int)mReceivedVersionData->startBlockHeight -
-                          HISTORY_BRANCH_CHECKING)
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-                              "Dropping. Requested header height %d (%d/%d) which is below start block height %d : %s",
-                              height, offset, getHeadersData->hashes.size(),
-                              mReceivedVersionData->startBlockHeight, hash->hex().text());
-                            sendReject(Message::nameFor(Message::GET_HEADERS),
-                              Message::RejectData::WRONG_CHAIN, "Too many unmatching headers");
-                            close();
-                            success = false;
-                            break;
-                        }
-                        else
-                        {
+//                        if(height > HISTORY_BRANCH_CHECKING &&
+//                          height < (unsigned int)mReceivedVersionData->startBlockHeight -
+//                          HISTORY_BRANCH_CHECKING)
+//                        {
+//                            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+//                              "Dropping. Requested header height %d (%d/%d) which is below start block height %d : %s",
+//                              height, offset, getHeadersData->hashes.size(),
+//                              mReceivedVersionData->startBlockHeight, hash->hex().text());
+//                            sendReject(Message::nameFor(Message::GET_HEADERS),
+//                              Message::RejectData::WRONG_CHAIN, "Too many unmatching headers");
+//                            close();
+//                            success = false;
+//                            break;
+//                        }
+//                        else
+//                        {
                             NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
                               "Headers requested after height %d (%d/%d) : %s", height, offset,
                               getHeadersData->hashes.size(), hash->hex().text());
@@ -2338,7 +2323,7 @@ namespace BitCoin
                                   "Failed to get headers for header request (%d/%d) : %s", offset,
                                   getHeadersData->hashes.size(), hash->hex().text());
                             break; // match found
-                        }
+//                        }
                     }
 
                     ++offset;
@@ -2512,7 +2497,16 @@ namespace BitCoin
                 }
                 break;
             case Message::HEADERS:
-                if(isOutgoing() && mReceivedVersionData != NULL)
+                if(isIncoming())
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                      "Dropping. Incoming node sent %d headers",
+                      ((Message::HeadersData *)message)->headers.size());
+                    info.addPeerFail(mAddress, 5);
+                    close();
+                    success = false;
+                }
+                else if(mReceivedVersionData != NULL)
                 {
                     Message::HeadersData *headersData = (Message::HeadersData *)message;
                     unsigned int addedCount = 0, badHeadersCount = 0;;
@@ -2522,7 +2516,18 @@ namespace BitCoin
                     Chain::HashStatus headerStatus;
 
                     if(headersData->headers.size() == 0)
+                    {
                         addAnnouncedBlock(mHeaderRequested);
+                        if(info.chainID != CHAIN_UNKNOWN)
+                        {
+                            mChainID = info.chainID;
+                            info.markPeerChain(mAddress, mChainID);
+                            NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                              "Provided no headers. Assuming matching chain %s",
+                              chainName(mChainID));
+                        }
+                        requestPeers();
+                    }
                     else
                         addAnnouncedBlock(headersData->headers.back().hash());
 
@@ -2546,28 +2551,98 @@ namespace BitCoin
                             lastAnnouncedHeaderFound = true;
 
                         headerStatus = mChain->addHeader(*header);
-                        if(headerStatus == Chain::BLOCK_NEEDED)
+                        switch(headerStatus)
                         {
+                        case Chain::ALREADY_HAVE:
+                            shortChain = false;
+                            break;
+                        case Chain::HEADER_NEEDED:
+                            shortChain = false;
+                            break;
+                        case Chain::HEADER_ADDED:
+                            shortChain = false;
+                            break;
+                        case Chain::BLOCK_NEEDED:
                             shortChain = false;
                             addedCount++;
                             if(!info.spvMode && mChain->isInSync())
                                 hashList.push_back(header->hash());
-                        }
-                        else if(headerStatus  == Chain::INVALID || headerStatus == Chain::UNKNOWN)
-                            ++badHeadersCount;
-                        else if(headerStatus == Chain::SHORT_CHAIN && isOutgoing())
-                        {
-                            shortHash = header->hash();
-                            shortChain = true;
-                        }
-                        else
+                            break;
+                        case Chain::BLOCK_ADDED:
                             shortChain = false;
+                            break;
+                        case Chain::SHORT_CHAIN:
+                            if(isOutgoing())
+                            {
+                                shortHash = header->hash();
+                                shortChain = true;
+                            }
+                            break;
+                        case Chain::INVALID:
+                        case Chain::UNKNOWN:
+                            ++badHeadersCount;
+                            break;
+                        }
+
+                        if(info.chainID != CHAIN_UNKNOWN && mChainID == CHAIN_UNKNOWN)
+                        {
+                            switch(headerStatus)
+                            {
+                            case Chain::ALREADY_HAVE:
+                            case Chain::HEADER_NEEDED:
+                            case Chain::HEADER_ADDED:
+                            case Chain::BLOCK_NEEDED:
+                            case Chain::BLOCK_ADDED:
+                                if(mChain->hashHeight(header->hash()) >=
+                                   chainSplitHeight(info.chainID))
+                                {
+                                    mChainID = info.chainID;
+                                    info.markPeerChain(mAddress, mChainID);
+                                    NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                                      "Provided header from %s chain : %s",
+                                      chainName(mChainID), header->hash().hex().text());
+                                    requestPeers();
+                                }
+                                break;
+                            case Chain::SHORT_CHAIN:
+                            case Chain::INVALID:
+                            case Chain::UNKNOWN:
+                                if(BTC_SPLIT_HASH == header->hash())
+                                {
+                                    mChainID = CHAIN_BTC;
+                                    info.markPeerChain(mAddress, mChainID);
+                                    NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                                      "Dropping. Provided header from %s chain : %s",
+                                      chainName(mChainID), header->hash().hex().text());
+                                    close();
+                                }
+                                else if(ABC_SPLIT_HASH == header->hash())
+                                {
+                                    mChainID = CHAIN_ABC;
+                                    info.markPeerChain(mAddress, mChainID);
+                                    NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                                      "Dropping. Provided header from %s chain : %s",
+                                      chainName(mChainID), header->hash().hex().text());
+                                    close();
+                                }
+                                else if(SV_SPLIT_HASH == header->hash())
+                                {
+                                    mChainID = CHAIN_SV;
+                                    info.markPeerChain(mAddress, mChainID);
+                                    NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
+                                      "Dropping. Provided header from %s chain : %s",
+                                      chainName(mChainID), header->hash().hex().text());
+                                    close();
+                                }
+                                break;
+                            }
+                        }
                     }
 
                     if(shortChain)
                     {
                         NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                          "Dropping. Announced header hash from short chain : %s",
+                          "Dropping. Provided header from short chain : %s",
                           shortHash.hex().text());
                         close();
                         success = false;
@@ -2611,16 +2686,13 @@ namespace BitCoin
 
                         NextCash::Log::addFormatted(NextCash::Log::DEBUG, mName,
                           "Added %d pending headers", addedCount);
+
+                        if(success && !isScan() && info.chainID == CHAIN_UNKNOWN)
+                            requestPeers();
                     }
-                }
-                else
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-                      "Dropping. Incoming node sent %d headers",
-                      ((Message::HeadersData *)message)->headers.size());
-                    info.addPeerFail(mAddress, 5);
-                    close();
-                    success = false;
+
+                    if(isScan())
+                        close();
                 }
                 break;
             case Message::BLOCK:

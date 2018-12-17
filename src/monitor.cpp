@@ -638,6 +638,14 @@ namespace BitCoin
         mMutex.unlock();
     }
 
+    void Monitor::ensurePassIsActive(unsigned int pBlockHeight)
+    {
+        mMutex.lock();
+        if(mPasses.size() == 0 || mPasses.back().complete)
+            startPass(pBlockHeight);
+        mMutex.unlock();
+    }
+
     void Monitor::startPass(unsigned int pBlockHeight)
     {
         // Check for existing passes that are close to this block height
@@ -1180,17 +1188,17 @@ namespace BitCoin
     bool Monitor::updateRelatedTransactionData(RelatedTransactionData &pData,
       std::vector<Key *>::iterator pChainKeyBegin, std::vector<Key *>::iterator pChainKeyEnd)
     {
-        if(pData.transaction.hash().isEmpty())
+        if(pData.transaction->hash().isEmpty())
             return false;
 
         Output spentOutput;
         NextCash::HashList payAddresses;
         ScriptInterpreter::ScriptType scriptType;
         unsigned int offset = 0;
-        pData.relatedInputAmounts.resize(pData.transaction.inputs.size());
-        pData.inputAddresses.resize(pData.transaction.inputs.size());
-        for(std::vector<Input>::iterator input = pData.transaction.inputs.begin();
-          input != pData.transaction.inputs.end(); ++input, ++offset)
+        pData.relatedInputAmounts.resize(pData.transaction->inputs.size());
+        pData.inputAddresses.resize(pData.transaction->inputs.size());
+        for(std::vector<Input>::iterator input = pData.transaction->inputs.begin();
+          input != pData.transaction->inputs.end(); ++input, ++offset)
         {
             pData.relatedInputAmounts[offset] = -1;
             pData.inputAddresses[offset].clear();
@@ -1213,10 +1221,10 @@ namespace BitCoin
         }
 
         offset = 0;
-        pData.relatedOutputs.resize(pData.transaction.outputs.size());
-        pData.outputAddresses.resize(pData.transaction.outputs.size());
-        for(std::vector<Output>::iterator output = pData.transaction.outputs.begin();
-          output != pData.transaction.outputs.end(); ++output, ++offset)
+        pData.relatedOutputs.resize(pData.transaction->outputs.size());
+        pData.outputAddresses.resize(pData.transaction->outputs.size());
+        for(std::vector<Output>::iterator output = pData.transaction->outputs.begin();
+          output != pData.transaction->outputs.end(); ++output, ++offset)
         {
             pData.relatedOutputs[offset] = outputIsRelated(*output, pChainKeyBegin, pChainKeyEnd);
             scriptType = ScriptInterpreter::parseOutputScript(output->script, payAddresses);
@@ -1243,7 +1251,7 @@ namespace BitCoin
         for(std::vector<bool>::const_iterator output = relatedOutputs.begin();
           output != relatedOutputs.end(); ++output, ++offset)
             if(*output)
-                result += transaction.outputs[offset].amount;
+                result += transaction->outputs[offset].amount;
 
         return result;
     }
@@ -1257,7 +1265,7 @@ namespace BitCoin
           mTransactions.begin(); trans != mTransactions.end(); ++trans)
             if((*trans)->transaction->hash() == pID)
             {
-                pTransaction.transaction = *(*trans)->transaction;
+                pTransaction.transaction = (*trans)->transaction;
                 pTransaction.blockHash = (*trans)->blockHash;
                 pTransaction.blockHeight = (*trans)->blockHeight;
                 pTransaction.nodesVerified = 0xffffffff;
@@ -1270,7 +1278,7 @@ namespace BitCoin
           mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
             if((*trans)->transaction->hash() == pID)
             {
-                pTransaction.transaction = *(*trans)->transaction;
+                pTransaction.transaction = (*trans)->transaction;
                 pTransaction.blockHash = (*trans)->blockHash;
                 pTransaction.blockHeight = (*trans)->blockHeight;
                 pTransaction.nodesVerified = (unsigned int)(*trans)->nodes.size();
@@ -1316,7 +1324,7 @@ namespace BitCoin
                             {
                                 pTransactions.emplace_back();
                                 newTransaction = &pTransactions.back();
-                                newTransaction->transaction = *(*trans)->transaction;
+                                newTransaction->transaction = (*trans)->transaction;
                                 newTransaction->blockHash = (*trans)->blockHash;
                                 newTransaction->blockHeight = (*trans)->blockHeight;
                                 newTransaction->nodesVerified = 0xffffffff;
@@ -1341,7 +1349,7 @@ namespace BitCoin
                             {
                                 pTransactions.emplace_back();
                                 newTransaction = &pTransactions.back();
-                                newTransaction->transaction = *(*trans)->transaction;
+                                newTransaction->transaction = (*trans)->transaction;
                                 newTransaction->blockHash = (*trans)->blockHash;
                                 newTransaction->blockHeight = (*trans)->blockHeight;
                                 newTransaction->nodesVerified = 0xffffffff;
@@ -1376,7 +1384,7 @@ namespace BitCoin
                                 {
                                     pTransactions.emplace_back();
                                     newTransaction = &pTransactions.back();
-                                    newTransaction->transaction = *(*trans)->transaction;
+                                    newTransaction->transaction = (*trans)->transaction;
                                     newTransaction->blockHash = (*trans)->blockHash;
                                     newTransaction->blockHeight = (*trans)->blockHeight;
                                     newTransaction->nodesVerified = (int)(*trans)->nodes.size();
@@ -1401,7 +1409,7 @@ namespace BitCoin
                                 {
                                     pTransactions.emplace_back();
                                     newTransaction = &pTransactions.back();
-                                    newTransaction->transaction = *(*trans)->transaction;
+                                    newTransaction->transaction = (*trans)->transaction;
                                     newTransaction->blockHash = (*trans)->blockHash;
                                     newTransaction->blockHeight = (*trans)->blockHeight;
                                     newTransaction->nodesVerified = (int)(*trans)->nodes.size();
@@ -1583,75 +1591,75 @@ namespace BitCoin
             return;
         }
 
-        if(mReversePassHeight == 0xffffffff)
-            mReversePassHeight = pChain.headerHeight();
-
-        unsigned int lastReverseHeight = pChain.headerHeight();
-        if(lastReverseHeight > 2016)
-            lastReverseHeight -= 2016;
-        else
-            lastReverseHeight = 0;
-
-        blockHeight = mReversePassHeight;
-        while(pBlockHashes.size() < pMaxCount && blockHeight > lastReverseHeight)
-        {
-            // Get next block hash
-            if(!pChain.getHash(blockHeight--, nextBlockHash))
-                break;
-
-            // Check if there is a merkle request for this block hash and if it needs more
-            //   requests sent.
-            found = false;
-            request = mMerkleRequests.get(nextBlockHash);
-            if(request != mMerkleRequests.end())
-            {
-                if((*request)->isReverse)
-                {
-                    found = true;
-                    if((*request)->addNode(pNodeID, time))
-                    {
-                        pBlockHashes.push_back(nextBlockHash);
-                        NextCash::Log::addFormatted(NextCash::Log::INFO,
-                          BITCOIN_MONITOR_LOG_NAME,
-                          "Requesting reverse merkle for height %d", blockHeight + 1);
-                    }
-                }
-                else
-                {
-                    // Check next item
-                    ++request;
-                    if(request != mMerkleRequests.end() &&
-                       request.hash() == nextBlockHash && (*request)->isReverse)
-                    {
-                        found = true;
-                        if((*request)->addNode(pNodeID, time))
-                        {
-                            pBlockHashes.push_back(nextBlockHash);
-                            NextCash::Log::addFormatted(NextCash::Log::INFO,
-                              BITCOIN_MONITOR_LOG_NAME,
-                              "Requesting reverse merkle for height %d", blockHeight + 1);
-                        }
-                    }
-                }
-            }
-
-            if(!found)
-            {
-                if(mMerkleRequests.size() < MAX_MERKLE_REQUESTS)
-                {
-                    // Add new merkle block request
-                    newMerkleRequest = new MerkleRequestData(1, pNodeID, time);
-                    newMerkleRequest->isReverse = true;
-                    mMerkleRequests.insert(nextBlockHash, newMerkleRequest);
-                    pBlockHashes.push_back(nextBlockHash);
-
-                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
-                      "Requesting reverse merkle for height %d", blockHeight + 1);
-                }
-                else
-                    break;
-            }
-        }
+//        if(mReversePassHeight == 0xffffffff)
+//            mReversePassHeight = pChain.headerHeight();
+//
+//        unsigned int lastReverseHeight = pChain.headerHeight();
+//        if(lastReverseHeight > 2016)
+//            lastReverseHeight -= 2016;
+//        else
+//            lastReverseHeight = 0;
+//
+//        blockHeight = mReversePassHeight;
+//        while(pBlockHashes.size() < pMaxCount && blockHeight > lastReverseHeight)
+//        {
+//            // Get next block hash
+//            if(!pChain.getHash(blockHeight--, nextBlockHash))
+//                break;
+//
+//            // Check if there is a merkle request for this block hash and if it needs more
+//            //   requests sent.
+//            found = false;
+//            request = mMerkleRequests.get(nextBlockHash);
+//            if(request != mMerkleRequests.end())
+//            {
+//                if((*request)->isReverse)
+//                {
+//                    found = true;
+//                    if((*request)->addNode(pNodeID, time))
+//                    {
+//                        pBlockHashes.push_back(nextBlockHash);
+//                        NextCash::Log::addFormatted(NextCash::Log::INFO,
+//                          BITCOIN_MONITOR_LOG_NAME,
+//                          "Requesting reverse merkle for height %d", blockHeight + 1);
+//                    }
+//                }
+//                else
+//                {
+//                    // Check next item
+//                    ++request;
+//                    if(request != mMerkleRequests.end() &&
+//                       request.hash() == nextBlockHash && (*request)->isReverse)
+//                    {
+//                        found = true;
+//                        if((*request)->addNode(pNodeID, time))
+//                        {
+//                            pBlockHashes.push_back(nextBlockHash);
+//                            NextCash::Log::addFormatted(NextCash::Log::INFO,
+//                              BITCOIN_MONITOR_LOG_NAME,
+//                              "Requesting reverse merkle for height %d", blockHeight + 1);
+//                        }
+//                    }
+//                }
+//            }
+//
+//            if(!found)
+//            {
+//                if(mMerkleRequests.size() < MAX_MERKLE_REQUESTS)
+//                {
+//                    // Add new merkle block request
+//                    newMerkleRequest = new MerkleRequestData(1, pNodeID, time);
+//                    newMerkleRequest->isReverse = true;
+//                    mMerkleRequests.insert(nextBlockHash, newMerkleRequest);
+//                    pBlockHashes.push_back(nextBlockHash);
+//
+//                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+//                      "Requesting reverse merkle for height %d", blockHeight + 1);
+//                }
+//                else
+//                    break;
+//            }
+//        }
 
         mMutex.unlock();
     }
@@ -2063,16 +2071,34 @@ namespace BitCoin
           "Reverted to block height %d", pBlockHeight);
 
         // Update last block height
-        for(std::vector<PassData>::iterator pass = mPasses.begin(); pass != mPasses.end(); ++pass)
-            if(!pass->complete && pass->blockHeight == pBlockHeight)
+        unsigned int passIndex = 1;
+        for(std::vector<PassData>::iterator pass = mPasses.begin(); pass != mPasses.end();
+          ++pass, ++passIndex)
+        {
+            if(pass->complete)
+                continue;
+            else if(pass->blockHeight > pBlockHeight)
             {
-                if(mLowestPassHeight == pass->blockHeight)
-                    --mLowestPassHeight;
-                if(mRoughMerkleHeight == pass->blockHeight)
-                    --mRoughMerkleHeight;
-                --(pass->blockHeight);
+                if(passIndex < mPasses.size())
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                      "Completing pass %d at block height %d", passIndex, pass->blockHeight);
+                    pass->complete = true;
+                }
+                else
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
+                      "Reverting pass %d from block height %d to %d", passIndex, pass->blockHeight,
+                      pBlockHeight);
+                    pass->blockHeight = pBlockHeight;
+                }
                 ++mChangeID;
             }
+        }
+
+        if(mRoughMerkleHeight > pBlockHeight)
+            mRoughMerkleHeight = pBlockHeight;
+        refreshLowestPassHeight();
 
         NextCash::HashContainerList<SPVTransactionData *>::Iterator pending;
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
@@ -2080,15 +2106,21 @@ namespace BitCoin
         {
             if((*trans)->blockHeight > pBlockHeight)
             {
-                pending = mPendingTransactions.get((*trans)->transaction->hash());
-                if(pending == mPendingTransactions.end())
-                {
-                    (*trans)->blockHeight = 0xffffffff;
-                    (*trans)->blockHash.clear();
-                    mPendingTransactions.insert((*trans)->transaction->hash(), *trans);
-                }
+                if((*trans)->blockHeight > pBlockHeight + 10)
+                    delete *trans; // Large revert. Don't save pending.
                 else
-                    delete *trans;
+                {
+                    // Add back to pending if not already there.
+                    pending = mPendingTransactions.get((*trans)->transaction->hash());
+                    if(pending == mPendingTransactions.end())
+                    {
+                        (*trans)->blockHeight = 0xffffffff;
+                        (*trans)->blockHash.clear();
+                        mPendingTransactions.insert((*trans)->transaction->hash(), *trans);
+                    }
+                    else
+                        delete *trans;
+                }
                 trans = mTransactions.erase(trans);
                 ++mChangeID;
             }
@@ -2275,21 +2307,21 @@ namespace BitCoin
                     break;
             }
 
-            if(!mBloomFilterNeedsRestart)
-            {
-                if(mReversePassHeight == 0xffffffff)
-                    mReversePassHeight = pChain.headerHeight();
-
-                unsigned int lastReverseHeight = pChain.headerHeight();
-                if(lastReverseHeight > 2016)
-                    lastReverseHeight -= 2016;
-                else
-                    lastReverseHeight = 0;
-
-                while(mReversePassHeight > lastReverseHeight &&
-                  processRequest(pChain, mReversePassHeight, true))
-                    --mReversePassHeight;
-            }
+//            if(!mBloomFilterNeedsRestart)
+//            {
+//                if(mReversePassHeight == 0xffffffff)
+//                    mReversePassHeight = pChain.headerHeight();
+//
+//                unsigned int lastReverseHeight = pChain.headerHeight();
+//                if(lastReverseHeight > 2016)
+//                    lastReverseHeight -= 2016;
+//                else
+//                    lastReverseHeight = 0;
+//
+//                while(mReversePassHeight > lastReverseHeight &&
+//                  processRequest(pChain, mReversePassHeight, true))
+//                    --mReversePassHeight;
+//            }
 
             if(!pLocked)
                 mMutex.unlock();
