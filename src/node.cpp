@@ -40,7 +40,7 @@ namespace BitCoin
         mChainID = CHAIN_UNKNOWN;
         mRequestAnnounceCompact = pAnnounceCompact;
         mConnection = pConnection;
-        mAddress = *pConnection;
+        mAddress = pConnection->ip();
         mServices = pServices;
         mDaemon = pDaemon;
         mStopFlag = pStopFlag;
@@ -69,7 +69,7 @@ namespace BitCoin
         mLastPingNonce = 0;
         mLastPingTime = 0;
         mPingRoundTripTime = 0xffffffffffffffff;
-        mPingCutoff = 30;
+        mPingCutoff = 10;
         mBlockDownloadCount = 0;
         mBlockDownloadSize = 0;
         mBlockDownloadTime = 0;
@@ -95,6 +95,7 @@ namespace BitCoin
         mLastMerkleReceive = 0;
         mBloomFilterID = 0;
         mInventoryData = NULL;
+        mPeersRequested = false;
 
         mID = mNextID++;
         if(isSeed())
@@ -117,11 +118,12 @@ namespace BitCoin
 #endif
     }
 
-    Node::Node(NextCash::IPAddress &pIPAddress, uint32_t pConnectionType, uint64_t pServices,
-      Daemon *pDaemon, bool pAnnounceCompact) : mConnectionMutex("Node Connection"),
-      mStatisticsLock("Statistics"), mMessagesToSendLock("Node Messages"),
-      mFilter(BloomFilter::STANDARD), mBlockRequestMutex("Node Block Request"),
-      mAnnounceMutex("Node Announce"), mAnnounceBlockMutex("Node Announce Block")
+    Node::Node(NextCash::Network::IPAddress &pIPAddress, uint32_t pConnectionType,
+      uint64_t pServices, Daemon *pDaemon, bool pAnnounceCompact) :
+      mConnectionMutex("Node Connection"), mStatisticsLock("Statistics"),
+      mMessagesToSendLock("Node Messages"), mFilter(BloomFilter::STANDARD),
+      mBlockRequestMutex("Node Block Request"), mAnnounceMutex("Node Announce"),
+      mAnnounceBlockMutex("Node Announce Block")
     {
         mConnectionType = pConnectionType;
         mChainID = CHAIN_UNKNOWN;
@@ -156,7 +158,7 @@ namespace BitCoin
         mLastPingNonce = 0;
         mLastPingTime = 0;
         mPingRoundTripTime = 0xffffffffffffffff;
-        mPingCutoff = 30;
+        mPingCutoff = 10;
         mBlockDownloadCount = 0;
         mBlockDownloadSize = 0;
         mBlockDownloadTime = 0;
@@ -182,6 +184,7 @@ namespace BitCoin
         mLastMerkleReceive = 0;
         mBloomFilterID = 0;
         mInventoryData = NULL;
+        mPeersRequested = false;
 
         mID = mNextID++;
         if(isSeed())
@@ -984,8 +987,8 @@ namespace BitCoin
         Info &info = Info::instance();
         if(mSentVersionData != NULL)
             delete mSentVersionData;
-        mSentVersionData = new Message::VersionData(mConnection->ipv6Bytes(), mConnection->port(),
-          mServices, info.ip, info.port, info.spvMode, mChain->blockHeight(),
+        mSentVersionData = new Message::VersionData(mConnection->ip(), mServices, info.ip,
+          info.spvMode, mChain->blockHeight(),
           (isOutgoing() && info.initialBlockDownloadIsComplete() && mChain->isInSync()));
         bool success = sendMessage(mSentVersionData);
         mVersionSent = true;
@@ -1048,11 +1051,10 @@ namespace BitCoin
         if(mConnection == NULL)
         {
             isNewConnection = true;
-            mConnection = new NextCash::Network::Connection(AF_INET6, mAddress.ip, mAddress.port,
-              10);
+            mConnection = new NextCash::Network::Connection(mAddress, 10);
         }
         else if(!isIncoming())
-            mAddress = *mConnection;
+            mAddress = mConnection->ip();
 
         // Verify connection
         if(!mConnection->isOpen())
@@ -1073,12 +1075,10 @@ namespace BitCoin
 
         if(isIncoming())
             NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-              "Incoming Connection %s : %d", mConnection->ipv6Address(),
-              mConnection->port());
+              "Incoming Connection %s", mConnection->ip().text().text());
         else
             NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
-              "Outgoing Connection %s : %d", mConnection->ipv6Address(),
-              mConnection->port());
+              "Outgoing Connection %s", mConnection->ip().text().text());
 
         mIsInitialized = true;
         return true;
@@ -1864,15 +1864,12 @@ namespace BitCoin
                 versionText += timeText;
                 NextCash::Log::add(NextCash::Log::INFO, mName, versionText);
 
-                std::memcpy(mAddress.ip, mReceivedVersionData->transmittingIPv6, 16);
-                mAddress.port = mReceivedVersionData->transmittingPort;
+                mAddress.set(NextCash::Network::IPAddress::IPV6,
+                  mReceivedVersionData->transmittingIPv6, mReceivedVersionData->transmittingPort);
                 mMessageInterpreter.version = mReceivedVersionData->version;
 
-                if(!mAddress.isValid() || mAddress.port == 0)
-                {
-                    std::memcpy(mAddress.ip, mConnection->ipv6Address(), 16);
-                    mAddress.port = mConnection->port();
-                }
+                if(!mAddress.isValid() || mAddress.port() == 0)
+                    mAddress = mConnection->ip();
 
                 info.updatePeer(mAddress, mReceivedVersionData->userAgent,
                   mReceivedVersionData->transmittingServices);
@@ -2053,14 +2050,10 @@ namespace BitCoin
                     NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                       "Received %d peer addresses", addressesData->addresses.size());
 
-                    NextCash::IPAddress ip;
                     for(std::vector<Message::Address>::iterator address =
                       addressesData->addresses.begin(); address != addressesData->addresses.end() &&
                       !mStopRequested; ++address)
-                    {
-                        ip.set(address->ip, address->port);
-                        info.addPeer(ip, address->services);
-                    }
+                        info.addPeer(address->ip, address->services);
 
                     if(isSeed())
                     {

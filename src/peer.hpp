@@ -41,8 +41,8 @@ namespace BitCoin
         {
             try
             {
-                const uint8_t *left = address.ip;
-                const uint8_t *right = dynamic_cast<const Peer *>(pRight)->address.ip;
+                const uint8_t *left = address.ipv6Bytes();
+                const uint8_t *right = dynamic_cast<const Peer *>(pRight)->address.ipv6Bytes();
                 for(unsigned int i = 0; i < INET6_ADDRLEN; ++i, ++left, ++right)
                 {
                     if(*left < *right)
@@ -76,7 +76,7 @@ namespace BitCoin
         uint64_t services;
         NextCash::String userAgent;
         int32_t rating;
-        NextCash::IPAddress address;
+        NextCash::Network::IPAddress address;
         ChainID chainID;
     };
 }

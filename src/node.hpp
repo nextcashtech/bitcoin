@@ -48,7 +48,7 @@ namespace BitCoin
         Node(NextCash::Network::Connection *pConnection, uint32_t pConnectionType,
           uint64_t pServices, Daemon *pDaemon, bool *pStopFlag, bool pAnnounceCompact);
 
-        Node(NextCash::IPAddress &pIPAddress, uint32_t pConnectionType,
+        Node(NextCash::Network::IPAddress &pIPAddress, uint32_t pConnectionType,
              uint64_t pServices, Daemon *pDaemon, bool pAnnounceCompact);
         ~Node();
 
@@ -142,8 +142,7 @@ namespace BitCoin
             return false;
         }
 
-        const NextCash::IPAddress &address() { return mAddress; }
-        const uint8_t *ipv6Bytes() const { return mConnection->ipv6Bytes(); }
+        const NextCash::Network::IPAddress &ip() { return mAddress; }
         bool wasRejected() const { return mRejected; }
 
         // Add statistics to collection and clear them
@@ -205,7 +204,7 @@ namespace BitCoin
 #ifndef SINGLE_THREAD
         NextCash::Thread *mThread;
 #endif
-        NextCash::IPAddress mAddress;
+        NextCash::Network::IPAddress mAddress;
         Daemon *mDaemon;
         Chain *mChain;
         Monitor *mMonitor;

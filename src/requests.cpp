@@ -43,8 +43,8 @@ namespace BitCoin
         mConnectionMutex.lock();
         mConnection = pConnection;
         mConnectionMutex.unlock();
-        NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Requests Connection %s : %d",
-          mConnection->ipv6Address(), mConnection->port());
+        NextCash::Log::addFormatted(NextCash::Log::INFO, mName, "Requests Connection %s",
+          mConnection->ip().text().text());
 
         // Start thread
         mThread = new NextCash::Thread("Request", run, this);
@@ -54,7 +54,7 @@ namespace BitCoin
     RequestChannel::~RequestChannel()
     {
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-          "Disconnecting %s", mConnection->ipv6Address());
+          "Disconnecting %s", mConnection->ip().text().text());
 
         requestStop();
         if(mThread != NULL)
@@ -870,6 +870,27 @@ namespace BitCoin
         {
             // Return block height for specified hash
 
+        }
+        else if(command == "peer")
+        {
+            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received peer request");
+
+            // Get Block at height
+            std::vector<Peer *> peers;
+            Info &info = Info::instance();
+            info.getRandomizedPeers(peers, 1, 0, info.chainID);
+
+            sendData.writeString("peer:");
+            sendData.writeUnsignedLong(0UL);
+            for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end(); ++peer)
+                (*peer)->write(&sendData);
+
+            // Update result size
+            sendData.setWriteOffset(5);
+            sendData.writeUnsignedLong(sendData.length() - 13);
+
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName, "Sending %d peers",
+              peers.size());
         }
         else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,

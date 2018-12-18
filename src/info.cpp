@@ -72,16 +72,8 @@ namespace BitCoin
     {
         chainID = CHAIN_SV;
 
-        // Unknown IP Address
-        std::memset(ip, 0, INET6_ADDRLEN);
-        ip[10] = 255;
-        ip[11] = 255;
-        ip[12] = 127;
-        ip[13] = 0;
-        ip[14] = 0;
-        ip[15] = 1;
-
-        port = 8333; // Default port
+        uint8_t defaultIP[] = {127, 0, 0, 1};
+        ip.set(NextCash::Network::IPAddress::IPV4, defaultIP, 8333);
 #ifdef ANDROID
         spvMode = true;
 #else
@@ -200,16 +192,9 @@ namespace BitCoin
         else if(std::strcmp(name, "mem_pool_low_size") == 0)
             memPoolLowFeeSize = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "ip") == 0)
-        {
-            uint8_t *newIP = NextCash::Network::parseIP(value);
-            if(newIP != NULL)
-            {
-                std::memcpy(ip, newIP, INET6_ADDRLEN);
-                delete[] newIP;
-            }
-        }
+            ip.setText(value);
         else if(std::strcmp(name, "port") == 0)
-            port = std::strtol(value, NULL, 0);
+            ip.setPort(std::strtol(value, NULL, 0));
         else if(std::strcmp(name, "pending_size") == 0)
             pendingSize = std::strtol(value, NULL, 0);
         else if(std::strcmp(name, "pending_blocks") == 0)
@@ -534,7 +519,7 @@ namespace BitCoin
         std::random_shuffle(pPeers.begin(), pPeers.end());
     }
 
-    void Info::addPeerFail(const NextCash::IPAddress &pAddress, int pCount, int pMinimum)
+    void Info::addPeerFail(const NextCash::Network::IPAddress &pAddress, int pCount, int pMinimum)
     {
         if(!pAddress.isValid())
             return;
@@ -584,7 +569,7 @@ namespace BitCoin
         // }
     }
 
-    void Info::markPeerChain(const NextCash::IPAddress &pAddress, ChainID pChainID)
+    void Info::markPeerChain(const NextCash::Network::IPAddress &pAddress, ChainID pChainID)
     {
         if(!pAddress.isValid())
             return;
@@ -611,6 +596,9 @@ namespace BitCoin
                     mPeersModified = true;
                 }
             }
+            else
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INFO_LOG_NAME,
+                  "Peer not found to mark chain %s : %s", chainName(pChainID), pAddress.text().text());
         }
         catch(...)
         {
@@ -618,7 +606,7 @@ namespace BitCoin
         mPeerLock.readUnlock();
     }
 
-    void Info::updatePeer(const NextCash::IPAddress &pAddress, const char *pUserAgent,
+    void Info::updatePeer(const NextCash::Network::IPAddress &pAddress, const char *pUserAgent,
       uint64_t pServices)
     {
         if(!pAddress.isValid() || (pUserAgent != NULL && std::strlen(pUserAgent) > 256) ||
@@ -652,7 +640,7 @@ namespace BitCoin
         mPeerLock.readUnlock();
     }
 
-    void Info::addPeerSuccess(const NextCash::IPAddress &pAddress, int pCount)
+    void Info::addPeerSuccess(const NextCash::Network::IPAddress &pAddress, int pCount)
     {
         if(!pAddress.isValid())
             return;
@@ -682,7 +670,7 @@ namespace BitCoin
         mPeerLock.readUnlock();
     }
 
-    bool Info::addPeer(const NextCash::IPAddress &pAddress, uint64_t pServices)
+    bool Info::addPeer(const NextCash::Network::IPAddress &pAddress, uint64_t pServices)
     {
         if(!pAddress.isValid() || (pServices & Message::VersionData::FULL_NODE_BIT) == 0)
             return false;

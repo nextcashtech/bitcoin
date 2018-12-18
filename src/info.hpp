@@ -35,8 +35,7 @@ namespace BitCoin
 
         ChainID chainID;
 
-        uint8_t ip[INET6_ADDRLEN];
-        uint16_t port;
+        NextCash::Network::IPAddress ip;
         bool spvMode;
 
         // Maximum number of connections incoming and outgoing.
@@ -96,12 +95,13 @@ namespace BitCoin
         // Return list of peers in random order
         void getRandomizedPeers(std::vector<Peer *> &pPeers, int pMinimumRating,
           uint64_t mServicesRequiredMask, ChainID pChainID, int pMaximumRating = 500000);
-        bool addPeer(const NextCash::IPAddress &pAddress, uint64_t pServices);
-        void updatePeer(const NextCash::IPAddress &pAddress, const char *pUserAgent,
+        bool addPeer(const NextCash::Network::IPAddress &pAddress, uint64_t pServices);
+        void updatePeer(const NextCash::Network::IPAddress &pAddress, const char *pUserAgent,
           uint64_t pServices);
-        void markPeerChain(const NextCash::IPAddress &pAddress, ChainID pChainID);
-        void addPeerSuccess(const NextCash::IPAddress &pAddress, int pCount = 1);
-        void addPeerFail(const NextCash::IPAddress &pAddress, int pCount = 1, int pMinimum = -500);
+        void markPeerChain(const NextCash::Network::IPAddress &pAddress, ChainID pChainID);
+        void addPeerSuccess(const NextCash::Network::IPAddress &pAddress, int pCount = 1);
+        void addPeerFail(const NextCash::Network::IPAddress &pAddress, int pCount = 1,
+          int pMinimum = -500);
         unsigned int peerCount() const { return mPeers.size(); }
         void resetPeers();
 

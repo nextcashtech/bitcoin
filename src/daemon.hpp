@@ -18,6 +18,7 @@
 #include "requests.hpp"
 #include "key.hpp"
 #include "monitor.hpp"
+#include "seeds.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -216,12 +217,12 @@ namespace BitCoin
 
         // Query peers from a seed
         // Returns true if connection attempted.
-        bool querySeed(const uint8_t *pIP);
-        const uint8_t *getRandomSeed();
+        bool querySeeds();
+        const Seed *getRandomSeed();
 
         bool mSeedsRandomized;
         ChainID mRandomSeedsChainID;
-        std::vector<const uint8_t *> mRandomSeeds;
+        std::vector<const Seed *> mRandomSeeds;
         unsigned int mConnectionsSinceLastRecruit;
 
         // Nodes
@@ -258,7 +259,7 @@ namespace BitCoin
         void addRejectedIP(const uint8_t *pIP);
         bool isRejectedIP(const uint8_t *pIP);
 
-        bool addNode(NextCash::IPAddress &pIPAddress, uint32_t pType, uint64_t pServices,
+        bool addNode(NextCash::Network::IPAddress &pIPAddress, uint32_t pType, uint64_t pServices,
           bool pAnnounceCompact);
         bool addNode(NextCash::Network::Connection *pConnection, uint32_t pType,
           uint64_t pServices, bool pAnnounceCompact);

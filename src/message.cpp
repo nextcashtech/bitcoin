@@ -603,8 +603,8 @@ namespace BitCoin
             return true;
         }
 
-        VersionData::VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort, uint64_t pReceivingServices,
-                                 const uint8_t *pTransmittingIP, uint16_t pTransmittingPort,
+        VersionData::VersionData(const NextCash::Network::IPAddress &pReceivingIP, uint64_t pReceivingServices,
+                                 const NextCash::Network::IPAddress &pTransmittingIP,
                                  bool pSPVNode, uint32_t pStartBlockHeight, bool pRelay) : Data(VERSION)
         {
             version = PROTOCOL_VERSION;
@@ -620,13 +620,13 @@ namespace BitCoin
 
             // Receiving
             receivingServices = pReceivingServices;
-            std::memcpy(receivingIPv6, pReceivingIP, 16);
-            receivingPort = pReceivingPort;
+            std::memcpy(receivingIPv6, pReceivingIP.ipv6Bytes(), 16);
+            receivingPort = pReceivingIP.port();
 
             // Transmitting
             transmittingServices = services; // Same as services
-            std::memcpy(transmittingIPv6, pTransmittingIP, 16);
-            transmittingPort = pTransmittingPort;
+            std::memcpy(transmittingIPv6, pTransmittingIP.ipv6Bytes(), 16);
+            transmittingPort = pTransmittingIP.port();
 
             // Nonce
             nonce = NextCash::Math::randomLong();
@@ -863,8 +863,8 @@ namespace BitCoin
         {
             pStream->writeUnsignedInt(time);
             pStream->writeUnsignedLong(services);
-            pStream->write(ip, 16);
-            pStream->writeUnsignedShort(NextCash::Endian::convert(port, NextCash::Endian::BIG));
+            pStream->write(ip.ipv6Bytes(), 16);
+            pStream->writeUnsignedShort(NextCash::Endian::convert(ip.port(), NextCash::Endian::BIG));
         }
 
         bool Address::read(NextCash::InputStream *pStream)
@@ -874,8 +874,10 @@ namespace BitCoin
 
             time = pStream->readUnsignedInt();
             services = pStream->readUnsignedLong();
-            pStream->read(ip, 16);
-            port = NextCash::Endian::convert(pStream->readUnsignedShort(), NextCash::Endian::BIG);
+            uint8_t ipBytes[16];
+            pStream->read(ipBytes, 16);
+            ip.set(NextCash::Network::IPAddress::IPV6, ipBytes,
+              NextCash::Endian::convert(pStream->readUnsignedShort(), NextCash::Endian::BIG));
             return true;
         }
 
@@ -1789,9 +1791,11 @@ namespace BitCoin
              * VERSION
              ***********************************************************************************************/
             Interpreter interpreter;
-            uint8_t rIP[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x04, 0x03, 0x02, 0x01 };
-            uint8_t tIP[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x08, 0x07, 0x06, 0x05 };
-            VersionData versionSendData(rIP, 1333, 3, tIP, 1333, false, 125, false);
+            uint8_t rIPBytes[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x04, 0x03, 0x02, 0x01 };
+            uint8_t tIPBytes[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x08, 0x07, 0x06, 0x05 };
+            NextCash::Network::IPAddress rIP(NextCash::Network::IPAddress::IPV6, rIPBytes, 1333);
+            NextCash::Network::IPAddress tIP(NextCash::Network::IPAddress::IPV6, tIPBytes, 1333);
+            VersionData versionSendData(rIP, 3, tIP, false, 125, false);
             NextCash::Buffer messageBuffer;
 
             interpreter.write(&versionSendData, &messageBuffer);
@@ -2017,23 +2021,24 @@ namespace BitCoin
              ***********************************************************************************************/
             AddressesData addressesData;
             Address address;
+            uint8_t ipBytes[4];
 
             address.time = 123;
             address.services = 0x01;
-            address.ip[15] = 0x80;
-            address.port = 321;
+            ipBytes[0] = 0x80;
+            address.ip.set(NextCash::Network::IPAddress::IPV4, ipBytes, 321);
             addressesData.addresses.push_back(address);
 
             address.time = 1234;
             address.services = 0x02;
-            address.ip[15] = 0x88;
-            address.port = 4321;
+            ipBytes[0] = 0x88;
+            address.ip.set(NextCash::Network::IPAddress::IPV4, ipBytes, 4321);
             addressesData.addresses.push_back(address);
 
             address.time = 12345;
             address.services = 0x03;
-            address.ip[15] = 0xF0;
-            address.port = 54321;
+            ipBytes[0] = 0xF0;
+            address.ip.set(NextCash::Network::IPAddress::IPV4, ipBytes, 54321);
             addressesData.addresses.push_back(address);
 
             messageBuffer.clear();
@@ -2065,10 +2070,7 @@ namespace BitCoin
                 if(addressesData.addresses[0].services != addressesReceiveData->addresses[0].services)
                     addressesDataMatches = false;
 
-                if(std::memcmp(addressesData.addresses[0].ip, addressesReceiveData->addresses[0].ip, 16) != 0)
-                    addressesDataMatches = false;
-
-                if(addressesData.addresses[0].port != addressesReceiveData->addresses[0].port)
+                if(addressesData.addresses[0].ip != addressesReceiveData->addresses[0].ip)
                     addressesDataMatches = false;
 
                 if(addressesDataMatches)

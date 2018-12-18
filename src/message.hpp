@@ -170,9 +170,9 @@ namespace BitCoin
             static const unsigned int LIMITED_NODE_BIT = 0x0400; // BIP-0159 "Full" node serving only the last 288 (2 day) blocks
 
             VersionData() : Data(VERSION) { }
-            VersionData(const uint8_t *pReceivingIP, uint16_t pReceivingPort, uint64_t pReceivingServices,
-                        const uint8_t *pTransmittingIP, uint16_t pTransmittingPort,
-                        bool pFullNode, uint32_t pStartBlockHeight, bool pRelay);
+            VersionData(const NextCash::Network::IPAddress &pReceivingIP, uint64_t pReceivingServices,
+                        const NextCash::Network::IPAddress &pTransmittingIP, bool pFullNode,
+                        uint32_t pStartBlockHeight, bool pRelay);
 
             void write(NextCash::OutputStream *pStream);
             bool read(NextCash::InputStream *pStream, unsigned int pSize, int32_t pVersion);
@@ -262,15 +262,12 @@ namespace BitCoin
             {
                 time = 0;
                 services = 0;
-                std::memset(ip, 0, 16);
-                port = 0;
             }
             Address(const Address &pCopy)
             {
                 time = pCopy.time;
                 services = pCopy.services;
-                std::memcpy(ip, pCopy.ip, 16);
-                port = pCopy.port;
+                ip = pCopy.ip;
             }
 
             void write(NextCash::OutputStream *pStream) const;
@@ -280,8 +277,7 @@ namespace BitCoin
             {
                 time = pRight.time;
                 services = pRight.services;
-                std::memcpy(ip, pRight.ip, 16);
-                port = pRight.port;
+                ip = pRight.ip;
                 return *this;
             }
 
@@ -289,15 +285,13 @@ namespace BitCoin
             {
                 time = pRight.time;
                 services = pRight.services;
-                std::memcpy(ip, pRight.address.ip, 16);
-                port = pRight.address.port;
+                ip = pRight.address;
                 return *this;
             }
 
             Time time;
             uint64_t services;
-            uint8_t ip[16];
-            uint16_t port;
+            NextCash::Network::IPAddress ip;
         };
 
         class AddressesData : public Data
