@@ -2355,7 +2355,7 @@ namespace BitCoin
             {
             case CHAIN_ABC:
                 seed = SEEDS_ABC;
-                seedCount = sizeof(SEEDS_ABC) / sizeof(Seed *);
+                seedCount = sizeof(SEEDS_ABC) / sizeof(*SEEDS_ABC);
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Loading %d ABC seeds", seedCount);
                 for(unsigned int i = 0; i < seedCount; ++i, ++seed)
@@ -2363,7 +2363,7 @@ namespace BitCoin
                 break;
             case CHAIN_SV:
                 seed = SEEDS_SV;
-                seedCount = sizeof(SEEDS_SV) / sizeof(Seed *);
+                seedCount = sizeof(SEEDS_SV) / sizeof(*SEEDS_SV);
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
                   "Loading %d SV seeds", seedCount);
                 for(unsigned int i = 0; i < seedCount; ++i, ++seed)
