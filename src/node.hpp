@@ -78,7 +78,7 @@ namespace BitCoin
         bool isScan() const { return mConnectionType & SCAN; }
 
         // Connection for requesting network data.
-        bool isOutgoing() const { return !(mConnectionType & (NOT_OUTGOING)); }
+        bool isOutgoing() const { return !(mConnectionType & NOT_OUTGOING); }
 
         bool isInitialized() const { return mIsInitialized; }
         bool isStopped() const { return mStopped; }

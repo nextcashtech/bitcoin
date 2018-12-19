@@ -129,7 +129,7 @@ namespace BitCoin
         mNodeLock.readLock();
         unsigned int result = 0;
         for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end(); ++node)
-            if((*node)->isReady())
+            if((*node)->isOutgoing() && (*node)->isReady())
                 ++result;
         mNodeLock.readUnlock();
         return result;
@@ -1884,11 +1884,12 @@ namespace BitCoin
             if(mStopping)
                 break;
 
+            if(mChain.headersNeeded())
+                sendHeaderRequest();
+
             if(!mChain.isInSync())
             {
                 time = getTime();
-                if(mChain.headersNeeded() || time - mLastHeaderRequestTime > 30)
-                    sendHeaderRequest();
                 if(mChain.blocksNeeded() || time - lastRequestCheckTime > 30 ||
                   (mChain.pendingBlockCount() == 0 && time - lastRequestCheckTime > 10))
                 {
@@ -1907,8 +1908,6 @@ namespace BitCoin
             }
             else
             {
-                if(mChain.headersNeeded())
-                    sendHeaderRequest();
                 if(mChain.blocksNeeded())
                     sendBlockRequests();
                 if(getTime() - lastTransactionRequest > 2)
@@ -1983,7 +1982,7 @@ namespace BitCoin
             else
                 NextCash::Thread::sleep(200);
 #else
-            NextCash::Thread::sleep(2000);
+            NextCash::Thread::sleep(1000);
 #endif
 
 #ifdef PROFILER_ON

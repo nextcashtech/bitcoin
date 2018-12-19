@@ -359,7 +359,7 @@ namespace BitCoin
             sCacheLock.unlock();
             return true;
         }
-        else
+        else // This is likely okay when reverting as it is just a non-existent file
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_HEADER_LOG_NAME,
               "Failed to remove header file %08x", pFileID);
 

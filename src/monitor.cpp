@@ -640,10 +640,11 @@ namespace BitCoin
 
     void Monitor::ensurePassIsActive(unsigned int pBlockHeight)
     {
-        mMutex.lock();
-        if(mPasses.size() == 0 || mPasses.back().complete)
-            startPass(pBlockHeight);
-        mMutex.unlock();
+        // This can't start a pass before IBD.
+//        mMutex.lock();
+//        if(mPasses.size() == 0 || mPasses.back().complete)
+//            startPass(pBlockHeight);
+//        mMutex.unlock();
     }
 
     void Monitor::startPass(unsigned int pBlockHeight)

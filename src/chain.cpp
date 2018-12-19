@@ -543,27 +543,39 @@ namespace BitCoin
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
           "Reverting from height %d to height %d", headerHeight(), pHeight);
 
+        if(!mInfo.spvMode && !(pLocks & LOCK_PENDING))
+            mPendingLock.writeLock("Revert");
+        if(!(pLocks & LOCK_HEADERS))
+            mHeadersLock.writeLock("Revert");
+        if(!(pLocks & LOCK_PROCESS))
+            mProcessMutex.lock();
+        if(!(pLocks & LOCK_BRANCHES))
+            mBranchLock.lock();
+
         // Revert pending blocks
-        if(mNextBlockHeight - 1 < pHeight)
-        {
-            if(!(pLocks & LOCK_PENDING))
-                mPendingLock.writeLock("Revert");
+        if(!mInfo.spvMode && mNextBlockHeight - 1 < pHeight)
             while(mNextBlockHeight + mPendingBlocks.size() - 1 > pHeight)
             {
                 delete mPendingBlocks.back();
                 mPendingBlocks.pop_back();
             }
-            if(!(pLocks & LOCK_PENDING))
-                mPendingLock.writeUnlock();
-        }
 
         NextCash::Hash hash;
         while(headerHeight() >= pHeight)
         {
-            if(!getHash(headerHeight(), hash, pLocks))
+            if(!getHash(headerHeight(), hash,
+              LOCK_PENDING | LOCK_HEADERS | LOCK_PROCESS | LOCK_BRANCHES))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
                   "Failed to get hash (%d) to revert", headerHeight());
+                if(!(pLocks & LOCK_BRANCHES))
+                    mBranchLock.unlock();
+                if(!(pLocks & LOCK_PROCESS))
+                    mProcessMutex.unlock();
+                if(!(pLocks & LOCK_HEADERS))
+                    mHeadersLock.writeUnlock();
+                if(!mInfo.spvMode && !(pLocks & LOCK_PENDING))
+                    mPendingLock.writeUnlock();
                 return false;
             }
 
@@ -583,6 +595,14 @@ namespace BitCoin
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
                       "Failed to get block (%d) to revert", blockHeight());
+                    if(!(pLocks & LOCK_BRANCHES))
+                        mBranchLock.unlock();
+                    if(!(pLocks & LOCK_PROCESS))
+                        mProcessMutex.unlock();
+                    if(!(pLocks & LOCK_HEADERS))
+                        mHeadersLock.writeUnlock();
+                    if(!mInfo.spvMode && !(pLocks & LOCK_PENDING))
+                        mPendingLock.writeUnlock();
                     return false;
                 }
 
@@ -590,6 +610,14 @@ namespace BitCoin
                 {
                     NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_CHAIN_LOG_NAME,
                       "Failed to revert outputs from block (%d) to revert", blockHeight());
+                    if(!(pLocks & LOCK_BRANCHES))
+                        mBranchLock.unlock();
+                    if(!(pLocks & LOCK_PROCESS))
+                        mProcessMutex.unlock();
+                    if(!(pLocks & LOCK_HEADERS))
+                        mHeadersLock.writeUnlock();
+                    if(!mInfo.spvMode && !(pLocks & LOCK_PENDING))
+                        mPendingLock.writeUnlock();
                     return false;
                 }
 
@@ -605,8 +633,6 @@ namespace BitCoin
                   "Reverting header (%d) : %s", headerHeight(), hash.hex().text());
 
             // Remove hash
-            if(!(pLocks & LOCK_HEADERS))
-                mHeadersLock.writeLock("Remove");
             HashLookupSet &blockSet = mHashLookup[hash.lookup16()];
             blockSet.lock();
             blockSet.remove(hash);
@@ -620,12 +646,7 @@ namespace BitCoin
             mForks.revert(this, mNextHeaderHeight);
             revertLastHeaderStat();
             --mNextHeaderHeight;
-            if(!(pLocks & LOCK_HEADERS))
-                mHeadersLock.writeUnlock();
         }
-
-        if(mMonitor != NULL)
-            mMonitor->revertToHeight(headerHeight());
 
         // Save accumulated work to prevent an invalid value in the file
         saveAccumulatedWork();
@@ -636,7 +657,21 @@ namespace BitCoin
           "New last block (%d)", mNextBlockHeight - 1);
 
         // Remove blocks from block/header files
-        return revertFileHeight(headerHeight());
+        bool success = revertFileHeight(headerHeight());
+
+        if(!(pLocks & LOCK_BRANCHES))
+            mBranchLock.unlock();
+        if(!(pLocks & LOCK_PROCESS))
+            mProcessMutex.unlock();
+        if(!(pLocks & LOCK_HEADERS))
+            mHeadersLock.writeUnlock();
+        if(!mInfo.spvMode && !(pLocks & LOCK_PENDING))
+            mPendingLock.writeUnlock();
+
+        // This has a dependency on the chain header lock, so must be done outside of the locks.
+        if(mMonitor != NULL)
+            mMonitor->revertToHeight(headerHeight());
+        return success;
     }
 
     void Chain::updatePendingBlocks()
@@ -1553,11 +1588,9 @@ namespace BitCoin
                     if(!pBlock->checkSize(this, mNextBlockHeight + offset))
                     {
                         // Block is an invalid size and headers need to be reverted out.
-                        mPendingLock.writeUnlock();
                         addBlackListedHash(pBlock->header.hash());
-                        mProcessMutex.lock();
-                        revert(mNextBlockHeight + offset, LOCK_PROCESS);
-                        mProcessMutex.unlock();
+                        revert(mNextBlockHeight + offset, LOCK_PENDING);
+                        mPendingLock.writeUnlock();
                         return INVALID;
                     }
 
@@ -1607,7 +1640,6 @@ namespace BitCoin
                         {
                             // Block is an invalid size and headers need to be reverted out.
                             addBlackListedHash(pBlock->header.hash());
-                            mPendingLock.writeUnlock();
                             return INVALID;
                         }
 

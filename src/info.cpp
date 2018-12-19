@@ -401,7 +401,10 @@ namespace BitCoin
         file.setInputEndian(NextCash::Endian::LITTLE);
 
         if(!file.isValid())
+        {
+            mPeersRead = true;
             return true;
+        }
 
         mPeerLock.writeLock("Load");
         mPeers.clear();
