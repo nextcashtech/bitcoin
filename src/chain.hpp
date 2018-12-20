@@ -444,7 +444,7 @@ namespace BitCoin
         NextCash::HashList mInvalidHashes;
         std::vector<unsigned int> mBlackListedNodeIDs;
 
-        void addBlackListedHash(const NextCash::Hash &pHash);
+        void addInvalidHash(const NextCash::Hash &pHash);
 
         // Branches being monitored for possible future most proof of work
         std::vector<Branch *> mBranches;

@@ -2426,7 +2426,8 @@ namespace BitCoin
 
     unsigned int Daemon::recruitPeers()
     {
-        NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Recruiting peers");
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+          "Recruiting %s peers", chainName(mInfo.chainID));
         std::vector<Peer *> peers;
         unsigned int newCount = 0;
         bool found;

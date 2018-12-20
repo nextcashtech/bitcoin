@@ -146,16 +146,16 @@ namespace BitCoin
         return result;
     }
 
-    void Chain::addBlackListedHash(const NextCash::Hash &pHash)
+    void Chain::addInvalidHash(const NextCash::Hash &pHash)
     {
         if(!mInvalidHashes.contains(pHash))
         {
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_CHAIN_LOG_NAME,
-              "Added block to black list : %s", pHash.hex().text());
+              "Added header hash to invalid list : %s", pHash.hex().text());
+            mInvalidHashes.push_back(pHash);
             // Keep list at 1024 or less
             if(mInvalidHashes.size() > 1024)
                 mInvalidHashes.erase(mInvalidHashes.begin());
-            mInvalidHashes.push_back(pHash);
         }
     }
 
@@ -453,7 +453,7 @@ namespace BitCoin
             {
                 mHeadersLock.readUnlock();
                 mHeadersLock.writeLock("Black List");
-                addBlackListedHash(pHash);
+                addInvalidHash(pHash);
                 mHeadersLock.writeUnlock();
                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
                   "Rejecting BTC fork block hash : %s", pHash.hex().text());
@@ -750,11 +750,14 @@ namespace BitCoin
         if(mHeaderStats.size() < HEADER_STATS_CACHE_SIZE && mHeaderStatHeight > HEADER_STATS_CACHE_SIZE)
         {
             // Calculate up to 5000 again on front.
-            NextCash::Hash target(32), blockWork(32), accumulatedWork(32);
+            NextCash::Hash target(32), blockWork(32);
             Header header;
             unsigned int accumulatedWorkHeight = mHeaderStatHeight - mHeaderStats.size();
+            NextCash::Hash accumulatedWork = mHeaderStats.front().accumulatedWork;
 
-            accumulatedWork = mHeaderStats.front().accumulatedWork;
+            target.setDifficulty(mHeaderStats.front().targetBits);
+            target.getWork(blockWork);
+            accumulatedWork -= blockWork;
 
             while(mHeaderStats.size() < 5000)
             {
@@ -923,7 +926,7 @@ namespace BitCoin
               "Version %d required", mForks.requiredBlockVersion(mNextHeaderHeight));
             mForks.revert(this, mNextHeaderHeight);
             revertLastHeaderStat();
-            addBlackListedHash(pHeader.hash());
+            addInvalidHash(pHeader.hash());
             return false;
         }
 
@@ -948,7 +951,7 @@ namespace BitCoin
                   mNextHeaderHeight, requiredTargetBits, pHeader.targetBits);
                 mForks.revert(this, mNextHeaderHeight);
                 revertLastHeaderStat();
-                addBlackListedHash(pHeader.hash());
+                addInvalidHash(pHeader.hash());
                 return false;
             }
         }
@@ -1057,7 +1060,7 @@ namespace BitCoin
         //   The validity of the target bits value is checked before adding the full block to the chain.
         if(!pHeader.hasProofOfWork())
         {
-            addBlackListedHash(pHeader.hash());
+            addInvalidHash(pHeader.hash());
             if(!(pLocks & LOCK_HEADERS))
                 mHeadersLock.writeUnlock();
             if(!mInfo.spvMode && !(pLocks & LOCK_PENDING))
@@ -1588,7 +1591,7 @@ namespace BitCoin
                     if(!pBlock->checkSize(this, mNextBlockHeight + offset))
                     {
                         // Block is an invalid size and headers need to be reverted out.
-                        addBlackListedHash(pBlock->header.hash());
+                        addInvalidHash(pBlock->header.hash());
                         revert(mNextBlockHeight + offset, LOCK_PENDING);
                         mPendingLock.writeUnlock();
                         return INVALID;
@@ -1639,7 +1642,7 @@ namespace BitCoin
                         if(!pBlock->checkSize(this, height))
                         {
                             // Block is an invalid size and headers need to be reverted out.
-                            addBlackListedHash(pBlock->header.hash());
+                            addInvalidHash(pBlock->header.hash());
                             return INVALID;
                         }
 
@@ -1747,7 +1750,7 @@ namespace BitCoin
             // Clear pending blocks since they assumed this block was good
             mBlackListedNodeIDs.push_back(nextPending->requestingNode);
             // Add hash to blacklist. So it isn't downloaded again.
-            addBlackListedHash(nextPending->block->header.hash());
+            addInvalidHash(nextPending->block->header.hash());
             // Delete block
             delete nextPending;
             for(std::list<PendingBlockData *>::iterator pending = mPendingBlocks.begin();
