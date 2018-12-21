@@ -636,12 +636,13 @@ namespace BitCoin
             HashLookupSet &blockSet = mHashLookup[hash.lookup16()];
             blockSet.lock();
             blockSet.remove(hash);
+            blockSet.unlock();
 #ifdef LOW_MEM
-            mLastHashes.erase(mLastHashes.end() - 1);
+            if(mLastHashes.size() > 0)
+                mLastHashes.pop_back();
 #else
             mHashes.erase(mHashes.end() - 1);
 #endif
-            blockSet.unlock();
 
             mForks.revert(this, mNextHeaderHeight);
             revertLastHeaderStat();
@@ -651,13 +652,41 @@ namespace BitCoin
         // Save accumulated work to prevent an invalid value in the file
         saveAccumulatedWork();
 
+        bool success = true;
+#ifdef LOW_MEM
+        // Rebuild recent header hashes
+        mLastHashes.clear();
+        mLastHashes.reserve(RECENT_BLOCK_COUNT);
+
+        // Get top block hashes
+        if(mNextHeaderHeight > 0)
+        {
+            unsigned int hashCount = RECENT_BLOCK_COUNT;
+            unsigned int startHeight;
+            if(headerHeight() > hashCount)
+                startHeight = mNextHeaderHeight - hashCount;
+            else
+            {
+                hashCount = mNextHeaderHeight;
+                startHeight = 0;
+            }
+
+            if(!Header::getHashes(startHeight, hashCount, mLastHashes))
+                success = false;
+
+            if(mLastHashes.back() != mLastHeaderHash)
+                success = false;
+        }
+#endif
+
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-          "New last header (%d) : %s", mNextHeaderHeight - 1, mLastHeaderHash.hex().text());
+          "New last header (%d) : %s", headerHeight(), mLastHeaderHash.hex().text());
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-          "New last block (%d)", mNextBlockHeight - 1);
+          "New last block (%d)", headerHeight());
 
         // Remove blocks from block/header files
-        bool success = revertFileHeight(headerHeight());
+        if(!revertFileHeight(headerHeight()))
+            success = false;
 
         if(!(pLocks & LOCK_BRANCHES))
             mBranchLock.unlock();
