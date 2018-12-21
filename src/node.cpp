@@ -1003,7 +1003,7 @@ namespace BitCoin
         bool success = sendMessage(&pingData);
         if(success)
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Sent ping");
+            NextCash::Log::add(NextCash::Log::DEBUG, mName, "Sent ping");
             mLastPingNonce = pingData.nonce;
             mLastPingTime = time;
         }
@@ -1945,7 +1945,7 @@ namespace BitCoin
                 break;
             }
             case Message::PONG:
-                NextCash::Log::add(NextCash::Log::VERBOSE, mName, "Received pong");
+                NextCash::Log::add(NextCash::Log::DEBUG, mName, "Received pong");
                 if(((Message::PongData *)message)->nonce != 0 &&
                   mLastPingNonce != ((Message::PongData *)message)->nonce)
                 {
@@ -1958,7 +1958,7 @@ namespace BitCoin
                 {
                     if(mPingRoundTripTime == 0xffffffffffffffff)
                     {
-                         NextCash::Log::add(NextCash::Log::VERBOSE, mName,
+                         NextCash::Log::add(NextCash::Log::DEBUG, mName,
                            "Received round trip pong");
                         mPingRoundTripTime = getTimeMilliseconds() - mLastPingTime;
                         if(!isIncoming())

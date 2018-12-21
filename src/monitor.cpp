@@ -1018,41 +1018,42 @@ namespace BitCoin
         {
             for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
               mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
-            {
-                // Subtract "spends" in inputs.
-                for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
-                  index != (*trans)->spendInputs.end(); ++index)
-                    if(getOutput((*trans)->transaction->inputs[*index].outpoint.transactionID,
-                      (*trans)->transaction->inputs[*index].outpoint.index, pIncludePending,
-                      output) && getPayAddresses(output, payAddresses, true))
-                    {
-                        for(NextCash::HashList::iterator hash = payAddresses.begin();
-                          hash != payAddresses.end(); ++hash)
-                            for(std::vector<Key *>::iterator key = pChainKeyBegin;
-                              key != pChainKeyEnd; ++key)
-                                if((*key)->findAddress(*hash) != NULL)
-                                {
-                                    result -= output.amount;
-                                    break;
-                                }
-                    }
+                if((*trans)->transaction)
+                {
+                    // Subtract "spends" in inputs.
+                    for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
+                      index != (*trans)->spendInputs.end(); ++index)
+                        if(getOutput((*trans)->transaction->inputs[*index].outpoint.transactionID,
+                          (*trans)->transaction->inputs[*index].outpoint.index, pIncludePending,
+                          output) && getPayAddresses(output, payAddresses, true))
+                        {
+                            for(NextCash::HashList::iterator hash = payAddresses.begin();
+                              hash != payAddresses.end(); ++hash)
+                                for(std::vector<Key *>::iterator key = pChainKeyBegin;
+                                  key != pChainKeyEnd; ++key)
+                                    if((*key)->findAddress(*hash) != NULL)
+                                    {
+                                        result -= output.amount;
+                                        break;
+                                    }
+                        }
 
-                // Add "pays" in outputs.
-                for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
-                  index != (*trans)->payOutputs.end(); ++index)
-                    if(getPayAddresses((*trans)->transaction->outputs[*index], payAddresses, true))
-                    {
-                        for(NextCash::HashList::iterator hash = payAddresses.begin();
-                          hash != payAddresses.end(); ++hash)
-                            for(std::vector<Key *>::iterator key = pChainKeyBegin;
-                              key != pChainKeyEnd; ++key)
-                                if((*key)->findAddress(*hash) != NULL)
-                                {
-                                    result += (*trans)->transaction->outputs[*index].amount;
-                                    break;
-                                }
-                    }
-            }
+                    // Add "pays" in outputs.
+                    for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
+                      index != (*trans)->payOutputs.end(); ++index)
+                        if(getPayAddresses((*trans)->transaction->outputs[*index], payAddresses, true))
+                        {
+                            for(NextCash::HashList::iterator hash = payAddresses.begin();
+                              hash != payAddresses.end(); ++hash)
+                                for(std::vector<Key *>::iterator key = pChainKeyBegin;
+                                  key != pChainKeyEnd; ++key)
+                                    if((*key)->findAddress(*hash) != NULL)
+                                    {
+                                        result += (*trans)->transaction->outputs[*index].amount;
+                                        break;
+                                    }
+                        }
+                }
         }
 
         mMutex.unlock();
@@ -1126,23 +1127,25 @@ namespace BitCoin
             // Get pending outputs
             for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
               mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
-            {
-                for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
-                  index != (*trans)->payOutputs.end(); ++index)
-                    if(getPayAddresses((*trans)->transaction->outputs[*index], payAddresses, true))
-                    {
-                        for(NextCash::HashList::iterator hash = payAddresses.begin();
-                          hash != payAddresses.end(); ++hash)
-                            if(containsAddress(*hash, pChainKeyBegin, pChainKeyEnd))
-                            {
-                                pOutputs.emplace_back((*trans)->transaction->hash(), *index);
-                                pOutputs.back().output =
-                                  new Output((*trans)->transaction->outputs[*index]);
-                                pOutputs.back().confirmations = 0;
-                                break;
-                            }
-                    }
-            }
+                if((*trans)->transaction)
+                {
+                    for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
+                      index != (*trans)->payOutputs.end(); ++index)
+                        if(getPayAddresses((*trans)->transaction->outputs[*index], payAddresses,
+                          true))
+                        {
+                            for(NextCash::HashList::iterator hash = payAddresses.begin();
+                              hash != payAddresses.end(); ++hash)
+                                if(containsAddress(*hash, pChainKeyBegin, pChainKeyEnd))
+                                {
+                                    pOutputs.emplace_back((*trans)->transaction->hash(), *index);
+                                    pOutputs.back().output =
+                                      new Output((*trans)->transaction->outputs[*index]);
+                                    pOutputs.back().confirmations = 0;
+                                    break;
+                                }
+                        }
+                }
         }
 
         // Remove spent
@@ -1264,7 +1267,7 @@ namespace BitCoin
 
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mTransactions.begin(); trans != mTransactions.end(); ++trans)
-            if((*trans)->transaction->hash() == pID)
+            if((*trans)->transaction && (*trans)->transaction->hash() == pID)
             {
                 pTransaction.transaction = (*trans)->transaction;
                 pTransaction.blockHash = (*trans)->blockHash;
@@ -1277,7 +1280,7 @@ namespace BitCoin
 
         for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
           mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
-            if((*trans)->transaction->hash() == pID)
+            if((*trans)->transaction && (*trans)->transaction->hash() == pID)
             {
                 pTransaction.transaction = (*trans)->transaction;
                 pTransaction.blockHash = (*trans)->blockHash;
@@ -1367,61 +1370,62 @@ namespace BitCoin
         {
             for(NextCash::HashContainerList<SPVTransactionData *>::Iterator trans =
               mPendingTransactions.begin(); trans != mPendingTransactions.end(); ++trans)
-            {
-                added = false;
-
-                for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
-                  index != (*trans)->spendInputs.end() && !added; ++index)
+                if((*trans)->transaction)
                 {
-                    if(getOutput((*trans)->transaction->inputs[*index].outpoint.transactionID,
-                      (*trans)->transaction->inputs[*index].outpoint.index, false, output) &&
-                      getPayAddresses(output, payAddresses, true))
+                    added = false;
+
+                    for(std::vector<unsigned int>::iterator index = (*trans)->spendInputs.begin();
+                      index != (*trans)->spendInputs.end() && !added; ++index)
                     {
-                        for(NextCash::HashList::iterator hash = payAddresses.begin();
-                          hash != payAddresses.end(); ++hash)
-                            for(std::vector<Key *>::iterator key = pChainKeyBegin;
-                              key != pChainKeyEnd; ++key)
-                                if((*key)->findAddress(*hash) != NULL)
-                                {
-                                    pTransactions.emplace_back();
-                                    newTransaction = &pTransactions.back();
-                                    newTransaction->transaction = (*trans)->transaction;
-                                    newTransaction->blockHash = (*trans)->blockHash;
-                                    newTransaction->blockHeight = (*trans)->blockHeight;
-                                    newTransaction->nodesVerified = (int)(*trans)->nodes.size();
-                                    updateRelatedTransactionData(*newTransaction, pChainKeyBegin,
-                                      pChainKeyEnd);
-                                    added = true;
-                                    break;
-                                }
+                        if(getOutput((*trans)->transaction->inputs[*index].outpoint.transactionID,
+                          (*trans)->transaction->inputs[*index].outpoint.index, false, output) &&
+                          getPayAddresses(output, payAddresses, true))
+                        {
+                            for(NextCash::HashList::iterator hash = payAddresses.begin();
+                              hash != payAddresses.end(); ++hash)
+                                for(std::vector<Key *>::iterator key = pChainKeyBegin;
+                                  key != pChainKeyEnd; ++key)
+                                    if((*key)->findAddress(*hash) != NULL)
+                                    {
+                                        pTransactions.emplace_back();
+                                        newTransaction = &pTransactions.back();
+                                        newTransaction->transaction = (*trans)->transaction;
+                                        newTransaction->blockHash = (*trans)->blockHash;
+                                        newTransaction->blockHeight = (*trans)->blockHeight;
+                                        newTransaction->nodesVerified = (int)(*trans)->nodes.size();
+                                        updateRelatedTransactionData(*newTransaction, pChainKeyBegin,
+                                          pChainKeyEnd);
+                                        added = true;
+                                        break;
+                                    }
+                        }
+                    }
+
+                    for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
+                      index != (*trans)->payOutputs.end() && !added; ++index)
+                    {
+                        if(getPayAddresses((*trans)->transaction->outputs[*index], payAddresses, true))
+                        {
+                            for(NextCash::HashList::iterator hash = payAddresses.begin();
+                              hash != payAddresses.end(); ++hash)
+                                for(std::vector<Key *>::iterator key = pChainKeyBegin;
+                                  key != pChainKeyEnd; ++key)
+                                    if((*key)->findAddress(*hash) != NULL)
+                                    {
+                                        pTransactions.emplace_back();
+                                        newTransaction = &pTransactions.back();
+                                        newTransaction->transaction = (*trans)->transaction;
+                                        newTransaction->blockHash = (*trans)->blockHash;
+                                        newTransaction->blockHeight = (*trans)->blockHeight;
+                                        newTransaction->nodesVerified = (int)(*trans)->nodes.size();
+                                        updateRelatedTransactionData(*newTransaction, pChainKeyBegin,
+                                          pChainKeyEnd);
+                                        added = true;
+                                        break;
+                                    }
+                        }
                     }
                 }
-
-                for(std::vector<unsigned int>::iterator index = (*trans)->payOutputs.begin();
-                  index != (*trans)->payOutputs.end() && !added; ++index)
-                {
-                    if(getPayAddresses((*trans)->transaction->outputs[*index], payAddresses, true))
-                    {
-                        for(NextCash::HashList::iterator hash = payAddresses.begin();
-                          hash != payAddresses.end(); ++hash)
-                            for(std::vector<Key *>::iterator key = pChainKeyBegin;
-                              key != pChainKeyEnd; ++key)
-                                if((*key)->findAddress(*hash) != NULL)
-                                {
-                                    pTransactions.emplace_back();
-                                    newTransaction = &pTransactions.back();
-                                    newTransaction->transaction = (*trans)->transaction;
-                                    newTransaction->blockHash = (*trans)->blockHash;
-                                    newTransaction->blockHeight = (*trans)->blockHeight;
-                                    newTransaction->nodesVerified = (int)(*trans)->nodes.size();
-                                    updateRelatedTransactionData(*newTransaction, pChainKeyBegin,
-                                      pChainKeyEnd);
-                                    added = true;
-                                    break;
-                                }
-                    }
-                }
-            }
         }
 
         mMutex.unlock();
@@ -1999,7 +2003,6 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   "Pending transaction accepted on first node [%d] : %s", pNodeID,
                   pTransactionHash.hex().text());
-                ++mChangeID;
                 mPendingTransactions.insert(pTransactionHash, newPendingTransaction);
                 result = true; // Need transaction
             }
@@ -2013,7 +2016,6 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   "Pending transaction accepted on %d nodes. [%d] : %s",
                   (*pendingTransaction)->nodes.size(), pNodeID, pTransactionHash.hex().text());
-                ++mChangeID;
             }
         }
         else
@@ -2167,7 +2169,8 @@ namespace BitCoin
                 if(pTransaction->amount > 0)
                 {
                     subject = "Bitcoin Cash Receive Confirmed";
-                    message.writeFormatted("Receive confirmed for %0.8f bitcoins in block %d\nNew Balance : %0.8f\nTransaction : %s",
+                    message.writeFormatted(
+                      "Receive confirmed for %0.8f bitcoins in block %d\nNew Balance : %0.8f\nTransaction : %s",
                       bitcoins(pTransaction->amount), pTransaction->blockHeight,
                       bitcoins(balance(true)), pTransaction->transaction->hash().hex().text());
                     NextCash::Log::addFormatted(NextCash::Log::INFO,
@@ -2178,7 +2181,8 @@ namespace BitCoin
                 else
                 {
                     subject = "Bitcoin Cash Send Confirmed";
-                    message.writeFormatted("Send confirmed for %0.8f bitcoins in block %d.\nNew Balance : %0.8f\nTransaction : %s",
+                    message.writeFormatted(
+                      "Send confirmed for %0.8f bitcoins in block %d.\nNew Balance : %0.8f\nTransaction : %s",
                       -bitcoins(pTransaction->amount), pTransaction->blockHeight,
                       bitcoins(balance(true)), pTransaction->transaction->hash().hex().text());
                     NextCash::Log::addFormatted(NextCash::Log::INFO,
