@@ -1997,7 +1997,7 @@ namespace BitCoin
               mPendingTransactions.get(pTransactionHash);
             if(pendingTransaction == mPendingTransactions.end())
             {
-                // Add new pending transaction
+                // Create new pending transaction
                 SPVTransactionData *newPendingTransaction = new SPVTransactionData();
                 newPendingTransaction->addNode(pNodeID);
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
@@ -2005,14 +2005,16 @@ namespace BitCoin
                   pTransactionHash.hex().text());
                 mPendingTransactions.insert(pTransactionHash, newPendingTransaction);
                 result = true; // Need transaction
+                ++mChangeID;
             }
             else
             {
-                // Set true if still need transaction
+                // Set true if transaction data is still needed.
                 result = !(*pendingTransaction)->transaction;
 
                 // Add node as accepting node
-                (*pendingTransaction)->addNode(pNodeID);
+                if((*pendingTransaction)->addNode(pNodeID) && pNodeID != 0)
+                    ++mChangeID;
                 NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_MONITOR_LOG_NAME,
                   "Pending transaction accepted on %d nodes. [%d] : %s",
                   (*pendingTransaction)->nodes.size(), pNodeID, pTransactionHash.hex().text());
