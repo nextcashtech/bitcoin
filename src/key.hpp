@@ -21,6 +21,9 @@
 #include <cstdint>
 #include <cstring>
 
+#define HARDENED 0x80000000
+#define DEFAULT_GAP 20
+
 
 namespace BitCoin
 {
@@ -175,12 +178,13 @@ namespace BitCoin
 
         // Keys with indices greater than or equal to this are "hardened", meaning the private keys
         //   are required to derive children.
-        static const uint32_t HARDENED_LIMIT = 0x80000000;
+        // static const uint32_t HARDENED = 0x80000000;
 
         // Depth when no hierarchy is present
         static const uint8_t NO_DEPTH = 0xff;
 
-        enum Version { MAINNET_PRIVATE, MAINNET_PUBLIC, TESTNET_PRIVATE, TESTNET_PUBLIC };
+        enum Version { MAINNET_PRIVATE, MAINNET_PUBLIC, TESTNET_PRIVATE, TESTNET_PUBLIC,
+          MAINNET_PUBKEY_HASH = 0xfe, EMPTY = 0xff };
 
         Key() : mChildLock("KeyChild") { mPublicKey = NULL; clear(); }
         Key(Key &pCopy);
@@ -196,9 +200,10 @@ namespace BitCoin
         bool decodePrivateKey(const char *pText);
         NextCash::String encodePrivateKey();
 
-        bool isPrivate() const { return mKey[0] == 0; }
-        bool isHardened() const { return mIndex >= HARDENED_LIMIT; }
-        const Version version() const { return (Version)mVersion; }
+        bool isEmpty() const { return mVersion == EMPTY; }
+        bool isPrivate() const { return !isEmpty() && mKey[0] == 0; }
+        bool isHardened() const { return mIndex >= HARDENED; }
+        const Version version() const { return mVersion; }
         uint8_t depth() const { return mDepth; }
         const uint8_t *fingerPrint() const { return mFingerPrint; }
         const uint8_t *parentFingerPrint() const { return mParentFingerPrint; }
@@ -268,10 +273,15 @@ namespace BitCoin
          * BIP-0044 Derivation Paths
          *   Path : Master / Purpose / Coin / Account / Chain
          *
+         * Coin Values (all hardened)
+         *   BTC : 0'
+         *   BCH : 145'
+         *   BSV : 236'
+         *
          * BIP-0044 Hierarchy levels are defined as such. (' after key index means hardened)
          *   Master  - Top level key generated from seed.
          *   Purpose - Separates different derivation path methods. Default 44'.
-         *   Coin    - Separates different coins. Default 0'.
+         *   Coin    - Separates different coins. Default 0' (BTC).
          *   Account - Separates different "identities". Like separate bank accounts. Default 0.
          *   Chain   - Parent of address keys. Default 0 for external "receiving" addresses and 1
          *     for internal "change" addresses.
@@ -288,12 +298,14 @@ namespace BitCoin
          * Coin and Account value of 0xffffffff means use default for derivation path
          *   method.
          ******************************************************************************************/
-        enum DerivationPathMethod { UNKNOWN = 0, SIMPLE = 1, BIP0032 = 2, BIP0044 = 3,
-          INDIVIDUAL = 4 };
+        enum DerivationPathMethod { DERIVE_UNKNOWN = 0, SIMPLE = 1, BIP0032 = 2, BIP0044 = 3,
+          INDIVIDUAL = 4, DERIVE_CUSTOM = 5 };
         enum CoinIndex
         {
-            BITCOIN      = 0x80000000, // 0x00'
-            BITCOIN_CASH = 0x80000091  // 0x91'
+            COIN_UNDEFINED    = 0xffffffff,
+            COIN_BITCOIN      = 0x80000000, // 0'
+            COIN_BITCOIN_CASH = 0x80000091, // 145'
+            COIN_BITCOIN_SV   = 0x800000ec  // 236'
         };
 
         const char *derivationPathMethodName(DerivationPathMethod pMethod)
@@ -301,7 +313,7 @@ namespace BitCoin
             switch(pMethod)
             {
             default:
-            case UNKNOWN:
+            case DERIVE_UNKNOWN:
                 return "Unknown";
             case SIMPLE:
                 return "Simple";
@@ -314,8 +326,8 @@ namespace BitCoin
 
         // Return "chain" key with which to generate/lookup address keys. Requires master key as
         //   top key to ensure correct full path.
-        Key *chainKey(uint32_t pChain, DerivationPathMethod pMethod = BIP0044,
-          uint32_t pAccount = 0xffffffff, uint32_t pCoin = 0xffffffff);
+        Key *chainKey(uint32_t pChain, DerivationPathMethod pMethod, uint32_t pAccount,
+          uint32_t pCoin);
 
         // Updates gap (unused addresses)
         // Call only on "chain" key (parent of address keys).
@@ -350,6 +362,8 @@ namespace BitCoin
         // For public only key, creates child public key for specified index.
         Key *deriveChild(uint32_t pIndex, bool pLocked = false);
 
+        Key *derivePath(const std::vector<uint32_t> &pPath);
+
         // Seed initialization
         bool loadBinarySeed(Network pNetwork, NextCash::InputStream *pStream);
 
@@ -374,7 +388,6 @@ namespace BitCoin
         static secp256k1_context *sContext;
         static unsigned int sContextFlags;
         static NextCash::MutexWithConstantName sMutex;
-        static const uint32_t sVersionValues[4];
 
         static bool test();
 
@@ -382,7 +395,7 @@ namespace BitCoin
 
         bool finalize();
 
-        uint8_t  mVersion;
+        Version  mVersion;
         uint8_t  mDepth;
         uint8_t  mParentFingerPrint[4]; // First 4 bytes of parent's Hash160. Zeros for master.
         uint32_t mIndex;
@@ -427,13 +440,17 @@ namespace BitCoin
         bool isSynchronized(unsigned int pOffset);
         bool isBackedUp(unsigned int pOffset);
         Key::DerivationPathMethod derivationPathMethod(unsigned int pOffset);
-        int32_t createdDate(unsigned int pOffset);
+        void getDerivationPath(unsigned int pOffset, unsigned int pChainOffset,
+          std::vector<uint32_t> &pPath);
+        Time createdDate(unsigned int pOffset);
+        unsigned int gap(unsigned int pOffset);
         bool passStarted(unsigned int pOffset);
         std::vector<Key *> *chainKeys(unsigned int pOffset);
         Key *chainKey(unsigned int pOffset, uint32_t pIndex);
 
         void setName(unsigned int pOffset, const char *pName);
         void setBackedUp(unsigned int pOffset);
+        void setGap(unsigned int pOffset, unsigned int pGap);
 
         // These functions require private keys to be loaded/decrypted.
         bool isPrivateLoaded() { return mPrivateLoaded; }
@@ -442,10 +459,17 @@ namespace BitCoin
 
         bool synchronize(unsigned int pOffset);
 
-        int addSeed(const char *pSeed, Key::DerivationPathMethod pMethod, int32_t pCreatedDate);
+        // pPath is path to "account" key.
+        //   Indices 0 and 1 under that will be used as receiving and change keys.
+        int addSeed(const char *pSeed, Key::DerivationPathMethod pMethod,
+          const std::vector<uint32_t> &pAccountPath, unsigned int pReceivingIndex,
+          unsigned int pChangeIndex, int32_t pCreatedDate);
 
-        int addKey(const char *pEncodedKey, Key::DerivationPathMethod pDerivationMethod,
-          int32_t pCreatedDate);
+        int addEncodedKey(const char *pEncodedKey, Key::DerivationPathMethod pMethod,
+          const std::vector<uint32_t> &pAccountPath, unsigned int pReceivingIndex,
+          unsigned int pChangeIndex, int32_t pCreatedDate);
+
+        int addIndividualKey(Key *pIndividualKey, int32_t pCreatedDate);
 
         // Load a key from text
         // Valid values are:
@@ -457,9 +481,9 @@ namespace BitCoin
         //   1 = unknown failure
         //   2 = invalid format
         //   3 = already exists
-        //   4 = invalid derivation method for key
+        //   4 = invalid derivation
         //   5 = encryption key needed
-        int loadKey(const char *pText, Key::DerivationPathMethod pMethod, int32_t pCreatedDate);
+        int addFromChainKeys(Key *pReceivingKey, Key *pChangeKey, int32_t pCreatedDate);
 
         // Load keys from a text stream
         // Valid lines of text are:
@@ -477,7 +501,7 @@ namespace BitCoin
         // Keep a specified number of unused addresses ahead of any used address.
         // Sets pNewAddresses to true if new addresses are generated.
         // Returns the key matching the hash or NULL if none found.
-        Key *markUsed(const NextCash::Hash &pHash, unsigned int pGap, bool &pNewAddresses);
+        Key *markUsed(const NextCash::Hash &pHash, bool &pNewAddresses);
 
         void write(NextCash::OutputStream *pStream) const;
         bool read(NextCash::InputStream *pStream);
@@ -491,7 +515,12 @@ namespace BitCoin
 
     private:
 
-        int add(Key *pKey, Key::DerivationPathMethod pMethod, int32_t pCreatedDate);
+        int addKeyMethod(Key *pKey, Key::DerivationPathMethod pMethod, Key::CoinIndex pCoinIndex,
+          int32_t pCreatedDate);
+
+        int addKeyPath(Key *pKey, Key::DerivationPathMethod pMethod,
+          const std::vector<uint32_t> &pAccountPath, unsigned int pReceivingIndex,
+          unsigned int pChangeIndex, int32_t pCreatedDate);
 
         bool mLoaded;
         std::vector<PublicKeyData *> mKeys;

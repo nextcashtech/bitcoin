@@ -1011,6 +1011,7 @@ namespace BitCoin
         switch(mVersion)
         {
             case MAINNET_PUBLIC:
+            case MAINNET_PUBKEY_HASH:
                 type = AddressType::MAIN_PUB_KEY_HASH;
                 break;
             case TESTNET_PUBLIC:
@@ -1034,7 +1035,8 @@ namespace BitCoin
     void Key::clear()
     {
         mChildLock.lock();
-        for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
+        for(std::vector<Key *>::iterator child = mChildren.begin(); child != mChildren.end();
+          ++child)
             delete *child;
         mChildren.clear();
         mChildLock.unlock();
@@ -1043,11 +1045,12 @@ namespace BitCoin
             delete mPublicKey;
         mPublicKey = NULL;
 
-        mVersion = 0;
+        mVersion = EMPTY;
         mDepth = 0;
         std::memset(mParentFingerPrint, 0, 4);
         mIndex = 0;
 
+        // Double clear memory
         std::memset(mChainCode, 0, 32);
         std::memset(mKey, 0, 33);
         std::memset(mChainCode, 0xff, 32);
@@ -1205,17 +1208,38 @@ namespace BitCoin
     {
         clear();
 
+        mVersion = MAINNET_PUBKEY_HASH;
         mDepth = NO_DEPTH;
         mIndex = NO_DEPTH;
         mHash = pHash;
+        mKey[0] = 0xff; // Not private or public
+        std::memcpy(mKey + 1, mHash.data(), PUB_KEY_HASH_SIZE);
     }
-
-    const uint32_t Key::sVersionValues[4] = { 0x0488ADE4, 0x0488B21E, 0x04358394, 0x043587CF };
 
     void Key::write(NextCash::OutputStream *pStream) const
     {
         pStream->setOutputEndian(NextCash::Endian::BIG);
-        pStream->writeUnsignedInt(sVersionValues[mVersion]);
+        switch(mVersion)
+        {
+        case MAINNET_PRIVATE:
+            pStream->writeUnsignedInt(0x0488ADE4);
+            break;
+        case MAINNET_PUBLIC:
+            pStream->writeUnsignedInt(0x0488B21E);
+            break;
+        case TESTNET_PRIVATE:
+            pStream->writeUnsignedInt(0x04358394);
+            break;
+        case TESTNET_PUBLIC:
+            pStream->writeUnsignedInt(0x043587CF);
+            break;
+        case MAINNET_PUBKEY_HASH:
+            pStream->writeUnsignedInt(0x000000fe);
+            break;
+        case EMPTY:
+            pStream->writeUnsignedInt(0x000000ff);
+            break;
+        }
         pStream->writeByte(mDepth);
         pStream->write(mParentFingerPrint, 4);
         pStream->writeUnsignedInt(mIndex);
@@ -1246,6 +1270,12 @@ namespace BitCoin
         case 0x043587CF:
             mVersion = TESTNET_PUBLIC;
             break;
+        case 0x000000fe:
+            mVersion = MAINNET_PUBKEY_HASH;
+            break;
+        case 0x000000ff:
+            mVersion = EMPTY;
+            break;
         default:
             return false;
         }
@@ -1255,7 +1285,9 @@ namespace BitCoin
         pStream->read(mChainCode, 32);
         pStream->read(mKey, 33);
 
-        if(!isPrivate())
+        if(mVersion == MAINNET_PUBKEY_HASH)
+            mHash.write(mKey + 1, PUB_KEY_HASH_SIZE);
+        else if(!isPrivate())
         {
             // Calculate hash
             NextCash::Digest hash(NextCash::Digest::SHA256_RIPEMD160);
@@ -1269,8 +1301,12 @@ namespace BitCoin
     void Key::writeTree(NextCash::OutputStream *pStream)
     {
         write(pStream);
+
+        if(isEmpty())
+            return;
+
         pStream->writeByte(mUsed);
-        if(isPrivate())
+        if(isPrivate() && mPublicKey != NULL)
             mPublicKey->writeTree(pStream);
 
         mChildLock.lock();
@@ -1284,6 +1320,10 @@ namespace BitCoin
     {
         if(!read(pStream))
             return false;
+
+        if(isEmpty())
+            return true;
+
         mUsed = pStream->readByte();
         if(isPrivate())
         {
@@ -1317,6 +1357,9 @@ namespace BitCoin
 
     NextCash::String Key::encode() const
     {
+        if(mVersion == MAINNET_PUBKEY_HASH)
+            return address();
+
         NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
         NextCash::Buffer data, checkSum;
         NextCash::String result;
@@ -1485,15 +1528,15 @@ namespace BitCoin
 
     bool Key::finalize()
     {
+        if(mPublicKey != NULL)
+            delete mPublicKey;
+
         unsigned int contextFlags = SECP256K1_CONTEXT_VERIFY;
         if(isPrivate())
             contextFlags = SECP256K1_CONTEXT_SIGN;
         secp256k1_context *thisContext = context(contextFlags);
         NextCash::Digest digest(NextCash::Digest::SHA256_RIPEMD160);
         NextCash::Buffer result;
-
-        if(mPublicKey != NULL)
-            delete mPublicKey;
 
         if(isPrivate())
         {
@@ -1538,7 +1581,8 @@ namespace BitCoin
             if(compressedLength != 33)
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "Failed to write compressed public key for private child key. Invalid return length : %d", compressedLength);
+                  "Failed to write compressed public key for private child key. Invalid return length : %d",
+                  compressedLength);
                 return false;
             }
 
@@ -1574,7 +1618,8 @@ namespace BitCoin
 
         mChildLock.lock();
         Key *result;
-        for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
+        for(std::vector<Key *>::iterator child = mChildren.begin(); child != mChildren.end();
+          ++child)
         {
             result = (*child)->findAddress(pHash);
             if(result != NULL)
@@ -1588,7 +1633,8 @@ namespace BitCoin
         return NULL;
     }
 
-    Key *Key::chainKey(uint32_t pChain, DerivationPathMethod pMethod, uint32_t pAccount, uint32_t pCoin)
+    Key *Key::chainKey(uint32_t pChain, DerivationPathMethod pMethod, uint32_t pAccount,
+      uint32_t pCoin)
     {
         switch(pMethod)
         {
@@ -1601,7 +1647,7 @@ namespace BitCoin
         case BIP0032: // m/account/chain
         {
             if(pAccount == 0xffffffff)
-                pAccount = Key::HARDENED_LIMIT; // Default
+                pAccount = HARDENED; // Default
 
             Key *account = NULL;
             if(mDepth == 0) // Master key
@@ -1616,20 +1662,20 @@ namespace BitCoin
             // Purpose
             Key *purpose = NULL;
             if(mDepth == 0) // Master key
-                purpose = deriveChild(Key::HARDENED_LIMIT + 44);
+                purpose = deriveChild(HARDENED + 44);
             if(purpose == NULL)
                 return NULL;
 
             // Coin
             if(pCoin == 0xffffffff)
-                pCoin = BITCOIN; // Default
+                pCoin = COIN_BITCOIN; // Default
             Key *coin = purpose->deriveChild(pCoin);
             if(coin == NULL)
                 return NULL;
 
             // Account
             if(pAccount == 0xffffffff)
-                pAccount = Key::HARDENED_LIMIT; // Default
+                pAccount = HARDENED; // Default
             Key *account = NULL;
             account = coin->deriveChild(pAccount);
             if(account == NULL)
@@ -1703,7 +1749,8 @@ namespace BitCoin
         unsigned int lastIndex = 0;
 
         mChildLock.lock();
-        for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
+        for(std::vector<Key *>::iterator child = mChildren.begin(); child != mChildren.end();
+          ++child)
         {
             if(result != NULL)
             {
@@ -1790,7 +1837,8 @@ namespace BitCoin
         {
             // Check if pOther is below this node in the hierarchy
             mChildLock.lock();
-            for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
+            for(std::vector<Key *>::iterator child = mChildren.begin(); child != mChildren.end();
+              ++child)
                 if((*child)->synchronize(pOther))
                 {
                     mChildLock.unlock();
@@ -1824,7 +1872,8 @@ namespace BitCoin
         pChildren.clear();
         pChildren.reserve(mChildren.size());
         mChildLock.lock();
-        for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
+        for(std::vector<Key *>::iterator child = mChildren.begin(); child != mChildren.end();
+          ++child)
             pChildren.push_back(*child);
         mChildLock.unlock();
     }
@@ -1833,7 +1882,8 @@ namespace BitCoin
     {
         if(!pLocked)
             mChildLock.lock();
-        for(std::vector<Key *>::iterator child=mChildren.begin();child!=mChildren.end();++child)
+        for(std::vector<Key *>::iterator child = mChildren.begin(); child != mChildren.end();
+          ++child)
             if((*child)->index() == pIndex)
             {
                 if(!pLocked)
@@ -1856,13 +1906,14 @@ namespace BitCoin
 
         if(pHash.size() != 32)
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Wrong size hash to sign");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Wrong size hash to sign");
             return false;
         }
 
         secp256k1_ecdsa_signature signature;
-        if(!secp256k1_ecdsa_sign(context(SECP256K1_CONTEXT_SIGN), &signature, pHash.data(), mKey + 1,
-          secp256k1_nonce_function_default, NULL))
+        if(!secp256k1_ecdsa_sign(context(SECP256K1_CONTEXT_SIGN), &signature, pHash.data(),
+          mKey + 1, secp256k1_nonce_function_default, NULL))
         {
             NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Failed to sign hash");
             return false;
@@ -1893,7 +1944,8 @@ namespace BitCoin
 
         if(pHash.size() != 32)
         {
-            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME, "Wrong size hash to verify");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Wrong size hash to verify");
             return false;
         }
 
@@ -1909,7 +1961,8 @@ namespace BitCoin
           pHash.data(), &publicKey))
             return true;
 
-        if(!secp256k1_ecdsa_signature_normalize(thisContext, (secp256k1_ecdsa_signature *)pSignature.data(),
+        if(!secp256k1_ecdsa_signature_normalize(thisContext,
+          (secp256k1_ecdsa_signature *)pSignature.data(),
           (const secp256k1_ecdsa_signature *)pSignature.data()))
             return false; // Already normalized
 
@@ -1928,7 +1981,7 @@ namespace BitCoin
         if(result != NULL)
             return result; // Already created
 
-        if(mDepth >= 100)
+        if(mVersion == EMPTY || mDepth >= 100)
             return NULL;
 
         secp256k1_context *thisContext = context(SECP256K1_CONTEXT_SIGN);
@@ -1960,7 +2013,7 @@ namespace BitCoin
             hmac.setOutputEndian(NextCash::Endian::BIG);
             hmac.initialize(&hmacKey);
 
-            if(pIndex >= HARDENED_LIMIT)
+            if(pIndex >= HARDENED)
             {
                 // Index >= 2^31 - Hardened child
                 // I = HMAC-SHA512(Key = cpar, Data = 0x00 || ser256(kpar) || ser32(i))
@@ -2003,7 +2056,7 @@ namespace BitCoin
         }
         else // Public
         {
-            if(pIndex >= HARDENED_LIMIT)
+            if(pIndex >= HARDENED)
                 return NULL;
 
             result = new Key();
@@ -2120,6 +2173,18 @@ namespace BitCoin
             delete result;
             return NULL;
         }
+    }
+
+    Key *Key::derivePath(const std::vector<uint32_t> &pPath)
+    {
+        Key *result = this;
+        for(std::vector<uint32_t>::const_iterator index = pPath.begin(); index != pPath.end(); ++index)
+        {
+            result = result->deriveChild(*index);
+            if(result == NULL)
+                return NULL;
+        }
+        return result;
     }
 
     bool Key::loadBinarySeed(Network pNetwork, NextCash::InputStream *pStream)
@@ -2471,27 +2536,10 @@ namespace BitCoin
         PublicKeyData()
         {
             hasPrivate = false;
-            derivationPathMethod = Key::UNKNOWN;
+            derivationPathMethod = Key::DERIVE_UNKNOWN;
             flags = 0;
             createdDate = 0;
-        }
-        PublicKeyData(const PublicKeyData &pCopy) : chainKeys(pCopy.chainKeys)
-        {
-            hasPrivate = pCopy.hasPrivate;
-            name = pCopy.name;
-            createdDate = pCopy.createdDate;
-            flags = pCopy.flags;
-            derivationPathMethod = pCopy.derivationPathMethod;
-        }
-        PublicKeyData &operator = (const PublicKeyData &pRight)
-        {
-            hasPrivate = pRight.hasPrivate;
-            name = pRight.name;
-            createdDate = pRight.createdDate;
-            flags = pRight.flags;
-            derivationPathMethod = pRight.derivationPathMethod;
-            chainKeys = pRight.chainKeys;
-            return *this;
+            gap = DEFAULT_GAP;
         }
         ~PublicKeyData()
         {
@@ -2510,12 +2558,22 @@ namespace BitCoin
             pStream->writeUnsignedInt(flags);
 
             pStream->writeByte(derivationPathMethod);
-            pStream->writeInt(createdDate);
+            pStream->writeUnsignedInt(createdDate);
+            pStream->writeUnsignedInt(gap);
 
             pStream->writeUnsignedInt(chainKeys.size());
+            std::vector<std::vector<uint32_t>>::const_iterator path = chainKeyPaths.begin();
             for(std::vector<Key *>::const_iterator key = chainKeys.begin(); key != chainKeys.end();
-              ++key)
+              ++key, ++path)
+            {
                 (*key)->writeTree(pStream);
+
+                // Write path integers
+                pStream->writeUnsignedInt(path->size());
+                for(std::vector<uint32_t>::const_iterator index = path->begin();
+                  index != path->end(); ++index)
+                    pStream->writeUnsignedInt(*index);
+            }
         }
 
         bool read(NextCash::InputStream *pStream, unsigned int pVersion)
@@ -2542,12 +2600,17 @@ namespace BitCoin
             }
 
             if(pVersion > 1)
-                createdDate = pStream->readInt();
+                createdDate = pStream->readUnsignedInt();
             else
             {
                 createdDate = 0;
                 flags |= PASS_STARTED;
             }
+
+            if(pVersion > 3)
+                gap = pStream->readUnsignedInt();
+            else
+                gap = DEFAULT_GAP;
 
             unsigned int chainCount = pStream->readUnsignedInt();
             Key *newKey;
@@ -2558,7 +2621,21 @@ namespace BitCoin
             {
                 newKey = new Key();
                 if(newKey->readTree(pStream))
+                {
                     chainKeys.push_back(newKey);
+                    chainKeyPaths.emplace_back();
+
+                    if(pVersion > 2)
+                    {
+                        // Read path integers
+                        std::vector<uint32_t> &path = chainKeyPaths.back();
+                        unsigned int pathCount = pStream->readUnsignedInt();
+                        path.reserve(pathCount);
+
+                        for(unsigned int j = 0; j < pathCount; ++j)
+                            path.emplace_back(pStream->readUnsignedInt());
+                    }
+                }
                 else
                 {
                     delete newKey;
@@ -2569,10 +2646,14 @@ namespace BitCoin
             return true;
         }
 
+        bool addChainKeys(Key *pKey, Key::DerivationPathMethod pMethod, Key::CoinIndex pCoinIndex,
+          uint32_t pIndex);
+
         bool hasPrivate;
         NextCash::String name;
         Key::DerivationPathMethod derivationPathMethod;
-        int32_t createdDate;
+        Time createdDate;
+        uint32_t gap;
         uint32_t flags;
 
         // Flag values
@@ -2582,6 +2663,11 @@ namespace BitCoin
 
         // Public keys used to generate addresses without access to private keys
         std::vector<Key *> chainKeys;
+        std::vector<std::vector<uint32_t>> chainKeyPaths;
+
+    private:
+        PublicKeyData(const PublicKeyData &pCopy);
+        PublicKeyData &operator = (const PublicKeyData &pRight);
     };
 
     class PrivateKeyData
@@ -2590,7 +2676,7 @@ namespace BitCoin
 
         PrivateKeyData()
         {
-            key = NULL;
+            key = new Key();
         }
         PrivateKeyData(Key *pKey)
         {
@@ -2615,6 +2701,7 @@ namespace BitCoin
         {
             if(key != NULL)
                 delete key;
+            seed.clean();
         }
 
         void write(NextCash::OutputStream *pStream) const
@@ -2643,6 +2730,86 @@ namespace BitCoin
         NextCash::String seed;
         Key *key;
     };
+
+    bool PublicKeyData::addChainKeys(Key *pKey, Key::DerivationPathMethod pMethod,
+      Key::CoinIndex pCoinIndex, uint32_t pIndex)
+    {
+        Key *chain;
+        switch(pMethod)
+        {
+        case Key::INDIVIDUAL:
+            // Add only address key as chain key
+            chainKeys.push_back(new Key(*pKey->publicKey()));
+            chainKeyPaths.emplace_back();
+            chainKeyPaths.back().emplace_back(pIndex);
+            return true;
+
+        case Key::SIMPLE:
+            chain = pKey->chainKey(pIndex, Key::SIMPLE, 0, 0);
+            if(chain != NULL)
+            {
+                if(chain->isPrivate())
+                    chainKeys.push_back(new Key(*chain->publicKey()));
+                else
+                    chainKeys.push_back(new Key(*chain));
+
+                // Specify Path
+                chainKeyPaths.emplace_back();
+                chainKeyPaths.back().emplace_back(pIndex);
+                return true;
+            }
+            else
+                return false;
+
+        case Key::BIP0032:
+            // Receiving chain
+            chain = pKey->chainKey(pIndex, Key::BIP0032, 0, 0);
+            if(chain != NULL)
+            {
+                if(chain->isPrivate())
+                    chainKeys.push_back(new Key(*chain->publicKey()));
+                else
+                    chainKeys.push_back(new Key(*chain));
+
+                // Specify Path
+                chainKeyPaths.emplace_back();
+                chainKeyPaths.back().emplace_back(HARDENED);
+                chainKeyPaths.back().emplace_back(pIndex);
+                return true;
+            }
+            else
+                return false;
+
+        case Key::BIP0044:
+            // Receiving chain
+            chain = pKey->chainKey(pIndex, Key::BIP0044, HARDENED, pCoinIndex);
+            if(chain != NULL)
+            {
+                if(chain->isPrivate())
+                    chainKeys.push_back(new Key(*chain->publicKey()));
+                else
+                    chainKeys.push_back(new Key(*chain));
+
+                // Specify Path 44'/Coin/Account/Chain
+                chainKeyPaths.emplace_back();
+                chainKeyPaths.back().emplace_back(HARDENED + 44);
+                if(pCoinIndex == 0xffffffff)
+                    chainKeyPaths.back().emplace_back(Key::COIN_BITCOIN);// Default
+                else
+                    chainKeyPaths.back().emplace_back(pCoinIndex);
+                chainKeyPaths.back().emplace_back(HARDENED);
+                chainKeyPaths.back().emplace_back(pIndex);
+                return true;
+            }
+            else
+                return false;
+
+        default:
+        case Key::DERIVE_CUSTOM:
+        case Key::DERIVE_UNKNOWN:
+            return false;
+        }
+    }
 
     static const char sEncryptKeyInitVector[] = "0daf9958eec1c536d8bed3608942b560";
 
@@ -2727,9 +2894,36 @@ namespace BitCoin
     Key::DerivationPathMethod KeyStore::derivationPathMethod(unsigned int pOffset)
     {
         if(pOffset >= mKeys.size())
-            return Key::DerivationPathMethod::UNKNOWN;
+            return Key::DERIVE_UNKNOWN;
 
         return mKeys[pOffset]->derivationPathMethod;
+    }
+
+    void KeyStore::getDerivationPath(unsigned int pOffset, unsigned int pChainOffset,
+      std::vector<uint32_t> &pPath)
+    {
+        pPath.clear();
+
+        if(pOffset >= mKeys.size() || pChainOffset >= mKeys[pOffset]->chainKeyPaths.size())
+            return;
+
+        pPath = mKeys[pOffset]->chainKeyPaths[pChainOffset];
+    }
+
+    Time KeyStore::createdDate(unsigned int pOffset)
+    {
+        if(pOffset >= mKeys.size())
+            return 0;
+
+        return mKeys[pOffset]->createdDate;
+    }
+
+    unsigned int KeyStore::gap(unsigned int pOffset)
+    {
+        if(pOffset >= mKeys.size())
+            return 0;
+
+        return mKeys[pOffset]->gap;
     }
 
     std::vector<Key *> *KeyStore::chainKeys(unsigned int pOffset)
@@ -2763,11 +2957,6 @@ namespace BitCoin
             return NextCash::String();
 
         return mPrivateKeys[pOffset]->seed;
-    }
-
-    int32_t KeyStore::createdDate(unsigned int pOffset)
-    {
-        return mKeys[pOffset]->createdDate;
     }
 
     bool KeyStore::passStarted(unsigned int pOffset)
@@ -2806,6 +2995,19 @@ namespace BitCoin
     {
         if(pOffset < mKeys.size())
             mKeys[pOffset]->flags |= PublicKeyData::BACKED_UP;
+    }
+
+    void KeyStore::setGap(unsigned int pOffset, unsigned int pGap)
+    {
+        if(pOffset < mKeys.size())
+        {
+            if(pGap < DEFAULT_GAP)
+                pGap = DEFAULT_GAP;
+            mKeys[pOffset]->gap = pGap;
+            for(std::vector<Key *>::iterator chainKey = mKeys[pOffset]->chainKeys.begin();
+              chainKey != mKeys[pOffset]->chainKeys.end(); ++chainKey)
+                (*chainKey)->updateGap(pGap);
+        }
     }
 
     void KeyStore::clear()
@@ -2854,7 +3056,7 @@ namespace BitCoin
         return NULL;
     }
 
-    Key *KeyStore::markUsed(const NextCash::Hash &pHash, unsigned int pGap, bool &pNewAddresses)
+    Key *KeyStore::markUsed(const NextCash::Hash &pHash, bool &pNewAddresses)
     {
         pNewAddresses = false;
         Key *result = NULL;
@@ -2863,7 +3065,7 @@ namespace BitCoin
             for(std::vector<Key *>::iterator key = (*keyData)->chainKeys.begin();
               key != (*keyData)->chainKeys.end(); ++key)
             {
-                result = (*key)->markUsed(pHash, pGap, pNewAddresses);
+                result = (*key)->markUsed(pHash, (*keyData)->gap, pNewAddresses);
                 if(result != NULL)
                     return result;
             }
@@ -2874,7 +3076,7 @@ namespace BitCoin
     void KeyStore::write(NextCash::OutputStream *pStream) const
     {
         // Version
-        pStream->writeUnsignedInt(2);
+        pStream->writeUnsignedInt(4);
 
         // Keys
         pStream->writeUnsignedInt(mKeys.size());
@@ -2892,7 +3094,7 @@ namespace BitCoin
 
         // Version
         unsigned int version = pStream->readUnsignedInt();
-        if(version != 1 && version != 2)
+        if(version < 1 || version > 4)
             return false;
 
         // Keys
@@ -2980,7 +3182,7 @@ namespace BitCoin
         PrivateKeyData *newPrivateKey;
 
         mPrivateKeys.reserve(count);
-        for(unsigned int i=0;i<count;++i)
+        for(unsigned int i = 0; i < count; ++i)
         {
             newPrivateKey = new PrivateKeyData();
             if(newPrivateKey->read(&decryptor, version))
@@ -3006,7 +3208,9 @@ namespace BitCoin
         mPrivateLoaded = mKeys.size() == 0;
     }
 
-    int KeyStore::add(Key *pKey, Key::DerivationPathMethod pMethod, int32_t pCreatedDate)
+    int KeyStore::addKeyPath(Key *pKey, Key::DerivationPathMethod pMethod,
+      const std::vector<uint32_t> &pAccountPath, unsigned int pReceivingIndex,
+      unsigned int pChangeIndex, int32_t pCreatedDate)
     {
         if(!mPrivateLoaded)
             return 5; // Private keys need to be loaded to add a private key
@@ -3017,159 +3221,124 @@ namespace BitCoin
                 return 3; // Already exists
 
         PublicKeyData *newData = new PublicKeyData();
-        Key *chain;
+        newData->createdDate = pCreatedDate;
+
+        // Derive account key from master key and derivation path.
+        Key *account = pKey->derivePath(pAccountPath);
+        if(account == NULL)
+            return 6;
+
+        // Receiving
+        Key *chain = account->deriveChild(pReceivingIndex);
+        std::vector<uint32_t> chainPath = pAccountPath;
+        chainPath.emplace_back(pReceivingIndex);
+
+        if(chain->isPrivate())
+            newData->chainKeys.push_back(new Key(*chain->publicKey()));
+        else
+            newData->chainKeys.push_back(new Key(*chain));
+
+        newData->chainKeyPaths.emplace_back(chainPath);
+
+        if(pMethod != Key::INDIVIDUAL && pChangeIndex != pReceivingIndex)
+        {
+            // Change
+            chain = account->deriveChild(pChangeIndex);
+            chainPath.back() = pChangeIndex;
+
+            if(chain->isPrivate())
+                newData->chainKeys.push_back(new Key(*chain->publicKey()));
+            else
+                newData->chainKeys.push_back(new Key(*chain));
+
+            newData->chainKeyPaths.emplace_back(chainPath);
+        }
+
+        for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
+          key != newData->chainKeys.end(); ++key)
+            (*key)->updateGap(DEFAULT_GAP);
+
+        newData->hasPrivate = true;
+        newData->derivationPathMethod = pMethod;
+        mKeys.push_back(newData);
+
+        PrivateKeyData *newPrivateData = new PrivateKeyData(pKey);
+        mPrivateKeys.push_back(newPrivateData);
+
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+          "Added key with path");
+        return 0; // Success
+    }
+
+    int KeyStore::addKeyMethod(Key *pKey, Key::DerivationPathMethod pMethod,
+      Key::CoinIndex pCoinIndex, int32_t pCreatedDate)
+    {
+        if(!mPrivateLoaded)
+            return 5; // Private keys need to be loaded to add a private key
+
+        for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
+          key != mPrivateKeys.end(); ++key)
+            if(*(*key)->key == *pKey)
+                return 3; // Already exists
+
+        PublicKeyData *newData = new PublicKeyData();
 
         newData->createdDate = pCreatedDate;
 
         // Prime the key for several derivation methods
         switch(pMethod)
         {
-            case Key::INDIVIDUAL:
-                // Add only address key as chain key
-                newData->chainKeys.push_back(new Key(*pKey->publicKey()));
-                break;
-            case Key::SIMPLE:
-                chain = pKey->chainKey(0, Key::SIMPLE);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
-                else
-                {
-                    delete newData;
-                    return 4; // Invalid Derivation Method
-                }
-                chain = pKey->chainKey(1, Key::SIMPLE);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
-                else
-                {
-                    delete newData;
-                    return 4; // Invalid Derivation Method
-                }
-                break;
-            case Key::BIP0032:
-                chain = pKey->chainKey(0, Key::BIP0032);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
-                else
-                {
-                    delete newData;
-                    return 4; // Invalid Derivation Method
-                }
-                chain = pKey->chainKey(1, Key::BIP0032);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
-                else
-                {
-                    delete newData;
-                    return 4; // Invalid Derivation Method
-                }
-                break;
-            case Key::BIP0044:
-                chain = pKey->chainKey(0, Key::BIP0044);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
-                else
-                {
-                    delete newData;
-                    return 4; // Invalid Derivation Method
-                }
-                chain = pKey->chainKey(1, Key::BIP0044);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
-                else
-                {
-                    delete newData;
-                    return 4; // Invalid Derivation Method
-                }
-                break;
-            case Key::UNKNOWN:
-                // Prime the key for several derivation methods
-                chain = pKey->chainKey(0, Key::SIMPLE);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
-                chain = pKey->chainKey(1, Key::SIMPLE);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
+        case Key::INDIVIDUAL:
+            // Add only address key as chain key
+            if(!newData->addChainKeys(pKey, pMethod, pCoinIndex, 0))
+            {
+                delete newData;
+                return 4; // Invalid Derivation Method
+            }
+            break;
 
-                chain = pKey->chainKey(0, Key::BIP0032);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
-                chain = pKey->chainKey(1, Key::BIP0032);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
+        case Key::SIMPLE:
+        case Key::BIP0032:
+        case Key::BIP0044:
+            // Receiving chain
+            if(!newData->addChainKeys(pKey, pMethod, pCoinIndex, 0))
+            {
+                delete newData;
+                return 4; // Invalid Derivation Method
+            }
 
-                chain = pKey->chainKey(0, Key::BIP0044);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
-                chain = pKey->chainKey(1, Key::BIP0044);
-                if(chain != NULL)
-                {
-                    if(chain->isPrivate())
-                        newData->chainKeys.push_back(new Key(*chain->publicKey()));
-                    else
-                        newData->chainKeys.push_back(new Key(*chain));
-                }
+            // Change chain
+            if(!newData->addChainKeys(pKey, pMethod, pCoinIndex, 1))
+            {
+                delete newData;
+                return 4; // Invalid Derivation Method
+            }
+            break;
 
-                if(newData->chainKeys.size() == 0)
-                {
-                    delete newData;
-                    return 4; // Invalid Derivation Method
-                }
+        case Key::DERIVE_UNKNOWN:
+            // Prime the key for several derivation methods
+
+            // SIMPLE
+            newData->addChainKeys(pKey, Key::SIMPLE, pCoinIndex, 0); // Receiving chain
+            newData->addChainKeys(pKey, Key::SIMPLE, pCoinIndex, 1); // Change chain
+
+            // BIP-0032
+            newData->addChainKeys(pKey, Key::BIP0032, pCoinIndex, 0); // Receiving chain
+            newData->addChainKeys(pKey, Key::BIP0032, pCoinIndex, 1); // Change chain
+
+            // BIP-0044
+            newData->addChainKeys(pKey, Key::BIP0044, pCoinIndex, 0); // Receiving chain
+            newData->addChainKeys(pKey, Key::BIP0044, pCoinIndex, 1); // Change chain
+
+            if(newData->chainKeys.size() == 0)
+            {
+                delete newData;
+                return 4; // Invalid Derivation Method
+            }
+            break;
+
+        case Key::DERIVE_CUSTOM:
+            return 4;
         }
 
         PrivateKeyData *newPrivateData = new PrivateKeyData(pKey);
@@ -3177,7 +3346,7 @@ namespace BitCoin
 
         for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
           key != newData->chainKeys.end(); ++key)
-            (*key)->updateGap(20);
+            (*key)->updateGap(DEFAULT_GAP);
 
         newData->hasPrivate = pKey->isPrivate();
         newData->derivationPathMethod = pMethod;
@@ -3185,7 +3354,9 @@ namespace BitCoin
         return 0; // Success
     }
 
-    int KeyStore::addSeed(const char *pSeed, Key::DerivationPathMethod pMethod, int32_t pCreatedDate)
+    int KeyStore::addSeed(const char *pSeed, Key::DerivationPathMethod pMethod,
+      const std::vector<uint32_t> &pAccountPath, unsigned int pReceivingIndex,
+      unsigned int pChangeIndex, int32_t pCreatedDate)
     {
         if(!mPrivateLoaded)
             return 5; // Private keys need to be loaded to add a private key
@@ -3197,18 +3368,24 @@ namespace BitCoin
             return 6;
         }
 
-        int result = add(newKey, pMethod, pCreatedDate);
+        int result = addKeyPath(newKey, pMethod, pAccountPath, pReceivingIndex, pChangeIndex,
+          pCreatedDate);
+
         if(result != 0)
+        {
             delete newKey;
+            return result;
+        }
 
         mPrivateKeys.back()->seed = pSeed;
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
           "Added key from seed");
-        return result;
+        return 0; // Success
     }
 
-    int KeyStore::addKey(const char *pEncodedKey, Key::DerivationPathMethod pDerivationMethod,
-      int32_t pCreatedDate)
+    int KeyStore::addEncodedKey(const char *pEncodedKey, Key::DerivationPathMethod pMethod,
+      const std::vector<uint32_t> &pAccountPath, unsigned int pReceivingIndex,
+      unsigned int pChangeIndex, int32_t pCreatedDate)
     {
         if(!mPrivateLoaded)
             return 5; // Private keys need to be loaded to add a private key
@@ -3220,77 +3397,99 @@ namespace BitCoin
             return 2;
         }
 
-        int result = add(newKey, pDerivationMethod, pCreatedDate);
+        int result = addKeyPath(newKey, pMethod, pAccountPath, pReceivingIndex, pChangeIndex,
+          pCreatedDate);
+
         if(result != 0)
         {
             delete newKey;
-            return 1;
+            return result;
         }
 
         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
           "Added key from encoded private key");
-        return result;
+        return 0; // Success
     }
 
-    int KeyStore::loadKey(const char *pText, Key::DerivationPathMethod pMethod, int32_t pCreatedDate)
+    int KeyStore::addIndividualKey(Key *pIndividualKey, int32_t pCreatedDate)
     {
         if(!mPrivateLoaded)
             return 5; // Private keys need to be loaded to add a private key
 
-        Key *newKey = new Key();
-        PaymentRequest paymentRequest;
+        for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
+          key != mPrivateKeys.end(); ++key)
+            if(*(*key)->key == *pIndividualKey)
+                return 3; // Already exists
 
-        if(newKey->decode(pText))
-        {
-            int result = add(newKey, pMethod, pCreatedDate);
-            if(result != 0)
-            {
-                delete newKey;
-                return result;
-            }
+        PublicKeyData *newData = new PublicKeyData();
+        newData->createdDate = pCreatedDate;
 
-            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
-              "Loaded BIP-0032 key");
-            return 0; // Success
-        }
+        // Add receiving key
+        if(pIndividualKey->isPrivate())
+            newData->chainKeys.push_back(new Key(*pIndividualKey->publicKey()));
         else
-        {
-            paymentRequest = decodePaymentCode(pText);
+            newData->chainKeys.push_back(pIndividualKey);
+        newData->chainKeyPaths.emplace_back();
+        newData->chainKeyPaths.back().emplace_back(pIndividualKey->index());
 
-            if(paymentRequest.network == MAINNET &&
-              paymentRequest.pubKeyHash.size() == PUB_KEY_HASH_SIZE)
-            {
-                for(std::vector<PublicKeyData *>::iterator keyData = mKeys.begin();
-                    keyData != mKeys.end(); ++keyData)
-                    for(std::vector<Key *>::const_iterator key = (*keyData)->chainKeys.begin();
-                        key != (*keyData)->chainKeys.end(); ++key)
-                        if((*key)->hash() == paymentRequest.pubKeyHash)
-                        {
-                            delete newKey;
-                            return 3; // Already exists
-                        }
+        newData->hasPrivate = pIndividualKey->isPrivate();
+        newData->derivationPathMethod = Key::INDIVIDUAL;
+        mKeys.push_back(newData);
 
-                newKey->loadHash(paymentRequest.pubKeyHash);
+        if(pIndividualKey->isPrivate())
+            mPrivateKeys.push_back(new PrivateKeyData(pIndividualKey));
+        else
+            mPrivateKeys.push_back(new PrivateKeyData());
 
-                PublicKeyData *newData = new PublicKeyData();
-                newData->hasPrivate = false;
-                newData->createdDate = pCreatedDate;
-                newData->chainKeys.push_back(newKey);
-                mPrivateKeys.push_back(new PrivateKeyData());
-                mKeys.push_back(newData);
-                NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
-                  "Added Address");
-                return 0; // Success
-            }
-            else
-            {
-                delete newKey;
-                return 2; // Invalid Format
-            }
-        }
+        NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+          "Added key from individual key");
+        return 0; // Success
+    }
 
-        delete newKey;
-        return 1; // Unknown Failure
+    int KeyStore::addFromChainKeys(Key *pReceivingKey, Key *pChangeKey, int32_t pCreatedDate)
+    {
+        if(!mPrivateLoaded)
+            return 5; // Private keys need to be loaded to add a private key
+
+        for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
+          key != mPrivateKeys.end(); ++key)
+            if(*(*key)->key == *pReceivingKey)
+                return 3; // Already exists
+
+        for(std::vector<PrivateKeyData *>::iterator key = mPrivateKeys.begin();
+          key != mPrivateKeys.end(); ++key)
+            if(*(*key)->key == *pChangeKey)
+                return 3; // Already exists
+
+        PublicKeyData *newData = new PublicKeyData();
+        newData->createdDate = pCreatedDate;
+
+        // Add receiving key
+        if(pReceivingKey->isPrivate())
+            newData->chainKeys.push_back(new Key(*pReceivingKey->publicKey()));
+        else
+            newData->chainKeys.push_back(pReceivingKey);
+        newData->chainKeyPaths.emplace_back();
+        newData->chainKeyPaths.back().emplace_back(pReceivingKey->index());
+
+        // Add change key
+        if(pChangeKey->isPrivate())
+            newData->chainKeys.push_back(new Key(*pChangeKey->publicKey()));
+        else
+            newData->chainKeys.push_back(pChangeKey);
+        newData->chainKeyPaths.emplace_back();
+        newData->chainKeyPaths.back().emplace_back(pChangeKey->index());
+
+        // Update gaps
+        for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
+          key != newData->chainKeys.end(); ++key)
+            (*key)->updateGap(DEFAULT_GAP);
+
+        newData->hasPrivate = false; // Need support for multiple private keys to support this.
+        newData->derivationPathMethod = Key::DERIVE_UNKNOWN;
+        mKeys.push_back(newData);
+        mPrivateKeys.push_back(new PrivateKeyData());
+        return 0; // Success
     }
 
     bool KeyStore::loadKeys(NextCash::InputStream *pStream)
@@ -3305,7 +3504,6 @@ namespace BitCoin
         bool found;
         Key *newKey = new Key();
         PublicKeyData *newData;
-        Key::DerivationPathMethod method = Key::UNKNOWN;
 
         while(pStream->remaining())
         {
@@ -3323,7 +3521,7 @@ namespace BitCoin
             {
                 if(newKey->decode(line))
                 {
-                    int result = add(newKey, method, getTime());
+                    int result = addKeyMethod(newKey, Key::DERIVE_UNKNOWN, Key::COIN_UNDEFINED, getTime());
                     if(result != 0)
                         delete newKey;
 
@@ -3543,7 +3741,7 @@ namespace BitCoin
         Key *m0hKey;
         if(success)
         {
-            m0hKey = keyTree.deriveChild(Key::HARDENED_LIMIT + 0);
+            m0hKey = keyTree.deriveChild(HARDENED + 0);
             if(m0hKey == NULL)
             {
                 success = false;
@@ -3691,7 +3889,7 @@ namespace BitCoin
         Key *m0h12hKey;
         if(success)
         {
-            m0h12hKey = m0h1Key->deriveChild(Key::HARDENED_LIMIT + 2);
+            m0h12hKey = m0h1Key->deriveChild(HARDENED + 2);
             if(m0h12hKey == NULL)
             {
                 success = false;
@@ -3905,7 +4103,7 @@ namespace BitCoin
          *****************************************************************************************/
         if(success)
         {
-            m0hKey = keyTree.deriveChild(Key::HARDENED_LIMIT + 0);
+            m0hKey = keyTree.deriveChild(HARDENED + 0);
             if(m0hKey == NULL)
             {
                 success = false;
@@ -4484,7 +4682,7 @@ namespace BitCoin
         }
         else
         {
-            checkChain = keyTree.chainKey(0, Key::SIMPLE);
+            checkChain = keyTree.chainKey(0, Key::SIMPLE, 0, 0);
             if(checkChain == NULL)
             {
                 success = false;
@@ -4515,7 +4713,7 @@ namespace BitCoin
         }
         else
         {
-            checkChain = keyTree.chainKey(1, Key::SIMPLE);
+            checkChain = keyTree.chainKey(1, Key::SIMPLE, 0, 0);
             if(checkChain == NULL)
             {
                 success = false;
@@ -4540,7 +4738,7 @@ namespace BitCoin
         /******************************************************************************************
          * BIP-0032 m/0'
          *****************************************************************************************/
-        account = keyTree.deriveChild(Key::HARDENED_LIMIT);
+        account = keyTree.deriveChild(HARDENED);
         if(account == NULL)
         {
             success = false;
@@ -4559,7 +4757,7 @@ namespace BitCoin
             }
             else
             {
-                checkChain = keyTree.chainKey(0, Key::BIP0032);
+                checkChain = keyTree.chainKey(0, Key::BIP0032, 0, 0);
                 if(checkChain == NULL)
                 {
                     success = false;
@@ -4590,7 +4788,7 @@ namespace BitCoin
             }
             else
             {
-                checkChain = keyTree.chainKey(1, Key::BIP0032);
+                checkChain = keyTree.chainKey(1, Key::BIP0032, 0, 0);
                 if(checkChain == NULL)
                 {
                     success = false;
@@ -4616,7 +4814,7 @@ namespace BitCoin
         /******************************************************************************************
          * BIP-0044 m/44'/0'/0'
          *****************************************************************************************/
-        purpose = keyTree.deriveChild(Key::HARDENED_LIMIT + 44);
+        purpose = keyTree.deriveChild(HARDENED + 44);
         if(purpose == NULL)
         {
             success = false;
@@ -4625,7 +4823,7 @@ namespace BitCoin
         }
         else
         {
-            coin = purpose->deriveChild(Key::HARDENED_LIMIT);
+            coin = purpose->deriveChild(HARDENED);
             if(coin == NULL)
             {
                 success = false;
@@ -4634,7 +4832,7 @@ namespace BitCoin
             }
             else
             {
-                account = coin->deriveChild(Key::HARDENED_LIMIT);
+                account = coin->deriveChild(HARDENED);
                 if(account == NULL)
                 {
                     success = false;
@@ -4653,7 +4851,8 @@ namespace BitCoin
                     }
                     else
                     {
-                        checkChain = keyTree.chainKey(0);
+                        checkChain = keyTree.chainKey(0, Key::BIP0044, HARDENED,
+                          Key::COIN_BITCOIN);
                         if(checkChain == NULL)
                         {
                             success = false;
@@ -4684,7 +4883,8 @@ namespace BitCoin
                     }
                     else
                     {
-                        checkChain = keyTree.chainKey(1);
+                        checkChain = keyTree.chainKey(1, Key::BIP0044, HARDENED,
+                          Key::COIN_BITCOIN);
                         if(checkChain == NULL)
                         {
                             success = false;
@@ -4713,14 +4913,15 @@ namespace BitCoin
          * Address Gap
          *****************************************************************************************/
         bool addressGapSuccess = true;
-        chain = keyTree.chainKey(0);
-        chain->updateGap(20);
+        chain = keyTree.chainKey(0, Key::BIP0044, HARDENED, Key::COIN_BITCOIN);
+        chain->updateGap(DEFAULT_GAP);
 
-        if(chain->childCount() != 20)
+        if(chain->childCount() != DEFAULT_GAP)
         {
             addressGapSuccess = false;
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
-              "Failed Address Gap : Update address gap : %d != 20", chain->childCount());
+              "Failed Address Gap : Update address gap : %d != %d", chain->childCount(),
+              DEFAULT_GAP);
         }
 
         addressKey = chain->getNextUnused();
@@ -4732,7 +4933,7 @@ namespace BitCoin
         }
 
         bool updated = false;
-        chain->markUsed(addressKey->hash(), 20, updated);
+        chain->markUsed(addressKey->hash(), DEFAULT_GAP, updated);
 
         if(!updated)
         {
@@ -4749,7 +4950,7 @@ namespace BitCoin
         }
 
         addressKey = chain->findChild(10);
-        chain->markUsed(addressKey->hash(), 20, updated);
+        chain->markUsed(addressKey->hash(), DEFAULT_GAP, updated);
 
         if(chain->childCount() != 31)
         {
@@ -4771,9 +4972,18 @@ namespace BitCoin
         NextCash::Buffer keyBuffer;
         KeyStore keyStore;
         bool readWriteSuccess = true;
+        Key *newKey = new BitCoin::Key();
+        if(newKey->decode("xpub661MyMwAqRbcGujPLVW3q6UQQGetTsUcM7EYwUTDFGif17McpzNmGu5P1kzwxvCNGnjtDPM5MDbRTD8QZQSpktu7f9CcYydG7PNc3tqCKZi"))
+            NextCash::Log::add(NextCash::Log::INFO, BITCOIN_KEY_LOG_NAME,
+              "Passed decode xpub");
+        else
+        {
+            NextCash::Log::add(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
+              "Failed to decode xpub");
+            success = false;
+        }
 
-        keyStore.loadKey("xpub661MyMwAqRbcGujPLVW3q6UQQGetTsUcM7EYwUTDFGif17McpzNmGu5P1kzwxvCNGnjtDPM5MDbRTD8QZQSpktu7f9CcYydG7PNc3tqCKZi",
-          SIMPLE, getTime());
+        keyStore.addFromChainKeys(newKey->deriveChild(0), newKey->deriveChild(1), getTime());
 
         chain = *keyStore.chainKeys(0)->begin();
         chain->updateGap(5);

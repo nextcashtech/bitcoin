@@ -252,7 +252,7 @@ namespace BitCoin
         mMutex.lock();
 
         unsigned int version = pStream->readUnsignedInt();
-        if(version != 1 && version != 2)
+        if(version < 1 || version > 2)
         {
             mMutex.unlock();
             return false; // Wrong version
@@ -263,7 +263,7 @@ namespace BitCoin
         PassData newPassData;
         mLowestPassHeightSet = false;
         mLowestPassHeight = 0;
-        for(unsigned int i=0;i<passesCount;++i)
+        for(unsigned int i = 0;i < passesCount; ++i)
         {
             newPassData.clear();
             if(!newPassData.read(pStream))
@@ -287,7 +287,7 @@ namespace BitCoin
         unsigned int addressCount = pStream->readUnsignedInt();
         mAddressHashes.reserve(addressCount);
         NextCash::Hash pubKeyHash(PUB_KEY_HASH_SIZE);
-        for(unsigned int i=0;i<addressCount;++i)
+        for(unsigned int i = 0; i < addressCount; ++i)
         {
             if(!pubKeyHash.read(pStream, PUB_KEY_HASH_SIZE))
             {
@@ -301,7 +301,7 @@ namespace BitCoin
         // Transactions
         unsigned int transactionCount = pStream->readUnsignedInt();
         SPVTransactionData *newSPVTransaction;
-        for(unsigned int i=0;i<transactionCount;++i)
+        for(unsigned int i = 0; i < transactionCount; ++i)
         {
             newSPVTransaction = new SPVTransactionData();
             if(!newSPVTransaction->read(pStream, version))
@@ -546,7 +546,7 @@ namespace BitCoin
                     for(NextCash::HashList::iterator hash = payAddresses.begin();
                       hash != payAddresses.end(); ++hash)
                     {
-                        mKeyStore->markUsed(*hash, 20, newAddressesCreated);
+                        mKeyStore->markUsed(*hash, newAddressesCreated);
                         if(newAddressesCreated)
                             newAddress = true;
                     }
