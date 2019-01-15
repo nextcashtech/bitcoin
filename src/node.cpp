@@ -782,8 +782,8 @@ namespace BitCoin
         TransactionList includedTransactions;
         Message::MerkleBlockData merkleMessage(pBlock, mFilter, includedTransactions);
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
-          "Sending merkle block with %d trans : %s", includedTransactions.size(),
-          pBlock->header.hash().hex().text());
+          "Sending merkle block %d with %d trans : %s", mChain->hashHeight(pBlock->header.hash()),
+          includedTransactions.size(), pBlock->header.hash().hex().text());
         if(!sendMessage(&merkleMessage))
             return false;
 
@@ -1677,7 +1677,7 @@ namespace BitCoin
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
                   "Waiting for %d merkle blocks from %ds ago", mActiveMerkleRequests,
                   time - mLastMerkleRequest);
-                if(time - mLastMerkleReceive > 30)
+                if(time - mLastMerkleReceive > 60)
                 {
                     NextCash::Log::addFormatted(NextCash::Log::INFO, mName,
                       "Dropping. Took too long to return merkle blocks");
