@@ -2774,7 +2774,7 @@ namespace BitCoin
     void Daemon::cleanNodes()
     {
         // Check for black listed nodes
-        std::vector<unsigned int> blackListedNodeIDs = mChain.blackListedNodeIDs();
+        std::vector<unsigned int> blackListedNodeIDs = mChain.invalidNodeIDs();
 
         // Drop all closed nodes
         std::vector<Node *> toDelete;

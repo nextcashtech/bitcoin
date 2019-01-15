@@ -137,11 +137,11 @@ namespace BitCoin
         return result;
     }
 
-    std::vector<unsigned int> Chain::blackListedNodeIDs()
+    std::vector<unsigned int> Chain::invalidNodeIDs()
     {
-        mPendingLock.writeLock("Black Listed Nodes");
-        std::vector<unsigned int> result = mBlackListedNodeIDs;
-        mBlackListedNodeIDs.clear();
+        mPendingLock.writeLock("Invalid Nodes");
+        std::vector<unsigned int> result = mInvalidNodeIDs;
+        mInvalidNodeIDs.clear();
         mPendingLock.writeUnlock();
         return result;
     }
@@ -452,7 +452,7 @@ namespace BitCoin
             if(BTC_SPLIT_HASH == pHash)
             {
                 mHeadersLock.readUnlock();
-                mHeadersLock.writeLock("Black List");
+                mHeadersLock.writeLock("Invalid List");
                 addInvalidHash(pHash);
                 mHeadersLock.writeUnlock();
                 NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_CHAIN_LOG_NAME,
@@ -1070,7 +1070,7 @@ namespace BitCoin
             if(!mInfo.spvMode && !(pLocks & LOCK_PENDING))
                 mPendingLock.writeUnlock();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,
-              "Rejecting black listed block hash : %s", pHeader.hash().hex().text());
+              "Rejecting invalid block hash : %s", pHeader.hash().hex().text());
             return INVALID;
         }
         else if(Forks::CASH_ACTIVATION_TIME != 0 && BTC_SPLIT_HASH == pHeader.hash())
@@ -1777,8 +1777,8 @@ namespace BitCoin
               "Clearing all pending blocks/headers");
 
             // Clear pending blocks since they assumed this block was good
-            mBlackListedNodeIDs.push_back(nextPending->requestingNode);
-            // Add hash to blacklist. So it isn't downloaded again.
+            mInvalidNodeIDs.push_back(nextPending->requestingNode);
+            // Add hash to invalid list. So it isn't downloaded again.
             addInvalidHash(nextPending->block->header.hash());
             // Delete block
             delete nextPending;

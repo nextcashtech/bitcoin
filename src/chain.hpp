@@ -344,7 +344,7 @@ namespace BitCoin
         // Revert to a lower height
         bool revert(unsigned int pHeight, uint8_t pLocks = 0x00);
 
-        std::vector<unsigned int> blackListedNodeIDs();
+        std::vector<unsigned int> invalidNodeIDs();
 
         // Set flag to stop processing
         void requestStop() { mStopRequested = true; }
@@ -442,7 +442,7 @@ namespace BitCoin
 
         // Block header hashes that have been proven invalid.
         NextCash::HashList mInvalidHashes;
-        std::vector<unsigned int> mBlackListedNodeIDs;
+        std::vector<unsigned int> mInvalidNodeIDs;
 
         void addInvalidHash(const NextCash::Hash &pHash);
 
