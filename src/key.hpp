@@ -21,9 +21,6 @@
 #include <cstdint>
 #include <cstring>
 
-#define HARDENED 0x80000000
-#define DEFAULT_GAP 20
-
 
 namespace BitCoin
 {
@@ -176,12 +173,9 @@ namespace BitCoin
     {
     public:
 
-        // Keys with indices greater than or equal to this are "hardened", meaning the private keys
-        //   are required to derive children.
-        // static const uint32_t HARDENED = 0x80000000;
-
         // Depth when no hierarchy is present
         static const uint8_t NO_DEPTH = 0xff;
+        static const unsigned int DEFAULT_GAP;
 
         enum Version { MAINNET_PRIVATE, MAINNET_PUBLIC, TESTNET_PRIVATE, TESTNET_PUBLIC,
           MAINNET_PUBKEY_HASH = 0xfe, EMPTY = 0xff };
@@ -300,13 +294,14 @@ namespace BitCoin
          ******************************************************************************************/
         enum DerivationPathMethod { DERIVE_UNKNOWN = 0, SIMPLE = 1, BIP0032 = 2, BIP0044 = 3,
           INDIVIDUAL = 4, DERIVE_CUSTOM = 5 };
-        enum CoinIndex
-        {
-            COIN_UNDEFINED    = 0xffffffff,
-            COIN_BITCOIN      = 0x80000000, // 0'
-            COIN_BITCOIN_CASH = 0x80000091, // 145'
-            COIN_BITCOIN_SV   = 0x800000ec  // 236'
-        };
+
+        // Keys with indices greater than or equal to this are "hardened", meaning the private keys
+        //   are required to derive children.
+        static const uint32_t HARDENED;
+        static const uint32_t PURPOSE_44;
+        static const uint32_t COIN_BITCOIN;
+        static const uint32_t COIN_BITCOIN_CASH;
+        static const uint32_t COIN_BITCOIN_SV;
 
         const char *derivationPathMethodName(DerivationPathMethod pMethod)
         {
@@ -377,7 +372,7 @@ namespace BitCoin
 
         // Validate check bits in mnemonic sentence
         bool static validateMnemonicSeed(const char *pText, const char *pPassPhrase = "",
-                                         const char *pSalt = "mnemonic");
+          const char *pSalt = "mnemonic");
 
         // Serializes key data and all children
         void writeTree(NextCash::OutputStream *pStream);
@@ -515,7 +510,7 @@ namespace BitCoin
 
     private:
 
-        int addKeyMethod(Key *pKey, Key::DerivationPathMethod pMethod, Key::CoinIndex pCoinIndex,
+        int addKeyMethod(Key *pKey, Key::DerivationPathMethod pMethod, uint32_t pCoinIndex,
           int32_t pCreatedDate);
 
         int addKeyPath(Key *pKey, Key::DerivationPathMethod pMethod,

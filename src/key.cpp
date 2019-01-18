@@ -26,6 +26,12 @@ namespace BitCoin
     secp256k1_context *Key::sContext = NULL;
     unsigned int Key::sContextFlags = 0;
     NextCash::MutexWithConstantName Key::sMutex("SECP256K1");
+    const unsigned int Key::DEFAULT_GAP = 20;
+    const uint32_t Key::HARDENED = 0x80000000;
+    const uint32_t Key::PURPOSE_44 = HARDENED + 44;
+    const uint32_t Key::COIN_BITCOIN = HARDENED;
+    const uint32_t Key::COIN_BITCOIN_CASH = HARDENED + 145;
+    const uint32_t Key::COIN_BITCOIN_SV = HARDENED + 236;
 
     void randomizeContext(secp256k1_context *pContext)
     {
@@ -2539,7 +2545,7 @@ namespace BitCoin
             derivationPathMethod = Key::DERIVE_UNKNOWN;
             flags = 0;
             createdDate = 0;
-            gap = DEFAULT_GAP;
+            gap = Key::DEFAULT_GAP;
         }
         ~PublicKeyData()
         {
@@ -2610,7 +2616,7 @@ namespace BitCoin
             if(pVersion > 3)
                 gap = pStream->readUnsignedInt();
             else
-                gap = DEFAULT_GAP;
+                gap = Key::DEFAULT_GAP;
 
             unsigned int chainCount = pStream->readUnsignedInt();
             Key *newKey;
@@ -2624,16 +2630,24 @@ namespace BitCoin
                 {
                     chainKeys.push_back(newKey);
                     chainKeyPaths.emplace_back();
+                    std::vector<uint32_t> &path = chainKeyPaths.back();
 
                     if(pVersion > 2)
                     {
                         // Read path integers
-                        std::vector<uint32_t> &path = chainKeyPaths.back();
                         unsigned int pathCount = pStream->readUnsignedInt();
                         path.reserve(pathCount);
 
                         for(unsigned int j = 0; j < pathCount; ++j)
                             path.emplace_back(pStream->readUnsignedInt());
+                    }
+                    else
+                    {
+                        // Default BIP-0044 path.
+                        path.emplace_back(Key::PURPOSE_44);
+                        path.emplace_back(Key::COIN_BITCOIN);
+                        path.emplace_back(Key::HARDENED);
+                        path.emplace_back(i); // 0 Receiving, 1 Change
                     }
                 }
                 else
@@ -2646,7 +2660,7 @@ namespace BitCoin
             return true;
         }
 
-        bool addChainKeys(Key *pKey, Key::DerivationPathMethod pMethod, Key::CoinIndex pCoinIndex,
+        bool addChainKeys(Key *pKey, Key::DerivationPathMethod pMethod, uint32_t pCoinIndex,
           uint32_t pIndex);
 
         bool hasPrivate;
@@ -2732,7 +2746,7 @@ namespace BitCoin
     };
 
     bool PublicKeyData::addChainKeys(Key *pKey, Key::DerivationPathMethod pMethod,
-      Key::CoinIndex pCoinIndex, uint32_t pIndex)
+      uint32_t pCoinIndex, uint32_t pIndex)
     {
         Key *chain;
         switch(pMethod)
@@ -2773,7 +2787,7 @@ namespace BitCoin
 
                 // Specify Path
                 chainKeyPaths.emplace_back();
-                chainKeyPaths.back().emplace_back(HARDENED);
+                chainKeyPaths.back().emplace_back(Key::HARDENED);
                 chainKeyPaths.back().emplace_back(pIndex);
                 return true;
             }
@@ -2782,7 +2796,7 @@ namespace BitCoin
 
         case Key::BIP0044:
             // Receiving chain
-            chain = pKey->chainKey(pIndex, Key::BIP0044, HARDENED, pCoinIndex);
+            chain = pKey->chainKey(pIndex, Key::BIP0044, Key::HARDENED, pCoinIndex);
             if(chain != NULL)
             {
                 if(chain->isPrivate())
@@ -2792,12 +2806,9 @@ namespace BitCoin
 
                 // Specify Path 44'/Coin/Account/Chain
                 chainKeyPaths.emplace_back();
-                chainKeyPaths.back().emplace_back(HARDENED + 44);
-                if(pCoinIndex == 0xffffffff)
-                    chainKeyPaths.back().emplace_back(Key::COIN_BITCOIN);// Default
-                else
-                    chainKeyPaths.back().emplace_back(pCoinIndex);
-                chainKeyPaths.back().emplace_back(HARDENED);
+                chainKeyPaths.back().emplace_back(Key::HARDENED + 44);
+                chainKeyPaths.back().emplace_back(pCoinIndex);
+                chainKeyPaths.back().emplace_back(Key::HARDENED);
                 chainKeyPaths.back().emplace_back(pIndex);
                 return true;
             }
@@ -3001,8 +3012,8 @@ namespace BitCoin
     {
         if(pOffset < mKeys.size())
         {
-            if(pGap < DEFAULT_GAP)
-                pGap = DEFAULT_GAP;
+            if(pGap < Key::DEFAULT_GAP)
+                pGap = Key::DEFAULT_GAP;
             mKeys[pOffset]->gap = pGap;
             for(std::vector<Key *>::iterator chainKey = mKeys[pOffset]->chainKeys.begin();
               chainKey != mKeys[pOffset]->chainKeys.end(); ++chainKey)
@@ -3256,7 +3267,7 @@ namespace BitCoin
 
         for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
           key != newData->chainKeys.end(); ++key)
-            (*key)->updateGap(DEFAULT_GAP);
+            (*key)->updateGap(Key::DEFAULT_GAP);
 
         newData->hasPrivate = true;
         newData->derivationPathMethod = pMethod;
@@ -3270,8 +3281,8 @@ namespace BitCoin
         return 0; // Success
     }
 
-    int KeyStore::addKeyMethod(Key *pKey, Key::DerivationPathMethod pMethod,
-      Key::CoinIndex pCoinIndex, int32_t pCreatedDate)
+    int KeyStore::addKeyMethod(Key *pKey, Key::DerivationPathMethod pMethod, uint32_t pCoinIndex,
+      int32_t pCreatedDate)
     {
         if(!mPrivateLoaded)
             return 5; // Private keys need to be loaded to add a private key
@@ -3346,7 +3357,7 @@ namespace BitCoin
 
         for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
           key != newData->chainKeys.end(); ++key)
-            (*key)->updateGap(DEFAULT_GAP);
+            (*key)->updateGap(Key::DEFAULT_GAP);
 
         newData->hasPrivate = pKey->isPrivate();
         newData->derivationPathMethod = pMethod;
@@ -3483,7 +3494,7 @@ namespace BitCoin
         // Update gaps
         for(std::vector<Key *>::const_iterator key = newData->chainKeys.begin();
           key != newData->chainKeys.end(); ++key)
-            (*key)->updateGap(DEFAULT_GAP);
+            (*key)->updateGap(Key::DEFAULT_GAP);
 
         newData->hasPrivate = false; // Need support for multiple private keys to support this.
         newData->derivationPathMethod = Key::DERIVE_UNKNOWN;
@@ -3521,7 +3532,8 @@ namespace BitCoin
             {
                 if(newKey->decode(line))
                 {
-                    int result = addKeyMethod(newKey, Key::DERIVE_UNKNOWN, Key::COIN_UNDEFINED, getTime());
+                    int result = addKeyMethod(newKey, Key::DERIVE_UNKNOWN, Key::COIN_BITCOIN,
+                      getTime());
                     if(result != 0)
                         delete newKey;
 
@@ -4914,14 +4926,14 @@ namespace BitCoin
          *****************************************************************************************/
         bool addressGapSuccess = true;
         chain = keyTree.chainKey(0, Key::BIP0044, HARDENED, Key::COIN_BITCOIN);
-        chain->updateGap(DEFAULT_GAP);
+        chain->updateGap(Key::DEFAULT_GAP);
 
-        if(chain->childCount() != DEFAULT_GAP)
+        if(chain->childCount() != Key::DEFAULT_GAP)
         {
             addressGapSuccess = false;
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_KEY_LOG_NAME,
               "Failed Address Gap : Update address gap : %d != %d", chain->childCount(),
-              DEFAULT_GAP);
+              Key::DEFAULT_GAP);
         }
 
         addressKey = chain->getNextUnused();
@@ -4933,7 +4945,7 @@ namespace BitCoin
         }
 
         bool updated = false;
-        chain->markUsed(addressKey->hash(), DEFAULT_GAP, updated);
+        chain->markUsed(addressKey->hash(), Key::DEFAULT_GAP, updated);
 
         if(!updated)
         {
@@ -4950,7 +4962,7 @@ namespace BitCoin
         }
 
         addressKey = chain->findChild(10);
-        chain->markUsed(addressKey->hash(), DEFAULT_GAP, updated);
+        chain->markUsed(addressKey->hash(), Key::DEFAULT_GAP, updated);
 
         if(chain->childCount() != 31)
         {
