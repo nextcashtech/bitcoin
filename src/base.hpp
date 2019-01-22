@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017-2018 NextCash, LLC                                      *
+ * Copyright 2017-2019 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -17,7 +17,7 @@
 
 // BIP-0014 Specifies User Agent Format
 #ifdef ANDROID
-#define BITCOIN_USER_AGENT "/NextCash:0.13.0/NextCashWallet:0.15.0(Android)/"
+#define BITCOIN_USER_AGENT "/NextCash:0.13.0/NextCashWallet:0.15.1(Android)/"
 #else
 #define BITCOIN_USER_AGENT "/NextCash:0.13.0/"
 #endif
