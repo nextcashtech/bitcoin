@@ -17,7 +17,7 @@
 
 // BIP-0014 Specifies User Agent Format
 #ifdef ANDROID
-#define BITCOIN_USER_AGENT "/NextCash:0.13.0/NextCashWallet:0.15.1(Android)/"
+#define BITCOIN_USER_AGENT "/NextCash:0.13.0/NextCashWallet:0.15.2(Android)/"
 #else
 #define BITCOIN_USER_AGENT "/NextCash:0.13.0/"
 #endif
