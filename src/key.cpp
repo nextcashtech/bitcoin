@@ -1167,6 +1167,7 @@ namespace BitCoin
         if(pStream->remaining() < 32)
             return false;
 
+        mVersion = MAINNET_PRIVATE;
         mKey[0] = 0; // Private
         pStream->read(mKey + 1, 32);
         return finalize();

@@ -89,16 +89,7 @@ namespace BitCoin
         if(opCode == OP_RETURN)
         {
             if(isPushOnly(pScript))
-            {
-                if(pScript.length() < 224)
-                    return NULL_DATA;
-                else
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_RETURN script is too long : %d", pScript.length());
-                    return NON_STANDARD;
-                }
-            }
+                return NULL_DATA;
             else
             {
                 NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
