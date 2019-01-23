@@ -40,7 +40,7 @@
 #endif
 
 #ifndef MAX_SCRIPT_SIZE
-#define MAX_SCRIPT_SIZE 50000
+#define MAX_SCRIPT_SIZE 100000
 #endif
 
 #ifndef OUTPUTS_SET_COUNT
