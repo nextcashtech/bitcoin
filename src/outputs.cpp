@@ -295,6 +295,7 @@ namespace BitCoin
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
           PROFILER_OUTPUTS_ADD_ID, PROFILER_OUTPUTS_ADD_NAME), true);
 #endif
+#ifndef TEST
         if(pBlockHeight != mNextBlockHeight)
         {
             NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
@@ -302,6 +303,7 @@ namespace BitCoin
               pBlockHeight, mNextBlockHeight);
             return false;
         }
+#endif
 
         TransactionOutputs *transactionReference;
         Iterator item;
@@ -344,11 +346,13 @@ namespace BitCoin
                 ++count;
             else
             {
+#ifndef TEST
                 NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                   "Failed to insert transaction output for block height %d : %s", pBlockHeight,
                   (*transaction)->hash().hex().text());
                 success = false;
                 delete transactionReference;
+#endif
             }
         }
 
@@ -1027,6 +1031,8 @@ namespace BitCoin
                       !(pFlags & REQUIRE_UNSPENT);
                 else if(pFlags & REQUIRE_UNSPENT)
                     result = ((TransactionOutputs *)*item)->isUnspent(pIndex);
+                else
+                    result = true;
 
                 if(result)
                 {

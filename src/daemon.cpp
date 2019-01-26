@@ -303,6 +303,10 @@ namespace BitCoin
           "Starting %s on %s in %s", BITCOIN_USER_AGENT, networkName(),
           mInfo.path().text());
 
+#ifdef TEST
+        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_DAEMON_LOG_NAME, "Running in TEST mode.");
+#endif
+
 #ifdef SINGLE_THREAD
         if(mInfo.spvMode)
             NextCash::Log::add(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME, "Running in SPV mode (Single Thread)");

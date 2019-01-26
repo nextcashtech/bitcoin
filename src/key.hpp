@@ -239,6 +239,10 @@ namespace BitCoin
         bool sign(const NextCash::Hash &pHash, Signature &pSignature) const;
         bool verify(const Signature &pSignature, const NextCash::Hash &pHash) const;
 
+        static bool verify(const uint8_t *pPublicKeyData, unsigned int pPublicKeyDataSize,
+          const uint8_t *pSignatureData, unsigned int pSignatureDataSize, bool pStrictSignatures,
+          const NextCash::Hash &pHash);
+
         // Read/Write public key in script format
         bool readPublic(NextCash::InputStream *pStream);
         bool writePublic(NextCash::OutputStream *pStream, bool pScriptFormat) const;

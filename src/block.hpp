@@ -128,7 +128,7 @@ namespace BitCoin
                 std::memset(complete, 0, count);
                 checkDupTime = 0L;
                 outputsTime = 0L;
-                sigTime = 0L;
+                scriptTime = 0L;
                 fullTime = 0L;
             }
             ~ProcessThreadData()
@@ -146,7 +146,7 @@ namespace BitCoin
             bool success;
             bool *complete;
             NextCash::Mutex timeLock;
-            uint64_t checkDupTime, outputsTime, sigTime, fullTime;
+            uint64_t checkDupTime, outputsTime, scriptTime, fullTime;
 
             Transaction *getNext(unsigned int &pOffset)
             {

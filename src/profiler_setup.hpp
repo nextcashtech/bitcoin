@@ -50,6 +50,8 @@
 
     static const unsigned int PROFILER_BLOCK_READ_ID = sNextID++;
     static const char *PROFILER_BLOCK_READ_NAME __attribute__ ((unused)) = "Block::read (B)";
+    static const unsigned int PROFILER_BLOCK_GET_ID = sNextID++;
+    static const char *PROFILER_BLOCK_GET_NAME __attribute__ ((unused)) = "Block::get (B)";
     static const unsigned int PROFILER_BLOCK_PROCESS_ID = sNextID++;
     static const char *PROFILER_BLOCK_PROCESS_NAME __attribute__ ((unused)) = "Block::process (B)"; // hits are bytes
     static const unsigned int PROFILER_BLOCK_MERKLE_CALC_ID = sNextID++;
@@ -59,6 +61,10 @@
     static const char *PROFILER_KEY_SIGN_NAME __attribute__ ((unused)) = "Key::sign";
     static const unsigned int PROFILER_KEY_VERIFY_SIG_ID = sNextID++;
     static const char *PROFILER_KEY_VERIFY_SIG_NAME __attribute__ ((unused)) = "Key::verifySig";
+    static const unsigned int PROFILER_KEY_STATIC_VERIFY_SIG_ID = sNextID++;
+    static const char *PROFILER_KEY_STATIC_VERIFY_SIG_NAME __attribute__ ((unused)) = "Key::verifySigStatic";
+    static const unsigned int PROFILER_KEY_SIG_READ_ID = sNextID++;
+    static const char *PROFILER_KEY_SIG_READ_NAME __attribute__ ((unused)) = "Key::SigRead";
 
     static const unsigned int PROFILER_MEMPOOL_STATUS_ID = sNextID++;
     static const char *PROFILER_MEMPOOL_STATUS_NAME __attribute__ ((unused)) = "MemPool::status";

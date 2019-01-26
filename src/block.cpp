@@ -661,7 +661,7 @@ namespace BitCoin
 
         Transaction *transaction;
         unsigned int offset;
-        NextCash::Timer checkDupTime, outputsTime, sigTime, fullTime;
+        NextCash::Timer checkDupTime, outputsTime, scriptTime, fullTime;
         while(true)
         {
             transaction = data->getNext(offset);
@@ -675,7 +675,7 @@ namespace BitCoin
             fullTime.start();
             transaction->check(data->chain, data->block->header.hash(), data->height, offset == 0,
               data->block->header.version, data->spentAgeLock, data->spentAges, checkDupTime,
-              outputsTime, sigTime);
+              outputsTime, scriptTime);
             if(transaction->isVerified())
                 data->markComplete(offset, true);
             else
@@ -691,7 +691,7 @@ namespace BitCoin
         data->timeLock.lock();
         data->checkDupTime += checkDupTime.microseconds();
         data->outputsTime += outputsTime.microseconds();
-        data->sigTime += sigTime.microseconds();
+        data->scriptTime += scriptTime.microseconds();
         data->fullTime += fullTime.microseconds();
         data->timeLock.unlock();
 
@@ -717,9 +717,11 @@ namespace BitCoin
         mFees = 0;
 
         NextCash::Timer addTime(true);
+#ifndef TEST
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
+#endif
         addTime.stop();
 
         ProcessThreadData threadData(pChain, this, pHeight, transactions.begin(),
@@ -801,9 +803,9 @@ namespace BitCoin
             return false;
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Multi threaded block times Threads,%d,Add,%d,Dup,%d,Out,%d,Sig,%d,Full,%d", pThreadCount,
+          "Multi threaded block times Threads,%d,Add,%d,Dup,%d,Out,%d,Scr,%d,Full,%d", pThreadCount,
           addTime.milliseconds(), threadData.checkDupTime / 1000L, threadData.outputsTime / 1000L,
-          threadData.sigTime / 1000L, threadData.fullTime / 1000L);
+          threadData.scriptTime / 1000L, threadData.fullTime / 1000L);
 
         if(threadData.spentAges.size() > 0)
         {
@@ -864,7 +866,7 @@ namespace BitCoin
         std::vector<unsigned int> spentAges;
         spentAges.reserve(transactions.size() * 2);
         NextCash::Mutex spentAgeLock("Spent Age");
-        NextCash::Timer checkDupTime, outputsTime, sigTime, fullTime;
+        NextCash::Timer checkDupTime, outputsTime, scriptTime, fullTime;
         for(TransactionList::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction, ++transactionOffset)
         {
@@ -872,7 +874,7 @@ namespace BitCoin
               // "Processing transaction %d", transactionOffset);
             fullTime.start();
             (*transaction)->check(pChain, header.hash(), pHeight, transactionOffset == 0,
-              header.version, spentAgeLock, spentAges, checkDupTime, outputsTime, sigTime);
+              header.version, spentAgeLock, spentAges, checkDupTime, outputsTime, scriptTime);
             if(!(*transaction)->isVerified())
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
@@ -886,9 +888,9 @@ namespace BitCoin
         }
 
         NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Single threaded block times Threads,1,Add,%d,Dup,%d,Out,%d,Sig,%d,Full,%d",
+          "Single threaded block times Threads,1,Add,%d,Dup,%d,Out,%d,Scr,%d,Full,%d",
           addTime.milliseconds(), checkDupTime.milliseconds(), outputsTime.milliseconds(),
-          sigTime.milliseconds(), fullTime.milliseconds());
+          scriptTime.milliseconds(), fullTime.milliseconds());
 
         if(spentAges.size() > 0)
         {
@@ -1906,6 +1908,11 @@ namespace BitCoin
 
     Block *Block::getBlock(unsigned int pHeight)
     {
+#ifdef PROFILER_ON
+        NextCash::Profiler &profiler = NextCash::getProfiler(PROFILER_SET,
+          PROFILER_BLOCK_GET_ID, PROFILER_BLOCK_GET_NAME);
+        NextCash::ProfilerReference profilerRef(profiler, true);
+#endif
         Block *result = new Block();
 
         if(!Header::getHeader(pHeight, result->header))
@@ -1922,8 +1929,8 @@ namespace BitCoin
         }
 
         NextCash::stream_size dataSize = 0;
-        if(file->readTransactions(BlockFile::fileOffset(pHeight),
-          result->transactions, result->header.time, &dataSize))
+        if(file->readTransactions(BlockFile::fileOffset(pHeight), result->transactions,
+          result->header.time, &dataSize))
         {
             result->header.transactionCount = result->transactions.size();
             result->setSize(80 + compactIntegerSize(result->header.transactionCount) + dataSize);
@@ -1935,6 +1942,10 @@ namespace BitCoin
         }
         file->unlock(false);
 
+#ifdef PROFILER_ON
+        if(result != NULL)
+            profiler.addHits(result->size() - 1); // One hit (byte) will be added by reference.
+#endif
         return result;
     }
 

@@ -963,17 +963,21 @@ namespace BitCoin
     }
 
     bool ScriptInterpreter::checkSignature(Transaction &pTransaction, unsigned int pInputOffset,
-      int64_t pOutputAmount, const Key &pPublicKey, const Signature &pSignature,
+      int64_t pOutputAmount, const uint8_t *pPublicKeyData, unsigned int pPublicKeyDataSize,
+      const uint8_t *pSignatureData, unsigned int pSignatureDataSize, bool pStrictSignatures,
       NextCash::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset,
       const Forks &pForks, unsigned int pBlockHeight)
     {
-        if(pForks.cashActive(pBlockHeight) && !(pSignature.hashType() & Signature::FORKID))
+        if(pForks.cashActive(pBlockHeight) &&
+          !(pSignatureData[pSignatureDataSize-1] & Signature::FORKID))
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Signature hash type missing required fork ID flag : %02x", pSignature.hashType());
+              "Signature hash type missing required fork ID flag : %02x",
+              pSignatureData[pSignatureDataSize-1]);
             return false;
         }
-        // else if(!pForks.cashActive() && pSignature.hashType() & Signature::FORKID)
+        // else if(!pForks.cashActive() &&
+        //   (pSignatureData[pSignatureDataSize-1] & Signature::FORKID))
         // {
             // NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               // "Signature hash type has disabled fork ID flag : %02x", pSignature.hashType());
@@ -985,16 +989,16 @@ namespace BitCoin
         NextCash::stream_size previousOffset = pCurrentOutputScript.readOffset();
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
         pTransaction.getSignatureHash(pForks, pBlockHeight, signatureHash, pInputOffset,
-          pCurrentOutputScript, pOutputAmount, pSignature.hashType());
+          pCurrentOutputScript, pOutputAmount, pSignatureData[pSignatureDataSize-1]);
 
         pCurrentOutputScript.setReadOffset(previousOffset);
-        if(pPublicKey.verify(pSignature, signatureHash))
+        if(Key::verify(pPublicKeyData, pPublicKeyDataSize, pSignatureData, pSignatureDataSize,
+          pStrictSignatures, signatureHash))
             return true;
         else
         {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Signature check failed : 0x%02x - %s", (int)pSignature.hashType(),
-              pSignature.hex().text());
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Signature check failed");
             return false;
         }
     }
@@ -1382,7 +1386,8 @@ namespace BitCoin
 
                     if(!checkStackSize(1))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_VERIFY");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_VERIFY");
                         mValid = false;
                         return false;
                     }
@@ -1398,7 +1403,8 @@ namespace BitCoin
                 case OP_RETURN: // Marks transaction as invalid
                     if(!ifStackTrue())
                         break;
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
+                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                      "Return. Marking not verified");
                     mVerified = false;
                     return true;
                 case OP_EQUAL: // Returns 1 if the the top two stack items are exactly equal, 0 otherwise
@@ -1409,7 +1415,8 @@ namespace BitCoin
 
                     if(!checkStackSize(2))
                     {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Stack not large enough for OP_EQUALVERIFY");
                         mValid = false;
                         return false;
                     }
@@ -1458,9 +1465,10 @@ namespace BitCoin
                     }
 
                     // Hash top stack item and pop it
-                    top()->setReadOffset(0);
+                    NextCash::Buffer *data = top();
+                    data->setReadOffset(0);
                     NextCash::Digest digest(NextCash::Digest::RIPEMD160);
-                    digest.writeStream(top(), top()->length());
+                    digest.writeStream(data, data->length());
                     digest.getResult(&mHash);
                     pop();
 
@@ -1482,9 +1490,10 @@ namespace BitCoin
                     }
 
                     // Hash top stack item and pop it
-                    top()->setReadOffset(0);
+                    NextCash::Buffer *data = top();
+                    data->setReadOffset(0);
                     NextCash::Digest digest(NextCash::Digest::SHA1);
-                    digest.writeStream(top(), top()->length());
+                    digest.writeStream(data, data->length());
                     digest.getResult(&mHash);
                     pop();
 
@@ -1506,9 +1515,10 @@ namespace BitCoin
                     }
 
                     // Hash top stack item and pop it
-                    top()->setReadOffset(0);
+                    NextCash::Buffer *data = top();
+                    data->setReadOffset(0);
                     NextCash::Digest digest(NextCash::Digest::SHA256);
-                    digest.writeStream(top(), top()->length());
+                    digest.writeStream(data, data->length());
                     digest.getResult(&mHash);
                     pop();
 
@@ -1529,9 +1539,10 @@ namespace BitCoin
                     }
 
                     // Hash top stack item and pop it
-                    top()->setReadOffset(0);
+                    NextCash::Buffer *data = top();
+                    data->setReadOffset(0);
                     NextCash::Digest digest(NextCash::Digest::SHA256_RIPEMD160);
-                    digest.writeStream(top(), top()->length());
+                    digest.writeStream(data, data->length());
                     digest.getResult(&mHash);
                     pop();
 
@@ -1553,9 +1564,10 @@ namespace BitCoin
                     }
 
                     // Hash top stack item and pop it
-                    top()->setReadOffset(0);
+                    NextCash::Buffer *data = top();
+                    data->setReadOffset(0);
                     NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
-                    digest.writeStream(top(), top()->length());
+                    digest.writeStream(data, data->length());
                     digest.getResult(&mHash);
                     pop();
 
@@ -1590,38 +1602,31 @@ namespace BitCoin
                     bool failed = false;
 
                     // Pop the public key
-                    Key publicKey;
-                    top()->setReadOffset(0);
-                    if(!publicKey.readPublic(top()))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid public key for OP_CHECKSIG");
-                        failed = true;
-                    }
-                    pop();
+                    NextCash::Buffer *publicKeyData = top();
+                    pop(false);
 
                     // Pop the signature
-                    bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && // TODO Move into only cases where used
+                    bool strictSigs = pBlockVersion >= 3 &&
                       pForks.enabledBlockVersion(pBlockHeight) >= 3;
-                    Signature signature;
-                    top()->setReadOffset(0);
-                    if(!signature.read(top(), (unsigned int)top()->length(), strictECDSA_DER_Sigs))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid signature for OP_CHECKSIG");
-                        failed = true;
-                    }
-                    pop();
+                    NextCash::Buffer *signatureData = top();
+                    signatureData->setReadOffset(0);
+                    pop(false);
 
                     // Check the signature with the public key
                     if(!failed && checkSignature(*mTransaction, mInputOffset, mOutputAmount,
-                      publicKey, signature, pScript, sigStartOffset, pForks, pBlockHeight))
+                      publicKeyData->begin(), publicKeyData->length(), signatureData->begin(),
+                      signatureData->length(), strictSigs, pScript, sigStartOffset, pForks,
+                      pBlockHeight))
                     {
+                        delete publicKeyData;
+                        delete signatureData;
                         if(opCode == OP_CHECKSIG)
                             push()->writeByte(1); // Push true onto the stack
                     }
                     else
                     {
+                        delete publicKeyData;
+                        delete signatureData;
                         if(opCode == OP_CHECKSIG)
                             push(); // Push false onto the stack
                         else
@@ -1670,15 +1675,11 @@ namespace BitCoin
                     }
 
                     // Pop public keys
-                    Key *publicKeys[publicKeyCount];
-                    for(unsigned int i=0;i<publicKeyCount;i++)
+                    NextCash::Buffer *publicKeys[publicKeyCount];
+                    for(unsigned int i = 0; i < publicKeyCount; ++i)
                     {
-                        publicKeys[i] = new Key();
-                        top()->setReadOffset(0);
-                        if(!publicKeys[i]->readPublic(top()))
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Invalid public key for OP_CHECKMULTISIG");
-                        pop();
+                        publicKeys[i] = top();
+                        pop(false);
                     }
 
                     // Pop count of signatures
@@ -1688,21 +1689,20 @@ namespace BitCoin
                         NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
                           "Stack not large enough for OP_CHECKMULTISIG signatures");
                         mValid = false;
+                        for(unsigned int i = 0; i < publicKeyCount; ++i)
+                            delete publicKeys[i];
                         return false;
                     }
 
                     // Pop signatures
-                    bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && // TODO Move into only cases where used
+                    bool strictECDSA_DER_Sigs = pBlockVersion >= 3 &&
                       pForks.enabledBlockVersion(pBlockHeight) >= 3;
-                    Signature signatures[signatureCount];
-                    for(unsigned int i=0;i<signatureCount;i++)
+                    NextCash::Buffer *signatures[signatureCount];
+                    for(unsigned int i = 0; i < signatureCount; ++i)
                     {
-                        top()->setReadOffset(0);
-                        if(!signatures[i].read(top(), (unsigned int)top()->length(),
-                          strictECDSA_DER_Sigs))
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Invalid signature for OP_CHECKMULTISIG");
-                        pop();
+                        signatures[i] = top();
+                        signatures[i]->setReadOffset(0);
+                        pop(false);
                     }
 
                     // Pop extra item because of bug
@@ -1713,17 +1713,23 @@ namespace BitCoin
                     unsigned int publicKeyOffset = 0;
                     bool signatureVerified;
                     bool failed = false;
-                    for(unsigned int i=0;i<signatureCount;i++)
+                    NextCash::Buffer *publicKey, *signature;
+                    for(unsigned int i = 0; i < signatureCount; ++i)
                     {
                         signatureVerified = false;
                         while(publicKeyOffset < publicKeyCount)
+                        {
+                            publicKey = publicKeys[publicKeyOffset++];
+                            signature = signatures[i];
                             if(checkSignature(*mTransaction, mInputOffset, mOutputAmount,
-                              *publicKeys[publicKeyOffset++], signatures[i], pScript,
-                              sigStartOffset, pForks, pBlockHeight))
+                              publicKey->begin(), publicKey->length(), signature->begin(),
+                              signature->length(), strictECDSA_DER_Sigs, pScript, sigStartOffset,
+                              pForks, pBlockHeight))
                             {
                                 signatureVerified = true;
                                 break;
                             }
+                        }
 
                         if(!signatureVerified)
                         {
@@ -1732,9 +1738,11 @@ namespace BitCoin
                         }
                     }
 
-                    // Destroy public keys
-                    for(unsigned int i=0;i<publicKeyCount;i++)
+                    // Destroy public key and signature buffers.
+                    for(unsigned int i = 0; i < publicKeyCount; ++i)
                         delete publicKeys[i];
+                    for(unsigned int i = 0; i < signatureCount; ++i)
+                        delete signatures[i];
 
                     if(failed)
                     {
@@ -1776,15 +1784,8 @@ namespace BitCoin
                     bool failed = false;
 
                     // Pop the public key
-                    Key publicKey;
-                    top()->setReadOffset(0);
-                    if(!publicKey.readPublic(top()))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid public key for OP_CHECKDATASIG");
-                        failed = true;
-                    }
-                    pop();
+                    NextCash::Buffer *publicKey = top();
+                    pop(false);
 
                     // Pop the message
                     NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
@@ -1796,24 +1797,23 @@ namespace BitCoin
                     pop();
 
                     // Pop the signature
-                    Signature signature;
-                    top()->setReadOffset(0);
-                    if(!signature.read(top(), (unsigned int)top()->length(), true))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid signature for OP_CHECKDATASIG");
-                        failed = true;
-                    }
-                    pop();
+                    NextCash::Buffer *signature = top();
+                    signature->setReadOffset(0);
+                    pop(false);
 
                     // Check the signature with the public key
-                    if(!failed && publicKey.verify(signature, messageHash))
+                    if(!failed && Key::verify(publicKey->begin(), publicKey->length(),
+                      signature->begin(), signature->length(), true, messageHash))
                     {
+                        delete publicKey;
+                        delete signature;
                         if(opCode == OP_CHECKDATASIG)
                             push()->writeByte(1); // Push true onto the stack
                     }
                     else
                     {
+                        delete publicKey;
+                        delete signature;
                         if(opCode == OP_CHECKDATASIG)
                             push(); // Push false onto the stack
                         else
@@ -3021,7 +3021,8 @@ namespace BitCoin
                         return false;
                     }
 
-                    push(new NextCash::Buffer(*top()));
+                    top()->setReadOffset(0);
+                    push(new NextCash::Buffer(*top(), true));
                     break;
                 }
                 case OP_IFDUP: // 0x73//     x    x / x x    If the top stack value is not 0, duplicate it.
@@ -3037,7 +3038,10 @@ namespace BitCoin
                     }
 
                     if(!bufferIsZero(top()))
-                        push(new NextCash::Buffer(*top()));
+                    {
+                        top()->setReadOffset(0);
+                        push(new NextCash::Buffer(*top(), true));
+                    }
                     break;
                 case OP_DEPTH: // 0x74//     Nothing    <Stack size>    Puts the number of stack items onto the stack.
                 {

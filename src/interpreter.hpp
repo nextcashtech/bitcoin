@@ -285,11 +285,11 @@ namespace BitCoin
             mHash.clear();
 
             std::list<NextCash::Buffer *>::iterator iter;
-            for(iter=mStack.begin();iter!=mStack.end();++iter)
+            for(iter = mStack.begin(); iter != mStack.end(); ++iter)
                 delete *iter;
             mStack.clear();
 
-            for(iter=mAltStack.begin();iter!=mAltStack.end();++iter)
+            for(iter = mAltStack.begin(); iter != mAltStack.end(); ++iter)
                 delete *iter;
             mAltStack.clear();
 
@@ -366,9 +366,11 @@ namespace BitCoin
         static void writePushDataSize(unsigned int pSize, NextCash::OutputStream *pOutput);
         static bool pullData(uint8_t pOpCode, NextCash::Buffer &pScript, NextCash::Buffer &pData);
 
-        static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset, int64_t pOutputAmount,
-          const Key &pPublicKey, const Signature &pSignature, NextCash::Buffer &pCurrentOutputScript,
-          unsigned int pSignatureStartOffset, const Forks &pForks, unsigned int pBlockHeight);
+        static bool checkSignature(Transaction &pTransaction, unsigned int pInputOffset,
+          int64_t pOutputAmount, const uint8_t *pPublicKeyData, unsigned int pPublicKeyDataSize,
+          const uint8_t *pSignatureData, unsigned int pSignatureDataSize, bool pStrictSignatures,
+          NextCash::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset,
+          const Forks &pForks, unsigned int pBlockHeight);
 
         static bool writeP2PKHOutputScript(NextCash::Buffer &pOutputScript,
           const NextCash::Hash &pPubKeyHash);
@@ -415,7 +417,7 @@ namespace BitCoin
             if(mIfStack.size() == 0)
                 return true;
 
-            for(std::list<bool>::iterator i = mIfStack.begin();i != mIfStack.end();++i)
+            for(std::list<bool>::iterator i = mIfStack.begin(); i != mIfStack.end(); ++i)
                 if(!(*i))
                     return false;
 

@@ -19,6 +19,7 @@
 bool chainTest();
 bool merkleTest1();
 bool merkleTest2();
+bool largeBlockTest();
 
 // To run with valgrind.
 //   make test.debug
@@ -64,18 +65,21 @@ namespace BitCoin
             // ++failed;
 
         // if(!merkleTest1())
-            // failed++;
+            // ++failed;
 
         // if(!merkleTest2())
-            // failed++;
+            // ++failed;
 
         // BitCoin::Chain::tempTest();
 
         // if(!chainTest())
-            // failed++;
+            // ++failed;
 
         // if(!cashDAATest())
-            // failed++;
+            // ++failed;
+
+        // if(!largeBlockTest())
+            // ++failed;
 #endif
 
         return failed == 0;
@@ -808,7 +812,7 @@ bool chainTest()
     // NextCash::removeDirectory("cash_test");
     // NextCash::createDirectory("cash_test");
     // BitCoin::setNetwork(BitCoin::MAINNET);
-    // BitCoin::Info::instance().setPath("cash_test");
+    // BitCoin::Info::setPath("cash_test");
 
     // BitCoin::Chain chain;
     // chain.setMaxTargetBits(maxTargetBits); // zero difficulty (all block hashes are valid)
@@ -819,3 +823,44 @@ bool chainTest()
 
     // return true;
 // }
+
+bool largeBlockTest()
+{
+    // NOTE: Requires valid UTXO set and blocks from BSV chain.
+    NextCash::Log::add(NextCash::Log::INFO, "Test", "------------- Starting Large Block Test -------------");
+    BitCoin::setNetwork(BitCoin::MAINNET);
+    BitCoin::Info::setPath("/var/bitcoin/mainnet/");
+
+    BitCoin::Chain *chain = new BitCoin::Chain();
+    if(!chain->load())
+        return false;
+
+#ifdef PROFILER_ON
+    NextCash::resetProfilers();
+#endif
+    BitCoin::BlockReference bigBlock = BitCoin::Block::getBlock(563638);
+
+    if(!bigBlock->processMultiThreaded(chain, 563638, 4))
+        return false;
+
+#ifdef PROFILER_ON
+    NextCash::printProfilerDataToLog(NextCash::Log::INFO);
+#endif
+
+#ifdef PROFILER_ON
+    NextCash::resetProfilers();
+#endif
+    NextCash::Timer timer;
+    BitCoin::BlockReference bigBlock2 = BitCoin::Block::getBlock(563638);
+
+    timer.start();
+    if(!bigBlock2->processMultiThreaded(chain, 563638, 4))
+        return false;
+    timer.stop();
+
+#ifdef PROFILER_ON
+    NextCash::printProfilerDataToLog(NextCash::Log::INFO);
+#endif
+    NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Total time : %d ms", timer.milliseconds());
+    return true;
+}
