@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017-2018 NextCash, LLC                                      *
+ * Copyright 2017-2019 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -215,6 +215,8 @@ namespace BitCoin
             mOutputAmount  = 0;
         }
         ~ScriptInterpreter() { clear(); }
+
+        static void initializeStatic();
 
         void initialize(Transaction *pTransaction, unsigned int pOffset, uint32_t pSequence,
           int64_t pOutputAmount)
@@ -469,6 +471,104 @@ namespace BitCoin
         static bool arithmeticRead(NextCash::Buffer *pBuffer, int64_t &pValue);
         static void arithmeticWrite(NextCash::Buffer *pBuffer, int64_t pValue);
 
+        NextCash::stream_size mSigStartOffset;
+        NextCash::Buffer *mScript;
+        int32_t mBlockVersion;
+        Forks *mForks;
+        unsigned int mBlockHeight;
+
+        // Member function pointer array for op codes.
+        static bool (ScriptInterpreter::*sExecuteOpCode[256])(uint8_t pOpCode);
+
+        // Op Code functions
+        bool opCodePushFalse(uint8_t pOpCode);
+        bool opCodeSingleBytePush(uint8_t pOpCode);
+        bool opCodePushData(uint8_t pOpCode);
+        bool opCodePushNumber(uint8_t pOpCode);
+
+        bool opCodeIf(uint8_t pOpCode);
+        bool opCodeNotIf(uint8_t pOpCode);
+        bool opCodeElse(uint8_t pOpCode);
+        bool opCodeEndIf(uint8_t pOpCode);
+
+        bool opCodeVerify(uint8_t pOpCode);
+        bool opCodeReturn(uint8_t pOpCode);
+
+        bool opCodeEqual(uint8_t pOpCode);
+
+        bool opCodeHash(uint8_t pOpCode);
+
+        bool opCodeSeparator(uint8_t pOpCode);
+
+        bool opCodeCheckSig(uint8_t pOpCode);
+        bool opCodeCheckMultiSig(uint8_t pOpCode);
+        bool opCodeCheckDataSig(uint8_t pOpCode);
+
+        bool opCodeCheckLockTimeVerify(uint8_t pOpCode);
+        bool opCodeCheckSequenceVerify(uint8_t pOpCode);
+
+        bool opCodeAdd1(uint8_t pOpCode);
+        bool opCodeSubtract1(uint8_t pOpCode);
+        bool opCodeNegate(uint8_t pOpCode);
+        bool opCodeAbs(uint8_t pOpCode);
+        bool opCodeNot(uint8_t pOpCode);
+        bool opCodeZeroNotEqual(uint8_t pOpCode);
+        bool opCodeAdd(uint8_t pOpCode);
+        bool opCodeSubtract(uint8_t pOpCode);
+        bool opCodeMultiply(uint8_t pOpCode);
+        bool opCodeDivide(uint8_t pOpCode);
+        bool opCodeMod(uint8_t pOpCode);
+
+        bool opCodeLeftShift(uint8_t pOpCode);
+        bool opCodeRightShift(uint8_t pOpCode);
+        bool opCodeBoolAnd(uint8_t pOpCode);
+        bool opCodeBoolOr(uint8_t pOpCode);
+
+        bool opCodeNumEqual(uint8_t pOpCode);
+        bool opCodeNumNotEqual(uint8_t pOpCode);
+        bool opCodeLessThan(uint8_t pOpCode);
+        bool opCodeGreaterThan(uint8_t pOpCode);
+        bool opCodeLessThanOrEqual(uint8_t pOpCode);
+        bool opCodeGreaterThanOrEqual(uint8_t pOpCode);
+        bool opCodeMin(uint8_t pOpCode);
+        bool opCodeMax(uint8_t pOpCode);
+        bool opCodeWithin(uint8_t pOpCode);
+
+        bool opCodeToAltStack(uint8_t pOpCode);
+        bool opCodeFromAltStack(uint8_t pOpCode);
+        bool opCodeDup(uint8_t pOpCode);
+        bool opCodeIfDup(uint8_t pOpCode);
+        bool opCodeDepth(uint8_t pOpCode);
+        bool opCodeDrop(uint8_t pOpCode);
+        bool opCodeNip(uint8_t pOpCode);
+        bool opCodeOver(uint8_t pOpCode);
+        bool opCodePick(uint8_t pOpCode);
+        bool opCodeRoll(uint8_t pOpCode);
+        bool opCodeRotate(uint8_t pOpCode);
+        bool opCodeSwap(uint8_t pOpCode);
+        bool opCodeTuck(uint8_t pOpCode);
+        bool opCodeDrop2(uint8_t pOpCode);
+        bool opCodeDup2(uint8_t pOpCode);
+        bool opCodeDup3(uint8_t pOpCode);
+        bool opCodeOver2(uint8_t pOpCode);
+        bool opCodeRotate2(uint8_t pOpCode);
+        bool opCodeSwap2(uint8_t pOpCode);
+
+        bool opCodeConcat(uint8_t pOpCode);
+        bool opCodeSplit(uint8_t pOpCode);
+        bool opCodeNum2Bin(uint8_t pOpCode);
+        bool opCodeBin2Num(uint8_t pOpCode);
+        bool opCodeSize(uint8_t pOpCode);
+        bool opCodeInvert(uint8_t pOpCode);
+
+        bool opCodeAnd(uint8_t pOpCode);
+        bool opCodeOr(uint8_t pOpCode);
+        bool opCodeXor(uint8_t pOpCode);
+
+        bool opCodeDisabled(uint8_t pOpCode);
+        bool opCodeFail(uint8_t pOpCode);
+        bool opCodeNoOp(uint8_t pOpCode);
+        bool opCodeUnknown(uint8_t pOpCode);
     };
 }
 

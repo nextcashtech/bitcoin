@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017-2018 NextCash, LLC                                      *
+ * Copyright 2017-2019 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -72,6 +72,8 @@ namespace BitCoin
         mFinishTime = 0;
         mKeysSynchronized = true;
         mTransmittedTransToLastNode = false;
+
+        ScriptInterpreter::initializeStatic();
 
         NextCash::Log::add(NextCash::Log::DEBUG, BITCOIN_DAEMON_LOG_NAME,
           "Creating daemon object");
