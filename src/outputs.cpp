@@ -131,14 +131,15 @@ namespace BitCoin
         pStream->setReadOffset(mDataOffset + TRANSACTION_HASH_SIZE + mBaseSize +
           (sizeof(uint32_t) * mOutputCount));
 
-        for(uint32_t i = 0; i < pIndex; i++)
+        for(uint32_t i = 0; i < pIndex; ++i)
             Output::skip(pStream);
 
         return pOutput.read(pStream);
     }
 
     void TransactionOutputs::writeInitialData(const NextCash::Hash &pHash,
-      NextCash::OutputStream *pStream, TransactionReference &pTransaction)
+      NextCash::OutputStream *pStream, TransactionReference &pTransaction,
+      unsigned int pBlockHeight)
     {
         if(mDataOffset == NextCash::INVALID_STREAM_SIZE)
         {
@@ -149,9 +150,14 @@ namespace BitCoin
 
             write(pStream);
 
+            uint32_t *currentSpent = mSpentHeights;
             for(std::vector<Output>::iterator output = pTransaction->outputs.begin();
-              output != pTransaction->outputs.end(); ++output)
-                output->write(pStream);
+              output != pTransaction->outputs.end(); ++output, ++currentSpent)
+            {
+                output->write(pStream, true);
+                if(ScriptInterpreter::isOPReturn(output->script))
+                    *currentSpent = pBlockHeight;
+            }
 
             clearModified();
             setNew();
@@ -317,7 +323,7 @@ namespace BitCoin
               pBlockHeight, (*transaction)->outputs.size());
 
             valid = true;
-            if(!insert(transactionReference, *transaction))
+            if(!insert(transactionReference, *transaction, pBlockHeight))
             {
                 // Check for matching transaction marked for removal.
                 Iterator item = get((*transaction)->hash());
@@ -732,14 +738,16 @@ namespace BitCoin
         return success;
     }
 
-    bool Outputs::insert(TransactionOutputs *pValue, TransactionReference &pTransaction)
+    bool Outputs::insert(TransactionOutputs *pValue, TransactionReference &pTransaction,
+      unsigned int pBlockHeight)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
           PROFILER_OUTPUTS_INSERT_ID, PROFILER_OUTPUTS_INSERT_NAME), true);
 #endif
         mLock.readLock();
-        bool result = mSubSets[subSetOffset(pValue->getHash())].insert(pValue, pTransaction);
+        bool result = mSubSets[subSetOffset(pValue->getHash())].insert(pValue, pTransaction,
+          pBlockHeight);
         mLock.readUnlock();
         return result;
     }
@@ -973,7 +981,8 @@ namespace BitCoin
         return result;
     }
 
-    bool Outputs::SubSet::insert(TransactionOutputs *pReference, TransactionReference &pTransaction)
+    bool Outputs::SubSet::insert(TransactionOutputs *pReference,
+      TransactionReference &pTransaction, unsigned int pBlockHeight)
     {
         mLock.lock();
 
@@ -1000,7 +1009,8 @@ namespace BitCoin
             return false;
         }
 
-        pReference->writeInitialData(pReference->getHash(), dataOutFile, pTransaction);
+        pReference->writeInitialData(pReference->getHash(), dataOutFile, pTransaction,
+          pBlockHeight);
         delete dataOutFile;
 
         ++mNewSize;
@@ -2239,7 +2249,7 @@ namespace BitCoin
                     transaction->outputs.pop_back();
 
                 // Add to set
-                if(!testOutputs.insert(data, transaction))
+                if(!testOutputs.insert(data, transaction, (i % 10) + 1))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                       "Failed to insert : %s", data->getHash().hex().text());
@@ -2267,7 +2277,7 @@ namespace BitCoin
                 transaction->outputs.pop_back();
 
             // Add to set
-            if(!testOutputs.insert(data, transaction))
+            if(!testOutputs.insert(data, transaction, (testSize / 2) + 2))
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
                   "Passed not insert duplicate value");
             else
@@ -2280,7 +2290,7 @@ namespace BitCoin
             // Make sure to use a different height to prevent dup check from rejecting insert.
             data->blockHeight = (testSize / 2) + 3;
             TransactionReference transactionDup(new Transaction(*transaction));
-            if(testOutputs.insert(data, transactionDup))
+            if(testOutputs.insert(data, transactionDup, (testSize / 2) + 2))
                 NextCash::Log::add(NextCash::Log::INFO, BITCOIN_OUTPUTS_LOG_NAME,
                   "Passed insert duplicate sort");
             else
@@ -2518,7 +2528,7 @@ namespace BitCoin
 
                 // Add to set
                 TransactionReference reference(transaction);
-                if(!testOutputs.insert(data, reference))
+                if(!testOutputs.insert(data, reference, (i % 10) + 1))
                 {
                     NextCash::Log::addFormatted(NextCash::Log::ERROR, BITCOIN_OUTPUTS_LOG_NAME,
                       "Failed to insert : %s", data->getHash().hex().text());

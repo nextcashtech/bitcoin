@@ -12,12 +12,21 @@
 
 namespace BitCoin
 {
-    void Output::write(NextCash::OutputStream *pStream)
+    void Output::write(NextCash::OutputStream *pStream, bool pTrim)
     {
         pStream->writeLong(amount);
-        writeCompactInteger(pStream, script.length());
-        script.setReadOffset(0);
-        pStream->writeStream(&script, script.length());
+        if(pTrim && ScriptInterpreter::isOPReturn(script))
+        {
+            // Trim OP_RETURN data
+            writeCompactInteger(pStream, 1);
+            pStream->writeByte(OP_RETURN);
+        }
+        else
+        {
+            script.setReadOffset(0);
+            writeCompactInteger(pStream, script.length());
+            pStream->writeStream(&script, script.length());
+        }
     }
 
     bool Output::read(NextCash::InputStream *pStream)

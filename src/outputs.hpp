@@ -138,7 +138,7 @@ namespace BitCoin
         bool readData(NextCash::InputStream *pStream);
         bool readOutput(NextCash::InputStream *pStream, uint32_t pIndex, Output &pOutput);
         void writeInitialData(const NextCash::Hash &pHash, NextCash::OutputStream *pStream,
-          TransactionReference &pTransaction);
+          TransactionReference &pTransaction, unsigned int pBlockHeight);
         void writeModifiedData(NextCash::OutputStream *pStream);
 
         bool spendInternal(uint32_t pBlockHeight, uint32_t pIndex)
@@ -404,7 +404,8 @@ namespace BitCoin
             SubSetIterator get(const NextCash::Hash &pTransactionID);
 
             // Inserts a new item corresponding to the lookup.
-            bool insert(TransactionOutputs *pReference, TransactionReference &pTransaction);
+            bool insert(TransactionOutputs *pReference, TransactionReference &pTransaction,
+              unsigned int pBlockHeight);
 
             bool getOutput(const NextCash::Hash &pTransactionID, uint32_t pIndex, uint8_t pFlags,
               uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight,
@@ -611,7 +612,8 @@ namespace BitCoin
         // Inserts a new item corresponding to the lookup.
         // Returns false if the pReference matches an existing value under the same hash according
         //   to the TransactionOutputs::valuesMatch function.
-        bool insert(TransactionOutputs *pReference, TransactionReference &pTransaction);
+        bool insert(TransactionOutputs *pReference, TransactionReference &pTransaction,
+          unsigned int pBlockHeight);
 
         Iterator begin();
         Iterator end();

@@ -45,7 +45,7 @@ namespace BitCoin
         NextCash::stream_size size() const
           { return 8 + compactIntegerSize(script.length()) + script.length(); }
 
-        void write(NextCash::OutputStream *pStream);
+        void write(NextCash::OutputStream *pStream, bool pTrim = false);
         bool read(NextCash::InputStream *pStream);
 
         // Skip over output in stream

@@ -345,6 +345,10 @@ namespace BitCoin
         static bool bufferIsZero(NextCash::Buffer *pBuffer);
 
         static bool isPushOnly(NextCash::Buffer &pScript);
+        static bool isOPReturn(NextCash::Buffer &pScript)
+        {
+            return pScript.length() && *pScript.begin() == OP_RETURN;
+        }
         static ScriptType parseOutputScript(NextCash::Buffer &pScript, NextCash::HashList &pHashes);
         static bool readDataPush(NextCash::Buffer &pScript, NextCash::Buffer &pData);
 
