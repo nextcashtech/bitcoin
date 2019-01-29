@@ -489,7 +489,8 @@ namespace BitCoin
     // }
 
     bool Outputs::getOutput(const NextCash::Hash &pTransactionID, uint32_t pIndex,
-      uint8_t pFlags, uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight)
+      uint8_t pFlags, uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight,
+      bool &pPulled)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -501,12 +502,12 @@ namespace BitCoin
         mLock.readLock();
         SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
         bool result = subSet->getOutput(pTransactionID, pIndex, pFlags, pSpentBlockHeight,
-          pOutput, pPreviousBlockHeight);
+          pOutput, pPreviousBlockHeight, pPulled);
         mLock.readUnlock();
         return result;
     }
 
-    bool Outputs::isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex)
+    bool Outputs::isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex, bool &pPulled)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -517,7 +518,7 @@ namespace BitCoin
 
         mLock.readLock();
         SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
-        bool result = subSet->isUnspent(pTransactionID, pIndex);
+        bool result = subSet->isUnspent(pTransactionID, pIndex, pPulled);
         mLock.readUnlock();
         return result;
     }
@@ -539,7 +540,8 @@ namespace BitCoin
     }
 
     bool Outputs::spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
-      uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent)
+      uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent,
+      bool &pPulled)
     {
 #ifdef PROFILER_ON
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
@@ -551,7 +553,7 @@ namespace BitCoin
         mLock.readLock();
         SubSet *subSet = mSubSets + subSetOffset(pTransactionID);
         bool result = subSet->spend(pTransactionID, pIndex, pSpentBlockHeight,
-          pPreviousBlockHeight, pRequireUnspent);
+          pPreviousBlockHeight, pRequireUnspent, pPulled);
         mLock.readUnlock();
         return result;
     }
@@ -1010,14 +1012,20 @@ namespace BitCoin
 
     bool Outputs::SubSet::getOutput(const NextCash::Hash &pTransactionID,
       uint32_t pIndex, uint8_t pFlags, uint32_t pSpentBlockHeight, Output &pOutput,
-      uint32_t &pPreviousBlockHeight)
+      uint32_t &pPreviousBlockHeight, bool &pPulled)
     {
         mLock.lock();
 
         bool result = false;
         SubSetIterator item = mCache.find(pTransactionID);
-        if(item == mCache.end() && pull(pTransactionID))
-            item = mCache.find(pTransactionID);
+        if(item == mCache.end())
+        {
+            pPulled = true;
+            if(pull(pTransactionID))
+                item = mCache.find(pTransactionID);
+        }
+        else
+            pPulled = false;
 
         while(item != mCache.end() && (*item)->getHash() == pTransactionID)
         {
@@ -1056,14 +1064,21 @@ namespace BitCoin
         return result;
     }
 
-    bool Outputs::SubSet::isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex)
+    bool Outputs::SubSet::isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex,
+      bool &pPulled)
     {
         mLock.lock();
 
         bool result = false;
         SubSetIterator item = mCache.find(pTransactionID);
-        if(item == mCache.end() && pull(pTransactionID))
-            item = mCache.find(pTransactionID);
+        if(item == mCache.end())
+        {
+            pPulled = true;
+            if(pull(pTransactionID))
+                item = mCache.find(pTransactionID);
+        }
+        else
+            pPulled = false;
 
         while(item != mCache.end() && (*item)->getHash() == pTransactionID)
         {
@@ -1107,14 +1122,21 @@ namespace BitCoin
     }
 
     bool Outputs::SubSet::spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
-      uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent)
+      uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent,
+      bool &pPulled)
     {
         mLock.lock();
 
         bool result = false;
         SubSetIterator item = mCache.find(pTransactionID);
-        if(item == mCache.end() && pull(pTransactionID))
-            item = mCache.find(pTransactionID);
+        if(item == mCache.end())
+        {
+            pPulled = true;
+            if(pull(pTransactionID))
+                item = mCache.find(pTransactionID);
+        }
+        else
+            pPulled = false;
 
         while(item != mCache.end() && (*item)->getHash() == pTransactionID)
         {

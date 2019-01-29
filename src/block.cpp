@@ -384,15 +384,14 @@ namespace BitCoin
 
         NextCash::Timer fullTime;
         unsigned int transactionOffset = 0;
-        NextCash::Mutex spentAgeLock("Spent Age");
-        std::vector<unsigned int> spentAges;
-        spentAges.reserve(transactions.size() * 2);
+        Transaction::CheckStats stats;
+        stats.spentAges.reserve(transactions.size() * 2);
         for(TransactionList::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction)
         {
             fullTime.start();
             if(!(*transaction)->updateOutputs(pChain, pHeight, transactionOffset == 0,
-              spentAgeLock, spentAges))
+              stats))
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
                   "Transaction %d update failed", transactionOffset);
@@ -402,16 +401,17 @@ namespace BitCoin
             ++transactionOffset;
         }
 
-        if(spentAges.size() > 0)
+        if(stats.spentAges.size() > 0)
         {
             unsigned int totalSpentAge = 0;
-            for(std::vector<unsigned int>::iterator spentAge = spentAges.begin();
-              spentAge != spentAges.end(); ++spentAge)
+            for(std::vector<unsigned int>::iterator spentAge = stats.spentAges.begin();
+              spentAge != stats.spentAges.end(); ++spentAge)
                 totalSpentAge += *spentAge;
-            unsigned int averageSpentAge = totalSpentAge / spentAges.size();
+            unsigned int averageSpentAge = totalSpentAge / stats.spentAges.size();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-              "Average spent age for block %d is %d for %d inputs (Add,%d,Full,%d)", pHeight, averageSpentAge,
-              spentAges.size(), addTime.milliseconds(), fullTime.milliseconds());
+              "Average spent age for block %d is %d for %d inputs (Add,%d,Full,%d)", pHeight,
+              averageSpentAge, stats.spentAges.size(), addTime.milliseconds(),
+              fullTime.milliseconds());
         }
 
         return true;
@@ -430,6 +430,7 @@ namespace BitCoin
         Transaction *transaction;
         unsigned int offset;
         NextCash::Timer fullTime;
+        Transaction::CheckStats stats;
         while(true)
         {
             transaction = data->getNext(offset);
@@ -441,8 +442,7 @@ namespace BitCoin
             }
 
             fullTime.start();
-            if(transaction->updateOutputs(data->chain, data->height, offset == 0,
-              data->spentAgeLock, data->spentAges))
+            if(transaction->updateOutputs(data->chain, data->height, offset == 0, stats))
                 data->markComplete(offset, true);
             else
             {
@@ -454,9 +454,10 @@ namespace BitCoin
             fullTime.stop();
         }
 
-        data->timeLock.lock();
+        data->statsLock.lock();
         data->fullTime += fullTime.microseconds();
-        data->timeLock.unlock();
+        data->stats += stats;
+        data->statsLock.unlock();
     }
 
     bool Block::updateOutputsMultiThreaded(Chain *pChain, unsigned int pHeight,
@@ -574,16 +575,16 @@ namespace BitCoin
             return false;
         }
 
-        if(threadData.spentAges.size() > 0)
+        if(threadData.stats.spentAges.size() > 0)
         {
             unsigned int totalSpentAge = 0;
-            for(std::vector<unsigned int>::iterator spentAge = threadData.spentAges.begin();
-              spentAge != threadData.spentAges.end(); ++spentAge)
+            for(std::vector<unsigned int>::iterator spentAge = threadData.stats.spentAges.begin();
+              spentAge != threadData.stats.spentAges.end(); ++spentAge)
                 totalSpentAge += *spentAge;
-            unsigned int averageSpentAge = totalSpentAge / threadData.spentAges.size();
+            unsigned int averageSpentAge = totalSpentAge / threadData.stats.spentAges.size();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
               "Average spent age for block %d is %d for %d inputs (Add,%d,Full,%d)", pHeight,
-              averageSpentAge, threadData.spentAges.size(), addTime.milliseconds(),
+              averageSpentAge, threadData.stats.spentAges.size(), addTime.milliseconds(),
               threadData.fullTime / 1000L);
         }
 
@@ -661,7 +662,10 @@ namespace BitCoin
 
         Transaction *transaction;
         unsigned int offset;
-        NextCash::Timer checkDupTime, outputsTime, scriptTime, fullTime;
+        NextCash::Timer fullTime, processTime;
+        Transaction::CheckStats stats;
+
+        fullTime.start();
         while(true)
         {
             transaction = data->getNext(offset);
@@ -672,10 +676,9 @@ namespace BitCoin
                 break;
             }
 
-            fullTime.start();
+            processTime.start();
             transaction->check(data->chain, data->block->header.hash(), data->height, offset == 0,
-              data->block->header.version, data->spentAgeLock, data->spentAges, checkDupTime,
-              outputsTime, scriptTime);
+              data->block->header.version, stats);
             if(transaction->isVerified())
                 data->markComplete(offset, true);
             else
@@ -685,15 +688,16 @@ namespace BitCoin
                 transaction->print(data->chain->forks(), NextCash::Log::WARNING);
                 data->markComplete(offset, false);
             }
-            fullTime.stop();
+            processTime.stop();
         }
+        fullTime.stop();
 
-        data->timeLock.lock();
-        data->checkDupTime += checkDupTime.microseconds();
-        data->outputsTime += outputsTime.microseconds();
-        data->scriptTime += scriptTime.microseconds();
+        data->statsLock.lock();
+        data->stats += stats;
+        data->processTime += processTime.microseconds();
         data->fullTime += fullTime.microseconds();
-        data->timeLock.unlock();
+        data->statsLock.unlock();
+
 
 #ifdef PROFILER_ON
         profilerTimer.stop();
@@ -716,7 +720,7 @@ namespace BitCoin
 
         mFees = 0;
 
-        NextCash::Timer addTime(true);
+        NextCash::Timer addTime(true), elapsed(true);
 #ifndef TEST
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
@@ -802,21 +806,24 @@ namespace BitCoin
         if(!threadData.success)
             return false;
 
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Multi threaded block times Threads,%d,Add,%d,Dup,%d,Out,%d,Scr,%d,Full,%d", pThreadCount,
-          addTime.milliseconds(), threadData.checkDupTime / 1000L, threadData.outputsTime / 1000L,
-          threadData.scriptTime / 1000L, threadData.fullTime / 1000L);
+        elapsed.stop();
 
-        if(threadData.spentAges.size() > 0)
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+          "Multi threaded block times Threads %d,Add %d,TXO %d,Scr %d,Proc %d,Full %d,Elapsed %d",
+          pThreadCount, addTime.milliseconds(),
+          threadData.stats.outputsTimer.milliseconds(), threadData.stats.scriptTimer.milliseconds(),
+          threadData.processTime / 1000L, threadData.fullTime / 1000L, elapsed.milliseconds());
+
+        if(threadData.stats.spentAges.size() > 0)
         {
             unsigned int totalSpentAge = 0;
-            for(std::vector<unsigned int>::iterator spentAge = threadData.spentAges.begin();
-              spentAge != threadData.spentAges.end(); ++spentAge)
+            for(std::vector<unsigned int>::iterator spentAge = threadData.stats.spentAges.begin();
+              spentAge != threadData.stats.spentAges.end(); ++spentAge)
                 totalSpentAge += *spentAge;
-            unsigned int averageSpentAge = totalSpentAge / threadData.spentAges.size();
+            unsigned int averageSpentAge = totalSpentAge / threadData.stats.spentAges.size();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-              "Average spent age for block %d is %d for %d inputs", pHeight, averageSpentAge,
-              threadData.spentAges.size());
+              "Average spent age for block %d is %d for %d inputs (%d pulled)", pHeight, averageSpentAge,
+              threadData.stats.spentAges.size(), threadData.stats.outputPulls);
         }
 
         for(TransactionList::iterator transaction = transactions.begin() + 1;
@@ -854,27 +861,28 @@ namespace BitCoin
           "Processing block %d (%d trans) (%d KB) : %s", pHeight,
           transactions.size(), size() / 1000, header.hash().hex().text());
 
-        NextCash::Timer addTime(true);
+        Transaction::CheckStats stats;
+        NextCash::Timer addTime(true), fullTime(true);
+#ifndef TEST
         // Add the transaction outputs from this block to the output pool
         if(!pChain->outputs().add(transactions, pHeight))
             return false;
+#endif
         addTime.stop();
 
         // Validate and process transactions
         mFees = 0;
         unsigned int transactionOffset = 0;
-        std::vector<unsigned int> spentAges;
-        spentAges.reserve(transactions.size() * 2);
-        NextCash::Mutex spentAgeLock("Spent Age");
-        NextCash::Timer checkDupTime, outputsTime, scriptTime, fullTime;
+        stats.spentAges.reserve(transactions.size() * 2);
+        NextCash::Timer processTime;
         for(TransactionList::iterator transaction = transactions.begin();
           transaction != transactions.end(); ++transaction, ++transactionOffset)
         {
             // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_BLOCK_LOG_NAME,
               // "Processing transaction %d", transactionOffset);
-            fullTime.start();
+            processTime.start();
             (*transaction)->check(pChain, header.hash(), pHeight, transactionOffset == 0,
-              header.version, spentAgeLock, spentAges, checkDupTime, outputsTime, scriptTime);
+              header.version, stats);
             if(!(*transaction)->isVerified())
             {
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
@@ -882,26 +890,28 @@ namespace BitCoin
                 (*transaction)->print(pChain->forks(), NextCash::Log::WARNING);
                 return false;
             }
-            fullTime.stop();
+            processTime.stop();
             if(transactionOffset != 0)
                 mFees += (*transaction)->fee();
         }
 
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-          "Single threaded block times Threads,1,Add,%d,Dup,%d,Out,%d,Scr,%d,Full,%d",
-          addTime.milliseconds(), checkDupTime.milliseconds(), outputsTime.milliseconds(),
-          scriptTime.milliseconds(), fullTime.milliseconds());
+        fullTime.stop();
 
-        if(spentAges.size() > 0)
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
+          "Single threaded block times Threads 1,Add %d,TXO %d,Scr %d,Proc %d,Full %d",
+          addTime.milliseconds(), stats.outputsTimer.milliseconds(),
+          stats.scriptTimer.milliseconds(), processTime.milliseconds(), fullTime.milliseconds());
+
+        if(stats.spentAges.size() > 0)
         {
             unsigned int totalSpentAge = 0;
-            for(std::vector<unsigned int>::iterator spentAge = spentAges.begin();
-              spentAge != spentAges.end(); ++spentAge)
+            for(std::vector<unsigned int>::iterator spentAge = stats.spentAges.begin();
+              spentAge != stats.spentAges.end(); ++spentAge)
                 totalSpentAge += *spentAge;
-            unsigned int averageSpentAge = totalSpentAge / spentAges.size();
+            unsigned int averageSpentAge = totalSpentAge / stats.spentAges.size();
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-              "Average spent age for block %d is %d for %d inputs", pHeight, averageSpentAge,
-              spentAges.size());
+              "Average spent age for block %d is %d for %d inputs (%d pulled)", pHeight,
+              averageSpentAge, stats.spentAges.size(), stats.outputPulls);
         }
 
         // Check that coinbase output amount - fees is correct for block height

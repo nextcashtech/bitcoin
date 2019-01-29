@@ -829,7 +829,8 @@ bool chainTest()
 bool largeBlockTest()
 {
     // NOTE: Requires valid UTXO set and blocks from BSV chain.
-    NextCash::Log::add(NextCash::Log::INFO, "Test", "------------- Starting Large Block Test -------------");
+    NextCash::Log::add(NextCash::Log::INFO, "Test",
+      "------------- Starting Large Block Test -------------");
     BitCoin::setNetwork(BitCoin::MAINNET);
     BitCoin::Info::setPath("/var/bitcoin/mainnet/");
 
@@ -863,6 +864,25 @@ bool largeBlockTest()
 #ifdef PROFILER_ON
     NextCash::printProfilerDataToLog(NextCash::Log::INFO);
 #endif
-    NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Total time : %d ms", timer.milliseconds());
+    NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Total time : %d ms",
+      timer.milliseconds());
+
+#ifdef PROFILER_ON
+    NextCash::resetProfilers();
+#endif
+    NextCash::Timer timer2;
+    BitCoin::BlockReference bigBlock3 = BitCoin::Block::getBlock(563638);
+
+    timer2.start();
+    if(!bigBlock3->processSingleThreaded(chain, 563638))
+        return false;
+    timer2.stop();
+
+#ifdef PROFILER_ON
+    NextCash::printProfilerDataToLog(NextCash::Log::INFO);
+#endif
+    NextCash::Log::addFormatted(NextCash::Log::INFO, "Test", "Total time : %d ms",
+      timer2.milliseconds());
+
     return true;
 }

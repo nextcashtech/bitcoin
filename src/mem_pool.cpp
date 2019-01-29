@@ -285,10 +285,10 @@ namespace BitCoin
         NextCash::Mutex spentAgeLock("Spent Age");
         std::vector<unsigned int> spentAges;
         NextCash::Timer checkDupTime, outputLookupTime, signatureTime;
+        Transaction::CheckStats stats;
 
         pTransaction->check(mChain, emptyBlockHash, Chain::INVALID_HEIGHT, false,
-          mChain->forks().requiredBlockVersion(Chain::INVALID_HEIGHT), spentAgeLock, spentAges,
-          checkDupTime, outputLookupTime, signatureTime);
+          mChain->forks().requiredBlockVersion(Chain::INVALID_HEIGHT), stats);
 
         if(pTransaction->isValid() && !pTransaction->outpointsFound())
         {
