@@ -1578,50 +1578,50 @@ namespace BitCoin
         if(containsForkID)
         {
             // BIP-0143 Signature Hash Algorithm
-            NextCash::Hash sigHash(32);
+            static const NextCash::Hash zeroHash(32);
             NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
             digest.setOutputEndian(NextCash::Endian::LITTLE);
 
             // Version
             pStream->writeUnsignedInt(version);
 
-            // Hash Prev Outs
+            // Hash Previous Outputs
             if(anyoneCanPay)
-                sigHash.zeroize();
+                zeroHash.write(pStream);
             else
             {
                 if(!mOutpointHash.isEmpty())
-                    sigHash = mOutpointHash;
+                    mOutpointHash.write(pStream);
                 else
                 {
                     // All input outpoints
                     digest.initialize();
-                    for(std::vector<Input>::iterator input=inputs.begin();input!=inputs.end();++input)
+                    for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
+                      ++input)
                         input->outpoint.write(&digest);
-                    digest.getResult(&sigHash);
-                    mOutpointHash = sigHash; // Save for next input
+                    digest.getResult(&mOutpointHash);
+                    mOutpointHash.write(pStream);
                 }
             }
-            sigHash.write(pStream);
 
             // Hash Sequence
             if(anyoneCanPay || hashType == Signature::SINGLE || hashType == Signature::NONE)
-                sigHash.zeroize();
+                zeroHash.write(pStream);
             else
             {
                 if(!mSequenceHash.isEmpty())
-                    sigHash = mSequenceHash;
+                    mSequenceHash.write(pStream);
                 else
                 {
                     // All input sequences
                     digest.initialize();
-                    for(std::vector<Input>::iterator input=inputs.begin();input!=inputs.end();++input)
+                    for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
+                      ++input)
                         digest.writeUnsignedInt(input->sequence);
-                    digest.getResult(&sigHash);
-                    mSequenceHash = sigHash; // Save for next input
+                    digest.getResult(&mSequenceHash);
+                    mSequenceHash.write(pStream);
                 }
             }
-            sigHash.write(pStream);
 
             // Outpoint
             if(pInputOffset < inputs.size())
@@ -1653,19 +1653,21 @@ namespace BitCoin
                 if(pInputOffset < outputs.size())
                 {
                     // Only output corresponding to this input
+                    NextCash::Hash singleOutputHash(32);
                     digest.initialize();
                     outputs[pInputOffset].write(&digest);
-                    digest.getResult(&sigHash);
+                    digest.getResult(&singleOutputHash);
+                    singleOutputHash.write(pStream);
                 }
                 else
-                    sigHash.zeroize();
+                    zeroHash.write(pStream);
             }
             else if(hashType == Signature::NONE)
-                sigHash.zeroize();
+                zeroHash.write(pStream);
             else
             {
                 if(!mOutputHash.isEmpty())
-                    sigHash = mOutputHash;
+                    mOutputHash.write(pStream);
                 else
                 {
                     // All outputs
@@ -1673,11 +1675,10 @@ namespace BitCoin
                     for(std::vector<Output>::iterator output = outputs.begin();
                       output != outputs.end(); ++output)
                         output->write(&digest);
-                    digest.getResult(&sigHash);
-                    mOutputHash = sigHash; // Save for next input
+                    digest.getResult(&mOutputHash);
+                    mOutputHash.write(pStream);
                 }
             }
-            sigHash.write(pStream);
 
             // Lock Time
             pStream->writeUnsignedInt(lockTime);
@@ -1711,7 +1712,8 @@ namespace BitCoin
 
                 // Inputs
                 offset = 0;
-                for(std::vector<Input>::iterator input=inputs.begin();input!=inputs.end();++input)
+                for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
+                  ++input)
                 {
                     if(pInputOffset == offset++)
                         input->writeSignatureData(pStream, &subScript, false);
@@ -1723,7 +1725,8 @@ namespace BitCoin
                 writeCompactInteger(pStream, outputs.size());
 
                 // Outputs
-                for(std::vector<Output>::iterator output=outputs.begin();output!=outputs.end();++output)
+                for(std::vector<Output>::iterator output = outputs.begin();
+                  output != outputs.end(); ++output)
                     output->write(pStream);
 
                 break;
@@ -1738,7 +1741,8 @@ namespace BitCoin
 
                 // Inputs
                 offset = 0;
-                for(std::vector<Input>::iterator input=inputs.begin();input!=inputs.end();++input)
+                for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
+                  ++input)
                 {
                     if(pInputOffset == offset++)
                         input->writeSignatureData(pStream, &subScript, false);
@@ -1760,7 +1764,8 @@ namespace BitCoin
 
                 // Inputs
                 offset = 0;
-                for(std::vector<Input>::iterator input=inputs.begin();input!=inputs.end();++input)
+                for(std::vector<Input>::iterator input = inputs.begin(); input != inputs.end();
+                  ++input)
                 {
                     if(pInputOffset == offset++)
                         input->writeSignatureData(pStream, &subScript, false);
@@ -1773,7 +1778,7 @@ namespace BitCoin
 
                 // Outputs
                 std::vector<Output>::iterator output = outputs.begin();
-                for(offset = 0; offset < pInputOffset + 1; offset++)
+                for(offset = 0; offset < pInputOffset + 1; ++offset)
                     if(output != outputs.end())
                     {
                         if(offset == pInputOffset)
@@ -1788,7 +1793,8 @@ namespace BitCoin
                     }
                     else
                     {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_TRANSACTION_LOG_NAME,
+                        NextCash::Log::addFormatted(NextCash::Log::WARNING,
+                          BITCOIN_TRANSACTION_LOG_NAME,
                           "Failed to write transaction signature data. Invalid number of outputs %d/%d",
                           pInputOffset + 1, outputs.size());
                         return false;
