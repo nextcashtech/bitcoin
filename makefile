@@ -110,7 +110,7 @@ test: headers ${OBJECT_DIRECTORY}/.headers build_secp256k1 ${OBJECTS} bitcoin_te
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mBUILDING TEST\033[0m"
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
-	${COMPILER} -c -o ${OBJECT_DIRECTORY}/test.o bitcoin_test.cpp ${COMPILE_FLAGS}
+	${COMPILER} -c -o ${OBJECT_DIRECTORY}/test.o bitcoin_test.cpp ${COMPILE_FLAGS} -DTEST
 	${COMPILER} ${OBJECTS} ${OBJECT_DIRECTORY}/test.o ${LIBRARY_PATHS} ${LIBRARIES} -o test ${LINK_FLAGS}
 	@echo "\033[0;33m----------------------------------------------------------------------------------------------------\033[0m"
 	@echo "\t\033[0;33mTESTING\033[0m"

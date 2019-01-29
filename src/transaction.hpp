@@ -264,21 +264,41 @@ namespace BitCoin
         int sign(uint64_t pInputAmount, double pFeeRate, uint64_t pSendAmount,
           int pChangeOutputOffset, Key *pKey, Signature::HashType pHashType, const Forks &pForks);
 
+        class CheckStats
+        {
+        public:
+
+            CheckStats() { outputPulls = 0; }
+
+            void operator += (const CheckStats &pRight)
+            {
+                spentAges.reserve(spentAges.size() + pRight.spentAges.size());
+                for(std::vector<unsigned int>::const_iterator iter = pRight.spentAges.begin();
+                  iter != pRight.spentAges.end(); ++iter)
+                    spentAges.emplace_back(*iter);
+                outputPulls += pRight.outputPulls;
+                outputsTimer += pRight.outputsTimer;
+                scriptTimer += pRight.scriptTimer;
+            }
+
+            std::vector<unsigned int> spentAges;
+            unsigned int outputPulls;
+            NextCash::Timer outputsTimer, scriptTimer;
+
+        };
+
         // Check validity
         void check(Chain *pChain, const NextCash::Hash &pBlockHash, unsigned int pHeight, bool pCoinBase,
-          int32_t pBlockVersion, NextCash::Mutex &pSpentAgeLock,
-          std::vector<unsigned int> &pSpentAges, NextCash::Timer &pCheckDupTime,
-          NextCash::Timer &pOutputLookupTime, NextCash::Timer &pSignatureTime);
+          int32_t pBlockVersion, CheckStats &pStats);
 
         // Re-check that outpoints are unspent.
         bool checkOutpoints(Chain *pChain, bool pMemPoolIsLocked);
 
-        bool updateOutputs(Chain *pChain, uint64_t pHeight, bool pCoinBase,
-          NextCash::Mutex &pSpentAgeLock, std::vector<unsigned int> &pSpentAges);
+        bool updateOutputs(Chain *pChain, uint64_t pHeight, bool pCoinBase, CheckStats &pStats);
 
         void getSignatureHash(const Forks &pForks, unsigned int pHeight,
           NextCash::Hash &pHash, unsigned int pInputOffset, NextCash::Buffer &pOutputScript,
-          int64_t pOutputAmount, Signature::HashType pHashType);
+          int64_t pOutputAmount, uint8_t pHashType);
 
         /***********************************************************************************************
          * Transaction building
@@ -338,7 +358,7 @@ namespace BitCoin
 
         bool writeSignatureData(const Forks &pForks, unsigned int pHeight,
           NextCash::OutputStream *pStream, unsigned int pInputOffset,
-          NextCash::Buffer &pOutputScript, int64_t pOutputAmount, Signature::HashType pHashType);
+          NextCash::Buffer &pOutputScript, int64_t pOutputAmount, uint8_t pHashType);
 
     };
 

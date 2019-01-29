@@ -278,11 +278,13 @@ namespace BitCoin
         static const uint8_t MARK_SPENT = 0x01;
         static const uint8_t REQUIRE_UNSPENT = 0x02;
         bool getOutput(const NextCash::Hash &pTransactionID, uint32_t pIndex, uint8_t pFlags,
-          uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight);
+          uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight,
+          bool &pPulled);
 
-        bool isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex);
+        bool isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex, bool &pPulled);
         bool spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
-          uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent);
+          uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent,
+          bool &pPulled);
         bool hasUnspent(const NextCash::Hash &pTransactionID,
           uint32_t pSpentBlockHeight = 0xffffffff);
         bool exists(const NextCash::Hash &pTransactionID, bool pPullIfNeeded = true);
@@ -405,10 +407,12 @@ namespace BitCoin
             bool insert(TransactionOutputs *pReference, TransactionReference &pTransaction);
 
             bool getOutput(const NextCash::Hash &pTransactionID, uint32_t pIndex, uint8_t pFlags,
-              uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight);
-            bool isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex);
+              uint32_t pSpentBlockHeight, Output &pOutput, uint32_t &pPreviousBlockHeight,
+              bool &pPulled);
+            bool isUnspent(const NextCash::Hash &pTransactionID, uint32_t pIndex, bool &pPulled);
             bool spend(const NextCash::Hash &pTransactionID, uint32_t pIndex,
-              uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent);
+              uint32_t pSpentBlockHeight, uint32_t &pPreviousBlockHeight, bool pRequireUnspent,
+              bool &pPulled);
             bool hasUnspent(const NextCash::Hash &pTransactionID, uint32_t pSpentBlockHeight);
             bool exists(const NextCash::Hash &pTransactionID, bool pPullIfNeeded);
             uint8_t unspentStatus(const NextCash::Hash &pTransactionID, uint32_t pIndex);

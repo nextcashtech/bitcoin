@@ -717,16 +717,184 @@ namespace BitCoin
         pStream->writeByte(mHashType);
     }
 
+    // Returns true if a change was made and it might now be a valid signature.
+    bool repairSignature(uint8_t *pData, unsigned int &pSize)
+    {
+        bool result = false;
+
+        // Hack badly formatted DER signatures
+        uint8_t subLength;
+        uint8_t *ptr = pData;
+        if(*ptr++ != 0x30) // Compound header byte
+        {
+            NextCash::String hex;
+            hex.writeHex(pData, pSize);
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Invalid compound header byte in signature (%d bytes) : %s", pSize,
+              hex.text());
+            return false;
+        }
+
+        // Full length
+        unsigned int fullLengthOffset = (ptr - pData);
+        if(*ptr != pSize - 2)
+        {
+            if(*ptr < pSize - 2)
+            {
+                // NextCash::String hex;
+                // hex.writeHex(pData, pSize);
+                // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                  // "Adjusting parse length %d to match total length in signature %d + 2 (header byte and length byte) : %s",
+                  // pSize, *ptr, hex.text());
+                pSize = *ptr + 2;
+            }
+            else
+            {
+                NextCash::String hex;
+                hex.writeHex(pData, pSize);
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  "Invalid total length byte in signature (%d bytes) : %s", pSize, hex.text());
+                return false;
+            }
+        }
+
+        ++ptr;
+
+        // Integer header byte
+        if(*ptr++ != 0x02)
+        {
+            NextCash::String hex;
+            hex.writeHex(pData, pSize);
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Invalid R integer header byte in signature (%d bytes) : %s", pSize, hex.text());
+            return false;
+        }
+
+        // R length
+        subLength = *ptr++;
+        if(subLength + (ptr - pData) > pSize)
+        {
+            NextCash::String hex;
+            hex.writeHex(pData, pSize);
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "R integer length byte too high in signature (%d bytes) : %s", pSize, hex.text());
+            return false;
+        }
+
+        while(*ptr == 0x00 && !(*(ptr+1) & 0x80))
+        {
+            // NextCash::String hex;
+            // hex.writeHex(pData, pSize);
+            // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              // "Removing extra leading zero byte in R value from signature (%d bytes) : %s", pSize, hex.text());
+
+            // Adjust lengths
+            (*(ptr-1))--;
+            pData[fullLengthOffset]--;
+
+            // Extra padding. Remove this
+            std::memmove(ptr, ptr + 1, pSize - (ptr - pData) - 1);
+
+            --pSize;
+            --subLength;
+        }
+
+        if(*ptr & 0x80)
+        {
+            // NextCash::String hex;
+            // hex.writeHex(pData, pSize);
+            // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              // "Adding required leading zero byte in R value to signature (%d bytes) : %s", pSize, hex.text());
+
+            // Adjust lengths
+            (*(ptr-1))--;
+            pData[fullLengthOffset]++;
+
+            // Add a zero byte
+            std::memmove(ptr + 1, ptr, pSize - (ptr - pData));
+            *ptr = 0x00;
+
+            ++pSize;
+            ++subLength;
+        }
+
+        ptr += subLength;
+
+        // Integer header byte
+        if(*ptr++ != 0x02)
+        {
+            NextCash::String hex;
+            hex.writeHex(pData, pSize);
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Invalid S integer header byte in signature (%d bytes) : %s", pSize, hex.text());
+            return false;
+        }
+
+        // S length
+        subLength = *ptr++;
+        if(subLength + (ptr - pData) > pSize)
+        {
+            NextCash::String hex;
+            hex.writeHex(pData, pSize);
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "S integer length byte too high in signature (%d bytes) : %s", pSize, hex.text());
+            return false;
+        }
+
+        while(*ptr == 0x00 && !(*(ptr+1) & 0x80))
+        {
+            // NextCash::String hex;
+            // hex.writeHex(pData, pSize);
+            // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              // "Removing extra leading zero byte in S value to signature (%d bytes) : %s", pSize, hex.text());
+
+            // Adjust lengths
+            (*(ptr-1))--;
+            pData[fullLengthOffset]--;
+
+            // Extra padding. Remove this
+            std::memmove(ptr, ptr + 1, pSize - (ptr - pData) - 1);
+
+            --pSize;
+            --subLength;
+        }
+
+        if(*ptr & 0x80)
+        {
+            // NextCash::String hex;
+            // hex.writeHex(pData, pSize);
+            // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+              // "Adding required leading zero byte in S value from signature (%d bytes) : %s", pSize, hex.text());
+
+            // Adjust lengths
+            (*(ptr-1))++;
+            pData[fullLengthOffset]++;
+
+            // Add a zero byte
+            std::memmove(ptr + 1, ptr, pSize - (ptr - pData));
+            *ptr = 0x00;
+
+            ++pSize;
+            ++subLength;
+        }
+
+        return result;
+    }
+
     bool Signature::read(NextCash::InputStream *pStream, unsigned int pLength,
       bool pStrictECDSA_DER_Sigs)
     {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_KEY_SIG_READ_ID, PROFILER_KEY_SIG_READ_NAME), true);
+#endif
         if(pLength < 2)
         {
             clear();
             return false;
         }
 
-        uint8_t input[pLength + 2];
+        uint8_t input[pLength + 2]; // Max of 2 bytes added by repair.
         unsigned int totalLength = pLength - 1;
 
         std::memset(mData, 0, 64);
@@ -745,176 +913,184 @@ namespace BitCoin
             return false;
         }
 
-        if(!pStrictECDSA_DER_Sigs)
-        {
-            // Hack badly formatted DER signatures
-            uint8_t offset = 0;
-            uint8_t subLength;
-            if(input[offset++] != 0x30) // Compound header byte
-            {
-                NextCash::String hex;
-                hex.writeHex(input, totalLength);
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "Invalid compound header byte in signature (%d bytes) : %s", totalLength,
-                  hex.text());
-                clear();
-                return false;
-            }
+        // if(!pStrictECDSA_DER_Sigs)
+        // {
+            // // Hack badly formatted DER signatures
+            // uint8_t offset = 0;
+            // uint8_t subLength;
+            // if(input[offset++] != 0x30) // Compound header byte
+            // {
+                // NextCash::String hex;
+                // hex.writeHex(input, totalLength);
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  // "Invalid compound header byte in signature (%d bytes) : %s", totalLength,
+                  // hex.text());
+                // clear();
+                // return false;
+            // }
 
-            // Full length
-            unsigned int fullLengthOffset = offset;
-            if(input[offset] != totalLength - 2)
-            {
-                if(input[offset] < totalLength - 2)
-                {
+            // // Full length
+            // unsigned int fullLengthOffset = offset;
+            // if(input[offset] != totalLength - 2)
+            // {
+                // if(input[offset] < totalLength - 2)
+                // {
+                    // // NextCash::String hex;
+                    // // hex.writeHex(input, totalLength);
+                    // // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                      // // "Adjusting parse length %d to match total length in signature %d + 2 (header byte and length byte) : %s",
+                      // // totalLength, input[offset], hex.text());
+                    // totalLength = input[offset] + 2;
+                // }
+                // else
+                // {
                     // NextCash::String hex;
                     // hex.writeHex(input, totalLength);
-                    // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-                      // "Adjusting parse length %d to match total length in signature %d + 2 (header byte and length byte) : %s",
-                      // totalLength, input[offset], hex.text());
-                    totalLength = input[offset] + 2;
-                }
-                else
-                {
-                    NextCash::String hex;
-                    hex.writeHex(input, totalLength);
-                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                      "Invalid total length byte in signature (%d bytes) : %s", totalLength, hex.text());
-                    clear();
-                    return false;
-                }
-            }
+                    // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                      // "Invalid total length byte in signature (%d bytes) : %s", totalLength, hex.text());
+                    // clear();
+                    // return false;
+                // }
+            // }
 
-            ++offset;
+            // ++offset;
 
-            // Integer header byte
-            if(input[offset++] != 0x02)
-            {
-                NextCash::String hex;
-                hex.writeHex(input, totalLength);
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "Invalid R integer header byte in signature (%d bytes) : %s", totalLength, hex.text());
-                clear();
-                return false;
-            }
-
-            // R length
-            subLength = input[offset++];
-            if(subLength + offset > totalLength)
-            {
-                NextCash::String hex;
-                hex.writeHex(input, totalLength);
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "R integer length byte too high in signature (%d bytes) : %s", totalLength, hex.text());
-                clear();
-                return false;
-            }
-
-            while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
-            {
+            // // Integer header byte
+            // if(input[offset++] != 0x02)
+            // {
                 // NextCash::String hex;
                 // hex.writeHex(input, totalLength);
-                // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-                  // "Removing extra leading zero byte in R value from signature (%d bytes) : %s", totalLength, hex.text());
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  // "Invalid R integer header byte in signature (%d bytes) : %s", totalLength, hex.text());
+                // clear();
+                // return false;
+            // }
 
-                // Adjust lengths
-                input[offset-1]--;
-                input[fullLengthOffset]--;
-
-                // Extra padding. Remove this
-                std::memmove(input + offset, input + offset + 1, totalLength - offset - 1);
-
-                --totalLength;
-                --subLength;
-            }
-
-            if(input[offset] & 0x80)
-            {
+            // // R length
+            // subLength = input[offset++];
+            // if(subLength + offset > totalLength)
+            // {
                 // NextCash::String hex;
                 // hex.writeHex(input, totalLength);
-                // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-                  // "Adding required leading zero byte in R value to signature (%d bytes) : %s", totalLength, hex.text());
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  // "R integer length byte too high in signature (%d bytes) : %s", totalLength, hex.text());
+                // clear();
+                // return false;
+            // }
 
-                // Adjust lengths
-                input[offset-1]++;
-                input[fullLengthOffset]++;
+            // while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
+            // {
+                // // NextCash::String hex;
+                // // hex.writeHex(input, totalLength);
+                // // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                  // // "Removing extra leading zero byte in R value from signature (%d bytes) : %s", totalLength, hex.text());
 
-                // Add a zero byte
-                std::memmove(input + offset + 1, input + offset, totalLength - offset);
-                input[offset] = 0x00;
+                // // Adjust lengths
+                // input[offset-1]--;
+                // input[fullLengthOffset]--;
 
-                ++totalLength;
-                ++subLength;
-            }
+                // // Extra padding. Remove this
+                // std::memmove(input + offset, input + offset + 1, totalLength - offset - 1);
 
-            offset += subLength;
+                // --totalLength;
+                // --subLength;
+            // }
 
-            // Integer header byte
-            if(input[offset++] != 0x02)
-            {
-                NextCash::String hex;
-                hex.writeHex(input, totalLength);
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "Invalid S integer header byte in signature (%d bytes) : %s", totalLength, hex.text());
-                clear();
-                return false;
-            }
+            // if(input[offset] & 0x80)
+            // {
+                // // NextCash::String hex;
+                // // hex.writeHex(input, totalLength);
+                // // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                  // // "Adding required leading zero byte in R value to signature (%d bytes) : %s", totalLength, hex.text());
 
-            // S length
-            subLength = input[offset++];
-            if(subLength + offset > totalLength)
-            {
-                NextCash::String hex;
-                hex.writeHex(input, totalLength);
-                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
-                  "S integer length byte too high in signature (%d bytes) : %s", totalLength, hex.text());
-                clear();
-                return false;
-            }
+                // // Adjust lengths
+                // input[offset-1]++;
+                // input[fullLengthOffset]++;
 
-            while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
-            {
+                // // Add a zero byte
+                // std::memmove(input + offset + 1, input + offset, totalLength - offset);
+                // input[offset] = 0x00;
+
+                // ++totalLength;
+                // ++subLength;
+            // }
+
+            // offset += subLength;
+
+            // // Integer header byte
+            // if(input[offset++] != 0x02)
+            // {
                 // NextCash::String hex;
                 // hex.writeHex(input, totalLength);
-                // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-                  // "Removing extra leading zero byte in S value to signature (%d bytes) : %s", totalLength, hex.text());
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  // "Invalid S integer header byte in signature (%d bytes) : %s", totalLength, hex.text());
+                // clear();
+                // return false;
+            // }
 
-                // Adjust lengths
-                input[offset-1]--;
-                input[fullLengthOffset]--;
-
-                // Extra padding. Remove this
-                std::memmove(input + offset, input + offset + 1, totalLength - offset - 1);
-
-                --totalLength;
-                --subLength;
-            }
-
-            if(input[offset] & 0x80)
-            {
+            // // S length
+            // subLength = input[offset++];
+            // if(subLength + offset > totalLength)
+            // {
                 // NextCash::String hex;
                 // hex.writeHex(input, totalLength);
-                // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
-                  // "Adding required leading zero byte in S value from signature (%d bytes) : %s", totalLength, hex.text());
+                // NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  // "S integer length byte too high in signature (%d bytes) : %s", totalLength, hex.text());
+                // clear();
+                // return false;
+            // }
 
-                // Adjust lengths
-                input[offset-1]++;
-                input[fullLengthOffset]++;
+            // while(input[offset] == 0x00 && !(input[offset+1] & 0x80))
+            // {
+                // // NextCash::String hex;
+                // // hex.writeHex(input, totalLength);
+                // // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                  // // "Removing extra leading zero byte in S value to signature (%d bytes) : %s", totalLength, hex.text());
 
-                // Add a zero byte
-                std::memmove(input + offset + 1, input + offset, totalLength - offset);
-                input[offset] = 0x00;
+                // // Adjust lengths
+                // input[offset-1]--;
+                // input[fullLengthOffset]--;
 
-                ++totalLength;
-                ++subLength;
-            }
+                // // Extra padding. Remove this
+                // std::memmove(input + offset, input + offset + 1, totalLength - offset - 1);
 
-            offset += subLength;
-        }
+                // --totalLength;
+                // --subLength;
+            // }
+
+            // if(input[offset] & 0x80)
+            // {
+                // // NextCash::String hex;
+                // // hex.writeHex(input, totalLength);
+                // // NextCash::Log::addFormatted(NextCash::Log::DEBUG, BITCOIN_KEY_LOG_NAME,
+                  // // "Adding required leading zero byte in S value from signature (%d bytes) : %s", totalLength, hex.text());
+
+                // // Adjust lengths
+                // input[offset-1]++;
+                // input[fullLengthOffset]++;
+
+                // // Add a zero byte
+                // std::memmove(input + offset + 1, input + offset, totalLength - offset);
+                // input[offset] = 0x00;
+
+                // ++totalLength;
+                // ++subLength;
+            // }
+
+            // offset += subLength;
+        // }
 
         secp256k1_context *thisContext = Key::context(SECP256K1_CONTEXT_NONE);
-        if(secp256k1_ecdsa_signature_parse_der(thisContext, (secp256k1_ecdsa_signature*)mData, input, totalLength))
+        if(secp256k1_ecdsa_signature_parse_der(thisContext, (secp256k1_ecdsa_signature*)mData,
+          input, totalLength))
             return true;
+
+        if(!pStrictECDSA_DER_Sigs && repairSignature(input, totalLength))
+        {
+            if(secp256k1_ecdsa_signature_parse_der(thisContext, (secp256k1_ecdsa_signature*)mData,
+              input, totalLength))
+                return true;
+        }
 
         if(totalLength == 64 && !pStrictECDSA_DER_Sigs)
         {
@@ -1188,6 +1364,15 @@ namespace BitCoin
 
         secp256k1_context *thisContext = context(SECP256K1_CONTEXT_NONE);
 
+        switch(pNetwork)
+        {
+        case MAINNET:
+            mVersion = MAINNET_PRIVATE;
+            break;
+        case TESTNET:
+            mVersion = TESTNET_PRIVATE;
+            break;
+        }
         mDepth = NO_DEPTH;
         mIndex = NO_DEPTH;
 
@@ -1979,6 +2164,72 @@ namespace BitCoin
             return true;
 
         return false;
+    }
+
+    bool Key::verify(const uint8_t *pPublicKeyData, unsigned int pPublicKeyDataSize,
+      const uint8_t *pSignatureData, unsigned int pSignatureDataSize, bool pStrictSignatures,
+      const NextCash::Hash &pHash)
+    {
+#ifdef PROFILER_ON
+        NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
+          PROFILER_KEY_STATIC_VERIFY_SIG_ID, PROFILER_KEY_STATIC_VERIFY_SIG_NAME), true);
+#endif
+        secp256k1_context *thisContext = context(SECP256K1_CONTEXT_VERIFY);
+
+        if(pHash.size() != 32)
+        {
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Wrong size hash to verify");
+            return false;
+        }
+
+        // Parse key into 64 byte format
+        secp256k1_pubkey publicKey;
+        if(!secp256k1_ec_pubkey_parse(thisContext, &publicKey, pPublicKeyData, pPublicKeyDataSize))
+        {
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+              "Failed to parse public key");
+            return false;
+        }
+
+        // Parse signature data
+        if(pSignatureDataSize < 2)
+            return false;
+
+        unsigned int signatureLength = pSignatureDataSize - 1; // Last byte is hash type.
+
+        secp256k1_ecdsa_signature signature;
+        if(secp256k1_ecdsa_signature_parse_der(thisContext, &signature, pSignatureData,
+          signatureLength) == 0)
+        {
+            bool valid = false;
+            if(!pStrictSignatures)
+            {
+                uint8_t repairedSignature[signatureLength + 2]; // Max of 2 bytes added by repair.
+                std::memcpy(repairedSignature, pSignatureData, signatureLength);
+                if(!repairSignature(repairedSignature, signatureLength) ||
+                  !secp256k1_ecdsa_signature_parse_der(thisContext, &signature, repairedSignature,
+                  signatureLength))
+                    valid = true;
+            }
+
+            if(!valid && signatureLength == 64 && !pStrictSignatures &&
+              secp256k1_ecdsa_signature_parse_compact(thisContext, &signature, pSignatureData) == 0)
+            {
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_KEY_LOG_NAME,
+                  "Failed to parse compact signature (64 bytes)");
+                return false;
+            }
+        }
+
+        if(secp256k1_ecdsa_verify(thisContext, &signature, pHash.data(), &publicKey))
+            return true;
+
+        if(!secp256k1_ecdsa_signature_normalize(thisContext, &signature, &signature))
+            return false; // Already normalized
+
+        // Try it again with the normalized signature
+        return secp256k1_ecdsa_verify(thisContext, &signature, pHash.data(), &publicKey) != 0;
     }
 
     Key *Key::deriveChild(uint32_t pIndex, bool pLocked)
@@ -4770,7 +5021,7 @@ namespace BitCoin
             }
             else
             {
-                checkChain = keyTree.chainKey(0, Key::BIP0032, 0, 0);
+                checkChain = keyTree.chainKey(0, Key::BIP0032, HARDENED, 0);
                 if(checkChain == NULL)
                 {
                     success = false;
@@ -4801,7 +5052,7 @@ namespace BitCoin
             }
             else
             {
-                checkChain = keyTree.chainKey(1, Key::BIP0032, 0, 0);
+                checkChain = keyTree.chainKey(1, Key::BIP0032, HARDENED, 0);
                 if(checkChain == NULL)
                 {
                     success = false;

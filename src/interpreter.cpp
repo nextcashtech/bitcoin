@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017-2018 NextCash, LLC                                      *
+ * Copyright 2017-2019 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -195,58 +195,58 @@ namespace BitCoin
 
         switch(pOpCode)
         {
-            // case OP_0: //                  = 0x00, // An empty array of bytes is pushed to the stack
-            case OP_FALSE: //               = 0x00, // An empty array of bytes is pushed to the stack
-            case OP_1NEGATE: //             = 0x4f, // The number -1 is pushed
-            // case OP_1: //                   = 0x51, // The number 1 is pushed
-            case OP_TRUE: //                = 0x51, // The number 1 is pushed
-            case OP_2: //                   = 0x52, // The number 2 is pushed
-            case OP_3: //                   = 0x53, // The number 3 is pushed
-            case OP_4: //                   = 0x54, // The number 4 is pushed
-            case OP_5: //                   = 0x55, // The number 5 is pushed
-            case OP_6: //                   = 0x56, // The number 6 is pushed
-            case OP_7: //                   = 0x57, // The number 7 is pushed
-            case OP_8: //                   = 0x58, // The number 8 is pushed
-            case OP_9: //                   = 0x59, // The number 9 is pushed
-            case OP_10: //                  = 0x5a, // The number 10 is pushed
-            case OP_11: //                  = 0x5b, // The number 11 is pushed
-            case OP_12: //                  = 0x5c, // The number 12 is pushed
-            case OP_13: //                  = 0x5d, // The number 13 is pushed
-            case OP_14: //                  = 0x5e, // The number 14 is pushed
-            case OP_15: //                  = 0x5f, // The number 15 is pushed
-            case OP_16: //                  = 0x60, // The number 16 is pushed
-                return 1;
+        // case OP_0: //                  = 0x00, // An empty array of bytes is pushed to the stack
+        case OP_FALSE: //               = 0x00, // An empty array of bytes is pushed to the stack
+        case OP_1NEGATE: //             = 0x4f, // The number -1 is pushed
+        // case OP_1: //                   = 0x51, // The number 1 is pushed
+        case OP_TRUE: //                = 0x51, // The number 1 is pushed
+        case OP_2: //                   = 0x52, // The number 2 is pushed
+        case OP_3: //                   = 0x53, // The number 3 is pushed
+        case OP_4: //                   = 0x54, // The number 4 is pushed
+        case OP_5: //                   = 0x55, // The number 5 is pushed
+        case OP_6: //                   = 0x56, // The number 6 is pushed
+        case OP_7: //                   = 0x57, // The number 7 is pushed
+        case OP_8: //                   = 0x58, // The number 8 is pushed
+        case OP_9: //                   = 0x59, // The number 9 is pushed
+        case OP_10: //                  = 0x5a, // The number 10 is pushed
+        case OP_11: //                  = 0x5b, // The number 11 is pushed
+        case OP_12: //                  = 0x5c, // The number 12 is pushed
+        case OP_13: //                  = 0x5d, // The number 13 is pushed
+        case OP_14: //                  = 0x5e, // The number 14 is pushed
+        case OP_15: //                  = 0x5f, // The number 15 is pushed
+        case OP_16: //                  = 0x60, // The number 16 is pushed
+            return 1;
 
-            case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
-            {
-                uint8_t length = pScript.readByte();
-                if(length > pScript.remaining())
-                    return 0xffffffff;
-                else if(pSkipData)
-                    pScript.setReadOffset(pScript.readOffset() + length);
-                return length;
-            }
-            case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
-            {
-                uint16_t length = pScript.readUnsignedShort();
-                if(length > pScript.remaining())
-                    return 0xffffffff;
-                else if(pSkipData)
-                    pScript.setReadOffset(pScript.readOffset() + length);
-                return length;
-            }
-            case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
-            {
-                uint32_t length = pScript.readUnsignedInt();
-                if(length > pScript.remaining())
-                    return 0xffffffff;
-                else if(pSkipData)
-                    pScript.setReadOffset(pScript.readOffset() + length);
-                return length;
-            }
-
-            default:
+        case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
+        {
+            uint8_t length = pScript.readByte();
+            if(length > pScript.remaining())
                 return 0xffffffff;
+            else if(pSkipData)
+                pScript.setReadOffset(pScript.readOffset() + length);
+            return length;
+        }
+        case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
+        {
+            uint16_t length = pScript.readUnsignedShort();
+            if(length > pScript.remaining())
+                return 0xffffffff;
+            else if(pSkipData)
+                pScript.setReadOffset(pScript.readOffset() + length);
+            return length;
+        }
+        case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
+        {
+            uint32_t length = pScript.readUnsignedInt();
+            if(length > pScript.remaining())
+                return 0xffffffff;
+            else if(pSkipData)
+                pScript.setReadOffset(pScript.readOffset() + length);
+            return length;
+        }
+
+        default:
+            return 0xffffffff;
         }
     }
 
@@ -265,59 +265,59 @@ namespace BitCoin
 
         switch(pOpCode)
         {
-            // case OP_0: //                  = 0x00, // An empty array of bytes is pushed to the stack
-            case OP_FALSE: //               = 0x00, // An empty array of bytes is pushed to the stack
-            case OP_1NEGATE: //             = 0x4f, // The number -1 is pushed
-            // case OP_1: //                   = 0x51, // The number 1 is pushed
-            case OP_TRUE: //                = 0x51, // The number 1 is pushed
-            case OP_2: //                   = 0x52, // The number 2 is pushed
-            case OP_3: //                   = 0x53, // The number 3 is pushed
-            case OP_4: //                   = 0x54, // The number 4 is pushed
-            case OP_5: //                   = 0x55, // The number 5 is pushed
-            case OP_6: //                   = 0x56, // The number 6 is pushed
-            case OP_7: //                   = 0x57, // The number 7 is pushed
-            case OP_8: //                   = 0x58, // The number 8 is pushed
-            case OP_9: //                   = 0x59, // The number 9 is pushed
-            case OP_10: //                  = 0x5a, // The number 10 is pushed
-            case OP_11: //                  = 0x5b, // The number 11 is pushed
-            case OP_12: //                  = 0x5c, // The number 12 is pushed
-            case OP_13: //                  = 0x5d, // The number 13 is pushed
-            case OP_14: //                  = 0x5e, // The number 14 is pushed
-            case OP_15: //                  = 0x5f, // The number 15 is pushed
-            case OP_16: //                  = 0x60, // The number 16 is pushed
-                pData.writeByte(smallIntegerValue(pOpCode));
-                return true;
+        // case OP_0: //                  = 0x00, // An empty array of bytes is pushed to the stack
+        case OP_FALSE: //               = 0x00, // An empty array of bytes is pushed to the stack
+        case OP_1NEGATE: //             = 0x4f, // The number -1 is pushed
+        // case OP_1: //                   = 0x51, // The number 1 is pushed
+        case OP_TRUE: //                = 0x51, // The number 1 is pushed
+        case OP_2: //                   = 0x52, // The number 2 is pushed
+        case OP_3: //                   = 0x53, // The number 3 is pushed
+        case OP_4: //                   = 0x54, // The number 4 is pushed
+        case OP_5: //                   = 0x55, // The number 5 is pushed
+        case OP_6: //                   = 0x56, // The number 6 is pushed
+        case OP_7: //                   = 0x57, // The number 7 is pushed
+        case OP_8: //                   = 0x58, // The number 8 is pushed
+        case OP_9: //                   = 0x59, // The number 9 is pushed
+        case OP_10: //                  = 0x5a, // The number 10 is pushed
+        case OP_11: //                  = 0x5b, // The number 11 is pushed
+        case OP_12: //                  = 0x5c, // The number 12 is pushed
+        case OP_13: //                  = 0x5d, // The number 13 is pushed
+        case OP_14: //                  = 0x5e, // The number 14 is pushed
+        case OP_15: //                  = 0x5f, // The number 15 is pushed
+        case OP_16: //                  = 0x60, // The number 16 is pushed
+            pData.writeByte(smallIntegerValue(pOpCode));
+            return true;
 
-            case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
-            {
-                uint8_t length = pScript.readByte();
-                if(length > pScript.remaining())
-                    return false;
-                else
-                    pData.copyBuffer(pScript, length);
-                return true;
-            }
-            case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
-            {
-                uint16_t length = pScript.readUnsignedShort();
-                if(length > pScript.remaining())
-                    return false;
-                else
-                    pData.copyBuffer(pScript, length);
-                return true;
-            }
-            case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
-            {
-                uint32_t length = pScript.readUnsignedInt();
-                if(length > pScript.remaining())
-                    return false;
-                else
-                    pData.copyBuffer(pScript, length);
-                return true;
-            }
-
-            default:
+        case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
+        {
+            uint8_t length = pScript.readByte();
+            if(length > pScript.remaining())
                 return false;
+            else
+                pData.copyBuffer(pScript, length);
+            return true;
+        }
+        case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
+        {
+            uint16_t length = pScript.readUnsignedShort();
+            if(length > pScript.remaining())
+                return false;
+            else
+                pData.copyBuffer(pScript, length);
+            return true;
+        }
+        case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
+        {
+            uint32_t length = pScript.readUnsignedInt();
+            if(length > pScript.remaining())
+                return false;
+            else
+                pData.copyBuffer(pScript, length);
+            return true;
+        }
+
+        default:
+            return false;
         }
     }
 
@@ -430,435 +430,434 @@ namespace BitCoin
 
             switch(opCode)
             {
-                case OP_NOP: // Does nothing
-                    result += "<OP_NOP>";
-                    break;
-                case OP_IF: // If the top stack value is not OP_FALSE the statements are executed. The top stack value is removed
-                    result += "<OP_IF>";
-                    break;
-                case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
-                    result += "<OP_NOTIF>";
-                    break;
-                case OP_ELSE:
-                    result += "<OP_ELSE>";
-                    break;
-                case OP_ENDIF:
-                    result += "<OP_ENDIF>";
-                    break;
-                case OP_VERIFY:
-                    result += "<OP_VERIFY>";
-                    break;
-                case OP_RETURN:
-                    result += "<OP_RETURN>";
-                    break;
-                case OP_EQUAL:
-                    result += "<OP_EQUAL>";
-                    break;
-                case OP_EQUALVERIFY:
-                    result += "<OP_EQUALVERIFY>";
-                    break;
-                case OP_RIPEMD160:
-                    result += "<OP_RIPEMD160>";
-                    break;
-                case OP_SHA1:
-                    result += "<OP_SHA1>";
-                    break;
-                case OP_SHA256:
-                    result += "<OP_SHA256>";
-                    break;
-                case OP_HASH160:
-                    result += "<OP_HASH160>";
-                    break;
-                case OP_HASH256:
-                    result += "<OP_HASH256>";
-                    break;
-                case OP_CODESEPARATOR:
-                    result += "<OP_CODESEPARATOR>";
-                    break;
-                case OP_CHECKSIG:
-                    result += "<OP_CHECKSIG>";
-                    break;
-                case OP_CHECKSIGVERIFY:
-                    result += "<OP_CHECKSIGVERIFY>";
-                    break;
-                case OP_CHECKMULTISIG:
-                    result += "<OP_CHECKMULTISIG>";
-                    break;
-                case OP_CHECKMULTISIGVERIFY:
-                    result += "<OP_CHECKMULTISIGVERIFY>";
-                    break;
-                case OP_CHECKDATASIG:
-                    result += "<OP_CHECKDATASIG>";
-                    break;
-                case OP_CHECKDATASIGVERIFY:
-                    result += "<OP_CHECKDATASIGVERIFY>";
-                    break;
-                case OP_CHECKLOCKTIMEVERIFY:
-                    result += "<OP_CHECKLOCKTIMEVERIFY>";
-                    break;
-                case OP_CHECKSEQUENCEVERIFY:
-                    result += "<OP_CHECKSEQUENCEVERIFY>";
-                    break;
-                case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
-                {
-                    uint8_t length = pScript.readByte();
-                    result += "<OP_PUSHDATA1=";
-                    if(length > pScript.remaining())
-                        result += "too long";
-                    else
-                        result += pScript.readHexString(length);
-                    result += ">";
-                    break;
-                }
-                case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
-                {
-                    uint16_t length = pScript.readUnsignedShort();
-                    result += "<OP_PUSHDATA2=";
-                    if(length > pScript.remaining())
-                        result += "too long";
-                    else
-                        result += pScript.readHexString(length);
-                    result += ">";
-                    break;
-                }
-                case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
-                {
-                    uint32_t length = pScript.readUnsignedInt();
-                    result += "<OP_PUSHDATA4=";
-                    if(length > pScript.remaining())
-                        result += "too long";
-                    else
-                        result += pScript.readHexString(length);
-                    result += ">";
-                    break;
-                }
-                case OP_0: // An empty array of bytes is pushed to the stack
-                    //case OP_FALSE:
-                    result += "<OP_0>";
-                    break;
-                case OP_1NEGATE: // The number -1 is pushed
-                    result += "<OP_1NEGATE>";
-                    break;
-                case OP_1: // The number 1 is pushed
-                    result += "<OP_1>";
-                    break;
-                case OP_2: // The number 2 is pushed
-                    result += "<OP_2>";
-                    break;
-                case OP_3: // The number 3 is pushed
-                    result += "<OP_3>";
-                    break;
-                case OP_4: // The number 4 is pushed
-                    result += "<OP_4>";
-                    break;
-                case OP_5: // The number 5 is pushed
-                    result += "<OP_5>";
-                    break;
-                case OP_6: // The number 6 is pushed
-                    result += "<OP_6>";
-                    break;
-                case OP_7: // The number 7 is pushed
-                    result += "<OP_7>";
-                    break;
-                case OP_8: // The number 8 is pushed
-                    result += "<OP_8>";
-                    break;
-                case OP_9: // The number 9 is pushed
-                    result += "<OP_9>";
-                    break;
-                case OP_10: // The number 10 is pushed
-                    result += "<OP_10>";
-                    break;
-                case OP_11: // The number 11 is pushed
-                    result += "<OP_11>";
-                    break;
-                case OP_12: // The number 12 is pushed
-                    result += "<OP_12>";
-                    break;
-                case OP_13: // The number 13 is pushed
-                    result += "<OP_13>";
-                    break;
-                case OP_14: // The number 14 is pushed
-                    result += "<OP_14>";
-                    break;
-                case OP_15: // The number 15 is pushed
-                    result += "<OP_15>";
-                    break;
-                case OP_16: // The number 16 is pushed
-                    result += "<OP_16>";
-                    break;
+            case OP_NOP: // Does nothing
+                result += "<OP_NOP>";
+                break;
+            case OP_IF: // If the top stack value is not OP_FALSE the statements are executed. The top stack value is removed
+                result += "<OP_IF>";
+                break;
+            case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
+                result += "<OP_NOTIF>";
+                break;
+            case OP_ELSE:
+                result += "<OP_ELSE>";
+                break;
+            case OP_ENDIF:
+                result += "<OP_ENDIF>";
+                break;
+            case OP_VERIFY:
+                result += "<OP_VERIFY>";
+                break;
+            case OP_RETURN:
+                result += "<OP_RETURN>";
+                break;
+            case OP_EQUAL:
+                result += "<OP_EQUAL>";
+                break;
+            case OP_EQUALVERIFY:
+                result += "<OP_EQUALVERIFY>";
+                break;
+            case OP_RIPEMD160:
+                result += "<OP_RIPEMD160>";
+                break;
+            case OP_SHA1:
+                result += "<OP_SHA1>";
+                break;
+            case OP_SHA256:
+                result += "<OP_SHA256>";
+                break;
+            case OP_HASH160:
+                result += "<OP_HASH160>";
+                break;
+            case OP_HASH256:
+                result += "<OP_HASH256>";
+                break;
+            case OP_CODESEPARATOR:
+                result += "<OP_CODESEPARATOR>";
+                break;
+            case OP_CHECKSIG:
+                result += "<OP_CHECKSIG>";
+                break;
+            case OP_CHECKSIGVERIFY:
+                result += "<OP_CHECKSIGVERIFY>";
+                break;
+            case OP_CHECKMULTISIG:
+                result += "<OP_CHECKMULTISIG>";
+                break;
+            case OP_CHECKMULTISIGVERIFY:
+                result += "<OP_CHECKMULTISIGVERIFY>";
+                break;
+            case OP_CHECKDATASIG:
+                result += "<OP_CHECKDATASIG>";
+                break;
+            case OP_CHECKDATASIGVERIFY:
+                result += "<OP_CHECKDATASIGVERIFY>";
+                break;
+            case OP_CHECKLOCKTIMEVERIFY:
+                result += "<OP_CHECKLOCKTIMEVERIFY>";
+                break;
+            case OP_CHECKSEQUENCEVERIFY:
+                result += "<OP_CHECKSEQUENCEVERIFY>";
+                break;
+            case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
+            {
+                uint8_t length = pScript.readByte();
+                result += "<OP_PUSHDATA1=";
+                if(length > pScript.remaining())
+                    result += "too long";
+                else
+                    result += pScript.readHexString(length);
+                result += ">";
+                break;
+            }
+            case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
+            {
+                uint16_t length = pScript.readUnsignedShort();
+                result += "<OP_PUSHDATA2=";
+                if(length > pScript.remaining())
+                    result += "too long";
+                else
+                    result += pScript.readHexString(length);
+                result += ">";
+                break;
+            }
+            case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
+            {
+                uint32_t length = pScript.readUnsignedInt();
+                result += "<OP_PUSHDATA4=";
+                if(length > pScript.remaining())
+                    result += "too long";
+                else
+                    result += pScript.readHexString(length);
+                result += ">";
+                break;
+            }
+            case OP_0: // An empty array of bytes is pushed to the stack
+                //case OP_FALSE:
+                result += "<OP_0>";
+                break;
+            case OP_1NEGATE: // The number -1 is pushed
+                result += "<OP_1NEGATE>";
+                break;
+            case OP_1: // The number 1 is pushed
+                result += "<OP_1>";
+                break;
+            case OP_2: // The number 2 is pushed
+                result += "<OP_2>";
+                break;
+            case OP_3: // The number 3 is pushed
+                result += "<OP_3>";
+                break;
+            case OP_4: // The number 4 is pushed
+                result += "<OP_4>";
+                break;
+            case OP_5: // The number 5 is pushed
+                result += "<OP_5>";
+                break;
+            case OP_6: // The number 6 is pushed
+                result += "<OP_6>";
+                break;
+            case OP_7: // The number 7 is pushed
+                result += "<OP_7>";
+                break;
+            case OP_8: // The number 8 is pushed
+                result += "<OP_8>";
+                break;
+            case OP_9: // The number 9 is pushed
+                result += "<OP_9>";
+                break;
+            case OP_10: // The number 10 is pushed
+                result += "<OP_10>";
+                break;
+            case OP_11: // The number 11 is pushed
+                result += "<OP_11>";
+                break;
+            case OP_12: // The number 12 is pushed
+                result += "<OP_12>";
+                break;
+            case OP_13: // The number 13 is pushed
+                result += "<OP_13>";
+                break;
+            case OP_14: // The number 14 is pushed
+                result += "<OP_14>";
+                break;
+            case OP_15: // The number 15 is pushed
+                result += "<OP_15>";
+                break;
+            case OP_16: // The number 16 is pushed
+                result += "<OP_16>";
+                break;
 
 
-                case OP_1ADD: //    in    out    1 is added to the input.
-                    result += "<OP_1ADD>";
-                    break;
-                case OP_1SUB: //    in    out    1 is subtracted from the input.
-                    result += "<OP_1SUB>";
-                    break;
-                case OP_2MUL: //    in    out    The input is multiplied by 2. disabled.
-                    result += "<OP_2MUL disabled>";
-                    break;
-                case OP_2DIV: //    in    out    The input is divided by 2. disabled.
-                    result += "<OP_2DIV disabled>";
-                    break;
-                case OP_NEGATE: //    in    out    The sign of the input is flipped.
-                    result += "<OP_NEGATE>";
-                    break;
-                case OP_ABS: //    in    out    The input is made positive.
-                    result += "<OP_ABS>";
-                    break;
-                case OP_NOT: //    in    out    If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
-                    result += "<OP_NOT>";
-                    break;
-                case OP_0NOTEQUAL: //    in    out    Returns 0 if the input is 0. 1 otherwise.
-                    result += "<OP_0NOTEQUAL>";
-                    break;
-                case OP_ADD: //    a b   out    a is added to b.
-                    result += "<OP_ADD>";
-                    break;
-                case OP_SUB: //    a b   out    b is subtracted from a.
-                    result += "<OP_SUB>";
-                    break;
-                case OP_MUL: //    a b   out    a is multiplied by b.
-                    if(pForks.cashFork201811IsActive(pBlockHeight))
-                        result += "<OP_MUL>";
-                    else
-                        result += "<OP_MUL disabled>";
-                    break;
-                case OP_DIV: //    a b   out    a is divided by b.
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                        result += "<OP_DIV>";
-                    else
-                        result += "<OP_DIV disabled>";
-                    break;
-                case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                        result += "<OP_MOD>";
-                    else
-                        result += "<OP_MOD disabled>";
-                    break;
-                case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign.
-                    if(pForks.cashFork201811IsActive(pBlockHeight))
-                        result += "<OP_LSHIFT>";
-                    else
-                        result += "<OP_LSHIFT disabled>";
-                    break;
-                case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign.
-                    if(pForks.cashFork201811IsActive(pBlockHeight))
-                        result += "<OP_RSHIFT>";
-                    else
-                        result += "<OP_RSHIFT disabled>";
-                    break;
-                case OP_BOOLAND: //    a b   out    If both a and b are not 0, the output is 1. Otherwise 0.
-                    result += "<OP_BOOLAND>";
-                    break;
-                case OP_BOOLOR: //    a b   out    If a or b is not 0, the output is 1. Otherwise 0.
-                    result += "<OP_BOOLOR>";
-                    break;
-                case OP_NUMEQUAL: //    a b   out    Returns 1 if the numbers are equal, 0 otherwise.
-                    result += "<OP_NUMEQUAL>";
-                    break;
-                case OP_NUMEQUALVERIFY: //    a b   Nothing / fail    Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
-                    result += "<OP_NUMEQUALVERIFY>";
-                    break;
-                case OP_NUMNOTEQUAL: //    a b   out    Returns 1 if the numbers are not equal, 0 otherwise.
-                    result += "<OP_NUMNOTEQUAL>";
-                    break;
-                case OP_LESSTHAN: //    a b   out    Returns 1 if a is less than b, 0 otherwise.
-                    result += "<OP_LESSTHAN>";
-                    break;
-                case OP_GREATERTHAN: //    a b   out    Returns 1 if a is greater than b, 0 otherwise.
-                    result += "<OP_GREATERTHAN>";
-                    break;
-                case OP_LESSTHANOREQUAL: //    a b   out    Returns 1 if a is less than or equal to b, 0 otherwise.
-                    result += "<OP_LESSTHANOREQUAL>";
-                    break;
-                case OP_GREATERTHANOREQUAL: //    a b   out    Returns 1 if a is greater than or equal to b, 0 otherwise.
-                    result += "<OP_GREATERTHANOREQUAL>";
-                    break;
-                case OP_MIN: //    a b   out    Returns the smaller of a and b.
-                    result += "<OP_MIN>";
-                    break;
-                case OP_MAX: //    a b   out    Returns the larger of a and b.
-                    result += "<OP_MAX>";
-                    break;
-                case OP_WITHIN: //    x min max    out    Returns 1 if x is within the specified range (left-inclusive), 0 otherwise
-                    result += "<OP_WITHIN>";
-                    break;
+            case OP_1ADD: //    in    out    1 is added to the input.
+                result += "<OP_1ADD>";
+                break;
+            case OP_1SUB: //    in    out    1 is subtracted from the input.
+                result += "<OP_1SUB>";
+                break;
+            case OP_2MUL: //    in    out    The input is multiplied by 2. disabled.
+                result += "<OP_2MUL disabled>";
+                break;
+            case OP_2DIV: //    in    out    The input is divided by 2. disabled.
+                result += "<OP_2DIV disabled>";
+                break;
+            case OP_NEGATE: //    in    out    The sign of the input is flipped.
+                result += "<OP_NEGATE>";
+                break;
+            case OP_ABS: //    in    out    The input is made positive.
+                result += "<OP_ABS>";
+                break;
+            case OP_NOT: //    in    out    If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
+                result += "<OP_NOT>";
+                break;
+            case OP_0NOTEQUAL: //    in    out    Returns 0 if the input is 0. 1 otherwise.
+                result += "<OP_0NOTEQUAL>";
+                break;
+            case OP_ADD: //    a b   out    a is added to b.
+                result += "<OP_ADD>";
+                break;
+            case OP_SUB: //    a b   out    b is subtracted from a.
+                result += "<OP_SUB>";
+                break;
+            case OP_MUL: //    a b   out    a is multiplied by b.
+                if(pForks.cashFork201811IsActive(pBlockHeight))
+                    result += "<OP_MUL>";
+                else
+                    result += "<OP_MUL disabled>";
+                break;
+            case OP_DIV: //    a b   out    a is divided by b.
+                if(pForks.cashFork201805IsActive(pBlockHeight))
+                    result += "<OP_DIV>";
+                else
+                    result += "<OP_DIV disabled>";
+                break;
+            case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
+                if(pForks.cashFork201805IsActive(pBlockHeight))
+                    result += "<OP_MOD>";
+                else
+                    result += "<OP_MOD disabled>";
+                break;
+            case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign.
+                if(pForks.cashFork201811IsActive(pBlockHeight))
+                    result += "<OP_LSHIFT>";
+                else
+                    result += "<OP_LSHIFT disabled>";
+                break;
+            case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign.
+                if(pForks.cashFork201811IsActive(pBlockHeight))
+                    result += "<OP_RSHIFT>";
+                else
+                    result += "<OP_RSHIFT disabled>";
+                break;
+            case OP_BOOLAND: //    a b   out    If both a and b are not 0, the output is 1. Otherwise 0.
+                result += "<OP_BOOLAND>";
+                break;
+            case OP_BOOLOR: //    a b   out    If a or b is not 0, the output is 1. Otherwise 0.
+                result += "<OP_BOOLOR>";
+                break;
+            case OP_NUMEQUAL: //    a b   out    Returns 1 if the numbers are equal, 0 otherwise.
+                result += "<OP_NUMEQUAL>";
+                break;
+            case OP_NUMEQUALVERIFY: //    a b   Nothing / fail    Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
+                result += "<OP_NUMEQUALVERIFY>";
+                break;
+            case OP_NUMNOTEQUAL: //    a b   out    Returns 1 if the numbers are not equal, 0 otherwise.
+                result += "<OP_NUMNOTEQUAL>";
+                break;
+            case OP_LESSTHAN: //    a b   out    Returns 1 if a is less than b, 0 otherwise.
+                result += "<OP_LESSTHAN>";
+                break;
+            case OP_GREATERTHAN: //    a b   out    Returns 1 if a is greater than b, 0 otherwise.
+                result += "<OP_GREATERTHAN>";
+                break;
+            case OP_LESSTHANOREQUAL: //    a b   out    Returns 1 if a is less than or equal to b, 0 otherwise.
+                result += "<OP_LESSTHANOREQUAL>";
+                break;
+            case OP_GREATERTHANOREQUAL: //    a b   out    Returns 1 if a is greater than or equal to b, 0 otherwise.
+                result += "<OP_GREATERTHANOREQUAL>";
+                break;
+            case OP_MIN: //    a b   out    Returns the smaller of a and b.
+                result += "<OP_MIN>";
+                break;
+            case OP_MAX: //    a b   out    Returns the larger of a and b.
+                result += "<OP_MAX>";
+                break;
+            case OP_WITHIN: //    x min max    out    Returns 1 if x is within the specified range (left-inclusive), 0 otherwise
+                result += "<OP_WITHIN>";
+                break;
 
 
-                // Stack
-                case OP_TOALTSTACK:
-                    result += "<OP_TOALTSTACK>";
-                    break;
-                case OP_FROMALTSTACK:
-                    result += "<OP_FROMALTSTACK>";
-                    break;
-                case OP_DUP:
-                    result += "<OP_DUP>";
-                    break;
-                case OP_IFDUP: // 0x73//     x    x / x x    If the top stack value is not 0, duplicate it.
-                    result += "<OP_IFDUP>";
-                    break;
-                case OP_DEPTH: // 0x74//     Nothing    <Stack size>    Puts the number of stack items onto the stack.
-                    result += "<OP_DEPTH>";
-                    break;
-                case OP_DROP: // 0x75//     x    Nothing    Removes the top stack item.
-                    result += "<OP_DROP>";
-                    break;
-                case OP_NIP: // 0x77//     x1 x2    x2    Removes the second-to-top stack item.
-                    result += "<OP_NIP>";
-                    break;
-                case OP_OVER: // 0x78//     x1 x2    x1 x2 x1    Copies the second-to-top stack item to the top.
-                    result += "<OP_OVER>";
-                    break;
-                case OP_PICK: // 0x79//     xn ... x2 x1 x0 <n>    xn ... x2 x1 x0 xn    The item n back in the stack is copied to the top.
-                    result += "<OP_PICK>";
-                    break;
-                case OP_ROLL: // 0x7a//     xn ... x2 x1 x0 <n>    ... x2 x1 x0 xn    The item n back in the stack is moved to the top.
-                    result += "<OP_ROLL>";
-                    break;
-                case OP_ROT: // 0x7b//     x1 x2 x3    x2 x3 x1    The top three items on the stack are rotated to the left.
-                    result += "<OP_ROT>";
-                    break;
-                case OP_SWAP: // 0x7c//     x1 x2    x2 x1    The top two items on the stack are swapped.
-                    result += "<OP_SWAP>";
-                    break;
-                case OP_TUCK: // 0x7d//     x1 x2    x2 x1 x2    The item at the top of the stack is copied and inserted before the second-to-top item.
-                    result += "<OP_TUCK>";
-                    break;
-                case OP_2DROP: // 0x6d//     x1 x2    Nothing    Removes the top two stack items.
-                    result += "<OP_2DROP>";
-                    break;
-                case OP_2DUP: // 0x6e//     x1 x2    x1 x2 x1 x2    Duplicates the top two stack items.
-                    result += "<OP_2DUP>";
-                    break;
-                case OP_3DUP: // 0x6f//     x1 x2 x3    x1 x2 x3 x1 x2 x3    Duplicates the top three stack items.
-                    result += "<OP_3DUP>";
-                    break;
-                case OP_2OVER: // 0x70//     x1 x2 x3 x4    x1 x2 x3 x4 x1 x2    Copies the pair of items two spaces back in the stack to the front.
-                    result += "<OP_2OVER>";
-                    break;
-                case OP_2ROT: // 0x71//     x1 x2 x3 x4 x5 x6    x3 x4 x5 x6 x1 x2    The fifth and sixth items back are moved to the top of the stack.
-                    result += "<OP_2ROT>";
-                    break;
-                case OP_2SWAP: // 0x72 //     x1 x2 x3 x4    x3 x4 x1 x2	Swaps the top two pairs of items.
-                    result += "<OP_2SWAP>";
-                    break;
+            // Stack
+            case OP_TOALTSTACK:
+                result += "<OP_TOALTSTACK>";
+                break;
+            case OP_FROMALTSTACK:
+                result += "<OP_FROMALTSTACK>";
+                break;
+            case OP_DUP:
+                result += "<OP_DUP>";
+                break;
+            case OP_IFDUP: // 0x73//     x    x / x x    If the top stack value is not 0, duplicate it.
+                result += "<OP_IFDUP>";
+                break;
+            case OP_DEPTH: // 0x74//     Nothing    <Stack size>    Puts the number of stack items onto the stack.
+                result += "<OP_DEPTH>";
+                break;
+            case OP_DROP: // 0x75//     x    Nothing    Removes the top stack item.
+                result += "<OP_DROP>";
+                break;
+            case OP_NIP: // 0x77//     x1 x2    x2    Removes the second-to-top stack item.
+                result += "<OP_NIP>";
+                break;
+            case OP_OVER: // 0x78//     x1 x2    x1 x2 x1    Copies the second-to-top stack item to the top.
+                result += "<OP_OVER>";
+                break;
+            case OP_PICK: // 0x79//     xn ... x2 x1 x0 <n>    xn ... x2 x1 x0 xn    The item n back in the stack is copied to the top.
+                result += "<OP_PICK>";
+                break;
+            case OP_ROLL: // 0x7a//     xn ... x2 x1 x0 <n>    ... x2 x1 x0 xn    The item n back in the stack is moved to the top.
+                result += "<OP_ROLL>";
+                break;
+            case OP_ROT: // 0x7b//     x1 x2 x3    x2 x3 x1    The top three items on the stack are rotated to the left.
+                result += "<OP_ROT>";
+                break;
+            case OP_SWAP: // 0x7c//     x1 x2    x2 x1    The top two items on the stack are swapped.
+                result += "<OP_SWAP>";
+                break;
+            case OP_TUCK: // 0x7d//     x1 x2    x2 x1 x2    The item at the top of the stack is copied and inserted before the second-to-top item.
+                result += "<OP_TUCK>";
+                break;
+            case OP_2DROP: // 0x6d//     x1 x2    Nothing    Removes the top two stack items.
+                result += "<OP_2DROP>";
+                break;
+            case OP_2DUP: // 0x6e//     x1 x2    x1 x2 x1 x2    Duplicates the top two stack items.
+                result += "<OP_2DUP>";
+                break;
+            case OP_3DUP: // 0x6f//     x1 x2 x3    x1 x2 x3 x1 x2 x3    Duplicates the top three stack items.
+                result += "<OP_3DUP>";
+                break;
+            case OP_2OVER: // 0x70//     x1 x2 x3 x4    x1 x2 x3 x4 x1 x2    Copies the pair of items two spaces back in the stack to the front.
+                result += "<OP_2OVER>";
+                break;
+            case OP_2ROT: // 0x71//     x1 x2 x3 x4 x5 x6    x3 x4 x5 x6 x1 x2    The fifth and sixth items back are moved to the top of the stack.
+                result += "<OP_2ROT>";
+                break;
+            case OP_2SWAP: // 0x72 //     x1 x2 x3 x4    x3 x4 x1 x2	Swaps the top two pairs of items.
+                result += "<OP_2SWAP>";
+                break;
 
 
-                // Splice
-                case OP_CAT: //  x1 x2  out  Concatenates two strings.
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                        result += "<OP_CAT>";
-                    else
-                        result += "<OP_CAT disabled>";
-                    break;
-                case OP_SPLIT: // Split byte sequence x at position n
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                        result += "<OP_SPLIT>";
-                    else
-                        result += "<OP_SUBSTR disabled>";
-                    break;
-                case OP_NUM2BIN: // Convert numeric value a into byte sequence of length b
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                        result += "<OP_NUM2BIN>";
-                    else
-                        result += "<OP_LEFT disabled>";
-                    break;
-                case OP_BIN2NUM: // Convert byte sequence x into a numeric value
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                        result += "<OP_BIN2NUM>";
-                    else
-                        result += "<OP_RIGHT disabled>";
-                    break;
-                case OP_SIZE: //  in  in size  Pushes the string length of the top element of the stack (without popping it).
-                    result += "<OP_SIZE>";
-                    break;
+            // Splice
+            case OP_CAT: //  x1 x2  out  Concatenates two strings.
+                if(pForks.cashFork201805IsActive(pBlockHeight))
+                    result += "<OP_CAT>";
+                else
+                    result += "<OP_CAT disabled>";
+                break;
+            case OP_SPLIT: // Split byte sequence x at position n
+                if(pForks.cashFork201805IsActive(pBlockHeight))
+                    result += "<OP_SPLIT>";
+                else
+                    result += "<OP_SUBSTR disabled>";
+                break;
+            case OP_NUM2BIN: // Convert numeric value a into byte sequence of length b
+                if(pForks.cashFork201805IsActive(pBlockHeight))
+                    result += "<OP_NUM2BIN>";
+                else
+                    result += "<OP_LEFT disabled>";
+                break;
+            case OP_BIN2NUM: // Convert byte sequence x into a numeric value
+                if(pForks.cashFork201805IsActive(pBlockHeight))
+                    result += "<OP_BIN2NUM>";
+                else
+                    result += "<OP_RIGHT disabled>";
+                break;
+            case OP_SIZE: //  in  in size  Pushes the string length of the top element of the stack (without popping it).
+                result += "<OP_SIZE>";
+                break;
 
 
-                // Bitwise logic
-                case OP_INVERT: //  in  out  Flips all of the bits in the input.
-                    if(pForks.cashFork201811IsActive(pBlockHeight))
-                        result += "<OP_INVERT>";
-                    else
-                        result += "<OP_INVERT disabled>";
-                    break;
-                case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs.
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                        result += "<OP_AND>";
-                    else
-                        result += "<OP_AND disabled>";
-                    break;
-                case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs.
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                        result += "<OP_OR>";
-                    else
-                        result += "<OP_OR disabled>";
-                    break;
-                case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs.
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                        result += "<OP_XOR>";
-                    else
-                        result += "<OP_XOR disabled>";
-                    break;
+            // Bitwise logic
+            case OP_INVERT: //  in  out  Flips all of the bits in the input.
+                if(pForks.cashFork201811IsActive(pBlockHeight))
+                    result += "<OP_INVERT>";
+                else
+                    result += "<OP_INVERT disabled>";
+                break;
+            case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs.
+                if(pForks.cashFork201805IsActive(pBlockHeight))
+                    result += "<OP_AND>";
+                else
+                    result += "<OP_AND disabled>";
+                break;
+            case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs.
+                if(pForks.cashFork201805IsActive(pBlockHeight))
+                    result += "<OP_OR>";
+                else
+                    result += "<OP_OR disabled>";
+                break;
+            case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs.
+                if(pForks.cashFork201805IsActive(pBlockHeight))
+                    result += "<OP_XOR>";
+                else
+                    result += "<OP_XOR disabled>";
+                break;
 
 
-                    // Reserved
-                case OP_RESERVED: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                    result += "<OP_RESERVED>";
-                    break;
-                case OP_VER: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                    result += "<OP_VER>";
-                    break;
-                case OP_VERIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
-                    result += "<OP_VERIF>";
-                    break;
-                case OP_VERNOTIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
-                    result += "<OP_VERNOTIF>";
-                    break;
-                case OP_RESERVED1: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                    result += "<OP_RESERVED1>";
-                    break;
-                case OP_RESERVED2: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                    result += "<OP_RESERVED2>";
-                    break;
+                // Reserved
+            case OP_RESERVED: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                result += "<OP_RESERVED>";
+                break;
+            case OP_VER: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                result += "<OP_VER>";
+                break;
+            case OP_VERIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
+                result += "<OP_VERIF>";
+                break;
+            case OP_VERNOTIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
+                result += "<OP_VERNOTIF>";
+                break;
+            case OP_RESERVED1: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                result += "<OP_RESERVED1>";
+                break;
+            case OP_RESERVED2: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
+                result += "<OP_RESERVED2>";
+                break;
 
-                case OP_NOP1: // The word is ignored. Does not mark transaction as invalid.
-                    result += "<OP_NOP1>";
-                    break;
-                    //OP_NOP2              = 0xb1, // Changed to OP_CHECKLOCKTIMEVERIFY
-                    //OP_NOP3              = 0xb2, // Changed to OP_CHECKSEQUENCEVERIFY
-                case OP_NOP4:  // The word is ignored. Does not mark transaction as invalid.
-                    result += "<OP_NOP4>";
-                    break;
-                case OP_NOP5:  // The word is ignored. Does not mark transaction as invalid.
-                    result += "<OP_NOP5>";
-                    break;
-                case OP_NOP6:  // The word is ignored. Does not mark transaction as invalid.
-                    result += "<OP_NOP6>";
-                    break;
-                case OP_NOP7:  // The word is ignored. Does not mark transaction as invalid.
-                    result += "<OP_NOP7>";
-                    break;
-                case OP_NOP8:  // The word is ignored. Does not mark transaction as invalid.
-                    result += "<OP_NOP8>";
-                    break;
-                case OP_NOP9:  // The word is ignored. Does not mark transaction as invalid.
-                    result += "<OP_NOP9>";
-                    break;
-                case OP_NOP10: // The word is ignored. Does not mark transaction as invalid.
-                    result += "<OP_NOP10>";
-                    break;
+            case OP_NOP1: // The word is ignored. Does not mark transaction as invalid.
+                result += "<OP_NOP1>";
+                break;
+                //OP_NOP2              = 0xb1, // Changed to OP_CHECKLOCKTIMEVERIFY
+                //OP_NOP3              = 0xb2, // Changed to OP_CHECKSEQUENCEVERIFY
+            case OP_NOP4:  // The word is ignored. Does not mark transaction as invalid.
+                result += "<OP_NOP4>";
+                break;
+            case OP_NOP5:  // The word is ignored. Does not mark transaction as invalid.
+                result += "<OP_NOP5>";
+                break;
+            case OP_NOP6:  // The word is ignored. Does not mark transaction as invalid.
+                result += "<OP_NOP6>";
+                break;
+            case OP_NOP7:  // The word is ignored. Does not mark transaction as invalid.
+                result += "<OP_NOP7>";
+                break;
+            case OP_NOP8:  // The word is ignored. Does not mark transaction as invalid.
+                result += "<OP_NOP8>";
+                break;
+            case OP_NOP9:  // The word is ignored. Does not mark transaction as invalid.
+                result += "<OP_NOP9>";
+                break;
+            case OP_NOP10: // The word is ignored. Does not mark transaction as invalid.
+                result += "<OP_NOP10>";
+                break;
 
-
-                default:
-                {
-                    NextCash::String undefinedText;
-                    undefinedText.writeFormatted("<!!!UNDEFINED 0x%02x!!!>", opCode);
-                    result += undefinedText;
-                    break;
-                }
+            default:
+            {
+                NextCash::String undefinedText;
+                undefinedText.writeFormatted("<!!!UNDEFINED 0x%02x!!!>", opCode);
+                result += undefinedText;
+                break;
+            }
             }
         }
 
@@ -929,51 +928,55 @@ namespace BitCoin
 
             switch(opCode)
             {
-                case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
-                {
-                    uint8_t size = pInputScript.readByte();
-                    if(size > pInputScript.remaining())
-                        break;
-                    pOutputScript.writeByte(size);
-                    pOutputScript.writeStream(&pInputScript, size);
+            case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
+            {
+                uint8_t size = pInputScript.readByte();
+                if(size > pInputScript.remaining())
                     break;
-                }
-                case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
-                {
-                    uint16_t size = pInputScript.readUnsignedShort();
-                    if(size > pInputScript.remaining())
-                        break;
-                    pOutputScript.writeUnsignedShort(size);
-                    pOutputScript.writeStream(&pInputScript, size);
+                pOutputScript.writeByte(size);
+                pOutputScript.writeStream(&pInputScript, size);
+                break;
+            }
+            case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
+            {
+                uint16_t size = pInputScript.readUnsignedShort();
+                if(size > pInputScript.remaining())
                     break;
-                }
-                case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
-                {
-                    uint32_t size = pInputScript.readUnsignedInt();
-                    if(size > pInputScript.remaining())
-                        break;
-                    pOutputScript.writeUnsignedInt(size);
-                    pOutputScript.writeStream(&pInputScript, size);
+                pOutputScript.writeUnsignedShort(size);
+                pOutputScript.writeStream(&pInputScript, size);
+                break;
+            }
+            case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
+            {
+                uint32_t size = pInputScript.readUnsignedInt();
+                if(size > pInputScript.remaining())
                     break;
-                }
-                default:
-                    break;
+                pOutputScript.writeUnsignedInt(size);
+                pOutputScript.writeStream(&pInputScript, size);
+                break;
+            }
+            default:
+                break;
             }
         }
     }
 
     bool ScriptInterpreter::checkSignature(Transaction &pTransaction, unsigned int pInputOffset,
-      int64_t pOutputAmount, const Key &pPublicKey, const Signature &pSignature,
+      int64_t pOutputAmount, const uint8_t *pPublicKeyData, unsigned int pPublicKeyDataSize,
+      const uint8_t *pSignatureData, unsigned int pSignatureDataSize, bool pStrictSignatures,
       NextCash::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset,
       const Forks &pForks, unsigned int pBlockHeight)
     {
-        if(pForks.cashActive(pBlockHeight) && !(pSignature.hashType() & Signature::FORKID))
+        if(pForks.cashActive(pBlockHeight) &&
+          !(pSignatureData[pSignatureDataSize-1] & Signature::FORKID))
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Signature hash type missing required fork ID flag : %02x", pSignature.hashType());
+              "Signature hash type missing required fork ID flag : %02x",
+              pSignatureData[pSignatureDataSize-1]);
             return false;
         }
-        // else if(!pForks.cashActive() && pSignature.hashType() & Signature::FORKID)
+        // else if(!pForks.cashActive() &&
+        //   (pSignatureData[pSignatureDataSize-1] & Signature::FORKID))
         // {
             // NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
               // "Signature hash type has disabled fork ID flag : %02x", pSignature.hashType());
@@ -985,16 +988,16 @@ namespace BitCoin
         NextCash::stream_size previousOffset = pCurrentOutputScript.readOffset();
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
         pTransaction.getSignatureHash(pForks, pBlockHeight, signatureHash, pInputOffset,
-          pCurrentOutputScript, pOutputAmount, pSignature.hashType());
+          pCurrentOutputScript, pOutputAmount, pSignatureData[pSignatureDataSize-1]);
 
         pCurrentOutputScript.setReadOffset(previousOffset);
-        if(pPublicKey.verify(pSignature, signatureHash))
+        if(Key::verify(pPublicKeyData, pPublicKeyDataSize, pSignatureData, pSignatureDataSize,
+          pStrictSignatures, signatureHash))
             return true;
         else
         {
-            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Signature check failed : 0x%02x - %s", (int)pSignature.hashType(),
-              pSignature.hex().text());
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Signature check failed");
             return false;
         }
     }
@@ -1020,7 +1023,7 @@ namespace BitCoin
         {
             pBuffer->setReadOffset(0);
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Arithmetic read to many bytes : %s", pBuffer->readHexString(pBuffer->length()).text());
+              "Arithmetic read has too many bytes : %s", pBuffer->readHexString(pBuffer->length()).text());
             return false;
         }
         else if(pBuffer->length() == 0)
@@ -1076,7 +1079,7 @@ namespace BitCoin
             {
                 pBuffer->setReadOffset(0);
                 NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                  "Arithmetic read to many bytes (negative with 0x80) : %s",
+                  "Arithmetic read has too many bytes (negative with 0x80) : %s",
                   pBuffer->readHexString(pBuffer->length()).text());
                 return false;
             }
@@ -1085,7 +1088,8 @@ namespace BitCoin
         {
             pBuffer->setReadOffset(0);
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Arithmetic read to many bytes : %s", pBuffer->readHexString(pBuffer->length()).text());
+              "Arithmetic read has too many bytes : %s",
+              pBuffer->readHexString(pBuffer->length()).text());
             return false;
         }
 
@@ -1245,9 +1249,13 @@ namespace BitCoin
         NextCash::ProfilerReference profiler(NextCash::getProfiler(PROFILER_SET,
           PROFILER_INTERP_PROCESS_ID, PROFILER_INTERP_PROCESS_NAME), true);
 #endif
-        unsigned int sigStartOffset = pScript.readOffset();
         uint8_t opCode;
-        uint64_t count;
+
+        mSigStartOffset = pScript.readOffset();
+        mScript = &pScript;
+        mBlockVersion = pBlockVersion;
+        mForks = &pForks;
+        mBlockHeight = pBlockHeight;
 
         while(pScript.remaining())
         {
@@ -1269,2651 +1277,2883 @@ namespace BitCoin
 
             opCode = pScript.readByte();
 
-            if(opCode == OP_0) // or OP_FALSE
-            {
-                if(!ifStackTrue())
-                    continue;
-
-                // Push an empty value onto the stack (OP_0, OP_FALSE)
-                push();
-                continue;
-            }
-
-            if(opCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
-            {
-                if(opCode > pScript.remaining())
-                {
-                    NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "Push data size more than remaining script : %d/%d", opCode, pScript.remaining());
-                    mValid = false;
-                    return false;
-                }
-
-                // Push opCode value bytes onto stack from input
-                if(!ifStackTrue())
-                    pScript.setReadOffset(pScript.readOffset() + opCode);
-                else
-                    push()->copyBuffer(pScript, opCode);
-                continue;
-            }
-
-            switch(opCode)
-            {
-                case OP_NOP: // Does nothing
-                    break;
-
-                case OP_IF: // If the top stack value is not OP_FALSE the statements are executed. The top stack value is removed
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_IF");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // if(!bufferIsZero(top()))
-                        // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          // "OP_IF pushing to on");
-                    // else
-                        // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          // "OP_IF pushing to off");
-                    if(ifStackTrue())
-                    {
-                        mIfStack.push_back(!bufferIsZero(top()));
-                        pop();
-                    }
-                    else
-                        mIfStack.push_back(true);
-                    break;
-                case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_NOTIF");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // if(bufferIsZero(top()))
-                        // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          // "OP_NOTIF pushing to on");
-                    // else
-                        // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          // "OP_NOTIF pushing to off");
-                    if(ifStackTrue())
-                    {
-                        mIfStack.push_back(bufferIsZero(top()));
-                        pop();
-                    }
-                    else
-                        mIfStack.push_back(true);
-                    break;
-                case OP_ELSE: // If the preceding OP_IF or OP_NOTIF or OP_ELSE was not executed then these statements are and if the preceding OP_IF or OP_NOTIF or OP_ELSE was executed then these statements are not.
-                    if(mIfStack.size() > 0)
-                    {
-                        // if(mIfStack.back())
-                            // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              // "OP_ELSE switching to off");
-                        // else
-                            // NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              // "OP_ELSE switching to on");
-                        mIfStack.back() = !mIfStack.back();
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "No if before else");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-                case OP_ENDIF: // Ends an if/else block. All blocks must end, or the transaction is invalid. An OP_ENDIF without OP_IF earlier is also invalid.
-                    //NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "OP_ENDIF");
-                    if(mIfStack.size() > 0)
-                        mIfStack.pop_back();
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "No if before endif");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-
-                case OP_VERIFY: // Marks transaction as invalid if top stack value is not true.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_VERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
-                    if(bufferIsZero(top()))
-                    {
-                        mVerified = false;
-                        return true;
-                    }
-                    else
-                        pop();
-                    break;
-                case OP_RETURN: // Marks transaction as invalid
-                    if(!ifStackTrue())
-                        break;
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Return. Marking not verified");
-                    mVerified = false;
-                    return true;
-                case OP_EQUAL: // Returns 1 if the the top two stack items are exactly equal, 0 otherwise
-                case OP_EQUALVERIFY: // Same as OP_EQUAL, but runs OP_VERIFY afterward.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_EQUALVERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // Compare top 2 stack entries
-                    std::list<NextCash::Buffer *>::iterator secondToLast = mStack.end();
-                    --secondToLast;
-                    --secondToLast;
-                    mStack.back()->setReadOffset(0);
-                    (*secondToLast)->setReadOffset(0);
-                    bool matching = *mStack.back() == **secondToLast;
-                    if(!matching)
-                        printStack("OP_EQUAL failed");
-                    pop();
-                    pop();
-
-                    if(matching)
-                    {
-                        if(opCode == OP_EQUAL)
-                            push()->writeByte(1); // Push true
-                    }
-                    else
-                    {
-                        if(opCode == OP_EQUAL)
-                            push(); // Push false
-                        else
-                        {
-                            mVerified = false;
-                            return true;
-                        }
-                    }
-
-                    break;
-                }
-                case OP_RIPEMD160:
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_SHA1");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // Hash top stack item and pop it
-                    top()->setReadOffset(0);
-                    NextCash::Digest digest(NextCash::Digest::RIPEMD160);
-                    digest.writeStream(top(), top()->length());
-                    digest.getResult(&mHash);
-                    pop();
-
-                    // Push the hash
-                    mHash.write(push());
-                    break;
-                }
-                case OP_SHA1:
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_SHA1");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // Hash top stack item and pop it
-                    top()->setReadOffset(0);
-                    NextCash::Digest digest(NextCash::Digest::SHA1);
-                    digest.writeStream(top(), top()->length());
-                    digest.getResult(&mHash);
-                    pop();
-
-                    // Push the hash
-                    mHash.write(push());
-                    break;
-                }
-                case OP_SHA256:
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_SHA256");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // Hash top stack item and pop it
-                    top()->setReadOffset(0);
-                    NextCash::Digest digest(NextCash::Digest::SHA256);
-                    digest.writeStream(top(), top()->length());
-                    digest.getResult(&mHash);
-                    pop();
-
-                    // Push the hash
-                    mHash.write(push());
-                    break;
-                }
-                case OP_HASH160: // The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // Hash top stack item and pop it
-                    top()->setReadOffset(0);
-                    NextCash::Digest digest(NextCash::Digest::SHA256_RIPEMD160);
-                    digest.writeStream(top(), top()->length());
-                    digest.getResult(&mHash);
-                    pop();
-
-                    // Push the hash
-                    mHash.write(push());
-                    break;
-                }
-                case OP_HASH256: // The input is hashed two times with SHA-256.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_HASH256");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // Hash top stack item and pop it
-                    top()->setReadOffset(0);
-                    NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
-                    digest.writeStream(top(), top()->length());
-                    digest.getResult(&mHash);
-                    pop();
-
-                    // Push the hash
-                    mHash.write(push());
-                    break;
-                }
-
-                case OP_CODESEPARATOR: // All of the signature checking words will only match signatures to the data after the most recently-executed OP_CODESEPARATOR.
-                    if(!ifStackTrue())
-                        break;
-                    sigStartOffset = (unsigned int)pScript.readOffset();
-                    break;
-
-                case OP_CHECKSIG:
-                case OP_CHECKSIGVERIFY: // Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
-                {
-                    /* The entire transaction's outputs, inputs, and script (from the most recently-executed OP_CODESEPARATOR
-                     *   to the end) are hashed. The signature used by OP_CHECKSIG must be a valid signature for this hash and
-                     *   public key. If it is, 1 is returned, 0 otherwise. */
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_CHECKSIG");
-                        mValid = false;
-                        return false;
-                    }
-
-                    bool failed = false;
-
-                    // Pop the public key
-                    Key publicKey;
-                    top()->setReadOffset(0);
-                    if(!publicKey.readPublic(top()))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid public key for OP_CHECKSIG");
-                        failed = true;
-                    }
-                    pop();
-
-                    // Pop the signature
-                    bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && // TODO Move into only cases where used
-                      pForks.enabledBlockVersion(pBlockHeight) >= 3;
-                    Signature signature;
-                    top()->setReadOffset(0);
-                    if(!signature.read(top(), (unsigned int)top()->length(), strictECDSA_DER_Sigs))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid signature for OP_CHECKSIG");
-                        failed = true;
-                    }
-                    pop();
-
-                    // Check the signature with the public key
-                    if(!failed && checkSignature(*mTransaction, mInputOffset, mOutputAmount,
-                      publicKey, signature, pScript, sigStartOffset, pForks, pBlockHeight))
-                    {
-                        if(opCode == OP_CHECKSIG)
-                            push()->writeByte(1); // Push true onto the stack
-                    }
-                    else
-                    {
-                        if(opCode == OP_CHECKSIG)
-                            push(); // Push false onto the stack
-                        else
-                        {
-                            mVerified = false;
-                            return true;
-                        }
-                    }
-
-                    break;
-                }
-                case OP_CHECKMULTISIG:
-                case OP_CHECKMULTISIGVERIFY:
-                {
-                    /* Compares the first signature against each public key until it finds an ECDSA match. Starting with the
-                     *   subsequent public key, it compares the second signature against each remaining public key until it
-                     *   finds an ECDSA match. The process is repeated until all signatures have been checked or not enough
-                     *   public keys remain to produce a successful result. All signatures need to match a public key. Because
-                     *   public keys are not checked again if they fail any signature comparison, signatures must be placed in
-                     *   the scriptSig using the same order as their corresponding public keys were placed in the scriptPubKey
-                     *   or redeemScript. If all signatures are valid, 1 is returned, 0 otherwise. Due to a bug, one extra
-                     *   unused value is removed from the stack.
-                     *
-                     * Preceding data
-                     *   <extra value to be removed by bug> sig1 sig2 ... <number of signatures> pub1 pub2 <number of public keys>
-                     */
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(4))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_CHECKMULTISIG");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // Pop count of public keys
-                    unsigned int publicKeyCount = popInteger();
-                    if(!checkStackSize(publicKeyCount))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_CHECKMULTISIG public keys");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // Pop public keys
-                    Key *publicKeys[publicKeyCount];
-                    for(unsigned int i=0;i<publicKeyCount;i++)
-                    {
-                        publicKeys[i] = new Key();
-                        top()->setReadOffset(0);
-                        if(!publicKeys[i]->readPublic(top()))
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Invalid public key for OP_CHECKMULTISIG");
-                        pop();
-                    }
-
-                    // Pop count of signatures
-                    unsigned int signatureCount = popInteger();
-                    if(!checkStackSize(signatureCount + 1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_CHECKMULTISIG signatures");
-                        mValid = false;
-                        return false;
-                    }
-
-                    // Pop signatures
-                    bool strictECDSA_DER_Sigs = pBlockVersion >= 3 && // TODO Move into only cases where used
-                      pForks.enabledBlockVersion(pBlockHeight) >= 3;
-                    Signature signatures[signatureCount];
-                    for(unsigned int i=0;i<signatureCount;i++)
-                    {
-                        top()->setReadOffset(0);
-                        if(!signatures[i].read(top(), (unsigned int)top()->length(),
-                          strictECDSA_DER_Sigs))
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Invalid signature for OP_CHECKMULTISIG");
-                        pop();
-                    }
-
-                    // Pop extra item because of bug
-                    pop();
-
-                    // Check the signatures with the public keys to make sure all the signatures
-                    //  are valid
-                    unsigned int publicKeyOffset = 0;
-                    bool signatureVerified;
-                    bool failed = false;
-                    for(unsigned int i=0;i<signatureCount;i++)
-                    {
-                        signatureVerified = false;
-                        while(publicKeyOffset < publicKeyCount)
-                            if(checkSignature(*mTransaction, mInputOffset, mOutputAmount,
-                              *publicKeys[publicKeyOffset++], signatures[i], pScript,
-                              sigStartOffset, pForks, pBlockHeight))
-                            {
-                                signatureVerified = true;
-                                break;
-                            }
-
-                        if(!signatureVerified)
-                        {
-                            failed = true;
-                            break;
-                        }
-                    }
-
-                    // Destroy public keys
-                    for(unsigned int i=0;i<publicKeyCount;i++)
-                        delete publicKeys[i];
-
-                    if(failed)
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Multiple Signature check failed");
-                        if(opCode == OP_CHECKMULTISIG)
-                            push(); // Push false onto the stack
-                        else
-                        {
-                            mVerified = false;
-                            return true;
-                        }
-                    }
-                    else
-                    {
-                        if(opCode == OP_CHECKMULTISIG)
-                            push()->writeByte(1); // Push true onto the stack
-                    }
-
-                    break;
-                }
-                case OP_CHECKDATASIG:
-                case OP_CHECKDATASIGVERIFY:
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!pForks.cashFork201811IsActive(pBlockHeight))
-                        break;
-
-                    if(!checkStackSize(3))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_CHECKDATASIG");
-                        mValid = false;
-                        return false;
-                    }
-
-                    bool failed = false;
-
-                    // Pop the public key
-                    Key publicKey;
-                    top()->setReadOffset(0);
-                    if(!publicKey.readPublic(top()))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid public key for OP_CHECKDATASIG");
-                        failed = true;
-                    }
-                    pop();
-
-                    // Pop the message
-                    NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
-                    NextCash::Hash messageHash;
-                    digest.setOutputEndian(NextCash::Endian::LITTLE);
-                    top()->setReadOffset(0);
-                    digest.writeStream(top(), (unsigned int)top()->length());
-                    digest.getResult(&messageHash);
-                    pop();
-
-                    // Pop the signature
-                    Signature signature;
-                    top()->setReadOffset(0);
-                    if(!signature.read(top(), (unsigned int)top()->length(), true))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Invalid signature for OP_CHECKDATASIG");
-                        failed = true;
-                    }
-                    pop();
-
-                    // Check the signature with the public key
-                    if(!failed && publicKey.verify(signature, messageHash))
-                    {
-                        if(opCode == OP_CHECKDATASIG)
-                            push()->writeByte(1); // Push true onto the stack
-                    }
-                    else
-                    {
-                        if(opCode == OP_CHECKDATASIG)
-                            push(); // Push false onto the stack
-                        else
-                        {
-                            mVerified = false;
-                            return true;
-                        }
-                    }
-
-                    break;
-                }
-                case OP_CHECKLOCKTIMEVERIFY: // BIP-0065
-                {
-                    if(pBlockVersion < 4 || pForks.enabledBlockVersion(pBlockHeight) < 4)
-                        break;
-
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_CHECKLOCKTIMEVERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t value;
-                    if(!arithmeticRead(top(), value))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    if(value < 0)
-                    {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_CHECKLOCKTIMEVERIFY top stack value can't be negative : %d", (int)value);
-                        mValid = false;
-                        return false;
-                    }
-
-                    if(mInputSequence == 0xffffffff)
-                    {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_CHECKLOCKTIMEVERIFY input sequence not 0xffffffff : %08x", mInputSequence);
-                        mVerified = false;
-                        return true;
-                    }
-
-                    if(mTransaction == NULL)
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_CHECKLOCKTIMEVERIFY Transaction not set");
-                        mVerified = false;
-                        return true;
-                    }
-
-                    // Check that the lock time and time in the stack are both the same type (block height or timestamp)
-                    if(((uint32_t)value < Transaction::LOCKTIME_THRESHOLD &&
-                      mTransaction->lockTime > Transaction::LOCKTIME_THRESHOLD) ||
-                      ((uint32_t)value > Transaction::LOCKTIME_THRESHOLD &&
-                        mTransaction->lockTime < Transaction::LOCKTIME_THRESHOLD))
-                    {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_CHECKLOCKTIMEVERIFY value and lock time are different \"types\" : value %d > lock time %d",
-                          (uint32_t)value, mTransaction->lockTime);
-                        mVerified = false;
-                        return true;
-                    }
-
-                    // Check that the lock time has passed
-                    if(mTransaction == NULL || (uint32_t)value > mTransaction->lockTime)
-                    {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_CHECKLOCKTIMEVERIFY value greater than lock time : value %d > lock time %d",
-                          (uint32_t)value, mTransaction->lockTime);
-                        mVerified = false;
-                        return true;
-                    }
-
-                    break;
-                }
-                case OP_CHECKSEQUENCEVERIFY: // BIP-0112
-                {
-                    if(!pForks.softForkIsActive(pBlockHeight, SoftFork::BIP0112))
-                        break;
-
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_CHECKSEQUENCEVERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t value;
-                    if(!arithmeticRead(top(), value))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    if(value < 0)
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Negative script sequence : OP_CHECKSEQUENCEVERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
-                    if(!(value & Input::SEQUENCE_DISABLE)) // Script sequence disable bit set
-                    {
-                        // Transaction version doesn't support OP_CHECKSEQUENCEVERIFY
-                        if(mTransaction->version < 2)
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Transaction version less than 2 : OP_CHECKSEQUENCEVERIFY");
-                            mVerified = false;
-                            return true;
-                        }
-
-                        if(mInputSequence & Input::SEQUENCE_DISABLE) // Input sequence disable bit set
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Input sequence disable bit set : OP_CHECKSEQUENCEVERIFY");
-                            mVerified = false;
-                            return true;
-                        }
-
-                        if((value & Input::SEQUENCE_TYPE) != (mInputSequence & Input::SEQUENCE_TYPE))
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Script sequence type doesn't match input sequence type %d != %d : OP_CHECKSEQUENCEVERIFY",
-                              (value & Input::SEQUENCE_TYPE) >> 22, (mInputSequence & Input::SEQUENCE_TYPE) >> 22);
-                            mVerified = false;
-                            return true;
-                        }
-
-                        if((value & Input::SEQUENCE_LOCKTIME_MASK) > (mInputSequence & Input::SEQUENCE_LOCKTIME_MASK))
-                        {
-                            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Script sequence greater than input sequence %d > %d : OP_CHECKSEQUENCEVERIFY",
-                              value & Input::SEQUENCE_LOCKTIME_MASK, mInputSequence & Input::SEQUENCE_LOCKTIME_MASK);
-                            mVerified = false;
-                            return true;
-                        }
-                    }
-
-                    break;
-                }
-                case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
-                {
-                    count = pScript.readByte();
-                    if(count > pScript.remaining())
-                    {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Push data size more than remaining script : %d/%d", count, pScript.remaining());
-                        mValid = false;
-                        return false;
-                    }
-
-                    if(!ifStackTrue())
-                        pScript.setReadOffset(pScript.readOffset() + count);
-                    else
-                        push()->copyBuffer(pScript, count);
-                    break;
-                }
-                case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
-                {
-                    count = pScript.readUnsignedShort();
-                    if(count > pScript.remaining())
-                    {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Push data size more than remaining script : %d/%d", count, pScript.remaining());
-                        mValid = false;
-                        return false;
-                    }
-
-                    if(!ifStackTrue())
-                        pScript.setReadOffset(pScript.readOffset() + count);
-                    else
-                        push()->copyBuffer(pScript, count);
-                    break;
-                }
-                case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
-                {
-                    count = pScript.readUnsignedInt();
-                    if(count > pScript.remaining())
-                    {
-                        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Push data size more than remaining script : %d/%d", count, pScript.remaining());
-                        mValid = false;
-                        return false;
-                    }
-
-                    if(!ifStackTrue())
-                        pScript.setReadOffset(pScript.readOffset() + count);
-                    else
-                        push()->copyBuffer(pScript, count);
-                    break;
-                }
-                case OP_1NEGATE: // The number -1 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push();
-                    arithmeticWrite(top(), -1);
-                    break;
-                case OP_1: // The number 1 is pushed
-                //case OP_TRUE: // The number 1 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(1);
-                    break;
-                case OP_2: // The number 2 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(2);
-                    break;
-                case OP_3: // The number 3 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(3);
-                    break;
-                case OP_4: // The number 4 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(4);
-                    break;
-                case OP_5: // The number 5 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(5);
-                    break;
-                case OP_6: // The number 6 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(6);
-                    break;
-                case OP_7: // The number 7 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(7);
-                    break;
-                case OP_8: // The number 8 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(8);
-                    break;
-                case OP_9: // The number 9 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(9);
-                    break;
-                case OP_10: // The number 10 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(10);
-                    break;
-                case OP_11: // The number 11 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(11);
-                    break;
-                case OP_12: // The number 12 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(12);
-                    break;
-                case OP_13: // The number 13 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(13);
-                    break;
-                case OP_14: // The number 14 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(14);
-                    break;
-                case OP_15: // The number 15 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(15);
-                    break;
-                case OP_16: // The number 16 is pushed
-                    if(!ifStackTrue())
-                        break;
-                    push()->writeByte(16);
-                    break;
-
-
-                // Arithmetic
-                case OP_1ADD: //    in    out    1 is added to the input.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_1ADD");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t value;
-                    if(!arithmeticRead(top(), value))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    arithmeticWrite(top(), value + 1);
-                    break;
-                }
-                case OP_1SUB: //    in    out    1 is subtracted from the input.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_1SUB");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t value;
-                    if(!arithmeticRead(top(), value))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    arithmeticWrite(top(), value - 1);
-                    break;
-                }
-                case OP_2MUL: //    in    out    The input is multiplied by 2. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_2MUL is a disabled op code");
-                    mValid = false;
-                    return false;
-                case OP_2DIV: //    in    out    The input is divided by 2. disabled.
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_2DIV is a disabled op code");
-                    mValid = false;
-                    return false;
-                case OP_NEGATE: //    in    out    The sign of the input is flipped.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_NEGATE");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t value;
-                    if(!arithmeticRead(top(), value))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    arithmeticWrite(top(), -value);
-                    break;
-                }
-                case OP_ABS: //    in    out    The input is made positive.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_ABS");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t value;
-                    if(!arithmeticRead(top(), value))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    if(value < 0)
-                        arithmeticWrite(top(), -value);
-                    break;
-                }
-                case OP_NOT: //    in    out    If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_NOT");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t value;
-                    if(!arithmeticRead(top(), value))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(value == 0)
-                        top()->writeByte(1);
-                    break;
-                }
-                case OP_0NOTEQUAL: //    in    out    Returns 0 if the input is 0. 1 otherwise.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_0NOTEQUAL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t value;
-                    if(!arithmeticRead(top(), value))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(value != 0)
-                        top()->writeByte(1);
-                    break;
-                }
-                case OP_ADD: //    a b   out    a is added to b.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_ADD");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    arithmeticWrite(top(), a + b);
-                    break;
-                }
-                case OP_SUB: //    a b   out    b is subtracted from a.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_SUB");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    arithmeticWrite(top(), a - b);
-                    break;
-                }
-                case OP_MUL: //    a b   out    a is multiplied by b.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201811IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_MUL");
-                            mValid = false;
-                            return false;
-                        }
-
-                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Value element longer than max element size for OP_MUL");
-                            mValid = false;
-                            return false;
-                        }
-
-                        int64_t b;
-                        if(!arithmeticRead(top(), b))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-                        pop();
-
-                        int64_t a;
-                        if(!arithmeticRead(top(), a))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-
-                        arithmeticWrite(top(), a * b);
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_MUL is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-
-                    break;
-                case OP_DIV: //    a b   out    a is divided by b.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_DIV");
-                            mValid = false;
-                            return false;
-                        }
-
-                        int64_t b;
-                        if(!arithmeticRead(top(), b))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-                        pop();
-
-                        int64_t a;
-                        if(!arithmeticRead(top(), a))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-
-                        if(b == 0)
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Divide by zero for OP_DIV");
-                            mValid = false;
-                            return false;
-                        }
-
-                        arithmeticWrite(top(), a / b);
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_DIV is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-                case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_MOD");
-                            mValid = false;
-                            return false;
-                        }
-
-                        int64_t b;
-                        if(!arithmeticRead(top(), b))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-                        pop();
-
-                        int64_t a;
-                        if(!arithmeticRead(top(), a))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-
-                        if(b == 0)
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Divide by zero for OP_MOD");
-                            mValid = false;
-                            return false;
-                        }
-
-                        arithmeticWrite(top(), a % b);
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_MOD is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-                case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201811IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_LSHIFT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Value element longer than max element size for OP_LSHIFT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        int64_t n;
-                        if(!arithmeticRead(top(), n))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-                        pop();
-
-                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Value element longer than max element size for OP_LSHIFT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        leftShift(*top(), n);
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_LSHIFT is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-
-                    break;
-                case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201811IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_RSHIFT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Value element longer than max element size for OP_RSHIFT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        int64_t n;
-                        if(!arithmeticRead(top(), n))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-                        pop();
-
-                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Value element longer than max element size for OP_RSHIFT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        rightShift(*top(), n);
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_RSHIFT is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-
-                    break;
-                case OP_BOOLAND: //    a b   out    If both a and b are not 0, the output is 1. Otherwise 0.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_BOOLAND");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(a != 0 && b != 0)
-                        top()->writeByte(1);
-                    break;
-                }
-                case OP_BOOLOR: //    a b   out    If a or b is not 0, the output is 1. Otherwise 0.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_BOOLOR");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(a != 0 || b != 0)
-                        top()->writeByte(1);
-                    break;
-                }
-                case OP_NUMEQUAL: //    a b   out    Returns 1 if the numbers are equal, 0 otherwise.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_NUMEQUAL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(a == b)
-                        top()->writeByte(1);
-                    break;
-                }
-                case OP_NUMEQUALVERIFY: //    a b   Nothing / fail    Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_NUMEQUALVERIFY");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    if(a != b)
-                    {
-                        mVerified = false;
-                        return true;
-                    }
-                    break;
-                }
-                case OP_NUMNOTEQUAL: //    a b   out    Returns 1 if the numbers are not equal, 0 otherwise.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_NUMNOTEQUAL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(a != b)
-                        top()->writeByte(1);
-                    break;
-                }
-                case OP_LESSTHAN: //    a b   out    Returns 1 if a is less than b, 0 otherwise.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_LESSTHAN");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(a < b)
-                        top()->writeByte(1);
-                    break;
-                }
-                case OP_GREATERTHAN: //    a b   out    Returns 1 if a is greater than b, 0 otherwise.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_GREATERTHAN");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(a > b)
-                        top()->writeByte(1);
-                    break;
-                }
-                case OP_LESSTHANOREQUAL: //    a b   out    Returns 1 if a is less than or equal to b, 0 otherwise.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_LESSTHANOREQUAL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(a <= b)
-                        top()->writeByte(1);
-                    break;
-                }
-                case OP_GREATERTHANOREQUAL: //    a b   out    Returns 1 if a is greater than or equal to b, 0 otherwise
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_GREATERTHANOREQUAL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(a >= b)
-                        top()->writeByte(1);
-                    break;
-                }
-                case OP_MIN: //    a b   out    Returns the smaller of a and b.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_MIN");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->setWriteOffset(0);
-                    if(a < b)
-                        arithmeticWrite(top(), a);
-                    else
-                        arithmeticWrite(top(), b);
-                    break;
-                }
-                case OP_MAX: //    a b   out    Returns the larger of a and b.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_MAX");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t a;
-                    if(!arithmeticRead(top(), a))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t b;
-                    if(!arithmeticRead(top(), b))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->setWriteOffset(0);
-                    if(a > b)
-                        arithmeticWrite(top(), a);
-                    else
-                        arithmeticWrite(top(), b);
-                    break;
-                }
-                case OP_WITHIN: //    x min max    out    Returns 1 if x is within the specified range (left-inclusive), 0 otherwise
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(3))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_WITHIN");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t max;
-                    if(!arithmeticRead(top(), max))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t min;
-                    if(!arithmeticRead(top(), min))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    int64_t x;
-                    if(!arithmeticRead(top(), x))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-
-                    top()->clear();
-                    if(x >= min && x < max)
-                        top()->writeByte(1);
-                    break;
-                }
-
-
-                // Stack
-                case OP_TOALTSTACK: // Puts the input onto the top of the alt stack. Removes it from the main stack.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_TOALTSTACK");
-                        mValid = false;
-                        return false;
-                    }
-
-                    pushAlt(top());
-                    pop(false);
-                    break;
-                case OP_FROMALTSTACK: // Puts the input onto the top of the main stack. Removes it from the alt stack.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkAltStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Alt Stack not large enough for OP_FROMALTSTACK");
-                        mValid = false;
-                        return false;
-                    }
-
-                    push(topAlt());
-                    popAlt(false);
-                    break;
-                case OP_DUP: // Duplicates the top stack item.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_DUP");
-                        mValid = false;
-                        return false;
-                    }
-
-                    push(new NextCash::Buffer(*top()));
-                    break;
-                }
-                case OP_IFDUP: // 0x73//     x    x / x x    If the top stack value is not 0, duplicate it.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_IFDUP");
-                        mValid = false;
-                        return false;
-                    }
-
-                    if(!bufferIsZero(top()))
-                        push(new NextCash::Buffer(*top()));
-                    break;
-                case OP_DEPTH: // 0x74//     Nothing    <Stack size>    Puts the number of stack items onto the stack.
-                {
-                    if(!ifStackTrue())
-                        break;
-                    int64_t stackSize = mStack.size();
-                    push();
-                    arithmeticWrite(top(), stackSize);
-                    break;
-                }
-                case OP_DROP: // 0x75//     x    Nothing    Removes the top stack item.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_DROP");
-                        mValid = false;
-                        return false;
-                    }
-
-                    pop();
-                    break;
-                case OP_NIP: // 0x77//     x1 x2    x2    Removes the second-to-top stack item.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_NIP");
-                        mValid = false;
-                        return false;
-                    }
-
-                    std::list<NextCash::Buffer *>::iterator secondToLast = mStack.end();
-                    --secondToLast;
-                    --secondToLast;
-                    delete *secondToLast;
-                    mStack.erase(secondToLast);
-                    break;
-                }
-                case OP_OVER: // 0x78//     x1 x2    x1 x2 x1    Copies the second-to-top stack item to the top.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_OVER");
-                        mValid = false;
-                        return false;
-                    }
-
-                    std::list<NextCash::Buffer *>::iterator secondToLast = mStack.end();
-                    --secondToLast;
-                    --secondToLast;
-
-                    push(new NextCash::Buffer(**secondToLast));
-                    break;
-                }
-                case OP_PICK: // 0x79//     xn ... x2 x1 x0 <n>    xn ... x2 x1 x0 xn    The item n back in the stack is copied to the top.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_PICK");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t n;
-                    if(!arithmeticRead(top(), n))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    if(!checkStackSize(n))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_ROLL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    std::list<NextCash::Buffer *>::iterator item = mStack.end();
-                    --item; // get last item
-
-                    for(unsigned int i=0;i<n;i++)
-                        --item;
-
-                    push(new NextCash::Buffer(**item));
-                    break;
-                }
-                case OP_ROLL: // 0x7a//     xn ... x2 x1 x0 <n>    ... x2 x1 x0 xn    The item n back in the stack is moved to the top.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_ROLL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t n;
-                    if(!arithmeticRead(top(), n))
-                    {
-                        mValid = false;
-                        return false;
-                    }
-                    pop();
-
-                    if(!checkStackSize(n))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_ROLL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    std::list<NextCash::Buffer *>::iterator item = mStack.end();
-                    --item; // get last item
-
-                    for(unsigned int i=0;i<n;i++)
-                        --item;
-
-                    push(*item);
-                    mStack.erase(item);
-                    break;
-                }
-                case OP_ROT: // 0x7b//     x1 x2 x3    x2 x3 x1    The top three items on the stack are rotated to the left.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(3))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_ROT");
-                        mValid = false;
-                        return false;
-                    }
-
-                    NextCash::Buffer *three = top();
-                    pop(false);
-                    NextCash::Buffer *two = top();
-                    pop(false);
-                    NextCash::Buffer *one = top();
-                    pop(false);
-
-                    push(two);
-                    push(three);
-                    push(one);
-                    break;
-                }
-                case OP_SWAP: // 0x7c//     x1 x2    x2 x1    The top two items on the stack are swapped.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_SWAP");
-                        mValid = false;
-                        return false;
-                    }
-
-                    NextCash::Buffer *two = top();
-                    pop(false);
-                    NextCash::Buffer *one = top();
-                    pop(false);
-
-                    push(two);
-                    push(one);
-                    break;
-                }
-                case OP_TUCK: // 0x7d//     x1 x2    x2 x1 x2    The item at the top of the stack is copied and inserted before the second-to-top item.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_TUCK");
-                        mValid = false;
-                        return false;
-                    }
-
-                    NextCash::Buffer *two = top();
-                    pop(false);
-                    NextCash::Buffer *one = top();
-                    pop(false);
-
-                    push(new NextCash::Buffer(*two));
-                    push(one);
-                    push(two);
-                    break;
-                }
-                case OP_2DROP: // 0x6d//     x1 x2    Nothing    Removes the top two stack items.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_2DROP");
-                        mValid = false;
-                        return false;
-                    }
-
-                    pop();
-                    pop();
-                    break;
-                }
-                case OP_2DUP: // 0x6e//     x1 x2    x1 x2 x1 x2    Duplicates the top two stack items.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_ROLL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    std::list<NextCash::Buffer *>::iterator two = mStack.end();
-                    --two; // get last item
-                    std::list<NextCash::Buffer *>::iterator one = two;
-                    --one; // get the second to last item
-
-                    push(new NextCash::Buffer(**one));
-                    push(new NextCash::Buffer(**two));
-                    break;
-                }
-                case OP_3DUP: // 0x6f//     x1 x2 x3    x1 x2 x3 x1 x2 x3    Duplicates the top three stack items.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_3DUP");
-                        mValid = false;
-                        return false;
-                    }
-
-                    std::list<NextCash::Buffer *>::iterator three = mStack.end();
-                    --three; // get last item
-                    std::list<NextCash::Buffer *>::iterator two = three;
-                    --two; // get second to last item
-                    std::list<NextCash::Buffer *>::iterator one = two;
-                    --one; // get the third to last item
-
-                    push(new NextCash::Buffer(**one));
-                    push(new NextCash::Buffer(**two));
-                    push(new NextCash::Buffer(**three));
-                    break;
-                }
-                case OP_2OVER: // 0x70//     x1 x2 x3 x4    x1 x2 x3 x4 x1 x2    Copies the pair of items two spaces back in the stack to the front.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(4))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_2OVER");
-                        mValid = false;
-                        return false;
-                    }
-
-                    std::list<NextCash::Buffer *>::iterator two = mStack.end();
-                    --two; // 4
-                    --two; // 3
-                    --two; // 2
-                    std::list<NextCash::Buffer *>::iterator one = two;
-                    --one; // 1
-
-                    push(new NextCash::Buffer(**one));
-                    push(new NextCash::Buffer(**two));
-                    break;
-                }
-                case OP_2ROT: // 0x71//     x1 x2 x3 x4 x5 x6    x3 x4 x5 x6 x1 x2    The fifth and sixth items back are moved to the top of the stack.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(6))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_ROLL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    std::list<NextCash::Buffer *>::iterator two = mStack.end();
-                    --two; // 6
-                    --two; // 5
-                    --two; // 4
-                    --two; // 3
-                    --two; // 2
-                    std::list<NextCash::Buffer *>::iterator one = two;
-                    --one; // 1
-
-                    NextCash::Buffer *itemTwo = *two;
-                    NextCash::Buffer *itemOne = *one;
-
-                    mStack.erase(one);
-                    mStack.erase(two);
-
-                    push(itemOne);
-                    push(itemTwo);
-                    break;
-                }
-                case OP_2SWAP: // 0x72 //     x1 x2 x3 x4    x3 x4 x1 x2	Swaps the top two pairs of items.
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(2))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_ROLL");
-                        mValid = false;
-                        return false;
-                    }
-
-                    std::list<NextCash::Buffer *>::iterator two = mStack.end();
-                    --two; // 4
-                    --two; // 3
-                    --two; // 2
-                    std::list<NextCash::Buffer *>::iterator one = two;
-                    --one; // 1
-
-                    NextCash::Buffer *itemTwo = *two;
-                    NextCash::Buffer *itemOne = *one;
-
-                    mStack.erase(one);
-                    mStack.erase(two);
-
-                    push(itemOne);
-                    push(itemTwo);
-                    break;
-                }
-
-
-                // Splice
-                case OP_CAT: //  x1 x2  out  Concatenates two strings.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_CAT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        NextCash::Buffer *two = top();
-                        pop(false);
-                        NextCash::Buffer *one = top();
-
-                        if(one->length() + two->length() > pForks.elementMaxSize(pBlockHeight))
-                        {
-                            // Put two back one stack since it hasn't been deleted yet.
-                            push(two);
-
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack elements too large for OP_CAT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        // Append two to the end of one
-                        one->setWriteOffset(one->length());
-                        two->setReadOffset(0);
-                        one->writeStream(two, two->length());
-
-                        // Delete two
-                        delete two;
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_CAT is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-                case OP_SPLIT: //  in x n  out x1 x2  Split byte sequence x at position n
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_SPLIT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        // Pull n off the stack
-                        int64_t n;
-                        if(!arithmeticRead(top(), n))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-                        pop();
-
-                        if(n < 0)
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack element negative for OP_SPLIT length");
-                            mValid = false;
-                            return false;
-                        }
-
-                        // Get x from stack
-                        NextCash::Buffer *x = top();
-
-                        if(x->length() > pForks.elementMaxSize(pBlockHeight))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack element too large for OP_SPLIT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        if((unsigned int)n > x->length())
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "OP_SPLIT byte count is past end of data element to be split");
-                            mValid = false;
-                            return false;
-                        }
-
-                        // Split x after n bytes leaving first part in x and putting second part in two.
-                        NextCash::Buffer *two = new NextCash::Buffer();
-
-                        if(n == 0)
-                        {
-                            // Put an empty value in front of x
-                            pop(false); // pop x
-                            push(two);
-                            push(x);
-                        }
-                        else
-                        {
-                            x->setReadOffset(n);
-                            two->writeStream(x, x->remaining());
-                            x->setReadOffset(0);
-                            x->setEnd(n);
-                            push(two);
-                        }
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_SUBSTR is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-                case OP_NUM2BIN: // in x1 x2 out  Convert numeric value a into byte sequence of length b
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_NUM2BIN");
-                            mValid = false;
-                            return false;
-                        }
-
-                        int64_t length;
-                        if(!arithmeticRead(top(), length))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-                        pop();
-
-                        int64_t n;
-                        unsigned int nLength = top()->length();
-                        if(!arithmeticRead(top(), n))
-                        {
-                            mValid = false;
-                            return false;
-                        }
-
-                        if(length < nLength)
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Length element too short for OP_NUM2BIN");
-                            mValid = false;
-                            return false;
-                        }
-
-                        if(length > pForks.elementMaxSize(pBlockHeight))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Length element more than max element size for OP_NUM2BIN");
-                            mValid = false;
-                            return false;
-                        }
-
-                        NextCash::Buffer *out = top();
-                        bool nIsNegative = n < 0;
-
-                        if(nIsNegative)
-                            n = -n;
-                        out->clear();
-
-                        for(int i=0;i<length;++i)
-                        {
-                            if(i < 8)
-                                out->writeByte((n >> (i * 8)) & 0xff);
-                            else
-                                out->writeByte(0);
-                        }
-
-                        if(nIsNegative)
-                        {
-                            // Add negative bit to last byte
-                            out->setWriteOffset(out->writeOffset() - 1);
-                            out->setReadOffset(out->writeOffset());
-                            out->writeByte(out->readByte() | 0x80);
-                        }
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_LEFT is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-                case OP_BIN2NUM: // in x out Convert byte sequence x into a numeric value
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(1))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_BIN2NUM");
-                            mValid = false;
-                            return false;
-                        }
-
-                        int64_t n = 0;
-                        int offset = 0;
-                        NextCash::Buffer *x = top();
-
-                        if(x->length() > pForks.elementMaxSize(pBlockHeight))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Value element longer than max element size for OP_BIN2NUM");
-                            mValid = false;
-                            return false;
-                        }
-
-                        x->setReadOffset(0);
-                        while(x->remaining() > 1)
-                        {
-                            if(offset >= 8)
-                            {
-                                if(x->readByte() != 0)
-                                {
-                                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                                      "Value element larger than max numeric for OP_BIN2NUM");
-                                    mValid = false;
-                                    return false;
-                                }
-                            }
-                            else
-                            {
-                                n |= x->readByte() << (offset * 8);
-                                ++offset;
-                            }
-                        }
-
-                        if(x->remaining())
-                        {
-                            if(offset >= 8)
-                            {
-                                uint8_t byte = x->readByte();
-
-                                // Bytes past end of numeric can only have negative bit
-                                if(byte == 0x80)
-                                    n = -n;
-                                else if(byte != 0)
-                                {
-                                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                                      "Value element larger than max numeric for OP_BIN2NUM");
-                                    mValid = false;
-                                    return false;
-                                }
-                            }
-                            else
-                            {
-                                // Check for negative bit
-                                uint8_t byte = x->readByte();
-                                n |= (byte & 0x7f) << (offset * 8);
-                                if(byte & 0x80)
-                                    n = -n;
-                            }
-                        }
-
-                        arithmeticWrite(x, n);
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_RIGHT is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-                case OP_SIZE: //  in x out size  Pushes the string length of the top element of the stack (without popping it).
-                {
-                    if(!ifStackTrue())
-                        break;
-
-                    if(!checkStackSize(1))
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "Stack not large enough for OP_SIZE");
-                        mValid = false;
-                        return false;
-                    }
-
-                    int64_t itemSize = top()->length();
-                    push();
-                    arithmeticWrite(top(), itemSize);
-                    break;
-                }
-
-
-                // Bitwise logic
-                case OP_INVERT: //  in  out  Flips all of the bits in the input.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201811IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(1))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_INVERT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        if(top()->length() > pForks.elementMaxSize(pBlockHeight))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Value element longer than max element size for OP_INVERT");
-                            mValid = false;
-                            return false;
-                        }
-
-                        // Invert each byte.
-                        uint8_t *byte = top()->begin();
-                        for(unsigned int i = 0; i < top()->length(); ++i, ++byte)
-                            *byte = ~*byte;
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_INVERT is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-
-                    break;
-                case OP_AND: //  x1 x2  out  Bitwise and between each bit in the inputs.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_AND");
-                            mValid = false;
-                            return false;
-                        }
-
-                        NextCash::Buffer *two = top();
-                        pop(false);
-                        NextCash::Buffer *one = top();
-
-                        if(two->length() != one->length())
-                        {
-                            push(two);
-
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack item lengths don't match for OP_AND");
-                            mValid = false;
-                            return false;
-                        }
-                        else if(one->length() > 0)
-                        {
-                            one->setReadOffset(0);
-                            two->setReadOffset(0);
-                            one->setWriteOffset(0);
-
-                            while(two->remaining())
-                                one->writeByte(one->readByte() & two->readByte());
-
-                            delete two;
-                        }
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_RIGHT is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-                case OP_OR: //  x1 x2  out  Bitwise or between each bit in the inputs.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_OR");
-                            mValid = false;
-                            return false;
-                        }
-
-                        NextCash::Buffer *two = top();
-                        pop(false);
-                        NextCash::Buffer *one = top();
-
-                        if(two->length() != one->length())
-                        {
-                            push(two);
-
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack item lengths don't match for OP_OR");
-                            mValid = false;
-                            return false;
-                        }
-                        else if(one->length() > 0)
-                        {
-                            one->setReadOffset(0);
-                            two->setReadOffset(0);
-                            one->setWriteOffset(0);
-
-                            while(two->remaining())
-                                one->writeByte(one->readByte() | two->readByte());
-
-                            delete two;
-                        }
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_RIGHT is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-                case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs.
-                    if(!ifStackTrue())
-                        break;
-
-                    if(pForks.cashFork201805IsActive(pBlockHeight))
-                    {
-                        if(!checkStackSize(2))
-                        {
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack not large enough for OP_XOR");
-                            mValid = false;
-                            return false;
-                        }
-
-                        NextCash::Buffer *two = top();
-                        pop(false);
-                        NextCash::Buffer *one = top();
-
-                        if(two->length() != one->length())
-                        {
-                            push(two);
-
-                            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                              "Stack item lengths don't match for OP_XOR");
-                            mValid = false;
-                            return false;
-                        }
-                        else if(one->length() > 0)
-                        {
-                            one->setReadOffset(0);
-                            two->setReadOffset(0);
-                            one->setWriteOffset(0);
-
-                            while(two->remaining())
-                                one->writeByte(one->readByte() ^ two->readByte());
-
-                            delete two;
-                        }
-                    }
-                    else
-                    {
-                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                          "OP_RIGHT is a disabled op code");
-                        mValid = false;
-                        return false;
-                    }
-                    break;
-
-
-                // Reserved
-                case OP_RESERVED: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                case OP_VER: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                case OP_VERIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
-                case OP_VERNOTIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
-                case OP_RESERVED1: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                case OP_RESERVED2: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                    if(!ifStackTrue())
-                        break;
-
-                    NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                      "OP_RESERVED op code executed");
-                    mValid = false;
-                    return false;
-
-                case OP_NOP1: // The word is ignored. Does not mark transaction as invalid.
-                //OP_NOP2              = 0xb1, // Changed to OP_CHECKLOCKTIMEVERIFY
-                //OP_NOP3              = 0xb2, // Changed to OP_CHECKSEQUENCEVERIFY
-                case OP_NOP4:  // The word is ignored. Does not mark transaction as invalid.
-                case OP_NOP5:  // The word is ignored. Does not mark transaction as invalid.
-                case OP_NOP6:  // The word is ignored. Does not mark transaction as invalid.
-                case OP_NOP7:  // The word is ignored. Does not mark transaction as invalid.
-                case OP_NOP8:  // The word is ignored. Does not mark transaction as invalid.
-                case OP_NOP9:  // The word is ignored. Does not mark transaction as invalid.
-                case OP_NOP10: // The word is ignored. Does not mark transaction as invalid.
-                    break;
-            }
+            if(!(this->*sExecuteOpCode[opCode])(opCode))
+                break;
         }
 
         return mValid;
+    }
+
+    bool ScriptInterpreter::opCodePushFalse(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        // Push an empty value onto the stack (OP_0, OP_FALSE)
+        push();
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeSingleBytePush(uint8_t pOpCode)
+    {
+        if(pOpCode > mScript->remaining())
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Push data size more than remaining script : %d/%d", pOpCode, mScript->remaining());
+            mValid = false;
+            return false;
+        }
+
+        // Push opCode value bytes onto stack from input
+        if(!ifStackTrue())
+            mScript->setReadOffset(mScript->readOffset() + pOpCode);
+        else
+            push()->copyBuffer(*mScript, pOpCode);
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeIf(uint8_t pOpCode)
+    {
+        // If the top stack value is not OP_FALSE the statements are executed. The top stack value
+        //   is removed
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_IF");
+            mValid = false;
+            return false;
+        }
+
+        if(ifStackTrue())
+        {
+            mIfStack.push_back(!bufferIsZero(top()));
+            pop();
+        }
+        else
+            mIfStack.push_back(true);
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeNotIf(uint8_t pOpCode)
+    {
+        // If the top stack value is OP_FALSE the statements are executed. The top stack value is
+        //   removed
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_NOTIF");
+            mValid = false;
+            return false;
+        }
+
+        if(ifStackTrue())
+        {
+            mIfStack.push_back(bufferIsZero(top()));
+            pop();
+        }
+        else
+            mIfStack.push_back(true);
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeElse(uint8_t pOpCode)
+    {
+        // If the preceding OP_IF or OP_NOTIF or OP_ELSE was not executed then these statements are
+        //   and if the preceding OP_IF or OP_NOTIF or OP_ELSE was executed then these statements
+        //   are not.
+        if(mIfStack.size() > 0)
+            mIfStack.back() = !mIfStack.back();
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "No if before else");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeEndIf(uint8_t pOpCode)
+    {
+        // Ends an if/else block. All blocks must end, or the transaction is invalid. An OP_ENDIF
+        //   without OP_IF earlier is also invalid.
+        if(mIfStack.size() > 0)
+            mIfStack.pop_back();
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "No if before endif");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeVerify(uint8_t pOpCode)
+    {
+        // Marks transaction as invalid if top stack value is not true.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_VERIFY");
+            mValid = false;
+            return false;
+        }
+
+        if(bufferIsZero(top()))
+        {
+            mVerified = false;
+            return false;
+        }
+        else
+            pop();
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeReturn(uint8_t pOpCode)
+    {
+        // Marks transaction as invalid
+        if(!ifStackTrue())
+            return true;
+
+        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+          "Return. Marking not verified");
+        mVerified = false;
+        return false;
+    }
+
+    bool ScriptInterpreter::opCodeEqual(uint8_t pOpCode)
+    {
+        // OP_EQUAL Returns 1 if the the top two stack items are exactly equal, 0 otherwise.
+        // OP_EQUALVERIFY Same as OP_EQUAL, but runs OP_VERIFY afterward.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_EQUALVERIFY");
+            mValid = false;
+            return false;
+        }
+
+        // Compare top 2 stack entries
+        std::list<NextCash::Buffer *>::iterator secondToLast = mStack.end();
+        --secondToLast;
+        --secondToLast;
+        mStack.back()->setReadOffset(0);
+        (*secondToLast)->setReadOffset(0);
+        bool matching = *mStack.back() == **secondToLast;
+        if(!matching)
+            printStack("OP_EQUAL failed");
+        pop();
+        pop();
+
+        if(matching)
+        {
+            if(pOpCode == OP_EQUAL)
+                push()->writeByte(1); // Push true
+        }
+        else
+        {
+            if(pOpCode == OP_EQUAL)
+                push(); // Push false
+            else
+            {
+                mVerified = false;
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeHash(uint8_t pOpCode)
+    {
+        switch(pOpCode)
+        {
+        case OP_RIPEMD160:
+        {
+            if(!ifStackTrue())
+                break;
+
+            if(!checkStackSize(1))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_SHA1");
+                mValid = false;
+                return false;
+            }
+
+            // Hash top stack item and pop it
+            NextCash::Buffer *data = top();
+            data->setReadOffset(0);
+            NextCash::Digest digest(NextCash::Digest::RIPEMD160);
+            digest.writeStream(data, data->length());
+            digest.getResult(&mHash);
+            pop();
+
+            // Push the hash
+            mHash.write(push());
+            break;
+        }
+        case OP_SHA1:
+        {
+            if(!ifStackTrue())
+                break;
+
+            if(!checkStackSize(1))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_SHA1");
+                mValid = false;
+                return false;
+            }
+
+            // Hash top stack item and pop it
+            NextCash::Buffer *data = top();
+            data->setReadOffset(0);
+            NextCash::Digest digest(NextCash::Digest::SHA1);
+            digest.writeStream(data, data->length());
+            digest.getResult(&mHash);
+            pop();
+
+            // Push the hash
+            mHash.write(push());
+            break;
+        }
+        case OP_SHA256:
+        {
+            if(!ifStackTrue())
+                break;
+
+            if(!checkStackSize(1))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_SHA256");
+                mValid = false;
+                return false;
+            }
+
+            // Hash top stack item and pop it
+            NextCash::Buffer *data = top();
+            data->setReadOffset(0);
+            NextCash::Digest digest(NextCash::Digest::SHA256);
+            digest.writeStream(data, data->length());
+            digest.getResult(&mHash);
+            pop();
+
+            // Push the hash
+            mHash.write(push());
+            break;
+        }
+        case OP_HASH160: // The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
+        {
+            if(!ifStackTrue())
+                break;
+
+            if(!checkStackSize(1))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
+                mValid = false;
+                return false;
+            }
+
+            // Hash top stack item and pop it
+            NextCash::Buffer *data = top();
+            data->setReadOffset(0);
+            NextCash::Digest digest(NextCash::Digest::SHA256_RIPEMD160);
+            digest.writeStream(data, data->length());
+            digest.getResult(&mHash);
+            pop();
+
+            // Push the hash
+            mHash.write(push());
+            break;
+        }
+        case OP_HASH256: // The input is hashed two times with SHA-256.
+        {
+            if(!ifStackTrue())
+                break;
+
+            if(!checkStackSize(1))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_HASH256");
+                mValid = false;
+                return false;
+            }
+
+            // Hash top stack item and pop it
+            NextCash::Buffer *data = top();
+            data->setReadOffset(0);
+            NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+            digest.writeStream(data, data->length());
+            digest.getResult(&mHash);
+            pop();
+
+            // Push the hash
+            mHash.write(push());
+            break;
+        }
+        }
+
+        return true;
+    }
+
+
+    bool ScriptInterpreter::opCodeSeparator(uint8_t pOpCode)
+    {
+        // All of the signature checking words will only match signatures to the data after the
+        //   most recently-executed OP_CODESEPARATOR.
+        if(!ifStackTrue())
+            return true;
+        mSigStartOffset = mScript->readOffset();
+        return true;
+    }
+
+
+    bool ScriptInterpreter::opCodeCheckSig(uint8_t pOpCode)
+    {
+        // Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_CHECKSIG");
+            mValid = false;
+            return false;
+        }
+
+        bool failed = false;
+
+        // Pop the public key
+        NextCash::Buffer *publicKeyData = top();
+        pop(false);
+
+        // Pop the signature
+        bool strictSigs = mBlockVersion >= 3 && mForks->enabledBlockVersion(mBlockHeight) >= 3;
+        NextCash::Buffer *signatureData = top();
+        signatureData->setReadOffset(0);
+        pop(false);
+
+        // Check the signature with the public key
+        if(!failed && checkSignature(*mTransaction, mInputOffset, mOutputAmount,
+          publicKeyData->begin(), publicKeyData->length(), signatureData->begin(),
+          signatureData->length(), strictSigs, *mScript, mSigStartOffset, *mForks,
+          mBlockHeight))
+        {
+            delete publicKeyData;
+            delete signatureData;
+            if(pOpCode == OP_CHECKSIG)
+                push()->writeByte(1); // Push true onto the stack
+        }
+        else
+        {
+            delete publicKeyData;
+            delete signatureData;
+            if(pOpCode == OP_CHECKSIG)
+                push(); // Push false onto the stack
+            else
+            {
+                mVerified = false;
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeCheckMultiSig(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(4))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_CHECKMULTISIG");
+            mValid = false;
+            return false;
+        }
+
+        // Pop count of public keys
+        unsigned int publicKeyCount = popInteger();
+        if(!checkStackSize(publicKeyCount))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_CHECKMULTISIG public keys");
+            mValid = false;
+            return false;
+        }
+
+        // Pop public keys
+        NextCash::Buffer *publicKeys[publicKeyCount];
+        for(unsigned int i = 0; i < publicKeyCount; ++i)
+        {
+            publicKeys[i] = top();
+            pop(false);
+        }
+
+        // Pop count of signatures
+        unsigned int signatureCount = popInteger();
+        if(!checkStackSize(signatureCount + 1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_CHECKMULTISIG signatures");
+            mValid = false;
+            for(unsigned int i = 0; i < publicKeyCount; ++i)
+                delete publicKeys[i];
+            return false;
+        }
+
+        // Pop signatures
+        bool strictECDSA_DER_Sigs = mBlockVersion >= 3 &&
+          mForks->enabledBlockVersion(mBlockHeight) >= 3;
+        NextCash::Buffer *signatures[signatureCount];
+        for(unsigned int i = 0; i < signatureCount; ++i)
+        {
+            signatures[i] = top();
+            signatures[i]->setReadOffset(0);
+            pop(false);
+        }
+
+        // Pop extra item because of bug
+        pop();
+
+        // Check the signatures with the public keys to make sure all the signatures
+        //  are valid
+        unsigned int publicKeyOffset = 0;
+        bool signatureVerified;
+        bool failed = false;
+        NextCash::Buffer *publicKey, *signature;
+        for(unsigned int i = 0; i < signatureCount; ++i)
+        {
+            signatureVerified = false;
+            while(publicKeyOffset < publicKeyCount)
+            {
+                publicKey = publicKeys[publicKeyOffset++];
+                signature = signatures[i];
+                if(checkSignature(*mTransaction, mInputOffset, mOutputAmount,
+                  publicKey->begin(), publicKey->length(), signature->begin(),
+                  signature->length(), strictECDSA_DER_Sigs, *mScript, mSigStartOffset,
+                  *mForks, mBlockHeight))
+                {
+                    signatureVerified = true;
+                    break;
+                }
+            }
+
+            if(!signatureVerified)
+            {
+                failed = true;
+                break;
+            }
+        }
+
+        // Destroy public key and signature buffers.
+        for(unsigned int i = 0; i < publicKeyCount; ++i)
+            delete publicKeys[i];
+        for(unsigned int i = 0; i < signatureCount; ++i)
+            delete signatures[i];
+
+        if(failed)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Multiple Signature check failed");
+            if(pOpCode == OP_CHECKMULTISIG)
+                push(); // Push false onto the stack
+            else
+            {
+                mVerified = false;
+                return false;
+            }
+        }
+        else
+        {
+            if(pOpCode == OP_CHECKMULTISIG)
+                push()->writeByte(1); // Push true onto the stack
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeCheckDataSig(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!mForks->cashFork201811IsActive(mBlockHeight))
+            return true;
+
+        if(!checkStackSize(3))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_CHECKDATASIG");
+            mValid = false;
+            return false;
+        }
+
+        bool failed = false;
+
+        // Pop the public key
+        NextCash::Buffer *publicKey = top();
+        pop(false);
+
+        // Pop the message
+        NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
+        NextCash::Hash messageHash;
+        digest.setOutputEndian(NextCash::Endian::LITTLE);
+        top()->setReadOffset(0);
+        digest.writeStream(top(), (unsigned int)top()->length());
+        digest.getResult(&messageHash);
+        pop();
+
+        // Pop the signature
+        NextCash::Buffer *signature = top();
+        signature->setReadOffset(0);
+        pop(false);
+
+        // Check the signature with the public key
+        if(!failed && Key::verify(publicKey->begin(), publicKey->length(),
+          signature->begin(), signature->length(), true, messageHash))
+        {
+            delete publicKey;
+            delete signature;
+            if(pOpCode == OP_CHECKDATASIG)
+                push()->writeByte(1); // Push true onto the stack
+        }
+        else
+        {
+            delete publicKey;
+            delete signature;
+            if(pOpCode == OP_CHECKDATASIG)
+                push(); // Push false onto the stack
+            else
+            {
+                mVerified = false;
+                return true;
+            }
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeCheckLockTimeVerify(uint8_t pOpCode)
+    {
+        if(mBlockVersion < 4 || mForks->enabledBlockVersion(mBlockHeight) < 4)
+            return true;
+
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_CHECKLOCKTIMEVERIFY");
+            mValid = false;
+            return false;
+        }
+
+        int64_t value;
+        if(!arithmeticRead(top(), value))
+        {
+            mValid = false;
+            return false;
+        }
+
+        if(value < 0)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_CHECKLOCKTIMEVERIFY top stack value can't be negative : %d", (int)value);
+            mValid = false;
+            return false;
+        }
+
+        if(mInputSequence == 0xffffffff)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_CHECKLOCKTIMEVERIFY input sequence not 0xffffffff : %08x", mInputSequence);
+            mVerified = false;
+            return false;
+        }
+
+        if(mTransaction == NULL)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_CHECKLOCKTIMEVERIFY Transaction not set");
+            mVerified = false;
+            return false;
+        }
+
+        // Check that the lock time and time in the stack are both the same type (block height or timestamp)
+        if(((uint32_t)value < Transaction::LOCKTIME_THRESHOLD &&
+          mTransaction->lockTime > Transaction::LOCKTIME_THRESHOLD) ||
+          ((uint32_t)value > Transaction::LOCKTIME_THRESHOLD &&
+            mTransaction->lockTime < Transaction::LOCKTIME_THRESHOLD))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_CHECKLOCKTIMEVERIFY value and lock time are different \"types\" : value %d > lock time %d",
+              (uint32_t)value, mTransaction->lockTime);
+            mVerified = false;
+            return false;
+        }
+
+        // Check that the lock time has passed
+        if(mTransaction == NULL || (uint32_t)value > mTransaction->lockTime)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_CHECKLOCKTIMEVERIFY value greater than lock time : value %d > lock time %d",
+              (uint32_t)value, mTransaction->lockTime);
+            mVerified = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeCheckSequenceVerify(uint8_t pOpCode)
+    {
+        if(!mForks->softForkIsActive(mBlockHeight, SoftFork::BIP0112))
+            return true;
+
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_CHECKSEQUENCEVERIFY");
+            mValid = false;
+            return false;
+        }
+
+        int64_t value;
+        if(!arithmeticRead(top(), value))
+        {
+            mValid = false;
+            return false;
+        }
+
+        if(value < 0)
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Negative script sequence : OP_CHECKSEQUENCEVERIFY");
+            mValid = false;
+            return false;
+        }
+
+        if(!(value & Input::SEQUENCE_DISABLE)) // Script sequence disable bit set
+        {
+            // Transaction version doesn't support OP_CHECKSEQUENCEVERIFY
+            if(mTransaction->version < 2)
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Transaction version less than 2 : OP_CHECKSEQUENCEVERIFY");
+                mVerified = false;
+                return false;
+            }
+
+            if(mInputSequence & Input::SEQUENCE_DISABLE) // Input sequence disable bit set
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Input sequence disable bit set : OP_CHECKSEQUENCEVERIFY");
+                mVerified = false;
+                return false;
+            }
+
+            if((value & Input::SEQUENCE_TYPE) != (mInputSequence & Input::SEQUENCE_TYPE))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Script sequence type doesn't match input sequence type %d != %d : OP_CHECKSEQUENCEVERIFY",
+                  (value & Input::SEQUENCE_TYPE) >> 22, (mInputSequence & Input::SEQUENCE_TYPE) >> 22);
+                mVerified = false;
+                return false;
+            }
+
+            if((value & Input::SEQUENCE_LOCKTIME_MASK) > (mInputSequence & Input::SEQUENCE_LOCKTIME_MASK))
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Script sequence greater than input sequence %d > %d : OP_CHECKSEQUENCEVERIFY",
+                  value & Input::SEQUENCE_LOCKTIME_MASK, mInputSequence & Input::SEQUENCE_LOCKTIME_MASK);
+                mVerified = false;
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodePushData(uint8_t pOpCode)
+    {
+        NextCash::stream_size count;
+        switch(pOpCode)
+        {
+        case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
+            count = mScript->readByte();
+            if(count > mScript->remaining())
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Push data size more than remaining script : %d/%d", count, mScript->remaining());
+                mValid = false;
+                return false;
+            }
+
+            if(!ifStackTrue())
+                mScript->setReadOffset(mScript->readOffset() + count);
+            else
+                push()->copyBuffer(*mScript, count);
+            break;
+
+        case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
+            count = mScript->readUnsignedShort();
+            if(count > mScript->remaining())
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Push data size more than remaining script : %d/%d", count, mScript->remaining());
+                mValid = false;
+                return false;
+            }
+
+            if(!ifStackTrue())
+                mScript->setReadOffset(mScript->readOffset() + count);
+            else
+                push()->copyBuffer(*mScript, count);
+            break;
+
+        case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
+            count = mScript->readUnsignedInt();
+            if(count > mScript->remaining())
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Push data size more than remaining script : %d/%d", count, mScript->remaining());
+                mValid = false;
+                return false;
+            }
+
+            if(!ifStackTrue())
+                mScript->setReadOffset(mScript->readOffset() + count);
+            else
+                push()->copyBuffer(*mScript, count);
+            break;
+
+        default:
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Invalid push data op code %02x", pOpCode);
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodePushNumber(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        switch(pOpCode)
+        {
+        case OP_1NEGATE: // The number -1 is pushed
+            push();
+            arithmeticWrite(top(), -1);
+            break;
+        case OP_1: // The number 1 is pushed
+        //case OP_TRUE: // The number 1 is pushed
+            push()->writeByte(1);
+            break;
+        case OP_2: // The number 2 is pushed
+            push()->writeByte(2);
+            break;
+        case OP_3: // The number 3 is pushed
+            push()->writeByte(3);
+            break;
+        case OP_4: // The number 4 is pushed
+            push()->writeByte(4);
+            break;
+        case OP_5: // The number 5 is pushed
+            push()->writeByte(5);
+            break;
+        case OP_6: // The number 6 is pushed
+            push()->writeByte(6);
+            break;
+        case OP_7: // The number 7 is pushed
+            push()->writeByte(7);
+            break;
+        case OP_8: // The number 8 is pushed
+            push()->writeByte(8);
+            break;
+        case OP_9: // The number 9 is pushed
+            push()->writeByte(9);
+            break;
+        case OP_10: // The number 10 is pushed
+            push()->writeByte(10);
+            break;
+        case OP_11: // The number 11 is pushed
+            push()->writeByte(11);
+            break;
+        case OP_12: // The number 12 is pushed
+            push()->writeByte(12);
+            break;
+        case OP_13: // The number 13 is pushed
+            push()->writeByte(13);
+            break;
+        case OP_14: // The number 14 is pushed
+            push()->writeByte(14);
+            break;
+        case OP_15: // The number 15 is pushed
+            push()->writeByte(15);
+            break;
+        case OP_16: // The number 16 is pushed
+            push()->writeByte(16);
+            break;
+        default:
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Invalid push number op code %02x", pOpCode);
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    // Arithmetic
+    bool ScriptInterpreter::opCodeAdd1(uint8_t pOpCode)
+    {
+        // Add 1 to the top item on the stack.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_1ADD");
+            mValid = false;
+            return false;
+        }
+
+        int64_t value;
+        if(!arithmeticRead(top(), value))
+        {
+            mValid = false;
+            return false;
+        }
+
+        arithmeticWrite(top(), value + 1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeSubtract1(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_1SUB");
+            mValid = false;
+            return false;
+        }
+
+        int64_t value;
+        if(!arithmeticRead(top(), value))
+        {
+            mValid = false;
+            return false;
+        }
+
+        arithmeticWrite(top(), value - 1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeNegate(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_NEGATE");
+            mValid = false;
+            return false;
+        }
+
+        int64_t value;
+        if(!arithmeticRead(top(), value))
+        {
+            mValid = false;
+            return false;
+        }
+
+        arithmeticWrite(top(), -value);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeAbs(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_ABS");
+            mValid = false;
+            return false;
+        }
+
+        int64_t value;
+        if(!arithmeticRead(top(), value))
+        {
+            mValid = false;
+            return false;
+        }
+
+        if(value < 0)
+            arithmeticWrite(top(), -value);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeNot(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_NOT");
+            mValid = false;
+            return false;
+        }
+
+        int64_t value;
+        if(!arithmeticRead(top(), value))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(value == 0)
+            top()->writeByte(1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeZeroNotEqual(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_0NOTEQUAL");
+            mValid = false;
+            return false;
+        }
+
+        int64_t value;
+        if(!arithmeticRead(top(), value))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(value != 0)
+            top()->writeByte(1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeAdd(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_ADD");
+            mValid = false;
+            return false;
+        }
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+
+        arithmeticWrite(top(), a + b);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeSubtract(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_SUB");
+            mValid = false;
+            return false;
+        }
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+
+        arithmeticWrite(top(), a - b);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeMultiply(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201811IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_MUL");
+                mValid = false;
+                return false;
+            }
+
+            if(top()->length() > mForks->elementMaxSize(mBlockHeight))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Value element longer than max element size for OP_MUL");
+                mValid = false;
+                return false;
+            }
+
+            int64_t b;
+            if(!arithmeticRead(top(), b))
+            {
+                mValid = false;
+                return false;
+            }
+            pop();
+
+            int64_t a;
+            if(!arithmeticRead(top(), a))
+            {
+                mValid = false;
+                return false;
+            }
+
+            arithmeticWrite(top(), a * b);
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_MUL is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeDivide(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201805IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_DIV");
+                mValid = false;
+                return false;
+            }
+
+            int64_t b;
+            if(!arithmeticRead(top(), b))
+            {
+                mValid = false;
+                return false;
+            }
+            pop();
+
+            int64_t a;
+            if(!arithmeticRead(top(), a))
+            {
+                mValid = false;
+                return false;
+            }
+
+            if(b == 0)
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Divide by zero for OP_DIV");
+                mValid = false;
+                return false;
+            }
+
+            arithmeticWrite(top(), a / b);
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_DIV is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeMod(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201805IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_MOD");
+                mValid = false;
+                return false;
+            }
+
+            int64_t b;
+            if(!arithmeticRead(top(), b))
+            {
+                mValid = false;
+                return false;
+            }
+            pop();
+
+            int64_t a;
+            if(!arithmeticRead(top(), a))
+            {
+                mValid = false;
+                return false;
+            }
+
+            if(b == 0)
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Divide by zero for OP_MOD");
+                mValid = false;
+                return false;
+            }
+
+            arithmeticWrite(top(), a % b);
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_MOD is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeLeftShift(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201811IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_LSHIFT");
+                mValid = false;
+                return false;
+            }
+
+            if(top()->length() > mForks->elementMaxSize(mBlockHeight))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Value element longer than max element size for OP_LSHIFT");
+                mValid = false;
+                return false;
+            }
+
+            int64_t n;
+            if(!arithmeticRead(top(), n))
+            {
+                mValid = false;
+                return false;
+            }
+            pop();
+
+            if(top()->length() > mForks->elementMaxSize(mBlockHeight))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Value element longer than max element size for OP_LSHIFT");
+                mValid = false;
+                return false;
+            }
+
+            leftShift(*top(), n);
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_LSHIFT is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeRightShift(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201811IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_RSHIFT");
+                mValid = false;
+                return false;
+            }
+
+            if(top()->length() > mForks->elementMaxSize(mBlockHeight))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Value element longer than max element size for OP_RSHIFT");
+                mValid = false;
+                return false;
+            }
+
+            int64_t n;
+            if(!arithmeticRead(top(), n))
+            {
+                mValid = false;
+                return false;
+            }
+            pop();
+
+            if(top()->length() > mForks->elementMaxSize(mBlockHeight))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Value element longer than max element size for OP_RSHIFT");
+                mValid = false;
+                return false;
+            }
+
+            rightShift(*top(), n);
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_RSHIFT is a disabled op code");
+            mValid = false;
+            return false;
+        }
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeBoolAnd(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_BOOLAND");
+            mValid = false;
+            return false;
+        }
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(a != 0 && b != 0)
+            top()->writeByte(1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeBoolOr(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_BOOLOR");
+            mValid = false;
+            return false;
+        }
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(a != 0 || b != 0)
+            top()->writeByte(1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeNumEqual(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_NUMEQUAL");
+            mValid = false;
+            return false;
+        }
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(pOpCode == OP_NUMEQUALVERIFY)
+        {
+            if(a != b)
+            {
+                mVerified = false;
+                return false;
+            }
+        }
+        else
+        {
+            if(a == b)
+                top()->writeByte(1);
+        }
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeNumNotEqual(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_NUMNOTEQUAL");
+            mValid = false;
+            return false;
+        }
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(a != b)
+            top()->writeByte(1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeLessThan(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_LESSTHAN");
+            mValid = false;
+            return false;
+        }
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(a < b)
+            top()->writeByte(1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeGreaterThan(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_GREATERTHAN");
+            mValid = false;
+            return false;
+        }
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(a > b)
+            top()->writeByte(1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeLessThanOrEqual(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_LESSTHANOREQUAL");
+            mValid = false;
+            return false;
+        }
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(a <= b)
+            top()->writeByte(1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeGreaterThanOrEqual(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_GREATERTHANOREQUAL");
+            mValid = false;
+            return false;
+        }
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(a >= b)
+            top()->writeByte(1);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeMin(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_MIN");
+            mValid = false;
+            return false;
+        }
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->setWriteOffset(0);
+        if(a < b)
+            arithmeticWrite(top(), a);
+        else
+            arithmeticWrite(top(), b);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeMax(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_MAX");
+            mValid = false;
+            return false;
+        }
+
+        int64_t a;
+        if(!arithmeticRead(top(), a))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t b;
+        if(!arithmeticRead(top(), b))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->setWriteOffset(0);
+        if(a > b)
+            arithmeticWrite(top(), a);
+        else
+            arithmeticWrite(top(), b);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeWithin(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(3))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_WITHIN");
+            mValid = false;
+            return false;
+        }
+
+        int64_t max;
+        if(!arithmeticRead(top(), max))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t min;
+        if(!arithmeticRead(top(), min))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        int64_t x;
+        if(!arithmeticRead(top(), x))
+        {
+            mValid = false;
+            return false;
+        }
+
+        top()->clear();
+        if(x >= min && x < max)
+            top()->writeByte(1);
+        return true;
+    }
+
+    // Stack
+    bool ScriptInterpreter::opCodeToAltStack(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_TOALTSTACK");
+            mValid = false;
+            return false;
+        }
+
+        pushAlt(top());
+        pop(false);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeFromAltStack(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkAltStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Alt Stack not large enough for OP_FROMALTSTACK");
+            mValid = false;
+            return false;
+        }
+
+        push(topAlt());
+        popAlt(false);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeDup(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_DUP");
+            mValid = false;
+            return false;
+        }
+
+        top()->setReadOffset(0);
+        push(new NextCash::Buffer(*top(), true));
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeIfDup(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_IFDUP");
+            mValid = false;
+            return false;
+        }
+
+        if(!bufferIsZero(top()))
+        {
+            top()->setReadOffset(0);
+            push(new NextCash::Buffer(*top(), true));
+        }
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeDepth(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+        int64_t stackSize = mStack.size();
+        push();
+        arithmeticWrite(top(), stackSize);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeDrop(uint8_t pOpCode)
+    {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_DROP");
+            mValid = false;
+            return false;
+        }
+
+        pop();
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeNip(uint8_t pOpCode)
+    {
+        // Removes the second-to-top stack item.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_NIP");
+            mValid = false;
+            return false;
+        }
+
+        std::list<NextCash::Buffer *>::iterator secondToLast = mStack.end();
+        --secondToLast;
+        --secondToLast;
+        delete *secondToLast;
+        mStack.erase(secondToLast);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeOver(uint8_t pOpCode)
+    {
+        // Copies the second-to-top stack item to the top.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_OVER");
+            mValid = false;
+            return false;
+        }
+
+        std::list<NextCash::Buffer *>::iterator secondToLast = mStack.end();
+        --secondToLast;
+        --secondToLast;
+
+        push(new NextCash::Buffer(**secondToLast));
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodePick(uint8_t pOpCode)
+    {
+        // The item n back in the stack is copied to the top.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_PICK");
+            mValid = false;
+            return false;
+        }
+
+        int64_t n;
+        if(!arithmeticRead(top(), n))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        if(!checkStackSize(n))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_ROLL");
+            mValid = false;
+            return false;
+        }
+
+        std::list<NextCash::Buffer *>::iterator item = mStack.end();
+        --item; // get last item
+
+        for(unsigned int i=0;i<n;i++)
+            --item;
+
+        push(new NextCash::Buffer(**item));
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeRoll(uint8_t pOpCode)
+    {
+        // The item n back in the stack is moved to the top.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_ROLL");
+            mValid = false;
+            return false;
+        }
+
+        int64_t n;
+        if(!arithmeticRead(top(), n))
+        {
+            mValid = false;
+            return false;
+        }
+        pop();
+
+        if(!checkStackSize(n))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_ROLL");
+            mValid = false;
+            return false;
+        }
+
+        std::list<NextCash::Buffer *>::iterator item = mStack.end();
+        --item; // get last item
+
+        for(unsigned int i=0;i<n;i++)
+            --item;
+
+        push(*item);
+        mStack.erase(item);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeRotate(uint8_t pOpCode)
+    {
+        // The top three items on the stack are rotated to the left.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(3))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_ROT");
+            mValid = false;
+            return false;
+        }
+
+        NextCash::Buffer *three = top();
+        pop(false);
+        NextCash::Buffer *two = top();
+        pop(false);
+        NextCash::Buffer *one = top();
+        pop(false);
+
+        push(two);
+        push(three);
+        push(one);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeSwap(uint8_t pOpCode)
+    {
+        // The top two items on the stack are swapped.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_SWAP");
+            mValid = false;
+            return false;
+        }
+
+        NextCash::Buffer *two = top();
+        pop(false);
+        NextCash::Buffer *one = top();
+        pop(false);
+
+        push(two);
+        push(one);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeTuck(uint8_t pOpCode)
+    {
+        // The item at the top of the stack is copied and inserted before the second-to-top item.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_TUCK");
+            mValid = false;
+            return false;
+        }
+
+        NextCash::Buffer *two = top();
+        pop(false);
+        NextCash::Buffer *one = top();
+        pop(false);
+
+        push(new NextCash::Buffer(*two));
+        push(one);
+        push(two);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeDrop2(uint8_t pOpCode)
+    {
+        // Removes the top two stack items.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_2DROP");
+            mValid = false;
+            return false;
+        }
+
+        pop();
+        pop();
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeDup2(uint8_t pOpCode)
+    {
+        // Duplicates the top two stack items.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_ROLL");
+            mValid = false;
+            return false;
+        }
+
+        std::list<NextCash::Buffer *>::iterator two = mStack.end();
+        --two; // get last item
+        std::list<NextCash::Buffer *>::iterator one = two;
+        --one; // get the second to last item
+
+        push(new NextCash::Buffer(**one));
+        push(new NextCash::Buffer(**two));
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeDup3(uint8_t pOpCode)
+    {
+        // Duplicates the top three stack items.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_3DUP");
+            mValid = false;
+            return false;
+        }
+
+        std::list<NextCash::Buffer *>::iterator three = mStack.end();
+        --three; // get last item
+        std::list<NextCash::Buffer *>::iterator two = three;
+        --two; // get second to last item
+        std::list<NextCash::Buffer *>::iterator one = two;
+        --one; // get the third to last item
+
+        push(new NextCash::Buffer(**one));
+        push(new NextCash::Buffer(**two));
+        push(new NextCash::Buffer(**three));
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeOver2(uint8_t pOpCode)
+    {
+        // Copies the pair of items two spaces back in the stack to the front.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(4))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_2OVER");
+            mValid = false;
+            return false;
+        }
+
+        std::list<NextCash::Buffer *>::iterator two = mStack.end();
+        --two; // 4
+        --two; // 3
+        --two; // 2
+        std::list<NextCash::Buffer *>::iterator one = two;
+        --one; // 1
+
+        push(new NextCash::Buffer(**one));
+        push(new NextCash::Buffer(**two));
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeRotate2(uint8_t pOpCode)
+    {
+        // The fifth and sixth items back are moved to the top of the stack.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(6))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_ROLL");
+            mValid = false;
+            return false;
+        }
+
+        std::list<NextCash::Buffer *>::iterator two = mStack.end();
+        --two; // 6
+        --two; // 5
+        --two; // 4
+        --two; // 3
+        --two; // 2
+        std::list<NextCash::Buffer *>::iterator one = two;
+        --one; // 1
+
+        NextCash::Buffer *itemTwo = *two;
+        NextCash::Buffer *itemOne = *one;
+
+        mStack.erase(one);
+        mStack.erase(two);
+
+        push(itemOne);
+        push(itemTwo);
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeSwap2(uint8_t pOpCode)
+    {
+        // Swaps the top two pairs of items.
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(2))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_ROLL");
+            mValid = false;
+            return false;
+        }
+
+        std::list<NextCash::Buffer *>::iterator two = mStack.end();
+        --two; // 4
+        --two; // 3
+        --two; // 2
+        std::list<NextCash::Buffer *>::iterator one = two;
+        --one; // 1
+
+        NextCash::Buffer *itemTwo = *two;
+        NextCash::Buffer *itemOne = *one;
+
+        mStack.erase(one);
+        mStack.erase(two);
+
+        push(itemOne);
+        push(itemTwo);
+        return true;
+    }
+
+    // Splice
+    bool ScriptInterpreter::opCodeConcat(uint8_t pOpCode)
+    {
+        // Concatenates two strings.
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201805IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_CAT");
+                mValid = false;
+                return false;
+            }
+
+            NextCash::Buffer *two = top();
+            pop(false);
+            NextCash::Buffer *one = top();
+
+            if(one->length() + two->length() > mForks->elementMaxSize(mBlockHeight))
+            {
+                // Put two back one stack since it hasn't been deleted yet.
+                push(two);
+
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack elements too large for OP_CAT");
+                mValid = false;
+                return false;
+            }
+
+            // Append two to the end of one
+            one->setWriteOffset(one->length());
+            two->setReadOffset(0);
+            one->writeStream(two, two->length());
+
+            // Delete two
+            delete two;
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_CAT is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeSplit(uint8_t pOpCode)
+    {
+        // Split byte sequence x at position n
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201805IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_SPLIT");
+                mValid = false;
+                return false;
+            }
+
+            // Pull n off the stack
+            int64_t n;
+            if(!arithmeticRead(top(), n))
+            {
+                mValid = false;
+                return false;
+            }
+            pop();
+
+            if(n < 0)
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack element negative for OP_SPLIT length");
+                mValid = false;
+                return false;
+            }
+
+            // Get x from stack
+            NextCash::Buffer *x = top();
+
+            if(x->length() > mForks->elementMaxSize(mBlockHeight))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack element too large for OP_SPLIT");
+                mValid = false;
+                return false;
+            }
+
+            if((unsigned int)n > x->length())
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "OP_SPLIT byte count is past end of data element to be split");
+                mValid = false;
+                return false;
+            }
+
+            // Split x after n bytes leaving first part in x and putting second part in two.
+            NextCash::Buffer *two = new NextCash::Buffer();
+
+            if(n == 0)
+            {
+                // Put an empty value in front of x
+                pop(false); // pop x
+                push(two);
+                push(x);
+            }
+            else
+            {
+                x->setReadOffset(n);
+                two->writeStream(x, x->remaining());
+                x->setReadOffset(0);
+                x->setEnd(n);
+                push(two);
+            }
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_SUBSTR is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeNum2Bin(uint8_t pOpCode)
+    {
+        // Convert numeric value a into byte sequence of length b
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201805IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_NUM2BIN");
+                mValid = false;
+                return false;
+            }
+
+            int64_t length;
+            if(!arithmeticRead(top(), length))
+            {
+                mValid = false;
+                return false;
+            }
+            pop();
+
+            int64_t n;
+            unsigned int nLength = top()->length();
+            if(!arithmeticRead(top(), n))
+            {
+                mValid = false;
+                return false;
+            }
+
+            if(length < nLength)
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Length element too short for OP_NUM2BIN");
+                mValid = false;
+                return false;
+            }
+
+            if(length > mForks->elementMaxSize(mBlockHeight))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Length element more than max element size for OP_NUM2BIN");
+                mValid = false;
+                return false;
+            }
+
+            NextCash::Buffer *out = top();
+            bool nIsNegative = n < 0;
+
+            if(nIsNegative)
+                n = -n;
+            out->clear();
+
+            for(int i=0;i<length;++i)
+            {
+                if(i < 8)
+                    out->writeByte((n >> (i * 8)) & 0xff);
+                else
+                    out->writeByte(0);
+            }
+
+            if(nIsNegative)
+            {
+                // Add negative bit to last byte
+                out->setWriteOffset(out->writeOffset() - 1);
+                out->setReadOffset(out->writeOffset());
+                out->writeByte(out->readByte() | 0x80);
+            }
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_LEFT is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeBin2Num(uint8_t pOpCode)
+    {
+        // Convert byte sequence x into a numeric value
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201805IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(1))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_BIN2NUM");
+                mValid = false;
+                return false;
+            }
+
+            int64_t n = 0;
+            int offset = 0;
+            NextCash::Buffer *x = top();
+
+            if(x->length() > mForks->elementMaxSize(mBlockHeight))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Value element longer than max element size for OP_BIN2NUM");
+                mValid = false;
+                return false;
+            }
+
+            x->setReadOffset(0);
+            while(x->remaining() > 1)
+            {
+                if(offset >= 8)
+                {
+                    if(x->readByte() != 0)
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Value element larger than max numeric for OP_BIN2NUM");
+                        mValid = false;
+                        return false;
+                    }
+                }
+                else
+                {
+                    n |= x->readByte() << (offset * 8);
+                    ++offset;
+                }
+            }
+
+            if(x->remaining())
+            {
+                if(offset >= 8)
+                {
+                    uint8_t byte = x->readByte();
+
+                    // Bytes past end of numeric can only have negative bit
+                    if(byte == 0x80)
+                        n = -n;
+                    else if(byte != 0)
+                    {
+                        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                          "Value element larger than max numeric for OP_BIN2NUM");
+                        mValid = false;
+                        return false;
+                    }
+                }
+                else
+                {
+                    // Check for negative bit
+                    uint8_t byte = x->readByte();
+                    n |= (byte & 0x7f) << (offset * 8);
+                    if(byte & 0x80)
+                        n = -n;
+                }
+            }
+
+            arithmeticWrite(x, n);
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_RIGHT is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeSize(uint8_t pOpCode)
+    {
+        // Pushes the string length of the top element of the stack (without popping it).
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for OP_SIZE");
+            mValid = false;
+            return false;
+        }
+
+        int64_t itemSize = top()->length();
+        push();
+        arithmeticWrite(top(), itemSize);
+        return true;
+    }
+
+
+    // Bitwise logic
+    bool ScriptInterpreter::opCodeInvert(uint8_t pOpCode)
+    {
+        // Flips all of the bits in the input.
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201811IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(1))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_INVERT");
+                mValid = false;
+                return false;
+            }
+
+            if(top()->length() > mForks->elementMaxSize(mBlockHeight))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Value element longer than max element size for OP_INVERT");
+                mValid = false;
+                return false;
+            }
+
+            // Invert each byte.
+            uint8_t *byte = top()->begin();
+            for(unsigned int i = 0; i < top()->length(); ++i, ++byte)
+                *byte = ~*byte;
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_INVERT is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeAnd(uint8_t pOpCode)
+    {
+        // Bitwise and between each bit in the inputs.
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201805IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_AND");
+                mValid = false;
+                return false;
+            }
+
+            NextCash::Buffer *two = top();
+            pop(false);
+            NextCash::Buffer *one = top();
+
+            if(two->length() != one->length())
+            {
+                push(two);
+
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack item lengths don't match for OP_AND");
+                mValid = false;
+                return false;
+            }
+            else if(one->length() > 0)
+            {
+                one->setReadOffset(0);
+                two->setReadOffset(0);
+                one->setWriteOffset(0);
+
+                while(two->remaining())
+                    one->writeByte(one->readByte() & two->readByte());
+
+                delete two;
+            }
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_RIGHT is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeOr(uint8_t pOpCode)
+    {
+        // Bitwise or between each bit in the inputs.
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201805IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_OR");
+                mValid = false;
+                return false;
+            }
+
+            NextCash::Buffer *two = top();
+            pop(false);
+            NextCash::Buffer *one = top();
+
+            if(two->length() != one->length())
+            {
+                push(two);
+
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack item lengths don't match for OP_OR");
+                mValid = false;
+                return false;
+            }
+            else if(one->length() > 0)
+            {
+                one->setReadOffset(0);
+                two->setReadOffset(0);
+                one->setWriteOffset(0);
+
+                while(two->remaining())
+                    one->writeByte(one->readByte() | two->readByte());
+
+                delete two;
+            }
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_RIGHT is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeXor(uint8_t pOpCode)
+    {
+        // Boolean exclusive or between each bit in the inputs.
+        if(!ifStackTrue())
+            return true;
+
+        if(mForks->cashFork201805IsActive(mBlockHeight))
+        {
+            if(!checkStackSize(2))
+            {
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack not large enough for OP_XOR");
+                mValid = false;
+                return false;
+            }
+
+            NextCash::Buffer *two = top();
+            pop(false);
+            NextCash::Buffer *one = top();
+
+            if(two->length() != one->length())
+            {
+                push(two);
+
+                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Stack item lengths don't match for OP_XOR");
+                mValid = false;
+                return false;
+            }
+            else if(one->length() > 0)
+            {
+                one->setReadOffset(0);
+                two->setReadOffset(0);
+                one->setWriteOffset(0);
+
+                while(two->remaining())
+                    one->writeByte(one->readByte() ^ two->readByte());
+
+                delete two;
+            }
+        }
+        else
+        {
+            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "OP_RIGHT is a disabled op code");
+            mValid = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeDisabled(uint8_t pOpCode)
+    {
+        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+          "Op code is disabled : %02x", pOpCode);
+        mValid = false;
+        return false;
+    }
+
+    bool ScriptInterpreter::opCodeFail(uint8_t pOpCode)
+    {
+        mValid = false;
+        return false;
+    }
+
+    bool ScriptInterpreter::opCodeNoOp(uint8_t pOpCode)
+    {
+        return true;
+    }
+
+    bool ScriptInterpreter::opCodeUnknown(uint8_t pOpCode)
+    {
+        NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+          "Unknown op code : %02x", pOpCode);
+        mValid = false;
+        return false;
+    }
+
+    bool (ScriptInterpreter::*ScriptInterpreter::sExecuteOpCode[256])(uint8_t pOpCode);
+
+    void ScriptInterpreter::initializeStatic()
+    {
+        // Initialize all to unknown.
+        for(unsigned int i = 0; i < 256; ++i)
+            sExecuteOpCode[i] = &ScriptInterpreter::opCodeUnknown;
+
+        sExecuteOpCode[OP_0] = &ScriptInterpreter::opCodePushFalse;
+
+        for(unsigned int i = 1; i <= MAX_SINGLE_BYTE_PUSH_DATA_CODE; ++i)
+            sExecuteOpCode[i] = &ScriptInterpreter::opCodeSingleBytePush;
+
+        sExecuteOpCode[OP_PUSHDATA1] = &ScriptInterpreter::opCodePushData;
+        sExecuteOpCode[OP_PUSHDATA2] = &ScriptInterpreter::opCodePushData;
+        sExecuteOpCode[OP_PUSHDATA4] = &ScriptInterpreter::opCodePushData;
+
+        sExecuteOpCode[OP_1NEGATE] = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_1]       = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_2]       = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_3]       = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_4]       = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_5]       = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_6]       = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_7]       = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_8]       = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_9]       = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_10]      = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_11]      = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_12]      = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_13]      = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_14]      = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_15]      = &ScriptInterpreter::opCodePushNumber;
+        sExecuteOpCode[OP_16]      = &ScriptInterpreter::opCodePushNumber;
+
+        sExecuteOpCode[OP_IF]    = &ScriptInterpreter::opCodeIf;
+        sExecuteOpCode[OP_NOTIF] = &ScriptInterpreter::opCodeNotIf;
+        sExecuteOpCode[OP_ELSE]  = &ScriptInterpreter::opCodeElse;
+        sExecuteOpCode[OP_ENDIF] = &ScriptInterpreter::opCodeEndIf;
+
+        sExecuteOpCode[OP_VERIFY] = &ScriptInterpreter::opCodeVerify;
+        sExecuteOpCode[OP_RETURN] = &ScriptInterpreter::opCodeReturn;
+
+        sExecuteOpCode[OP_EQUAL]       = &ScriptInterpreter::opCodeEqual;
+        sExecuteOpCode[OP_EQUALVERIFY] = &ScriptInterpreter::opCodeEqual;
+
+        sExecuteOpCode[OP_RIPEMD160] = &ScriptInterpreter::opCodeHash;
+        sExecuteOpCode[OP_SHA1]      = &ScriptInterpreter::opCodeHash;
+        sExecuteOpCode[OP_SHA256]    = &ScriptInterpreter::opCodeHash;
+        sExecuteOpCode[OP_HASH160]   = &ScriptInterpreter::opCodeHash;
+        sExecuteOpCode[OP_HASH256]   = &ScriptInterpreter::opCodeHash;
+
+        sExecuteOpCode[OP_CODESEPARATOR] = &ScriptInterpreter::opCodeSeparator;
+
+        sExecuteOpCode[OP_CHECKSIG]            = &ScriptInterpreter::opCodeCheckSig;
+        sExecuteOpCode[OP_CHECKSIGVERIFY]      = &ScriptInterpreter::opCodeCheckSig;
+        sExecuteOpCode[OP_CHECKMULTISIG]       = &ScriptInterpreter::opCodeCheckMultiSig;
+        sExecuteOpCode[OP_CHECKMULTISIGVERIFY] = &ScriptInterpreter::opCodeCheckMultiSig;
+        sExecuteOpCode[OP_CHECKDATASIG]        = &ScriptInterpreter::opCodeCheckDataSig;
+        sExecuteOpCode[OP_CHECKDATASIGVERIFY]  = &ScriptInterpreter::opCodeCheckDataSig;
+
+        sExecuteOpCode[OP_CHECKLOCKTIMEVERIFY]  = &ScriptInterpreter::opCodeCheckLockTimeVerify;
+        sExecuteOpCode[OP_CHECKSEQUENCEVERIFY]  = &ScriptInterpreter::opCodeCheckSequenceVerify;
+
+        sExecuteOpCode[OP_1ADD]      = &ScriptInterpreter::opCodeAdd1;
+        sExecuteOpCode[OP_1SUB]      = &ScriptInterpreter::opCodeSubtract1;
+        sExecuteOpCode[OP_NEGATE]    = &ScriptInterpreter::opCodeNegate;
+        sExecuteOpCode[OP_ABS]       = &ScriptInterpreter::opCodeAbs;
+        sExecuteOpCode[OP_NOT]       = &ScriptInterpreter::opCodeNot;
+        sExecuteOpCode[OP_0NOTEQUAL] = &ScriptInterpreter::opCodeZeroNotEqual;
+        sExecuteOpCode[OP_ADD]       = &ScriptInterpreter::opCodeAdd;
+        sExecuteOpCode[OP_SUB]       = &ScriptInterpreter::opCodeSubtract;
+        sExecuteOpCode[OP_MUL]       = &ScriptInterpreter::opCodeMultiply;
+        sExecuteOpCode[OP_DIV]       = &ScriptInterpreter::opCodeDivide;
+        sExecuteOpCode[OP_MOD]       = &ScriptInterpreter::opCodeMod;
+
+        sExecuteOpCode[OP_LSHIFT]  = &ScriptInterpreter::opCodeLeftShift;
+        sExecuteOpCode[OP_RSHIFT]  = &ScriptInterpreter::opCodeRightShift;
+        sExecuteOpCode[OP_BOOLAND] = &ScriptInterpreter::opCodeBoolAnd;
+        sExecuteOpCode[OP_BOOLOR]  = &ScriptInterpreter::opCodeBoolOr;
+
+        sExecuteOpCode[OP_NUMEQUAL]           = &ScriptInterpreter::opCodeNumEqual;
+        sExecuteOpCode[OP_NUMEQUALVERIFY]     = &ScriptInterpreter::opCodeNumEqual;
+        sExecuteOpCode[OP_NUMNOTEQUAL]        = &ScriptInterpreter::opCodeNumNotEqual;
+        sExecuteOpCode[OP_LESSTHAN]           = &ScriptInterpreter::opCodeLessThan;
+        sExecuteOpCode[OP_GREATERTHAN]        = &ScriptInterpreter::opCodeGreaterThan;
+        sExecuteOpCode[OP_LESSTHANOREQUAL]    = &ScriptInterpreter::opCodeLessThanOrEqual;
+        sExecuteOpCode[OP_GREATERTHANOREQUAL] = &ScriptInterpreter::opCodeGreaterThanOrEqual;
+        sExecuteOpCode[OP_MIN]                = &ScriptInterpreter::opCodeMin;
+        sExecuteOpCode[OP_MAX]                = &ScriptInterpreter::opCodeMax;
+        sExecuteOpCode[OP_WITHIN]             = &ScriptInterpreter::opCodeWithin;
+
+        sExecuteOpCode[OP_TOALTSTACK]   = &ScriptInterpreter::opCodeToAltStack;
+        sExecuteOpCode[OP_FROMALTSTACK] = &ScriptInterpreter::opCodeFromAltStack;
+        sExecuteOpCode[OP_DUP]          = &ScriptInterpreter::opCodeDup;
+        sExecuteOpCode[OP_IFDUP]        = &ScriptInterpreter::opCodeIfDup;
+        sExecuteOpCode[OP_DEPTH]        = &ScriptInterpreter::opCodeDepth;
+        sExecuteOpCode[OP_DROP]         = &ScriptInterpreter::opCodeDrop;
+        sExecuteOpCode[OP_NIP]          = &ScriptInterpreter::opCodeNip;
+        sExecuteOpCode[OP_OVER]         = &ScriptInterpreter::opCodeOver;
+        sExecuteOpCode[OP_PICK]         = &ScriptInterpreter::opCodePick;
+        sExecuteOpCode[OP_ROLL]         = &ScriptInterpreter::opCodeRoll;
+        sExecuteOpCode[OP_ROT]          = &ScriptInterpreter::opCodeRotate;
+        sExecuteOpCode[OP_SWAP]         = &ScriptInterpreter::opCodeSwap;
+        sExecuteOpCode[OP_TUCK]         = &ScriptInterpreter::opCodeTuck;
+        sExecuteOpCode[OP_2DROP]        = &ScriptInterpreter::opCodeDrop2;
+        sExecuteOpCode[OP_2DUP]         = &ScriptInterpreter::opCodeDup2;
+        sExecuteOpCode[OP_3DUP]         = &ScriptInterpreter::opCodeDup3;
+        sExecuteOpCode[OP_2OVER]        = &ScriptInterpreter::opCodeOver2;
+        sExecuteOpCode[OP_2ROT]         = &ScriptInterpreter::opCodeRotate2;
+        sExecuteOpCode[OP_2SWAP]        = &ScriptInterpreter::opCodeSwap2;
+
+        sExecuteOpCode[OP_CAT]     = &ScriptInterpreter::opCodeConcat;
+        sExecuteOpCode[OP_SPLIT]   = &ScriptInterpreter::opCodeSplit;
+        sExecuteOpCode[OP_NUM2BIN] = &ScriptInterpreter::opCodeNum2Bin;
+        sExecuteOpCode[OP_BIN2NUM] = &ScriptInterpreter::opCodeBin2Num;
+        sExecuteOpCode[OP_SIZE]    = &ScriptInterpreter::opCodeSize;
+        sExecuteOpCode[OP_INVERT]  = &ScriptInterpreter::opCodeInvert;
+
+        sExecuteOpCode[OP_AND] = &ScriptInterpreter::opCodeAnd;
+        sExecuteOpCode[OP_OR]  = &ScriptInterpreter::opCodeOr;
+        sExecuteOpCode[OP_XOR] = &ScriptInterpreter::opCodeXor;
+
+        sExecuteOpCode[OP_2MUL]  = &ScriptInterpreter::opCodeDisabled;
+        sExecuteOpCode[OP_2DIV]  = &ScriptInterpreter::opCodeDisabled;
+
+        sExecuteOpCode[OP_RESERVED]  = &ScriptInterpreter::opCodeFail;
+        sExecuteOpCode[OP_VER]       = &ScriptInterpreter::opCodeFail;
+        sExecuteOpCode[OP_VERIF]     = &ScriptInterpreter::opCodeFail;
+        sExecuteOpCode[OP_VERNOTIF]  = &ScriptInterpreter::opCodeFail;
+        sExecuteOpCode[OP_RESERVED1] = &ScriptInterpreter::opCodeFail;
+        sExecuteOpCode[OP_RESERVED2] = &ScriptInterpreter::opCodeFail;
+
+        sExecuteOpCode[OP_NOP]   = &ScriptInterpreter::opCodeNoOp;
+        sExecuteOpCode[OP_NOP1]  = &ScriptInterpreter::opCodeNoOp;
+        // OP_NOP2 changed to OP_CHECKLOCKTIMEVERIFY
+        // OP_NOP3 changed to OP_CHECKSEQUENCEVERIFY
+        sExecuteOpCode[OP_NOP4]  = &ScriptInterpreter::opCodeNoOp;
+        sExecuteOpCode[OP_NOP5]  = &ScriptInterpreter::opCodeNoOp;
+        sExecuteOpCode[OP_NOP6]  = &ScriptInterpreter::opCodeNoOp;
+        sExecuteOpCode[OP_NOP7]  = &ScriptInterpreter::opCodeNoOp;
+        sExecuteOpCode[OP_NOP8]  = &ScriptInterpreter::opCodeNoOp;
+        sExecuteOpCode[OP_NOP9]  = &ScriptInterpreter::opCodeNoOp;
+        sExecuteOpCode[OP_NOP10] = &ScriptInterpreter::opCodeNoOp;
     }
 
     bool ScriptInterpreter::test()
