@@ -84,7 +84,7 @@ namespace BitCoin
         mPeersRead = false;
         pendingSize = 100000000UL; // 100 MB
         pendingBlocks = 256;
-        outputsCacheSize = 1000000000UL; // 1 GB
+        outputsCacheSize = 2000000000UL; // 2 GB
         outputsCacheDelta = 500000000UL; // 500 MB
         minFee = 0; // satoshis per KB
         lowFee = 500; // satoshis per KB
@@ -96,7 +96,7 @@ namespace BitCoin
         threadCount = 4;
 
         // Block height 540,288 (Jul 23, 2018 7:17:35 PM)
-        approvedHash.setHex("000000000000000000cbcd34ba48ce30891af1e5b224de1a1a7eca8af24b05a6");
+        //approvedHash.setHex("000000000000000000cbcd34ba48ce30891af1e5b224de1a1a7eca8af24b05a6");
 
         mDataModified = false;
         mInitialBlockDownloadComplete = false;
