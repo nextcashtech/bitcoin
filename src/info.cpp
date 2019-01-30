@@ -95,8 +95,8 @@ namespace BitCoin
         spvMemPoolCountRequired = 4;
         threadCount = 4;
 
-        // Block height 540,288 (Jul 23, 2018 7:17:35 PM)
-        //approvedHash.setHex("000000000000000000cbcd34ba48ce30891af1e5b224de1a1a7eca8af24b05a6");
+        // Block height 556,766 2018-11-15 (Last block before Cash/SV split)
+        approvedHash.setHex("00000000000000000102d94fde9bd0807a2cc7582fe85dd6349b73ce4e8d9322");
 
         mDataModified = false;
         mInitialBlockDownloadComplete = false;
