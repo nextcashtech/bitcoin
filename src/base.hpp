@@ -17,18 +17,23 @@
 
 // BIP-0014 Specifies User Agent Format
 #ifdef ANDROID
-#define BITCOIN_USER_AGENT "/NextCash:0.13.0/NextCashWallet:0.15.2(Android)/"
+#define BITCOIN_USER_AGENT "/NextCash:0.14.0/NextCashWallet:0.15.2(Android)/"
 #else
-#define BITCOIN_USER_AGENT "/NextCash:0.13.0/"
+#define BITCOIN_USER_AGENT "/NextCash:0.14.0/"
 #endif
 
 #define PROTOCOL_VERSION 70015
 #define PUB_KEY_HASH_SIZE 20
 #define BLOCK_HASH_SIZE 32
 #define TRANSACTION_HASH_SIZE 32
+#define SIGNATURE_HASH_SIZE 32
 
 #ifndef MAX_BLOCK_TRANSACTIONS
 #define MAX_BLOCK_TRANSACTIONS 500000
+#endif
+
+#ifndef MAX_TRANSACTION_SIZE
+#define MAX_TRANSACTION_SIZE 1000000
 #endif
 
 #ifndef MAX_TRANSACTION_INPUTS

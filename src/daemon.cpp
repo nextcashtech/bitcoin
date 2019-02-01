@@ -2618,6 +2618,82 @@ namespace BitCoin
             }
         }
 
+        if(!mStopping && allCount < maxOutgoingNodes() - 2 && mInfo.chainID != CHAIN_UNKNOWN)
+        {
+            // Try peers with okay ratings
+            peers.clear();
+            mInfo.getRandomizedPeers(peers, OKAY_RATING, servicesMask, CHAIN_UNKNOWN);
+            NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
+              "Found %d okay peers with unknown chain", peers.size());
+            Time startTime = getTime();
+            for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
+              !mStopping && allCount < maxOutgoingNodes() - 3; ++peer)
+            {
+                // Skip nodes already connected
+                found = false;
+                mNodeLock.readLock();
+                for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+                  !mStopping; ++node)
+                    if((*node)->ip() == (*peer)->address)
+                    {
+                        found = true;
+                        break;
+                    }
+                if(found)
+                {
+                    mNodeLock.readUnlock();
+                    continue;
+                }
+
+                for(std::list<IPBytes>::iterator recent = mRecentIPs.begin();
+                  recent != mRecentIPs.end(); ++recent)
+                    if(*recent == (*peer)->address.ipv6Bytes())
+                    {
+                        found = true;
+                        break;
+                    }
+                if(found)
+                {
+                    mNodeLock.readUnlock();
+                    continue;
+                }
+
+                mNodeLock.readUnlock();
+
+                mRecentIPs.emplace_back((*peer)->address.ipv6Bytes());
+                while(mRecentIPs.size() > RECENT_IP_COUNT)
+                    mRecentIPs.erase(mRecentIPs.begin());
+
+                if(addNode((*peer)->address, Node::NONE, (*peer)->services, compactCount < 3))
+                {
+                    if(compactCount < 3)
+                        ++compactCount;
+                    ++allCount;
+                    ++newCount;
+#ifdef SINGLE_THREAD
+                    break;
+#endif
+                }
+
+                // Max 30 seconds connecting to usable peers
+                if(mStopping || getTime() - startTime > 30)
+                    break;
+
+#ifdef SINGLE_THREAD
+                if(getTime() - lastNodeProcess > 5)
+                {
+                    // Process nodes so they don't wait a long time
+                    mNodeLock.readLock();
+                    for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end() &&
+                      !mStopRequested; ++node)
+                        (*node)->process();
+                    mNodeLock.readUnlock();
+                    lastNodeProcess = getTime();
+                }
+#endif
+            }
+        }
+
         if(!mStopping && allCount < maxOutgoingNodes() && mInfo.chainID != CHAIN_UNKNOWN)
         {
             // Try peers on matching chain with no ratings
@@ -2700,7 +2776,7 @@ namespace BitCoin
             peers.clear();
             mInfo.getRandomizedPeers(peers, USABLE_RATING, servicesMask, CHAIN_UNKNOWN);
             NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-              "Found %d usable peers", peers.size());
+              "Found %d usable peers with unknown chain", peers.size());
             Time startTime = getTime();
             for(std::vector<Peer *>::iterator peer = peers.begin(); peer != peers.end() &&
               !mStopping && allCount < maxOutgoingNodes(); ++peer)
@@ -2780,13 +2856,13 @@ namespace BitCoin
     void Daemon::cleanNodes()
     {
         // Check for black listed nodes
-        std::vector<unsigned int> blackListedNodeIDs = mChain.invalidNodeIDs();
+        std::vector<unsigned int> invalidNodeIDs = mChain.invalidNodeIDs();
 
         // Drop all closed nodes
         std::vector<Node *> toDelete;
         bool dropped;
         mNodeLock.writeLock("Clean");
-        for(std::vector<Node *>::iterator node=mNodes.begin();node!=mNodes.end();)
+        for(std::vector<Node *>::iterator node = mNodes.begin(); node != mNodes.end();)
             if((*node)->isStopped())
             {
                 mLastConnectionActive = getTime();
@@ -2803,12 +2879,12 @@ namespace BitCoin
             else
             {
                 dropped = false;
-                for(std::vector<unsigned int>::iterator nodeID = blackListedNodeIDs.begin();
-                  nodeID != blackListedNodeIDs.end(); ++nodeID)
+                for(std::vector<unsigned int>::iterator nodeID = invalidNodeIDs.begin();
+                  nodeID != invalidNodeIDs.end(); ++nodeID)
                     if(*nodeID == (*node)->id())
                     {
                         NextCash::Log::addFormatted(NextCash::Log::INFO, BITCOIN_DAEMON_LOG_NAME,
-                          "%s Dropping. Black listed", (*node)->name());
+                          "%s Dropping. Invalid", (*node)->name());
                         dropped = true;
                         addRejectedIP((*node)->ip().ipv6Bytes());
                         (*node)->close();

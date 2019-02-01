@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017-2018 NextCash, LLC                                      *
+ * Copyright 2017-2019 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -126,6 +126,8 @@ namespace BitCoin
             FORKID       = 0x40, // Signature contains a fork ID
             ANYONECANPAY = 0x80  // Only sign this input so that other inputs can be added later
         };
+
+        static const uint8_t VALID_MASK = 0xc3;
 
         Signature()
         {

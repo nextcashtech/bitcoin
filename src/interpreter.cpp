@@ -411,15 +411,9 @@ namespace BitCoin
         {
             opCode = pScript.readByte();
 
-            if(opCode == 0x00)
+            if(opCode > 0x00 && opCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
             {
-                result += "<OP_0>";
-                continue;
-            }
-
-            if(opCode <= MAX_SINGLE_BYTE_PUSH_DATA_CODE)
-            {
-                result += "<PUSH_OP=";
+                result += "<OP_PUSH=0x";
                 if(opCode > pScript.remaining())
                     result += "too long";
                 else
@@ -430,79 +424,13 @@ namespace BitCoin
 
             switch(opCode)
             {
-            case OP_NOP: // Does nothing
-                result += "<OP_NOP>";
-                break;
-            case OP_IF: // If the top stack value is not OP_FALSE the statements are executed. The top stack value is removed
-                result += "<OP_IF>";
-                break;
-            case OP_NOTIF: // If the top stack value is OP_FALSE the statements are executed. The top stack value is removed
-                result += "<OP_NOTIF>";
-                break;
-            case OP_ELSE:
-                result += "<OP_ELSE>";
-                break;
-            case OP_ENDIF:
-                result += "<OP_ENDIF>";
-                break;
-            case OP_VERIFY:
-                result += "<OP_VERIFY>";
-                break;
-            case OP_RETURN:
-                result += "<OP_RETURN>";
-                break;
-            case OP_EQUAL:
-                result += "<OP_EQUAL>";
-                break;
-            case OP_EQUALVERIFY:
-                result += "<OP_EQUALVERIFY>";
-                break;
-            case OP_RIPEMD160:
-                result += "<OP_RIPEMD160>";
-                break;
-            case OP_SHA1:
-                result += "<OP_SHA1>";
-                break;
-            case OP_SHA256:
-                result += "<OP_SHA256>";
-                break;
-            case OP_HASH160:
-                result += "<OP_HASH160>";
-                break;
-            case OP_HASH256:
-                result += "<OP_HASH256>";
-                break;
-            case OP_CODESEPARATOR:
-                result += "<OP_CODESEPARATOR>";
-                break;
-            case OP_CHECKSIG:
-                result += "<OP_CHECKSIG>";
-                break;
-            case OP_CHECKSIGVERIFY:
-                result += "<OP_CHECKSIGVERIFY>";
-                break;
-            case OP_CHECKMULTISIG:
-                result += "<OP_CHECKMULTISIG>";
-                break;
-            case OP_CHECKMULTISIGVERIFY:
-                result += "<OP_CHECKMULTISIGVERIFY>";
-                break;
-            case OP_CHECKDATASIG:
-                result += "<OP_CHECKDATASIG>";
-                break;
-            case OP_CHECKDATASIGVERIFY:
-                result += "<OP_CHECKDATASIGVERIFY>";
-                break;
-            case OP_CHECKLOCKTIMEVERIFY:
-                result += "<OP_CHECKLOCKTIMEVERIFY>";
-                break;
-            case OP_CHECKSEQUENCEVERIFY:
-                result += "<OP_CHECKSEQUENCEVERIFY>";
+            default:
+                result += sOpCodeNames[opCode];
                 break;
             case OP_PUSHDATA1: // The next byte contains the number of bytes to be pushed
             {
                 uint8_t length = pScript.readByte();
-                result += "<OP_PUSHDATA1=";
+                result += "<OP_PUSHDATA1=0x";
                 if(length > pScript.remaining())
                     result += "too long";
                 else
@@ -513,7 +441,7 @@ namespace BitCoin
             case OP_PUSHDATA2: // The next 2 bytes contains the number of bytes to be pushed
             {
                 uint16_t length = pScript.readUnsignedShort();
-                result += "<OP_PUSHDATA2=";
+                result += "<OP_PUSHDATA2=0x";
                 if(length > pScript.remaining())
                     result += "too long";
                 else
@@ -524,338 +452,12 @@ namespace BitCoin
             case OP_PUSHDATA4: // The next 4 bytes contains the number of bytes to be pushed
             {
                 uint32_t length = pScript.readUnsignedInt();
-                result += "<OP_PUSHDATA4=";
+                result += "<OP_PUSHDATA4=0x";
                 if(length > pScript.remaining())
                     result += "too long";
                 else
                     result += pScript.readHexString(length);
                 result += ">";
-                break;
-            }
-            case OP_0: // An empty array of bytes is pushed to the stack
-                //case OP_FALSE:
-                result += "<OP_0>";
-                break;
-            case OP_1NEGATE: // The number -1 is pushed
-                result += "<OP_1NEGATE>";
-                break;
-            case OP_1: // The number 1 is pushed
-                result += "<OP_1>";
-                break;
-            case OP_2: // The number 2 is pushed
-                result += "<OP_2>";
-                break;
-            case OP_3: // The number 3 is pushed
-                result += "<OP_3>";
-                break;
-            case OP_4: // The number 4 is pushed
-                result += "<OP_4>";
-                break;
-            case OP_5: // The number 5 is pushed
-                result += "<OP_5>";
-                break;
-            case OP_6: // The number 6 is pushed
-                result += "<OP_6>";
-                break;
-            case OP_7: // The number 7 is pushed
-                result += "<OP_7>";
-                break;
-            case OP_8: // The number 8 is pushed
-                result += "<OP_8>";
-                break;
-            case OP_9: // The number 9 is pushed
-                result += "<OP_9>";
-                break;
-            case OP_10: // The number 10 is pushed
-                result += "<OP_10>";
-                break;
-            case OP_11: // The number 11 is pushed
-                result += "<OP_11>";
-                break;
-            case OP_12: // The number 12 is pushed
-                result += "<OP_12>";
-                break;
-            case OP_13: // The number 13 is pushed
-                result += "<OP_13>";
-                break;
-            case OP_14: // The number 14 is pushed
-                result += "<OP_14>";
-                break;
-            case OP_15: // The number 15 is pushed
-                result += "<OP_15>";
-                break;
-            case OP_16: // The number 16 is pushed
-                result += "<OP_16>";
-                break;
-
-
-            case OP_1ADD: //    in    out    1 is added to the input.
-                result += "<OP_1ADD>";
-                break;
-            case OP_1SUB: //    in    out    1 is subtracted from the input.
-                result += "<OP_1SUB>";
-                break;
-            case OP_2MUL: //    in    out    The input is multiplied by 2. disabled.
-                result += "<OP_2MUL disabled>";
-                break;
-            case OP_2DIV: //    in    out    The input is divided by 2. disabled.
-                result += "<OP_2DIV disabled>";
-                break;
-            case OP_NEGATE: //    in    out    The sign of the input is flipped.
-                result += "<OP_NEGATE>";
-                break;
-            case OP_ABS: //    in    out    The input is made positive.
-                result += "<OP_ABS>";
-                break;
-            case OP_NOT: //    in    out    If the input is 0 or 1, it is flipped. Otherwise the output will be 0.
-                result += "<OP_NOT>";
-                break;
-            case OP_0NOTEQUAL: //    in    out    Returns 0 if the input is 0. 1 otherwise.
-                result += "<OP_0NOTEQUAL>";
-                break;
-            case OP_ADD: //    a b   out    a is added to b.
-                result += "<OP_ADD>";
-                break;
-            case OP_SUB: //    a b   out    b is subtracted from a.
-                result += "<OP_SUB>";
-                break;
-            case OP_MUL: //    a b   out    a is multiplied by b.
-                if(pForks.cashFork201811IsActive(pBlockHeight))
-                    result += "<OP_MUL>";
-                else
-                    result += "<OP_MUL disabled>";
-                break;
-            case OP_DIV: //    a b   out    a is divided by b.
-                if(pForks.cashFork201805IsActive(pBlockHeight))
-                    result += "<OP_DIV>";
-                else
-                    result += "<OP_DIV disabled>";
-                break;
-            case OP_MOD: //    a b   out    Returns the remainder after dividing a by b.
-                if(pForks.cashFork201805IsActive(pBlockHeight))
-                    result += "<OP_MOD>";
-                else
-                    result += "<OP_MOD disabled>";
-                break;
-            case OP_LSHIFT: //    a b   out    Shifts a left b bits, preserving sign.
-                if(pForks.cashFork201811IsActive(pBlockHeight))
-                    result += "<OP_LSHIFT>";
-                else
-                    result += "<OP_LSHIFT disabled>";
-                break;
-            case OP_RSHIFT: //    a b   out    Shifts a right b bits, preserving sign.
-                if(pForks.cashFork201811IsActive(pBlockHeight))
-                    result += "<OP_RSHIFT>";
-                else
-                    result += "<OP_RSHIFT disabled>";
-                break;
-            case OP_BOOLAND: //    a b   out    If both a and b are not 0, the output is 1. Otherwise 0.
-                result += "<OP_BOOLAND>";
-                break;
-            case OP_BOOLOR: //    a b   out    If a or b is not 0, the output is 1. Otherwise 0.
-                result += "<OP_BOOLOR>";
-                break;
-            case OP_NUMEQUAL: //    a b   out    Returns 1 if the numbers are equal, 0 otherwise.
-                result += "<OP_NUMEQUAL>";
-                break;
-            case OP_NUMEQUALVERIFY: //    a b   Nothing / fail    Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
-                result += "<OP_NUMEQUALVERIFY>";
-                break;
-            case OP_NUMNOTEQUAL: //    a b   out    Returns 1 if the numbers are not equal, 0 otherwise.
-                result += "<OP_NUMNOTEQUAL>";
-                break;
-            case OP_LESSTHAN: //    a b   out    Returns 1 if a is less than b, 0 otherwise.
-                result += "<OP_LESSTHAN>";
-                break;
-            case OP_GREATERTHAN: //    a b   out    Returns 1 if a is greater than b, 0 otherwise.
-                result += "<OP_GREATERTHAN>";
-                break;
-            case OP_LESSTHANOREQUAL: //    a b   out    Returns 1 if a is less than or equal to b, 0 otherwise.
-                result += "<OP_LESSTHANOREQUAL>";
-                break;
-            case OP_GREATERTHANOREQUAL: //    a b   out    Returns 1 if a is greater than or equal to b, 0 otherwise.
-                result += "<OP_GREATERTHANOREQUAL>";
-                break;
-            case OP_MIN: //    a b   out    Returns the smaller of a and b.
-                result += "<OP_MIN>";
-                break;
-            case OP_MAX: //    a b   out    Returns the larger of a and b.
-                result += "<OP_MAX>";
-                break;
-            case OP_WITHIN: //    x min max    out    Returns 1 if x is within the specified range (left-inclusive), 0 otherwise
-                result += "<OP_WITHIN>";
-                break;
-
-
-            // Stack
-            case OP_TOALTSTACK:
-                result += "<OP_TOALTSTACK>";
-                break;
-            case OP_FROMALTSTACK:
-                result += "<OP_FROMALTSTACK>";
-                break;
-            case OP_DUP:
-                result += "<OP_DUP>";
-                break;
-            case OP_IFDUP: // 0x73//     x    x / x x    If the top stack value is not 0, duplicate it.
-                result += "<OP_IFDUP>";
-                break;
-            case OP_DEPTH: // 0x74//     Nothing    <Stack size>    Puts the number of stack items onto the stack.
-                result += "<OP_DEPTH>";
-                break;
-            case OP_DROP: // 0x75//     x    Nothing    Removes the top stack item.
-                result += "<OP_DROP>";
-                break;
-            case OP_NIP: // 0x77//     x1 x2    x2    Removes the second-to-top stack item.
-                result += "<OP_NIP>";
-                break;
-            case OP_OVER: // 0x78//     x1 x2    x1 x2 x1    Copies the second-to-top stack item to the top.
-                result += "<OP_OVER>";
-                break;
-            case OP_PICK: // 0x79//     xn ... x2 x1 x0 <n>    xn ... x2 x1 x0 xn    The item n back in the stack is copied to the top.
-                result += "<OP_PICK>";
-                break;
-            case OP_ROLL: // 0x7a//     xn ... x2 x1 x0 <n>    ... x2 x1 x0 xn    The item n back in the stack is moved to the top.
-                result += "<OP_ROLL>";
-                break;
-            case OP_ROT: // 0x7b//     x1 x2 x3    x2 x3 x1    The top three items on the stack are rotated to the left.
-                result += "<OP_ROT>";
-                break;
-            case OP_SWAP: // 0x7c//     x1 x2    x2 x1    The top two items on the stack are swapped.
-                result += "<OP_SWAP>";
-                break;
-            case OP_TUCK: // 0x7d//     x1 x2    x2 x1 x2    The item at the top of the stack is copied and inserted before the second-to-top item.
-                result += "<OP_TUCK>";
-                break;
-            case OP_2DROP: // 0x6d//     x1 x2    Nothing    Removes the top two stack items.
-                result += "<OP_2DROP>";
-                break;
-            case OP_2DUP: // 0x6e//     x1 x2    x1 x2 x1 x2    Duplicates the top two stack items.
-                result += "<OP_2DUP>";
-                break;
-            case OP_3DUP: // 0x6f//     x1 x2 x3    x1 x2 x3 x1 x2 x3    Duplicates the top three stack items.
-                result += "<OP_3DUP>";
-                break;
-            case OP_2OVER: // 0x70//     x1 x2 x3 x4    x1 x2 x3 x4 x1 x2    Copies the pair of items two spaces back in the stack to the front.
-                result += "<OP_2OVER>";
-                break;
-            case OP_2ROT: // 0x71//     x1 x2 x3 x4 x5 x6    x3 x4 x5 x6 x1 x2    The fifth and sixth items back are moved to the top of the stack.
-                result += "<OP_2ROT>";
-                break;
-            case OP_2SWAP: // 0x72 //     x1 x2 x3 x4    x3 x4 x1 x2	Swaps the top two pairs of items.
-                result += "<OP_2SWAP>";
-                break;
-
-
-            // Splice
-            case OP_CAT: //  x1 x2  out  Concatenates two strings.
-                if(pForks.cashFork201805IsActive(pBlockHeight))
-                    result += "<OP_CAT>";
-                else
-                    result += "<OP_CAT disabled>";
-                break;
-            case OP_SPLIT: // Split byte sequence x at position n
-                if(pForks.cashFork201805IsActive(pBlockHeight))
-                    result += "<OP_SPLIT>";
-                else
-                    result += "<OP_SUBSTR disabled>";
-                break;
-            case OP_NUM2BIN: // Convert numeric value a into byte sequence of length b
-                if(pForks.cashFork201805IsActive(pBlockHeight))
-                    result += "<OP_NUM2BIN>";
-                else
-                    result += "<OP_LEFT disabled>";
-                break;
-            case OP_BIN2NUM: // Convert byte sequence x into a numeric value
-                if(pForks.cashFork201805IsActive(pBlockHeight))
-                    result += "<OP_BIN2NUM>";
-                else
-                    result += "<OP_RIGHT disabled>";
-                break;
-            case OP_SIZE: //  in  in size  Pushes the string length of the top element of the stack (without popping it).
-                result += "<OP_SIZE>";
-                break;
-
-
-            // Bitwise logic
-            case OP_INVERT: //  in  out  Flips all of the bits in the input.
-                if(pForks.cashFork201811IsActive(pBlockHeight))
-                    result += "<OP_INVERT>";
-                else
-                    result += "<OP_INVERT disabled>";
-                break;
-            case OP_AND: //  x1 x2  out  Boolean and between each bit in the inputs.
-                if(pForks.cashFork201805IsActive(pBlockHeight))
-                    result += "<OP_AND>";
-                else
-                    result += "<OP_AND disabled>";
-                break;
-            case OP_OR: //  x1 x2  out  Boolean or between each bit in the inputs.
-                if(pForks.cashFork201805IsActive(pBlockHeight))
-                    result += "<OP_OR>";
-                else
-                    result += "<OP_OR disabled>";
-                break;
-            case OP_XOR: //  x1 x2  out  Boolean exclusive or between each bit in the inputs.
-                if(pForks.cashFork201805IsActive(pBlockHeight))
-                    result += "<OP_XOR>";
-                else
-                    result += "<OP_XOR disabled>";
-                break;
-
-
-                // Reserved
-            case OP_RESERVED: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                result += "<OP_RESERVED>";
-                break;
-            case OP_VER: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                result += "<OP_VER>";
-                break;
-            case OP_VERIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
-                result += "<OP_VERIF>";
-                break;
-            case OP_VERNOTIF: //  Transaction is invalid even when occuring in an unexecuted OP_IF branch
-                result += "<OP_VERNOTIF>";
-                break;
-            case OP_RESERVED1: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                result += "<OP_RESERVED1>";
-                break;
-            case OP_RESERVED2: //  Transaction is invalid unless occuring in an unexecuted OP_IF branch
-                result += "<OP_RESERVED2>";
-                break;
-
-            case OP_NOP1: // The word is ignored. Does not mark transaction as invalid.
-                result += "<OP_NOP1>";
-                break;
-                //OP_NOP2              = 0xb1, // Changed to OP_CHECKLOCKTIMEVERIFY
-                //OP_NOP3              = 0xb2, // Changed to OP_CHECKSEQUENCEVERIFY
-            case OP_NOP4:  // The word is ignored. Does not mark transaction as invalid.
-                result += "<OP_NOP4>";
-                break;
-            case OP_NOP5:  // The word is ignored. Does not mark transaction as invalid.
-                result += "<OP_NOP5>";
-                break;
-            case OP_NOP6:  // The word is ignored. Does not mark transaction as invalid.
-                result += "<OP_NOP6>";
-                break;
-            case OP_NOP7:  // The word is ignored. Does not mark transaction as invalid.
-                result += "<OP_NOP7>";
-                break;
-            case OP_NOP8:  // The word is ignored. Does not mark transaction as invalid.
-                result += "<OP_NOP8>";
-                break;
-            case OP_NOP9:  // The word is ignored. Does not mark transaction as invalid.
-                result += "<OP_NOP9>";
-                break;
-            case OP_NOP10: // The word is ignored. Does not mark transaction as invalid.
-                result += "<OP_NOP10>";
-                break;
-
-            default:
-            {
-                NextCash::String undefinedText;
-                undefinedText.writeFormatted("<!!!UNDEFINED 0x%02x!!!>", opCode);
-                result += undefinedText;
                 break;
             }
             }
@@ -871,6 +473,70 @@ namespace BitCoin
         NextCash::Log::addFormatted(pLevel, BITCOIN_INTERPRETER_LOG_NAME, text);
     }
 
+    void ScriptInterpreter::printStack(const char *pText)
+    {
+        unsigned int index;
+
+        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack : %s", pText);
+        index = 1;
+        for(std::list<NextCash::Buffer *>::reverse_iterator i = mStack.rbegin();
+          i != mStack.rend(); ++i, ++index)
+        {
+            (*i)->setReadOffset(0);
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+              "  %d (%d bytes) : %s", index, (*i)->length(), (*i)->readHexString((*i)->length()).text());
+        }
+
+        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack :");
+        index = 1;
+        for(std::list<NextCash::Buffer *>::reverse_iterator i = mAltStack.rbegin();
+          i != mAltStack.rend(); ++i, ++index)
+        {
+            (*i)->setReadOffset(0);
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+              "  %d (%d bytes) : %s", index, (*i)->length(), (*i)->readHexString((*i)->length()).text());
+        }
+
+        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "If Stack :");
+        index = 1;
+        for(std::list<bool>::reverse_iterator i = mIfStack.rbegin();
+          i != mIfStack.rend(); ++i, ++index)
+        {
+            if(*i)
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "  true");
+            else
+                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "  false");
+        }
+    }
+
+    void ScriptInterpreter::printFailure(const char *pScriptName, NextCash::Buffer &pScript)
+    {
+        if(isValid() && isVerified())
+            return;
+
+        const char *reason;
+        if(!isValid())
+            reason = "is invalid";
+        else
+            reason = "failed verify";
+
+        if(pScript.remaining())
+        {
+            if(pScript.readOffset() > 0)
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Script (%s) %s at offset %d after %s", pScriptName, reason,
+                  pScript.readOffset() - 1,
+                  sOpCodeNames[*(pScript.begin() + (pScript.readOffset() - 1))]);
+            else
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Script (%s) %s before start", pScriptName, reason);
+        }
+        else
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+              "Script (%s) %s after completion", pScriptName, reason);
+
+        printStack("After Failure");
+    }
 
     bool ScriptInterpreter::readArithmeticInteger(NextCash::Buffer &pScript, int64_t &pValue)
     {
@@ -967,6 +633,13 @@ namespace BitCoin
       NextCash::Buffer &pCurrentOutputScript, unsigned int pSignatureStartOffset,
       const Forks &pForks, unsigned int pBlockHeight)
     {
+        if(pSignatureDataSize < 2)
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Signature too short : %d", pSignatureDataSize);
+            return false;
+        }
+
         if(pForks.cashActive(pBlockHeight) &&
           !(pSignatureData[pSignatureDataSize-1] & Signature::FORKID))
         {
@@ -975,13 +648,6 @@ namespace BitCoin
               pSignatureData[pSignatureDataSize-1]);
             return false;
         }
-        // else if(!pForks.cashActive() &&
-        //   (pSignatureData[pSignatureDataSize-1] & Signature::FORKID))
-        // {
-            // NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              // "Signature hash type has disabled fork ID flag : %02x", pSignature.hashType());
-            // return false;
-        // }
 
         // Get signature hash
         NextCash::Hash signatureHash(32);
@@ -989,30 +655,13 @@ namespace BitCoin
         pCurrentOutputScript.setReadOffset(pSignatureStartOffset);
         pTransaction.getSignatureHash(pForks, pBlockHeight, signatureHash, pInputOffset,
           pCurrentOutputScript, pOutputAmount, pSignatureData[pSignatureDataSize-1]);
-
         pCurrentOutputScript.setReadOffset(previousOffset);
-        if(Key::verify(pPublicKeyData, pPublicKeyDataSize, pSignatureData, pSignatureDataSize,
+
+        if(Key::verify(pPublicKeyData, pPublicKeyDataSize, pSignatureData, pSignatureDataSize - 1,
           pStrictSignatures, signatureHash))
             return true;
         else
-        {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Signature check failed");
             return false;
-        }
-    }
-
-    void ScriptInterpreter::printStack(const char *pText)
-    {
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack : %s", pText);
-
-        unsigned int index = 1;
-        for(std::list<NextCash::Buffer *>::reverse_iterator i = mStack.rbegin();i!=mStack.rend();++i,index++)
-        {
-            (*i)->setReadOffset(0);
-            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
-              "    %d (%d bytes) : %s", index, (*i)->length(), (*i)->readHexString((*i)->length()).text());
-        }
     }
 
     bool ScriptInterpreter::arithmeticRead(NextCash::Buffer *pBuffer, int64_t &pValue)
@@ -1421,12 +1070,10 @@ namespace BitCoin
 
     bool ScriptInterpreter::opCodeReturn(uint8_t pOpCode)
     {
-        // Marks transaction as invalid
         if(!ifStackTrue())
             return true;
 
-        NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-          "Return. Marking not verified");
+        // Marks transaction as invalid
         mVerified = false;
         return false;
     }
@@ -1453,8 +1100,6 @@ namespace BitCoin
         mStack.back()->setReadOffset(0);
         (*secondToLast)->setReadOffset(0);
         bool matching = *mStack.back() == **secondToLast;
-        if(!matching)
-            printStack("OP_EQUAL failed");
         pop();
         pop();
 
@@ -1469,6 +1114,7 @@ namespace BitCoin
                 push(); // Push false
             else
             {
+                // OP_EQUALVERIFY
                 mVerified = false;
                 return false;
             }
@@ -1479,133 +1125,69 @@ namespace BitCoin
 
     bool ScriptInterpreter::opCodeHash(uint8_t pOpCode)
     {
+        if(!ifStackTrue())
+            return true;
+
+        if(!checkStackSize(1))
+        {
+            NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+              "Stack not large enough for %s", sOpCodeNames[pOpCode]);
+            mValid = false;
+            return false;
+        }
+
+        NextCash::Buffer *data = top();
+        data->setReadOffset(0);
+
         switch(pOpCode)
         {
         case OP_RIPEMD160:
         {
-            if(!ifStackTrue())
-                break;
-
-            if(!checkStackSize(1))
-            {
-                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                  "Stack not large enough for OP_SHA1");
-                mValid = false;
-                return false;
-            }
-
             // Hash top stack item and pop it
-            NextCash::Buffer *data = top();
-            data->setReadOffset(0);
             NextCash::Digest digest(NextCash::Digest::RIPEMD160);
             digest.writeStream(data, data->length());
             digest.getResult(&mHash);
-            pop();
-
-            // Push the hash
-            mHash.write(push());
             break;
         }
         case OP_SHA1:
         {
-            if(!ifStackTrue())
-                break;
-
-            if(!checkStackSize(1))
-            {
-                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                  "Stack not large enough for OP_SHA1");
-                mValid = false;
-                return false;
-            }
-
             // Hash top stack item and pop it
-            NextCash::Buffer *data = top();
-            data->setReadOffset(0);
             NextCash::Digest digest(NextCash::Digest::SHA1);
             digest.writeStream(data, data->length());
             digest.getResult(&mHash);
-            pop();
-
-            // Push the hash
-            mHash.write(push());
             break;
         }
         case OP_SHA256:
         {
-            if(!ifStackTrue())
-                break;
-
-            if(!checkStackSize(1))
-            {
-                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                  "Stack not large enough for OP_SHA256");
-                mValid = false;
-                return false;
-            }
-
             // Hash top stack item and pop it
-            NextCash::Buffer *data = top();
-            data->setReadOffset(0);
             NextCash::Digest digest(NextCash::Digest::SHA256);
             digest.writeStream(data, data->length());
             digest.getResult(&mHash);
-            pop();
-
-            // Push the hash
-            mHash.write(push());
             break;
         }
         case OP_HASH160: // The input is hashed twice: first with SHA-256 and then with RIPEMD-160.
         {
-            if(!ifStackTrue())
-                break;
-
-            if(!checkStackSize(1))
-            {
-                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME, "Stack not large enough for OP_HASH160");
-                mValid = false;
-                return false;
-            }
-
             // Hash top stack item and pop it
-            NextCash::Buffer *data = top();
-            data->setReadOffset(0);
             NextCash::Digest digest(NextCash::Digest::SHA256_RIPEMD160);
             digest.writeStream(data, data->length());
             digest.getResult(&mHash);
-            pop();
-
-            // Push the hash
-            mHash.write(push());
             break;
         }
         case OP_HASH256: // The input is hashed two times with SHA-256.
         {
-            if(!ifStackTrue())
-                break;
-
-            if(!checkStackSize(1))
-            {
-                NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                  "Stack not large enough for OP_HASH256");
-                mValid = false;
-                return false;
-            }
-
             // Hash top stack item and pop it
-            NextCash::Buffer *data = top();
-            data->setReadOffset(0);
             NextCash::Digest digest(NextCash::Digest::SHA256_SHA256);
             digest.writeStream(data, data->length());
             digest.getResult(&mHash);
-            pop();
-
-            // Push the hash
-            mHash.write(push());
             break;
         }
         }
+
+        // Pop the hashed value.
+        pop();
+
+        // Push the hash
+        mHash.write(push());
 
         return true;
     }
@@ -1661,6 +1243,8 @@ namespace BitCoin
         }
         else
         {
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+              "Signature check failed");
             delete publicKeyData;
             delete signatureData;
             if(pOpCode == OP_CHECKSIG)
@@ -1770,7 +1354,7 @@ namespace BitCoin
 
         if(failed)
         {
-            NextCash::Log::add(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
               "Multiple Signature check failed");
             if(pOpCode == OP_CHECKMULTISIG)
                 push(); // Push false onto the stack
@@ -3047,7 +2631,7 @@ namespace BitCoin
         }
 
         top()->setReadOffset(0);
-        push(new NextCash::Buffer(*top(), true));
+        push(new NextCash::Buffer(*top()));
         return true;
     }
 
@@ -3076,9 +2660,7 @@ namespace BitCoin
     {
         if(!ifStackTrue())
             return true;
-        int64_t stackSize = mStack.size();
-        push();
-        arithmeticWrite(top(), stackSize);
+        arithmeticWrite(push(), mStack.size());
         return true;
     }
 
@@ -3216,7 +2798,7 @@ namespace BitCoin
         std::list<NextCash::Buffer *>::iterator item = mStack.end();
         --item; // get last item
 
-        for(unsigned int i=0;i<n;i++)
+        for(unsigned int i = 0; i < n; ++i)
             --item;
 
         push(*item);
@@ -3985,14 +3567,20 @@ namespace BitCoin
 
     bool ScriptInterpreter::opCodeDisabled(uint8_t pOpCode)
     {
+        if(!ifStackTrue())
+            return true;
+
         NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
           "Op code is disabled : %02x", pOpCode);
         mValid = false;
         return false;
     }
 
-    bool ScriptInterpreter::opCodeFail(uint8_t pOpCode)
+    bool ScriptInterpreter::opCodeReserved(uint8_t pOpCode)
     {
+        if(!ifStackTrue())
+            return true;
+
         mValid = false;
         return false;
     }
@@ -4002,158 +3590,297 @@ namespace BitCoin
         return true;
     }
 
-    bool ScriptInterpreter::opCodeUnknown(uint8_t pOpCode)
+    bool ScriptInterpreter::opCodeUndefined(uint8_t pOpCode)
     {
+        if(!ifStackTrue())
+            return true;
+
         NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-          "Unknown op code : %02x", pOpCode);
+          "Undefined op code : %02x", pOpCode);
         mValid = false;
         return false;
     }
 
+    const char *ScriptInterpreter::sOpCodeNames[256];
     bool (ScriptInterpreter::*ScriptInterpreter::sExecuteOpCode[256])(uint8_t pOpCode);
 
     void ScriptInterpreter::initializeStatic()
     {
         // Initialize all to unknown.
         for(unsigned int i = 0; i < 256; ++i)
-            sExecuteOpCode[i] = &ScriptInterpreter::opCodeUnknown;
+        {
+            sExecuteOpCode[i] = &ScriptInterpreter::opCodeUndefined;
+            sOpCodeNames[i] = "<UNDEFINED>";
+        }
 
+        // False
         sExecuteOpCode[OP_0] = &ScriptInterpreter::opCodePushFalse;
 
+        // Push single byte length data
         for(unsigned int i = 1; i <= MAX_SINGLE_BYTE_PUSH_DATA_CODE; ++i)
+        {
             sExecuteOpCode[i] = &ScriptInterpreter::opCodeSingleBytePush;
+            sOpCodeNames[i] = "<OP_PUSH_BYTE>";
+        }
 
+        // Push data
         sExecuteOpCode[OP_PUSHDATA1] = &ScriptInterpreter::opCodePushData;
+        sOpCodeNames[OP_PUSHDATA1] = "<OP_PUSHDATA1>";
         sExecuteOpCode[OP_PUSHDATA2] = &ScriptInterpreter::opCodePushData;
+        sOpCodeNames[OP_PUSHDATA2] = "<OP_PUSHDATA2>";
         sExecuteOpCode[OP_PUSHDATA4] = &ScriptInterpreter::opCodePushData;
+        sOpCodeNames[OP_PUSHDATA4] = "<OP_PUSHDATA4>";
 
+        // Small integers
         sExecuteOpCode[OP_1NEGATE] = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_1NEGATE]   = "<-1>";
         sExecuteOpCode[OP_1]       = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_1]         = "<1>";
         sExecuteOpCode[OP_2]       = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_2]         = "<2>";
         sExecuteOpCode[OP_3]       = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_3]         = "<3>";
         sExecuteOpCode[OP_4]       = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_4]         = "<4>";
         sExecuteOpCode[OP_5]       = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_5]         = "<5>";
         sExecuteOpCode[OP_6]       = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_6]         = "<6>";
         sExecuteOpCode[OP_7]       = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_7]         = "<7>";
         sExecuteOpCode[OP_8]       = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_8]         = "<8>";
         sExecuteOpCode[OP_9]       = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_9]         = "<9>";
         sExecuteOpCode[OP_10]      = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_10]        = "<10>";
         sExecuteOpCode[OP_11]      = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_11]        = "<11>";
         sExecuteOpCode[OP_12]      = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_12]        = "<12>";
         sExecuteOpCode[OP_13]      = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_13]        = "<13>";
         sExecuteOpCode[OP_14]      = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_14]        = "<14>";
         sExecuteOpCode[OP_15]      = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_15]        = "<15>";
         sExecuteOpCode[OP_16]      = &ScriptInterpreter::opCodePushNumber;
+        sOpCodeNames[OP_16]        = "<16>";
 
-        sExecuteOpCode[OP_IF]    = &ScriptInterpreter::opCodeIf;
-        sExecuteOpCode[OP_NOTIF] = &ScriptInterpreter::opCodeNotIf;
-        sExecuteOpCode[OP_ELSE]  = &ScriptInterpreter::opCodeElse;
-        sExecuteOpCode[OP_ENDIF] = &ScriptInterpreter::opCodeEndIf;
+        // Conditional
+        sExecuteOpCode[OP_IF]         = &ScriptInterpreter::opCodeIf;
+        sOpCodeNames[OP_IF]           = "<OP_IF>";
+        sExecuteOpCode[OP_NOTIF]      = &ScriptInterpreter::opCodeNotIf;
+        sOpCodeNames[OP_NOTIF]        = "<OP_NOTIF>";
+        sExecuteOpCode[OP_ELSE]       = &ScriptInterpreter::opCodeElse;
+        sOpCodeNames[OP_ELSE]         = "<OP_ELSE>";
+        sExecuteOpCode[OP_ENDIF]      = &ScriptInterpreter::opCodeEndIf;
+        sOpCodeNames[OP_ENDIF]        = "<OP_ENDIF>";
 
-        sExecuteOpCode[OP_VERIFY] = &ScriptInterpreter::opCodeVerify;
-        sExecuteOpCode[OP_RETURN] = &ScriptInterpreter::opCodeReturn;
+        // Control
+        sExecuteOpCode[OP_VERIFY]      = &ScriptInterpreter::opCodeVerify;
+        sOpCodeNames[OP_VERIFY]        = "<OP_VERIFY>";
+        sExecuteOpCode[OP_RETURN]      = &ScriptInterpreter::opCodeReturn;
+        sOpCodeNames[OP_RETURN]        = "<OP_RETURN>";
 
+        // Compare
         sExecuteOpCode[OP_EQUAL]       = &ScriptInterpreter::opCodeEqual;
+        sOpCodeNames[OP_EQUAL]         = "<OP_EQUAL>";
         sExecuteOpCode[OP_EQUALVERIFY] = &ScriptInterpreter::opCodeEqual;
+        sOpCodeNames[OP_EQUALVERIFY]   = "<OP_EQUALVERIFY>";
 
+        // Hashes
         sExecuteOpCode[OP_RIPEMD160] = &ScriptInterpreter::opCodeHash;
+        sOpCodeNames[OP_RIPEMD160] = "<OP_RIPEMD160>";
         sExecuteOpCode[OP_SHA1]      = &ScriptInterpreter::opCodeHash;
+        sOpCodeNames[OP_SHA1] = "<OP_SHA1>";
         sExecuteOpCode[OP_SHA256]    = &ScriptInterpreter::opCodeHash;
+        sOpCodeNames[OP_SHA256] = "<OP_SHA256>";
         sExecuteOpCode[OP_HASH160]   = &ScriptInterpreter::opCodeHash;
+        sOpCodeNames[OP_HASH160] = "<OP_HASH160>";
         sExecuteOpCode[OP_HASH256]   = &ScriptInterpreter::opCodeHash;
+        sOpCodeNames[OP_HASH256] = "<OP_HASH256>";
 
         sExecuteOpCode[OP_CODESEPARATOR] = &ScriptInterpreter::opCodeSeparator;
+        sOpCodeNames[OP_CODESEPARATOR]   = "<OP_CODESEPARATOR>";
 
+        // Signatures
         sExecuteOpCode[OP_CHECKSIG]            = &ScriptInterpreter::opCodeCheckSig;
+        sOpCodeNames[OP_CHECKSIG]              = "<OP_CHECKSIG>";
         sExecuteOpCode[OP_CHECKSIGVERIFY]      = &ScriptInterpreter::opCodeCheckSig;
+        sOpCodeNames[OP_CHECKSIGVERIFY]        = "<OP_CHECKSIGVERIFY>";
         sExecuteOpCode[OP_CHECKMULTISIG]       = &ScriptInterpreter::opCodeCheckMultiSig;
+        sOpCodeNames[OP_CHECKMULTISIG]         = "<OP_CHECKMULTISIG>";
         sExecuteOpCode[OP_CHECKMULTISIGVERIFY] = &ScriptInterpreter::opCodeCheckMultiSig;
+        sOpCodeNames[OP_CHECKMULTISIGVERIFY]   = "<OP_CHECKMULTISIGVERIFY>";
         sExecuteOpCode[OP_CHECKDATASIG]        = &ScriptInterpreter::opCodeCheckDataSig;
+        sOpCodeNames[OP_CHECKDATASIG]          = "<OP_CHECKDATASIG>";
         sExecuteOpCode[OP_CHECKDATASIGVERIFY]  = &ScriptInterpreter::opCodeCheckDataSig;
+        sOpCodeNames[OP_CHECKDATASIGVERIFY]    = "<OP_CHECKDATASIGVERIFY>";
 
+        // Time locks
         sExecuteOpCode[OP_CHECKLOCKTIMEVERIFY]  = &ScriptInterpreter::opCodeCheckLockTimeVerify;
+        sOpCodeNames[OP_CHECKLOCKTIMEVERIFY]    = "<OP_CHECKLOCKTIMEVERIFY>";
         sExecuteOpCode[OP_CHECKSEQUENCEVERIFY]  = &ScriptInterpreter::opCodeCheckSequenceVerify;
+        sOpCodeNames[OP_CHECKSEQUENCEVERIFY]    = "<OP_CHECKSEQUENCEVERIFY>";
 
+        // Math
         sExecuteOpCode[OP_1ADD]      = &ScriptInterpreter::opCodeAdd1;
+        sOpCodeNames[OP_1ADD]        = "<OP_1ADD>";
         sExecuteOpCode[OP_1SUB]      = &ScriptInterpreter::opCodeSubtract1;
+        sOpCodeNames[OP_1SUB]        = "<OP_1SUB>";
         sExecuteOpCode[OP_NEGATE]    = &ScriptInterpreter::opCodeNegate;
+        sOpCodeNames[OP_NEGATE]      = "<OP_NEGATE>";
         sExecuteOpCode[OP_ABS]       = &ScriptInterpreter::opCodeAbs;
+        sOpCodeNames[OP_ABS]         = "<OP_ABS>";
         sExecuteOpCode[OP_NOT]       = &ScriptInterpreter::opCodeNot;
+        sOpCodeNames[OP_NOT]         = "<OP_NOT>";
         sExecuteOpCode[OP_0NOTEQUAL] = &ScriptInterpreter::opCodeZeroNotEqual;
+        sOpCodeNames[OP_0NOTEQUAL]   = "<OP_0NOTEQUAL>";
         sExecuteOpCode[OP_ADD]       = &ScriptInterpreter::opCodeAdd;
+        sOpCodeNames[OP_ADD]         = "<OP_ADD>";
         sExecuteOpCode[OP_SUB]       = &ScriptInterpreter::opCodeSubtract;
+        sOpCodeNames[OP_SUB]         = "<OP_SUB>";
         sExecuteOpCode[OP_MUL]       = &ScriptInterpreter::opCodeMultiply;
+        sOpCodeNames[OP_MUL]         = "<OP_MUL>";
         sExecuteOpCode[OP_DIV]       = &ScriptInterpreter::opCodeDivide;
+        sOpCodeNames[OP_DIV]         = "<OP_DIV>";
         sExecuteOpCode[OP_MOD]       = &ScriptInterpreter::opCodeMod;
+        sOpCodeNames[OP_MOD]         = "<OP_MOD>";
+        sExecuteOpCode[OP_2MUL]      = &ScriptInterpreter::opCodeDisabled;
+        sOpCodeNames[OP_2MUL]        = "<OP_2MUL>";
+        sExecuteOpCode[OP_2DIV]      = &ScriptInterpreter::opCodeDisabled;
+        sOpCodeNames[OP_2DIV]        = "<OP_2DIV>";
 
+        // Bitwise
         sExecuteOpCode[OP_LSHIFT]  = &ScriptInterpreter::opCodeLeftShift;
+        sOpCodeNames[OP_LSHIFT]    = "<OP_LSHIFT>";
         sExecuteOpCode[OP_RSHIFT]  = &ScriptInterpreter::opCodeRightShift;
+        sOpCodeNames[OP_RSHIFT]    = "<OP_RSHIFT>";
         sExecuteOpCode[OP_BOOLAND] = &ScriptInterpreter::opCodeBoolAnd;
+        sOpCodeNames[OP_BOOLAND]   = "<OP_BOOLAND>";
         sExecuteOpCode[OP_BOOLOR]  = &ScriptInterpreter::opCodeBoolOr;
+        sOpCodeNames[OP_BOOLOR]    = "<OP_BOOLOR>";
 
+        // Comparison
         sExecuteOpCode[OP_NUMEQUAL]           = &ScriptInterpreter::opCodeNumEqual;
+        sOpCodeNames[OP_NUMEQUAL]             = "<OP_NUMEQUAL>";
         sExecuteOpCode[OP_NUMEQUALVERIFY]     = &ScriptInterpreter::opCodeNumEqual;
+        sOpCodeNames[OP_NUMEQUALVERIFY]       = "<OP_NUMEQUALVERIFY>";
         sExecuteOpCode[OP_NUMNOTEQUAL]        = &ScriptInterpreter::opCodeNumNotEqual;
+        sOpCodeNames[OP_NUMNOTEQUAL]          = "<OP_NUMNOTEQUAL>";
         sExecuteOpCode[OP_LESSTHAN]           = &ScriptInterpreter::opCodeLessThan;
+        sOpCodeNames[OP_LESSTHAN]             = "<OP_LESSTHAN>";
         sExecuteOpCode[OP_GREATERTHAN]        = &ScriptInterpreter::opCodeGreaterThan;
+        sOpCodeNames[OP_GREATERTHAN]          = "<OP_GREATERTHAN>";
         sExecuteOpCode[OP_LESSTHANOREQUAL]    = &ScriptInterpreter::opCodeLessThanOrEqual;
+        sOpCodeNames[OP_LESSTHANOREQUAL]      = "<OP_LESSTHANOREQUAL>";
         sExecuteOpCode[OP_GREATERTHANOREQUAL] = &ScriptInterpreter::opCodeGreaterThanOrEqual;
+        sOpCodeNames[OP_GREATERTHANOREQUAL]   = "<OP_GREATERTHANOREQUAL>";
         sExecuteOpCode[OP_MIN]                = &ScriptInterpreter::opCodeMin;
+        sOpCodeNames[OP_MIN]                  = "<OP_MIN>";
         sExecuteOpCode[OP_MAX]                = &ScriptInterpreter::opCodeMax;
+        sOpCodeNames[OP_MAX]                  = "<OP_MAX>";
         sExecuteOpCode[OP_WITHIN]             = &ScriptInterpreter::opCodeWithin;
+        sOpCodeNames[OP_WITHIN]               = "<OP_WITHIN>";
 
+        // Stack manipulation
         sExecuteOpCode[OP_TOALTSTACK]   = &ScriptInterpreter::opCodeToAltStack;
+        sOpCodeNames[OP_TOALTSTACK]     = "<OP_TOALTSTACK>";
         sExecuteOpCode[OP_FROMALTSTACK] = &ScriptInterpreter::opCodeFromAltStack;
+        sOpCodeNames[OP_FROMALTSTACK]   = "<OP_FROMALTSTACK>";
         sExecuteOpCode[OP_DUP]          = &ScriptInterpreter::opCodeDup;
+        sOpCodeNames[OP_DUP]            = "<OP_DUP>";
         sExecuteOpCode[OP_IFDUP]        = &ScriptInterpreter::opCodeIfDup;
+        sOpCodeNames[OP_IFDUP]          = "<OP_IFDUP>";
         sExecuteOpCode[OP_DEPTH]        = &ScriptInterpreter::opCodeDepth;
+        sOpCodeNames[OP_DEPTH]          = "<OP_DEPTH>";
         sExecuteOpCode[OP_DROP]         = &ScriptInterpreter::opCodeDrop;
+        sOpCodeNames[OP_DROP]           = "<OP_DROP>";
         sExecuteOpCode[OP_NIP]          = &ScriptInterpreter::opCodeNip;
+        sOpCodeNames[OP_NIP]            = "<OP_NIP>";
         sExecuteOpCode[OP_OVER]         = &ScriptInterpreter::opCodeOver;
+        sOpCodeNames[OP_OVER]           = "<OP_OVER>";
         sExecuteOpCode[OP_PICK]         = &ScriptInterpreter::opCodePick;
+        sOpCodeNames[OP_PICK]           = "<OP_PICK>";
         sExecuteOpCode[OP_ROLL]         = &ScriptInterpreter::opCodeRoll;
+        sOpCodeNames[OP_ROLL]           = "<OP_ROLL>";
         sExecuteOpCode[OP_ROT]          = &ScriptInterpreter::opCodeRotate;
+        sOpCodeNames[OP_ROT]            = "<OP_ROT>";
         sExecuteOpCode[OP_SWAP]         = &ScriptInterpreter::opCodeSwap;
+        sOpCodeNames[OP_SWAP]           = "<OP_SWAP>";
         sExecuteOpCode[OP_TUCK]         = &ScriptInterpreter::opCodeTuck;
+        sOpCodeNames[OP_TUCK]           = "<OP_TUCK>";
         sExecuteOpCode[OP_2DROP]        = &ScriptInterpreter::opCodeDrop2;
+        sOpCodeNames[OP_2DROP]          = "<OP_2DROP>";
         sExecuteOpCode[OP_2DUP]         = &ScriptInterpreter::opCodeDup2;
+        sOpCodeNames[OP_2DUP]           = "<OP_2DUP>";
         sExecuteOpCode[OP_3DUP]         = &ScriptInterpreter::opCodeDup3;
+        sOpCodeNames[OP_3DUP]           = "<OP_3DUP>";
         sExecuteOpCode[OP_2OVER]        = &ScriptInterpreter::opCodeOver2;
+        sOpCodeNames[OP_2OVER]          = "<OP_2OVER>";
         sExecuteOpCode[OP_2ROT]         = &ScriptInterpreter::opCodeRotate2;
+        sOpCodeNames[OP_2ROT]           = "<OP_2ROT>";
         sExecuteOpCode[OP_2SWAP]        = &ScriptInterpreter::opCodeSwap2;
+        sOpCodeNames[OP_2SWAP]          = "<OP_2SWAP>";
 
+        // Value manipulation
         sExecuteOpCode[OP_CAT]     = &ScriptInterpreter::opCodeConcat;
+        sOpCodeNames[OP_CAT]       = "<OP_CAT>";
         sExecuteOpCode[OP_SPLIT]   = &ScriptInterpreter::opCodeSplit;
+        sOpCodeNames[OP_SPLIT]     = "<OP_SPLIT>";
         sExecuteOpCode[OP_NUM2BIN] = &ScriptInterpreter::opCodeNum2Bin;
+        sOpCodeNames[OP_NUM2BIN]   = "<OP_NUM2BIN>";
         sExecuteOpCode[OP_BIN2NUM] = &ScriptInterpreter::opCodeBin2Num;
+        sOpCodeNames[OP_BIN2NUM]   = "<OP_BIN2NUM>";
         sExecuteOpCode[OP_SIZE]    = &ScriptInterpreter::opCodeSize;
+        sOpCodeNames[OP_SIZE]      = "<OP_SIZE>";
         sExecuteOpCode[OP_INVERT]  = &ScriptInterpreter::opCodeInvert;
+        sOpCodeNames[OP_INVERT]    = "<OP_INVERT>";
 
+        // Logic
         sExecuteOpCode[OP_AND] = &ScriptInterpreter::opCodeAnd;
+        sOpCodeNames[OP_AND]   = "<OP_AND>";
         sExecuteOpCode[OP_OR]  = &ScriptInterpreter::opCodeOr;
+        sOpCodeNames[OP_OR]    = "<OP_OR>";
         sExecuteOpCode[OP_XOR] = &ScriptInterpreter::opCodeXor;
+        sOpCodeNames[OP_XOR]   = "<OP_XOR>";
 
-        sExecuteOpCode[OP_2MUL]  = &ScriptInterpreter::opCodeDisabled;
-        sExecuteOpCode[OP_2DIV]  = &ScriptInterpreter::opCodeDisabled;
+        // Reserved
+        sExecuteOpCode[OP_RESERVED]  = &ScriptInterpreter::opCodeReserved;
+        sOpCodeNames[OP_RESERVED]    = "<OP_RESERVED>";
+        sExecuteOpCode[OP_VER]       = &ScriptInterpreter::opCodeReserved;
+        sOpCodeNames[OP_VER]         = "<OP_VER>";
+        sExecuteOpCode[OP_VERIF]     = &ScriptInterpreter::opCodeReserved;
+        sOpCodeNames[OP_VERIF]       = "<OP_VERIF>";
+        sExecuteOpCode[OP_VERNOTIF]  = &ScriptInterpreter::opCodeReserved;
+        sOpCodeNames[OP_VERNOTIF]    = "<OP_VERNOTIF>";
+        sExecuteOpCode[OP_RESERVED1] = &ScriptInterpreter::opCodeReserved;
+        sOpCodeNames[OP_RESERVED1]   = "<OP_RESERVED1>";
+        sExecuteOpCode[OP_RESERVED2] = &ScriptInterpreter::opCodeReserved;
+        sOpCodeNames[OP_RESERVED2]   = "<OP_RESERVED2>";
 
-        sExecuteOpCode[OP_RESERVED]  = &ScriptInterpreter::opCodeFail;
-        sExecuteOpCode[OP_VER]       = &ScriptInterpreter::opCodeFail;
-        sExecuteOpCode[OP_VERIF]     = &ScriptInterpreter::opCodeFail;
-        sExecuteOpCode[OP_VERNOTIF]  = &ScriptInterpreter::opCodeFail;
-        sExecuteOpCode[OP_RESERVED1] = &ScriptInterpreter::opCodeFail;
-        sExecuteOpCode[OP_RESERVED2] = &ScriptInterpreter::opCodeFail;
-
+        // No Op
         sExecuteOpCode[OP_NOP]   = &ScriptInterpreter::opCodeNoOp;
+        sOpCodeNames[OP_NOP]     = "<OP_NOP>";
         sExecuteOpCode[OP_NOP1]  = &ScriptInterpreter::opCodeNoOp;
+        sOpCodeNames[OP_NOP1]    = "<OP_NOP1>";
         // OP_NOP2 changed to OP_CHECKLOCKTIMEVERIFY
         // OP_NOP3 changed to OP_CHECKSEQUENCEVERIFY
         sExecuteOpCode[OP_NOP4]  = &ScriptInterpreter::opCodeNoOp;
+        sOpCodeNames[OP_NOP4]    = "<OP_NOP4>";
         sExecuteOpCode[OP_NOP5]  = &ScriptInterpreter::opCodeNoOp;
+        sOpCodeNames[OP_NOP5]    = "<OP_NOP5>";
         sExecuteOpCode[OP_NOP6]  = &ScriptInterpreter::opCodeNoOp;
+        sOpCodeNames[OP_NOP6]    = "<OP_NOP6>";
         sExecuteOpCode[OP_NOP7]  = &ScriptInterpreter::opCodeNoOp;
+        sOpCodeNames[OP_NOP7]    = "<OP_NOP7>";
         sExecuteOpCode[OP_NOP8]  = &ScriptInterpreter::opCodeNoOp;
+        sOpCodeNames[OP_NOP8]    = "<OP_NOP8>";
         sExecuteOpCode[OP_NOP9]  = &ScriptInterpreter::opCodeNoOp;
+        sOpCodeNames[OP_NOP9]    = "<OP_NOP9>";
         sExecuteOpCode[OP_NOP10] = &ScriptInterpreter::opCodeNoOp;
+        sOpCodeNames[OP_NOP10]   = "<OP_NOP10>";
     }
 
     bool ScriptInterpreter::test()

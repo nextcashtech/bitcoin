@@ -232,26 +232,20 @@ namespace BitCoin
           unsigned int pBlockHeight);
 
         // No issues processing script
-        bool isValid()
-        {
-            if(!mValid)
-                return false;
-
-            if(mIfStack.size() > 0)
-            {
-                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-                  "Not all if statements ended : %d", mIfStack.size());
-                return false;;
-            }
-
-            return true;
-        }
+        bool isValid() { return mValid; }
 
         // Script verifies and signatures were all correct
         bool isVerified()
         {
             if(!mVerified)
                 return false;
+
+            if(mIfStack.size() > 0)
+            {
+                NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
+                  "Not all if statements ended : %d", mIfStack.size());
+                return false;
+            }
 
             // Valid if top stack item is not zero
             if(mStack.size() > 0)
@@ -301,6 +295,7 @@ namespace BitCoin
 
         // For debugging
         void printStack(const char *pText);
+        void printFailure(const char *pScriptName, NextCash::Buffer &pScript);
 
         enum ScriptType
         {
@@ -464,7 +459,7 @@ namespace BitCoin
         NextCash::Buffer *pushAlt()
         {
             mAltStack.push_back(new NextCash::Buffer());
-            mStack.back()->setInputEndian(NextCash::Endian::LITTLE); // Needed for arithmetic op codes to work
+            mAltStack.back()->setInputEndian(NextCash::Endian::LITTLE); // Needed for arithmetic op codes to work
             return mAltStack.back();
         }
         void pushAlt(NextCash::Buffer *pValue) { mAltStack.push_back(pValue); }
@@ -480,6 +475,8 @@ namespace BitCoin
         int32_t mBlockVersion;
         Forks *mForks;
         unsigned int mBlockHeight;
+
+        static const char *sOpCodeNames[256];
 
         // Member function pointer array for op codes.
         static bool (ScriptInterpreter::*sExecuteOpCode[256])(uint8_t pOpCode);
@@ -570,9 +567,9 @@ namespace BitCoin
         bool opCodeXor(uint8_t pOpCode);
 
         bool opCodeDisabled(uint8_t pOpCode);
-        bool opCodeFail(uint8_t pOpCode);
+        bool opCodeReserved(uint8_t pOpCode);
         bool opCodeNoOp(uint8_t pOpCode);
-        bool opCodeUnknown(uint8_t pOpCode);
+        bool opCodeUndefined(uint8_t pOpCode);
     };
 }
 

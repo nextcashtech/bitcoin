@@ -63,8 +63,6 @@
     static const char *PROFILER_KEY_VERIFY_SIG_NAME __attribute__ ((unused)) = "Key::verifySig";
     static const unsigned int PROFILER_KEY_STATIC_VERIFY_SIG_ID = sNextID++;
     static const char *PROFILER_KEY_STATIC_VERIFY_SIG_NAME __attribute__ ((unused)) = "Key::verifySigStatic";
-    static const unsigned int PROFILER_KEY_SIG_READ_ID = sNextID++;
-    static const char *PROFILER_KEY_SIG_READ_NAME __attribute__ ((unused)) = "Key::SigRead";
 
     static const unsigned int PROFILER_MEMPOOL_STATUS_ID = sNextID++;
     static const char *PROFILER_MEMPOOL_STATUS_NAME __attribute__ ((unused)) = "MemPool::status";

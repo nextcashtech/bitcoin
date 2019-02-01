@@ -1,5 +1,5 @@
 /**************************************************************************
- * Copyright 2017-2018 NextCash, LLC                                      *
+ * Copyright 2017-2019 NextCash, LLC                                      *
  * Contributors :                                                         *
  *   Curtis Ellis <curtis@nextcash.tech>                                  *
  * Distributed under the MIT software license, see the accompanying       *
@@ -46,6 +46,7 @@ namespace BitCoin
         mMonitor = NULL;
         mHeaderStatHeight = 0;
         mMemPoolRequests = 0;
+        mLastDataSaveTime = 0;
 
         if(mInfo.approvedHash.isEmpty())
             mApprovedBlockHeight = 0x00000000; // Not set
@@ -1117,7 +1118,8 @@ namespace BitCoin
             if(!(pLocks & LOCK_HEADERS))
                 mHeadersLock.writeUnlock();
 
-            if(!mInfo.spvMode && mApprovedBlockHeight != 0xffffffff)
+            if(!mInfo.spvMode && mApprovedBlockHeight != 0xffffffff &&
+              mPendingBlocks.size() < mInfo.pendingBlocks * 2)
             {
                 // Add pending block if necessary.
                 bool addPending = false;
@@ -1722,9 +1724,13 @@ namespace BitCoin
 
             // No pending blocks or headers
             mPendingLock.readUnlock();
-            Header::save();
-            Block::save();
-            mForks.save();
+            if(getTime() - mLastDataSaveTime > 10)
+            {
+                mLastDataSaveTime = getTime();
+                Header::save();
+                Block::save();
+                mForks.save();
+            }
             return false;
         }
 
@@ -1739,9 +1745,13 @@ namespace BitCoin
         PendingBlockData *nextPending = mPendingBlocks.front();
         if(!nextPending->isFull()) // Next pending block is not full yet
         {
-            Header::save();
-            Block::save();
-            mForks.save();
+            if(getTime() - mLastDataSaveTime > 10)
+            {
+                mLastDataSaveTime = getTime();
+                Header::save();
+                Block::save();
+                mForks.save();
+            }
             mPendingLock.writeUnlock();
             return false;
         }
