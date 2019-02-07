@@ -304,11 +304,11 @@ namespace BitCoin
                 {
                 default:
                 case 4:
-                    version4OrHigherCount++;
+                    ++version4OrHigherCount;
                 case 3:
-                    version3OrHigherCount++;
+                    ++version3OrHigherCount;
                 case 2:
-                    version2OrHigherCount++;
+                    ++version2OrHigherCount;
                 case 1:
                 case 0:
                     break;
@@ -619,7 +619,7 @@ namespace BitCoin
         mMutex.lock();
 
         mBlockVersions.clear();
-        for(unsigned int i = 0; i < 3; i++)
+        for(unsigned int i = 0; i < 3; ++i)
         {
             mBlockVersionEnabledHeights[i] = 0;
             mBlockVersionRequiredHeights[i] = 0;

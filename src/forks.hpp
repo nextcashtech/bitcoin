@@ -139,30 +139,21 @@ namespace BitCoin
 
         // TODO Change cash forks to be more dynamic, like the soft forks, like a list.
         bool cashActive(unsigned int pHeight) const
-        {
-            return mCashActivationBlockHeight != 0 &&
-              pHeight > mCashActivationBlockHeight;
-        }
+          { return mCashActivationBlockHeight != 0 && pHeight > mCashActivationBlockHeight; }
         unsigned int cashForkBlockHeight() const { return mCashActivationBlockHeight; }
 
         // New Cash DAA (Nov 13th 2018)
         static const Time CASH_FORK_201711_ACTIVATION_TIME = 1510600000;
 
         bool cashFork201711IsActive(unsigned int pHeight) const
-        {
-            return mCashFork201711BlockHeight != 0 &&
-              pHeight > mCashFork201711BlockHeight;
-        }
+          { return mCashFork201711BlockHeight != 0 && pHeight > mCashFork201711BlockHeight; }
 
         // 2018 May Hard Fork
         static const Time CASH_FORK_201805_ACTIVATION_TIME = 1526400000;
         static const unsigned int FORK_201805_MAX_BLOCK_SIZE = 32000000;
 
         bool cashFork201805IsActive(unsigned int pHeight) const
-        {
-            return mCashFork201805BlockHeight != 0 &&
-              pHeight > mCashFork201805BlockHeight;
-        }
+          { return mCashFork201805BlockHeight != 0 && pHeight > mCashFork201805BlockHeight; }
 
         // 2018 Nov Hard Fork
         static const Time CASH_FORK_201811_ACTIVATION_TIME = 1542300000;
@@ -173,23 +164,20 @@ namespace BitCoin
         // Enforce "push only" rule for scriptSig
         // Enforce "clean stack" rule
         bool cashFork201811IsActive(unsigned int pHeight) const
-        {
-            return mCashFork201811BlockHeight != 0 &&
-              pHeight > mCashFork201811BlockHeight;
-        }
+          { return mCashFork201811BlockHeight != 0 && pHeight > mCashFork201811BlockHeight; }
 
         unsigned int blockMaxSize(unsigned int pHeight) const
         {
             if(pHeight >= mHeight)
                 return mBlockMaxSize;
             else if(mCashFork201811BlockHeight != 0 &&
-              pHeight > mCashFork201811BlockHeight)
+              pHeight >= mCashFork201811BlockHeight)
                 return FORK_201811_MAX_BLOCK_SIZE;
             else if(mCashFork201805BlockHeight != 0 &&
-              pHeight > mCashFork201805BlockHeight)
+              pHeight >= mCashFork201805BlockHeight)
                 return FORK_201805_MAX_BLOCK_SIZE;
             else if(mCashActivationBlockHeight != 0 &&
-              pHeight > mCashActivationBlockHeight)
+              pHeight >= mCashActivationBlockHeight)
                 return CASH_START_MAX_BLOCK_SIZE;
             else
                 return HARD_MAX_BLOCK_SIZE;
