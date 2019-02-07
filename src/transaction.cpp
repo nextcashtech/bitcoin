@@ -811,7 +811,7 @@ namespace BitCoin
     void Transaction::check(Chain *pChain, const NextCash::Hash &pBlockHash, unsigned int pHeight,
       bool pCoinBase, int32_t pBlockVersion, CheckStats &pStats)
     {
-        mStatus |= WAS_CHECKED;
+        mStatus |= WAS_CHECKED | IS_STANDARD;
 
         if(!(mStatus & IS_VALID))
         {

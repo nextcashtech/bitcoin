@@ -83,6 +83,7 @@ namespace BitCoin
         mInfo.setInitialBlockDownloadComplete();
         mMonitor->updatePasses(this);
         mMonitor->incrementChange();
+        mMemPool.start();
     }
 
     bool Chain::blockAvailable(const NextCash::Hash &pHash)

@@ -147,6 +147,7 @@ namespace BitCoin
         unsigned int count() const { return mTransactions.size(); }
         unsigned int pendingCount() const { return mPendingTransactions.size(); }
 
+        void start();
         void stop();
 
         // Request support
@@ -378,6 +379,7 @@ namespace BitCoin
         NextCash::Mutex mPipeLineLock;
         TransactionSet mPipeLineTransactions;
         std::list<NextCash::Hash> mPipeLineQueue;
+        bool mStarted; // When threads are running.
         bool mStopping; // To notify threads to stop.
         unsigned int mPipeLineThreadCount;
         NextCash::Thread **mPipeLineThreads;
