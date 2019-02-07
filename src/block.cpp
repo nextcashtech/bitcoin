@@ -589,7 +589,6 @@ namespace BitCoin
         }
 
         return true;
-
     }
 
     bool Block::checkSize(Chain *pChain, unsigned int pHeight)
@@ -606,8 +605,8 @@ namespace BitCoin
         if(size() > pChain->forks().blockMaxSize(pHeight))
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-              "Block size must be less than %d bytes : %d",
-              pChain->forks().blockMaxSize(pHeight), size());
+              "Block size for height (%d) must not be more than %d bytes : %d",
+              pHeight, pChain->forks().blockMaxSize(pHeight), size());
             return false;
         }
 
@@ -637,7 +636,7 @@ namespace BitCoin
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
               "Included   : %s", header.merkleHash.hex().text());
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_BLOCK_LOG_NAME,
-              "Calculated : %s", header.merkleHash.hex().text());
+              "Calculated : %s", calculatedMerkleHash.hex().text());
             return false;
         }
 
@@ -1459,6 +1458,7 @@ namespace BitCoin
         unsigned int lastGoodCount = 0;
         NextCash::stream_size lastGoodOffset = 0;
         unsigned int previousCount = 0;
+        bool fail;
 
         // Find current block count.
         mInputFile->setReadOffset(HEADER_START_OFFSET);
@@ -1499,6 +1499,7 @@ namespace BitCoin
                 break;
             transactionCount = mInputFile->readUnsignedInt();
 
+            fail = false;
             block.transactions.reserve(transactionCount);
             for(unsigned int i = 0; i < transactionCount; ++i)
             {
@@ -1508,9 +1509,13 @@ namespace BitCoin
                 else
                 {
                     delete transaction;
+                    fail = true;
                     break;
                 }
             }
+
+            if(fail)
+                break;
 
             if(!block.validate())
                 break;
@@ -1532,7 +1537,8 @@ namespace BitCoin
         {
             // Truncate end of file.
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_BLOCK_LOG_NAME,
-              "Block file %08x reverting to count of %d", mID, lastGoodCount);
+              "Block file %08x reverting from count of %d to %d", mID, previousCount,
+              lastGoodCount);
 
             NextCash::String swapFilePathName = mFilePathName + ".swap";
             NextCash::FileOutputStream *swapFile = new NextCash::FileOutputStream(swapFilePathName,
@@ -1555,7 +1561,7 @@ namespace BitCoin
             mInputFile->setReadOffset(HEADER_START_OFFSET);
 
             // Transfer block to swap file
-            for(unsigned int i = 0; i <= lastGoodCount; ++i)
+            for(unsigned int i = 0; i < lastGoodCount; ++i)
             {
                 if(!hash.read(mInputFile))
                     return false;
@@ -1570,7 +1576,7 @@ namespace BitCoin
 
             // Write the rest of the block as empty
             hash.zeroize();
-            for(unsigned int i = lastGoodCount + 1; i < MAX_COUNT; ++i)
+            for(unsigned int i = lastGoodCount; i < MAX_COUNT; ++i)
             {
                 hash.write(swapFile);
                 swapFile->writeUnsignedInt(0);
