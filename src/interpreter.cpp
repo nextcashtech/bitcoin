@@ -477,36 +477,60 @@ namespace BitCoin
     {
         unsigned int index;
 
-        NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Stack : %s", pText);
-        index = 1;
-        for(std::list<NextCash::Buffer *>::reverse_iterator i = mStack.rbegin();
-          i != mStack.rend(); ++i, ++index)
+        if(mStack.size())
         {
-            (*i)->setReadOffset(0);
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
-              "  %d (%d bytes) : %s", index, (*i)->length(), (*i)->readHexString((*i)->length()).text());
+              "Stack : %s", pText);
+            index = 1;
+            for(std::list<NextCash::Buffer *>::reverse_iterator i = mStack.rbegin();
+              i != mStack.rend(); ++i, ++index)
+            {
+                (*i)->setReadOffset(0);
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                  "  %d (%d bytes) : %s", index, (*i)->length(),
+                  (*i)->readHexString((*i)->length()).text());
+            }
         }
-
-        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "Alt Stack :");
-        index = 1;
-        for(std::list<NextCash::Buffer *>::reverse_iterator i = mAltStack.rbegin();
-          i != mAltStack.rend(); ++i, ++index)
-        {
-            (*i)->setReadOffset(0);
+        else
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
-              "  %d (%d bytes) : %s", index, (*i)->length(), (*i)->readHexString((*i)->length()).text());
-        }
+              "Stack empty - %s", pText);
 
-        NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "If Stack :");
-        index = 1;
-        for(std::list<bool>::reverse_iterator i = mIfStack.rbegin();
-          i != mIfStack.rend(); ++i, ++index)
+        if(mAltStack.size())
         {
-            if(*i)
-                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "  true");
-            else
-                NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "  false");
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+              "Alt Stack :");
+            index = 1;
+            for(std::list<NextCash::Buffer *>::reverse_iterator i = mAltStack.rbegin();
+              i != mAltStack.rend(); ++i, ++index)
+            {
+                (*i)->setReadOffset(0);
+                NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                  "  %d (%d bytes) : %s", index, (*i)->length(),
+                  (*i)->readHexString((*i)->length()).text());
+            }
         }
+        else
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+              "Alt Stack empty - %s", pText);
+
+        if(mAltStack.size())
+        {
+            NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME, "If Stack :");
+            index = 1;
+            for(std::list<bool>::reverse_iterator i = mIfStack.rbegin();
+              i != mIfStack.rend(); ++i, ++index)
+            {
+                if(*i)
+                    NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                      "  true");
+                else
+                    NextCash::Log::add(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+                      "  false");
+            }
+        }
+        else
+            NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_INTERPRETER_LOG_NAME,
+              "If Stack empty - %s", pText);
     }
 
     void ScriptInterpreter::printFailure(const char *pScriptName, NextCash::Buffer &pScript)
@@ -644,7 +668,7 @@ namespace BitCoin
           !(pSignatureData[pSignatureDataSize-1] & Signature::FORKID))
         {
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Signature hash type missing required fork ID flag : %02x",
+              "Signature hash type missing required fork ID flag : 0x%02x",
               pSignatureData[pSignatureDataSize-1]);
             return false;
         }
@@ -672,7 +696,8 @@ namespace BitCoin
         {
             pBuffer->setReadOffset(0);
             NextCash::Log::addFormatted(NextCash::Log::WARNING, BITCOIN_INTERPRETER_LOG_NAME,
-              "Arithmetic read has too many bytes : %s", pBuffer->readHexString(pBuffer->length()).text());
+              "Arithmetic read has too many bytes : %s",
+              pBuffer->readHexString(pBuffer->length()).text());
             return false;
         }
         else if(pBuffer->length() == 0)
