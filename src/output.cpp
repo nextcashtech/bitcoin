@@ -23,9 +23,8 @@ namespace BitCoin
         }
         else
         {
-            script.setReadOffset(0);
             writeCompactInteger(pStream, script.length());
-            pStream->writeStream(&script, script.length());
+            pStream->write(script.begin(), script.length());
         }
     }
 

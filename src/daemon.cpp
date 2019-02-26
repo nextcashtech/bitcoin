@@ -792,9 +792,10 @@ namespace BitCoin
 
     int estimatedStandardFee(int pInputCount, int pOutputCount, double pFeeRate)
     {
-        // P2PKH/P2SH input size
+        // P2PKH/P2SH input size 147
         //   Previous Transaction ID = 32 bytes
         //   Previous Transaction Output Index = 4 bytes
+        //   script size = 2 bytes
         //   Signature push to stack = 75
         //       push size = 1 byte
         //       signature up to = 73 bytes
@@ -802,14 +803,14 @@ namespace BitCoin
         //   Public key push to stack = 34
         //       push size = 1 byte
         //       public key size = 33 bytes
-        int inputSize = 32 + 4 + 75 + 34;
+        static const int inputSize = 32 + 4 + 2 + 75 + 34;
 
-        // P2PKH/P2SH output size
+        // P2PKH/P2SH output size 33
         //   amount = 8 bytes
-        //   push size = 1 byte
+        //   script size = 1 byte
         //   Script (24 bytes) OP_DUP OP_HASH160 <PUB KEY/SCRIPT HASH (20 bytes)> OP_EQUALVERIFY
         //     OP_CHECKSIG
-        int outputSize = 8 + 25;
+        static const int outputSize = 8 + 25;
 
         return (int)((double)((inputSize * pInputCount) + (pOutputCount * outputSize)) * pFeeRate);
     }

@@ -1883,7 +1883,12 @@ namespace BitCoin
     bool Chain::getHeaders(HeaderList &pBlockHeaders, const NextCash::Hash &pStartingHash,
       const NextCash::Hash &pStoppingHash, unsigned int pCount)
     {
-        unsigned int startingHeight = hashHeight(pStartingHash);
+        unsigned int startingHeight;
+        if (pStartingHash.isEmpty())
+            startingHeight = 0;
+        else
+            startingHeight = hashHeight(pStartingHash);
+
         if(startingHeight == 0xffffffff)
         {
             NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_CHAIN_LOG_NAME,

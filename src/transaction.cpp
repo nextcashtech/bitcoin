@@ -1449,8 +1449,7 @@ namespace BitCoin
     {
         outpoint.write(pStream);
         writeCompactInteger(pStream, script.length());
-        script.setReadOffset(0);
-        pStream->writeStream(&script, script.length());
+        pStream->write(script.begin(), script.length());
         pStream->writeUnsignedInt(sequence);
     }
 

@@ -2335,6 +2335,19 @@ namespace BitCoin
                 if(sendMessage(&sendHeadersData))
                     mStatistics.headersSent += sendHeadersData.headers.size();
             }
+            else
+            {
+                NextCash::Hash emptyHash;
+                if(mChain->getHeaders(sendHeadersData.headers, emptyHash,
+                  getHeadersData->stopHeaderHash, 2000))
+                {
+                    NextCash::Log::addFormatted(NextCash::Log::VERBOSE, mName,
+                      "Sending %d headers starting at genesis",
+                      sendHeadersData.headers.size());
+                    if(sendMessage(&sendHeadersData))
+                        mStatistics.headersSent += sendHeadersData.headers.size();
+                }
+            }
             break;
         }
         case Message::INVENTORY:
@@ -2780,16 +2793,6 @@ namespace BitCoin
         {
             if(!info.spvMode)
                 --mMessagesReceived; // Don't count towards message limit
-            if(mBloomFilterID == 0 &&
-              (mSentVersionData == NULL || mSentVersionData->relay == 0x00))
-            {
-                NextCash::Log::add(NextCash::Log::INFO, mName,
-                  "Dropping. Received transaction when relay is off and no bloom filter was sent");
-                info.addPeerFail(mAddress);
-                close();
-                success = false;
-                break;
-            }
 
             // Verify and add to mem pool or monitor.
             Message::TransactionData *transactionData = (Message::TransactionData *)message;
