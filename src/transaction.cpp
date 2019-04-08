@@ -853,7 +853,7 @@ namespace BitCoin
             if(!pChain->outputs().checkDuplicate(hash, pHeight, pBlockHash))
             {
                 NextCash::Log::addFormatted(NextCash::Log::VERBOSE, BITCOIN_TRANSACTION_LOG_NAME,
-                  "Zero outputs : trans %s", hash().hex().text());
+                  "Duplicate hash : trans %s", hash().hex().text());
                 return;
             }
             pStats.checkDupTimer.stop();
